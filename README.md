@@ -1,4 +1,4 @@
-# Mirth® Connect by NextGen Healthcare
+# BridgeLink - an interop Open Source Community 
 
 1. [Useful Links](#useful-links)
 2. [General Information](#general-information)
@@ -25,10 +25,11 @@
 
 <a name="general-information"></a>
 ## 2. General Information
-##### The NextGen Solutions Mission
-NextGen Solutions help many of the nation&apos;s largest, most respected healthcare entities streamline their care-management processes to satisfy the demands of a regulatory, competitive healthcare industry. With Mirth Solutions, NextGen Healthcare&apos;s goal is to provide the healthcare community with a secure, efficient, cost-effective means of sharing health information. The natural product of this aim is a family of applications &mdash; which includes Mirth Connect &mdash; flexible enough to manage patient information, from small practices to large HIEs, so our clients and users can work confidently and effectively within the healthcare-delivery system.
-##### About Mirth Connect
-Like an interpreter who translates foreign languages into the one you understand, Mirth Connect translates message standards into the one your system understands. Whenever a &quot;foreign&quot; system sends you a message, Mirth Connect&apos;s integration capabilities expedite the following:
+##### About Innovar
+Innovar helps make healthcare data move—securely, efficiently, and without the headaches. We help some of the biggest names in healthcare streamline their integrations, cut through complexity, and stay ahead in an industry that never stops evolving.
+Our flagship product, Lightswitch, along with our deep expertise in Mirth Connect, gives organizations the tools they need to connect systems, manage data, and keep things running smoothly. Whether it’s a small practice, a large HIE, or a national network, we make sure our clients can focus on what they do best—delivering care—while we handle the data.
+##### About OSS Mirth Connect
+Like an interpreter who translates foreign languages into the one you understand, OSS Mirth Connect translates message standards into the one your system understands. Whenever a &quot;foreign&quot; system sends you a message, Mirth Connect&apos;s integration capabilities expedite the following:
 - Filtering &mdash; Mirth Connect reads message parameters and passes the message to or stops it on its way to the transformation stage.
 - Transformation &mdash; Mirth Connect converts the incoming message standard to another standard (e.g., HL7 to XML).
 - Extraction &mdash; Mirth Connect can &quot;pull&quot; data from and &quot;push&quot; data to a database.
