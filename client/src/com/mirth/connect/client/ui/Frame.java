@@ -174,11 +174,11 @@ public class Frame extends JXFrame {
 
     private Logger logger = LogManager.getLogger(this.getClass());
     public Client mirthClient;
-    public DashboardPanel dashboardPanel = null;
-    public ChannelPanel channelPanel = null;
-    public SettingsPane settingsPane = null;
-    public UserPanel userPanel = null;
-    public ChannelSetup channelEditPanel = null;
+    public com.mirth.connect.client.ui.DashboardPanel dashboardPanel = null;
+    public com.mirth.connect.client.ui.ChannelPanel channelPanel = null;
+    public com.mirth.connect.client.ui.SettingsPane settingsPane = null;
+    public com.mirth.connect.client.ui.UserPanel userPanel = null;
+    public com.mirth.connect.client.ui.ChannelSetup channelEditPanel = null;
     public EventBrowser eventBrowser = null;
     public MessageBrowser activeBrowser = null;
     public MessageBrowser messageBrowser = null;
@@ -187,7 +187,7 @@ public class Frame extends JXFrame {
     public AlertPanel alertPanel = null;
     public AlertEditPanel alertEditPanel = null;
     public CodeTemplatePanel codeTemplatePanel = null;
-    public GlobalScriptsPanel globalScriptsPanel = null;
+    public com.mirth.connect.client.ui.GlobalScriptsPanel globalScriptsPanel = null;
     public ExtensionManagerPanel extensionsPanel = null;
     public JXTaskPaneContainer taskPaneContainer;
     public List<DashboardStatus> status = null;
@@ -195,14 +195,14 @@ public class Frame extends JXFrame {
     public ActionManager manager = ActionManager.getInstance();
     public JPanel contentPanel;
     public BorderLayout borderLayout1 = new BorderLayout();
-    public StatusBar statusBar;
+    public com.mirth.connect.client.ui.StatusBar statusBar;
     public JSplitPane splitPane = new JSplitPane();
     public JScrollPane taskPane = new JScrollPane();
     public JScrollPane contentPane = new JScrollPane();
     public Component currentContentPage = null;
     public JXTaskPaneContainer currentTaskPaneContainer = null;
     public JScrollPane container;
-    public EditMessageDialog editMessageDialog = null;
+    public com.mirth.connect.client.ui.EditMessageDialog editMessageDialog = null;
 
     // Task panes and popup menus
     public JXTaskPane viewPane;
@@ -233,7 +233,7 @@ public class Frame extends JXFrame {
     private Future<?> statusUpdaterJob = null;
     public static Preferences userPreferences;
     private boolean connectionError;
-    private ArrayList<CharsetEncodingInformation> availableCharsetEncodings = null;
+    private ArrayList<com.mirth.connect.client.ui.CharsetEncodingInformation> availableCharsetEncodings = null;
     private List<String> charsetEncodings = null;
     public boolean isEditingChannel = false;
     private boolean isEditingAlert = false;
@@ -246,11 +246,11 @@ public class Frame extends JXFrame {
     private Map<Component, String> componentTaskMap = new HashMap<Component, String>();
     private boolean acceleratorKeyPressed = false;
     private boolean canSave = true;
-    private RemoveMessagesDialog removeMessagesDialog;
-    private MessageExportDialog messageExportDialog;
-    public  MessageExportDialog enhancedMessageExportDialog;
-    private MessageImportDialog messageImportDialog;
-    private AttachmentExportDialog attachmentExportDialog;
+    private com.mirth.connect.client.ui.RemoveMessagesDialog removeMessagesDialog;
+    private com.mirth.connect.client.ui.MessageExportDialog messageExportDialog;
+    public com.mirth.connect.client.ui.MessageExportDialog enhancedMessageExportDialog;
+    private com.mirth.connect.client.ui.MessageImportDialog messageImportDialog;
+    private com.mirth.connect.client.ui.AttachmentExportDialog attachmentExportDialog;
     private KeyEventDispatcher keyEventDispatcher = null;
     private int deployedChannelCount;
     private DebugOptions debugOptions;
@@ -268,21 +268,21 @@ public class Frame extends JXFrame {
 
         StringBuilder titleText = new StringBuilder();
 
-        if (!StringUtils.isBlank(PlatformUI.ENVIRONMENT_NAME)) {
-            titleText.append(PlatformUI.ENVIRONMENT_NAME + " - ");
+        if (!StringUtils.isBlank(com.mirth.connect.client.ui.PlatformUI.ENVIRONMENT_NAME)) {
+            titleText.append(com.mirth.connect.client.ui.PlatformUI.ENVIRONMENT_NAME + " - ");
         }
 
-        if (!StringUtils.isBlank(PlatformUI.SERVER_NAME)) {
-            titleText.append(PlatformUI.SERVER_NAME);
+        if (!StringUtils.isBlank(com.mirth.connect.client.ui.PlatformUI.SERVER_NAME)) {
+            titleText.append(com.mirth.connect.client.ui.PlatformUI.SERVER_NAME);
         } else {
-            titleText.append(PlatformUI.SERVER_URL);
+            titleText.append(com.mirth.connect.client.ui.PlatformUI.SERVER_URL);
         }
 
-        titleText.append(" - " + UIConstants.TITLE_TEXT);
+        titleText.append(" - " + com.mirth.connect.client.ui.UIConstants.TITLE_TEXT);
 
         setTitle(titleText.toString());
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
-        setIconImage(UIConstants.MIRTH_FAVICON.getImage());
+        setIconImage(com.mirth.connect.client.ui.UIConstants.MIRTH_FAVICON.getImage());
         makePaneContainer();
 
         connectionError = false;
@@ -336,11 +336,11 @@ public class Frame extends JXFrame {
         }
         try {
             this.charsetEncodings = this.mirthClient.getAvailableCharsetEncodings();
-            this.availableCharsetEncodings = new ArrayList<CharsetEncodingInformation>();
-            this.availableCharsetEncodings.add(new CharsetEncodingInformation(UIConstants.DEFAULT_ENCODING_OPTION, "Default"));
+            this.availableCharsetEncodings = new ArrayList<com.mirth.connect.client.ui.CharsetEncodingInformation>();
+            this.availableCharsetEncodings.add(new com.mirth.connect.client.ui.CharsetEncodingInformation(com.mirth.connect.client.ui.UIConstants.DEFAULT_ENCODING_OPTION, "Default"));
             for (int i = 0; i < charsetEncodings.size(); i++) {
                 String canonical = charsetEncodings.get(i);
-                this.availableCharsetEncodings.add(new CharsetEncodingInformation(canonical, canonical));
+                this.availableCharsetEncodings.add(new com.mirth.connect.client.ui.CharsetEncodingInformation(canonical, canonical));
             }
         } catch (Exception e) {
             alertError(this, "Error getting the charset list:\n " + e);
@@ -370,7 +370,7 @@ public class Frame extends JXFrame {
 
             // Insert the NONE option after the default option
             if (allowNone && i == 0) {
-                charsetEncodingCombobox.addItem(new CharsetEncodingInformation(CharsetUtils.NONE, "None"));
+                charsetEncodingCombobox.addItem(new com.mirth.connect.client.ui.CharsetEncodingInformation(CharsetUtils.NONE, "None"));
             }
         }
     }
@@ -391,12 +391,12 @@ public class Frame extends JXFrame {
             logger.error("Error, there are no encodings detected.");
             return;
         }
-        if ((selectedCharset == null) || (selectedCharset.equalsIgnoreCase(UIConstants.DEFAULT_ENCODING_OPTION))) {
+        if ((selectedCharset == null) || (selectedCharset.equalsIgnoreCase(com.mirth.connect.client.ui.UIConstants.DEFAULT_ENCODING_OPTION))) {
             charsetEncodingCombobox.setSelectedIndex(0);
         } else if (allowNone && selectedCharset.equalsIgnoreCase(CharsetUtils.NONE)) {
             charsetEncodingCombobox.setSelectedIndex(1);
         } else if (this.charsetEncodings.contains(selectedCharset)) {
-            int index = this.availableCharsetEncodings.indexOf(new CharsetEncodingInformation(selectedCharset, selectedCharset));
+            int index = this.availableCharsetEncodings.indexOf(new com.mirth.connect.client.ui.CharsetEncodingInformation(selectedCharset, selectedCharset));
             if (index < 0) {
                 logger.error("Synchronization lost in the list of the encoding characters.");
                 index = 0;
@@ -418,10 +418,10 @@ public class Frame extends JXFrame {
      */
     public String getSelectedEncodingForConnector(javax.swing.JComboBox charsetEncodingCombobox) {
         try {
-            return ((CharsetEncodingInformation) charsetEncodingCombobox.getSelectedItem()).getCanonicalName();
+            return ((com.mirth.connect.client.ui.CharsetEncodingInformation) charsetEncodingCombobox.getSelectedItem()).getCanonicalName();
         } catch (Throwable t) {
             alertInformation(this, "Error " + t);
-            return UIConstants.DEFAULT_ENCODING_OPTION;
+            return com.mirth.connect.client.ui.UIConstants.DEFAULT_ENCODING_OPTION;
         }
     }
 
@@ -544,10 +544,10 @@ public class Frame extends JXFrame {
      */
     public void setupFrame(Client mirthClient) throws ClientException {
 
-        LoginPanel login = LoginPanel.getInstance();
+        com.mirth.connect.client.ui.LoginPanel login = com.mirth.connect.client.ui.LoginPanel.getInstance();
 
         // Initialize the send message dialog
-        editMessageDialog = new EditMessageDialog();
+        editMessageDialog = new com.mirth.connect.client.ui.EditMessageDialog();
 
         this.mirthClient = mirthClient;
         login.setStatus("Loading extensions...");
@@ -559,24 +559,24 @@ public class Frame extends JXFrame {
         }
 
         // Re-initialize the controller every time the frame is setup
-        AuthorizationControllerFactory.getAuthorizationController().initialize();
-        channelPanel = new ChannelPanel();
+        com.mirth.connect.client.ui.AuthorizationControllerFactory.getAuthorizationController().initialize();
+        channelPanel = new com.mirth.connect.client.ui.ChannelPanel();
         channelPanel.retrieveGroups();
         channelPanel.retrieveDependencies();
 
         // Initialize all of the extensions now that the metadata has been retrieved
         // Make sure to initialize before the code template panel is created because it needs extensions
-        LoadedExtensions.getInstance().initialize();
+        com.mirth.connect.client.ui.LoadedExtensions.getInstance().initialize();
 
         codeTemplatePanel = new CodeTemplatePanel(this);
 
         // Now it's okay to start the plugins
-        LoadedExtensions.getInstance().startPlugins();
+        com.mirth.connect.client.ui.LoadedExtensions.getInstance().startPlugins();
 
-        mirthClient.setRecorder(LoadedExtensions.getInstance().getRecorder());
+        mirthClient.setRecorder(com.mirth.connect.client.ui.LoadedExtensions.getInstance().getRecorder());
 
         User currentUser = getCurrentUser(this);
-        statusBar = new StatusBar(currentUser);
+        statusBar = new com.mirth.connect.client.ui.StatusBar(currentUser);
         statusBar.setBorder(BorderFactory.createEmptyBorder());
 
         channelPanel.initPanelPlugins();
@@ -584,7 +584,7 @@ public class Frame extends JXFrame {
         // Load the data type/display name maps now that the extensions have been loaded.
         dataTypeToDisplayName = new LinkedHashMap<String, String>();
         displayNameToDataType = new LinkedHashMap<String, String>();
-        for (Entry<String, DataTypeClientPlugin> entry : LoadedExtensions.getInstance().getDataTypePlugins().entrySet()) {
+        for (Entry<String, DataTypeClientPlugin> entry : com.mirth.connect.client.ui.LoadedExtensions.getInstance().getDataTypePlugins().entrySet()) {
             dataTypeToDisplayName.put(entry.getKey(), entry.getValue().getDisplayName());
             displayNameToDataType.put(entry.getValue().getDisplayName(), entry.getKey());
         }
@@ -592,7 +592,7 @@ public class Frame extends JXFrame {
         setInitialVisibleTasks();
         login.setStatus("Loading preferences...");
         userPreferences = Preferences.userNodeForPackage(Mirth.class);
-        userPreferences.put("defaultServer", PlatformUI.SERVER_URL);
+        userPreferences.put("defaultServer", com.mirth.connect.client.ui.PlatformUI.SERVER_URL);
         login.setStatus("Loading GUI components...");
         splitPane.setDividerSize(0);
         splitPane.setBorder(BorderFactory.createEmptyBorder());
@@ -611,25 +611,25 @@ public class Frame extends JXFrame {
 
         splitPane.add(rightContainer, JSplitPane.RIGHT);
         splitPane.add(taskPane, JSplitPane.LEFT);
-        taskPane.setMinimumSize(new Dimension(UIConstants.TASK_PANE_WIDTH, 0));
-        splitPane.setDividerLocation(UIConstants.TASK_PANE_WIDTH);
+        taskPane.setMinimumSize(new Dimension(com.mirth.connect.client.ui.UIConstants.TASK_PANE_WIDTH, 0));
+        splitPane.setDividerLocation(com.mirth.connect.client.ui.UIConstants.TASK_PANE_WIDTH);
 
         contentPanel.add(statusBar, BorderLayout.SOUTH);
         contentPanel.add(splitPane, java.awt.BorderLayout.CENTER);
 
         try {
-            PlatformUI.SERVER_ID = mirthClient.getServerId();
-            PlatformUI.SERVER_VERSION = mirthClient.getVersion();
-            PlatformUI.SERVER_TIMEZONE = mirthClient.getServerTimezone();
-            PlatformUI.SERVER_TIME = mirthClient.getServerTime();
+            com.mirth.connect.client.ui.PlatformUI.SERVER_ID = mirthClient.getServerId();
+            com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION = mirthClient.getVersion();
+            com.mirth.connect.client.ui.PlatformUI.SERVER_TIMEZONE = mirthClient.getServerTimezone();
+            com.mirth.connect.client.ui.PlatformUI.SERVER_TIME = mirthClient.getServerTime();
 
-            setTitle(getTitle() + " - (" + PlatformUI.SERVER_VERSION + ")");
+            setTitle(getTitle() + " - (" + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + ")");
 
-            PlatformUI.BUILD_DATE = mirthClient.getBuildDate();
+            com.mirth.connect.client.ui.PlatformUI.BUILD_DATE = mirthClient.getBuildDate();
 
             // Initialize ObjectXMLSerializer once we know the server version
             try {
-                ObjectXMLSerializer.getInstance().init(PlatformUI.SERVER_VERSION);
+                ObjectXMLSerializer.getInstance().init(com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION);
             } catch (Exception e) {
             }
         } catch (ClientException e) {
@@ -643,15 +643,15 @@ public class Frame extends JXFrame {
         }
 
         // Display the server time zone information
-        statusBar.setTimezoneText(PlatformUI.SERVER_TIMEZONE);
-        statusBar.setServerTime(PlatformUI.SERVER_TIME);
+        statusBar.setTimezoneText(com.mirth.connect.client.ui.PlatformUI.SERVER_TIMEZONE);
+        statusBar.setServerTime(com.mirth.connect.client.ui.PlatformUI.SERVER_TIME);
 
         // Refresh resources and tags
         if (settingsPane == null) {
-            settingsPane = new SettingsPane();
+            settingsPane = new com.mirth.connect.client.ui.SettingsPane();
         }
 
-        SettingsPanelResources resourcesPanel = (SettingsPanelResources) settingsPane.getSettingsPanel(SettingsPanelResources.TAB_NAME);
+        com.mirth.connect.client.ui.SettingsPanelResources resourcesPanel = (com.mirth.connect.client.ui.SettingsPanelResources) settingsPane.getSettingsPanel(com.mirth.connect.client.ui.SettingsPanelResources.TAB_NAME);
         if (resourcesPanel != null) {
             resourcesPanel.doRefresh();
         }
@@ -665,7 +665,7 @@ public class Frame extends JXFrame {
         login.setStatus("Loading dashboard...");
         doShowDashboard();
         login.setStatus("Loading channel editor...");
-        channelEditPanel = new ChannelSetup();
+        channelEditPanel = new com.mirth.connect.client.ui.ChannelSetup();
         login.setStatus("Loading alert editor...");
         if (alertEditPanel == null) {
             alertEditPanel = new DefaultAlertEditPanel();
@@ -676,7 +676,7 @@ public class Frame extends JXFrame {
         // Refresh code templates after extensions have been loaded
         codeTemplatePanel.doRefreshCodeTemplates(false);
 
-        LicenseClient.start();
+        com.mirth.connect.client.ui.LicenseClient.start();
 
         AbstractAction logout = new AbstractAction() {
             public void actionPerformed(ActionEvent e) {
@@ -759,7 +759,7 @@ public class Frame extends JXFrame {
         container.getContentContainer().setLayout(new BorderLayout());
         container.setBorder(null);
         container.setTitleFont(new Font("Tahoma", Font.BOLD, 18));
-        container.setTitleForeground(UIConstants.HEADER_TITLE_TEXT_COLOR);
+        container.setTitleForeground(com.mirth.connect.client.ui.UIConstants.HEADER_TITLE_TEXT_COLOR);
 
         padlockWarning = new JLabel();
         padlockWarning.setText("    ");
@@ -767,18 +767,18 @@ public class Frame extends JXFrame {
         padlockWarning.setForeground(Color.WHITE);
         
         JLabel mirthConnectImage = new JLabel();
-        ImageIcon imageIcon = UIConstants.MIRTHCONNECT_LOGO_GRAY; // load the image to a imageIcon
+        ImageIcon imageIcon = com.mirth.connect.client.ui.UIConstants.MIRTHCONNECT_LOGO_GRAY; // load the image to a imageIcon
         Image image = imageIcon.getImage(); // transform it
         Image newimg = image.getScaledInstance(218, 29, java.awt.Image.SCALE_SMOOTH); // scale it the smooth way 
         imageIcon = new ImageIcon(newimg);
         mirthConnectImage.setIcon(imageIcon);
-        mirthConnectImage.setToolTipText(UIConstants.MIRTHCONNECT_TOOLTIP);
+        mirthConnectImage.setToolTipText(com.mirth.connect.client.ui.UIConstants.MIRTHCONNECT_TOOLTIP);
         mirthConnectImage.setCursor(new Cursor(Cursor.HAND_CURSOR));
         mirthConnectImage.setVerticalAlignment(SwingConstants.BOTTOM);
         mirthConnectImage.addMouseListener(new java.awt.event.MouseAdapter() {
 
             public void mouseClicked(java.awt.event.MouseEvent evt) {
-                BareBonesBrowserLaunch.openURL(UIConstants.MIRTHCONNECT_URL);
+                BareBonesBrowserLaunch.openURL(com.mirth.connect.client.ui.UIConstants.MIRTHCONNECT_URL);
             }
         });
         
@@ -848,7 +848,7 @@ public class Frame extends JXFrame {
      * loaded one.
      */
     public void setupChannel(Channel channel, String groupId) {
-        setBold(viewPane, UIConstants.ERROR_CONSTANT);
+        setBold(viewPane, com.mirth.connect.client.ui.UIConstants.ERROR_CONSTANT);
         setCurrentContentPage(channelEditPanel);
         setFocus(channelEditTasks);
         setVisibleTasks(channelEditTasks, channelEditPopupMenu, 0, 0, false);
@@ -869,7 +869,7 @@ public class Frame extends JXFrame {
         }
 
         confirmLeave();
-        setBold(viewPane, UIConstants.ERROR_CONSTANT);
+        setBold(viewPane, com.mirth.connect.client.ui.UIConstants.ERROR_CONSTANT);
         setCurrentContentPage(channelEditPanel);
         setFocus(channelEditTasks);
         setVisibleTasks(channelEditTasks, channelEditPopupMenu, 0, 4, false);
@@ -881,7 +881,7 @@ public class Frame extends JXFrame {
      * loaded one.
      */
     public void setupAlert(Map<String, Map<String, String>> protocolOptions) {
-        setBold(viewPane, UIConstants.ERROR_CONSTANT);
+        setBold(viewPane, com.mirth.connect.client.ui.UIConstants.ERROR_CONSTANT);
         setCurrentContentPage(alertEditPanel);
         setFocus(alertEditTasks);
         setVisibleTasks(alertEditTasks, alertEditPopupMenu, 0, 0, false);
@@ -893,7 +893,7 @@ public class Frame extends JXFrame {
      */
     public void editAlert(AlertModel alertModel, Map<String, Map<String, String>> protocolOptions) {
         if (alertEditPanel.editAlert(alertModel, protocolOptions)) {
-            setBold(viewPane, UIConstants.ERROR_CONSTANT);
+            setBold(viewPane, com.mirth.connect.client.ui.UIConstants.ERROR_CONSTANT);
             setCurrentContentPage(alertEditPanel);
             setFocus(alertEditTasks);
             setVisibleTasks(alertEditTasks, alertEditPopupMenu, 0, 0, false);
@@ -904,7 +904,7 @@ public class Frame extends JXFrame {
      * Edit global scripts
      */
     public void editGlobalScripts() {
-        setBold(viewPane, UIConstants.ERROR_CONSTANT);
+        setBold(viewPane, com.mirth.connect.client.ui.UIConstants.ERROR_CONSTANT);
         setCurrentContentPage(globalScriptsPanel);
         setFocus(globalScriptsTasks);
         setVisibleTasks(globalScriptsTasks, globalScriptsPopupMenu, 0, 0, false);
@@ -933,7 +933,7 @@ public class Frame extends JXFrame {
 
         // Start a new status updater job if the current content page is the dashboard
         if (currentContentPage == dashboardPanel || currentContentPage == alertPanel) {
-            statusUpdaterJob = statusUpdaterExecutor.submit(new StatusUpdater());
+            statusUpdaterJob = statusUpdaterExecutor.submit(new com.mirth.connect.client.ui.StatusUpdater());
         }
     }
 
@@ -1020,7 +1020,7 @@ public class Frame extends JXFrame {
     private void createViewPane() {
         // Create View pane
         viewPane = new JXTaskPane();
-        viewPane.setTitle("Mirth Connect");
+        viewPane.setTitle("BridgeLink");//Change to BridgeLink by Innovar Healthcare
         viewPane.setName(TaskConstants.VIEW_KEY);
         viewPane.setFocusable(false);
 
@@ -1100,9 +1100,9 @@ public class Frame extends JXFrame {
         addTask(TaskConstants.CHANNEL_EDIT_DISABLE_DESTINATION, "Disable Destination", "Disable the currently selected destination.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/control_stop_blue.png")), channelEditTasks, channelEditPopupMenu);
         addTask(TaskConstants.CHANNEL_EDIT_MOVE_DESTINATION_UP, "Move Dest. Up", "Move the currently selected destination up.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/arrow_up.png")), channelEditTasks, channelEditPopupMenu);
         addTask(TaskConstants.CHANNEL_EDIT_MOVE_DESTINATION_DOWN, "Move Dest. Down", "Move the currently selected destination down.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/arrow_down.png")), channelEditTasks, channelEditPopupMenu);
-        addTask(TaskConstants.CHANNEL_EDIT_FILTER, UIConstants.EDIT_FILTER, "Edit the filter for the current connector.", "F", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/table_edit.png")), channelEditTasks, channelEditPopupMenu);
-        addTask(TaskConstants.CHANNEL_EDIT_TRANSFORMER, UIConstants.EDIT_TRANSFORMER, "Edit the transformer for the current connector.", "T", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/table_edit.png")), channelEditTasks, channelEditPopupMenu);
-        addTask(TaskConstants.CHANNEL_EDIT_RESPONSE_TRANSFORMER, UIConstants.EDIT_RESPONSE_TRANSFORMER, "Edit the response transformer for the current connector.", "R", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/table_edit.png")), channelEditTasks, channelEditPopupMenu);
+        addTask(TaskConstants.CHANNEL_EDIT_FILTER, com.mirth.connect.client.ui.UIConstants.EDIT_FILTER, "Edit the filter for the current connector.", "F", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/table_edit.png")), channelEditTasks, channelEditPopupMenu);
+        addTask(TaskConstants.CHANNEL_EDIT_TRANSFORMER, com.mirth.connect.client.ui.UIConstants.EDIT_TRANSFORMER, "Edit the transformer for the current connector.", "T", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/table_edit.png")), channelEditTasks, channelEditPopupMenu);
+        addTask(TaskConstants.CHANNEL_EDIT_RESPONSE_TRANSFORMER, com.mirth.connect.client.ui.UIConstants.EDIT_RESPONSE_TRANSFORMER, "Edit the response transformer for the current connector.", "R", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/table_edit.png")), channelEditTasks, channelEditPopupMenu);
         addTask(TaskConstants.CHANNEL_EDIT_IMPORT_CONNECTOR, "Import Connector", "Import the currently displayed connector from an XML file.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/report_go.png")), channelEditTasks, channelEditPopupMenu);
         addTask(TaskConstants.CHANNEL_EDIT_EXPORT_CONNECTOR, "Export Connector", "Export the currently displayed connector to an XML file.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/report_disk.png")), channelEditTasks, channelEditPopupMenu);
         addTask(TaskConstants.CHANNEL_EDIT_EXPORT, "Export Channel", "Export the currently selected channel to an XML file.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/report_disk.png")), channelEditTasks, channelEditPopupMenu);
@@ -1258,12 +1258,12 @@ public class Frame extends JXFrame {
         otherPane.setTitle("Other");
         otherPane.setName(TaskConstants.OTHER_KEY);
         otherPane.setFocusable(false);
-        addTask(TaskConstants.OTHER_NOTIFICATIONS, UIConstants.VIEW_NOTIFICATIONS, "View notifications from NextGen Healthcare.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/flag_orange.png")), otherPane, null);
+        addTask(TaskConstants.OTHER_NOTIFICATIONS, com.mirth.connect.client.ui.UIConstants.VIEW_NOTIFICATIONS, "View notifications from NextGen Healthcare.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/flag_orange.png")), otherPane, null);
         addTask(TaskConstants.OTHER_VIEW_USER_API, "View User API", "View documentation for the Mirth Connect User API.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/page_white_text.png")), otherPane, null);
         addTask(TaskConstants.OTHER_VIEW_CLIENT_API, "View Client API", "View documentation for the Mirth Connect Client API.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/page_white_text.png")), otherPane, null);
         addTask(TaskConstants.OTHER_HELP, "Help", "View the Mirth Connect wiki.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/help.png")), otherPane, null);
-        addTask(TaskConstants.OTHER_ABOUT, "About Mirth Connect", "View the about page for Mirth Connect.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/information.png")), otherPane, null);
-        addTask(TaskConstants.OTHER_VISIT_MIRTH, "Visit nextgen.com", "View Mirth Connect's homepage.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/house.png")), otherPane, null);
+        addTask(TaskConstants.OTHER_ABOUT, "About BridgeLink", "View the about page for BridgeLink.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/information.png")), otherPane, null);//Change to BridgeLink by Innovar Healthcare
+        addTask(TaskConstants.OTHER_VISIT_MIRTH, "Visit innovarhealthcare", "View innovarhealthcare's homepage.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/house.png")), otherPane, null);//Change to Innovar Healthcare
         addTask(TaskConstants.OTHER_REPORT_ISSUE, "Report Issue", "Visit Mirth Connect's issue tracker.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/bug.png")), otherPane, null);
         addTask(TaskConstants.OTHER_LOGOUT, "Logout", "Logout and return to the login screen.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/disconnect.png")), otherPane, null);
         setNonFocusable(otherPane);
@@ -1276,11 +1276,11 @@ public class Frame extends JXFrame {
     }
 
     public void updateNotificationTaskName(int notifications) {
-        String taskName = UIConstants.VIEW_NOTIFICATIONS;
+        String taskName = com.mirth.connect.client.ui.UIConstants.VIEW_NOTIFICATIONS;
         if (notifications > 0) {
             taskName += " (" + notifications + ")";
         }
-        ((JXHyperlink) otherPane.getContentPane().getComponent(UIConstants.VIEW_NOTIFICATIONS_TASK_NUMBER)).setText(taskName);
+        ((JXHyperlink) otherPane.getContentPane().getComponent(com.mirth.connect.client.ui.UIConstants.VIEW_NOTIFICATIONS_TASK_NUMBER)).setText(taskName);
     }
 
     public int addTask(String callbackMethod, String displayName, String toolTip, String shortcutKey, ImageIcon icon, JXTaskPane pane, JPopupMenu menu) {
@@ -1375,8 +1375,8 @@ public class Frame extends JXFrame {
     public boolean alertRefresh() {
         boolean cancelRefresh = false;
 
-        if (PlatformUI.MIRTH_FRAME.isSaveEnabled()) {
-            int option = JOptionPane.showConfirmDialog(PlatformUI.MIRTH_FRAME, "<html>Any unsaved changes will be lost.<br>Would you like to continue?</html>", "Warning", JOptionPane.YES_NO_OPTION);
+        if (com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.isSaveEnabled()) {
+            int option = JOptionPane.showConfirmDialog(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "<html>Any unsaved changes will be lost.<br>Would you like to continue?</html>", "Warning", JOptionPane.YES_NO_OPTION);
 
             if (option == JOptionPane.NO_OPTION || option == JOptionPane.CLOSED_OPTION) {
                 cancelRefresh = true;
@@ -1418,9 +1418,9 @@ public class Frame extends JXFrame {
         Window owner = getWindowForComponent(parentComponent);
 
         if (owner instanceof java.awt.Frame) {
-            new CustomErrorDialog((java.awt.Frame) owner, message, question);
+            new com.mirth.connect.client.ui.CustomErrorDialog((java.awt.Frame) owner, message, question);
         } else { // window instanceof Dialog
-            new CustomErrorDialog((java.awt.Dialog) owner, message, question);
+            new com.mirth.connect.client.ui.CustomErrorDialog((java.awt.Dialog) owner, message, question);
         }
     }
 
@@ -1522,17 +1522,17 @@ public class Frame extends JXFrame {
                     }
                     mirthClient.close();
                     this.dispose();
-                    LoginPanel.getInstance().initialize(PlatformUI.SERVER_URL, PlatformUI.CLIENT_VERSION, "", "");
+                    com.mirth.connect.client.ui.LoginPanel.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
                     return;
                 } else if (t.getCause() != null && t.getCause() instanceof HttpHostConnectException && (StringUtils.contains(t.getCause().getMessage(), "Connection refused") || StringUtils.contains(t.getCause().getMessage(), "Host is down"))) {
                     connectionError = true;
                     statusUpdaterExecutor.shutdownNow();
 
                     String server;
-                    if (!StringUtils.isBlank(PlatformUI.SERVER_NAME)) {
-                        server = PlatformUI.SERVER_NAME + "(" + PlatformUI.SERVER_URL + ")";
+                    if (!StringUtils.isBlank(com.mirth.connect.client.ui.PlatformUI.SERVER_NAME)) {
+                        server = com.mirth.connect.client.ui.PlatformUI.SERVER_NAME + "(" + com.mirth.connect.client.ui.PlatformUI.SERVER_URL + ")";
                     } else {
-                        server = PlatformUI.SERVER_URL;
+                        server = com.mirth.connect.client.ui.PlatformUI.SERVER_URL;
                     }
                     alertWarning(parentComponent, "The Mirth Connect server " + server + " is no longer running.  Please start it and log in again.");
                     if (!exportChannelOnError()) {
@@ -1540,7 +1540,7 @@ public class Frame extends JXFrame {
                     }
                     mirthClient.close();
                     this.dispose();
-                    LoginPanel.getInstance().initialize(PlatformUI.SERVER_URL, PlatformUI.CLIENT_VERSION, "", "");
+                    com.mirth.connect.client.ui.LoginPanel.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
                     return;
                 }
             }
@@ -1559,9 +1559,9 @@ public class Frame extends JXFrame {
             Window owner = getWindowForComponent(parentComponent);
 
             if (owner instanceof java.awt.Frame) {
-                new ErrorDialog((java.awt.Frame) owner, message);
+                new com.mirth.connect.client.ui.ErrorDialog((java.awt.Frame) owner, message);
             } else { // window instanceof Dialog
-                new ErrorDialog((java.awt.Dialog) owner, message);
+                new com.mirth.connect.client.ui.ErrorDialog((java.awt.Dialog) owner, message);
             }
         }
     }
@@ -1599,11 +1599,11 @@ public class Frame extends JXFrame {
      */
     public void setBold(JXTaskPane pane, int index) {
         for (int i = 0; i < pane.getContentPane().getComponentCount(); i++) {
-            pane.getContentPane().getComponent(i).setFont(UIConstants.TEXTFIELD_PLAIN_FONT);
+            pane.getContentPane().getComponent(i).setFont(com.mirth.connect.client.ui.UIConstants.TEXTFIELD_PLAIN_FONT);
         }
 
-        if (index != UIConstants.ERROR_CONSTANT) {
-            pane.getContentPane().getComponent(index).setFont(UIConstants.TEXTFIELD_BOLD_FONT);
+        if (index != com.mirth.connect.client.ui.UIConstants.ERROR_CONSTANT) {
+            pane.getContentPane().getComponent(index).setFont(com.mirth.connect.client.ui.UIConstants.TEXTFIELD_BOLD_FONT);
         }
     }
 
@@ -1659,7 +1659,7 @@ public class Frame extends JXFrame {
             boolean componentVisible = visible;
             String componentTask = getComponentTaskMap().get(pane.getContentPane().getComponent(i));
             if (componentTask != null) {
-                if (!AuthorizationControllerFactory.getAuthorizationController().checkTask(pane.getName(), componentTask)) {
+                if (!com.mirth.connect.client.ui.AuthorizationControllerFactory.getAuthorizationController().checkTask(pane.getName(), componentTask)) {
                     componentVisible = false;
                 }
             }
@@ -1844,7 +1844,7 @@ public class Frame extends JXFrame {
      */
     public boolean updateCurrentUser(Component parentComponent, final User currentUser, String newPassword) {
         // Find out if the username is being changed so that we can login again.
-        boolean changingUsername = !currentUser.getUsername().equals(PlatformUI.USER_NAME);
+        boolean changingUsername = !currentUser.getUsername().equals(com.mirth.connect.client.ui.PlatformUI.USER_NAME);
 
         final String workingId = startWorking("Saving user...");
 
@@ -1894,10 +1894,10 @@ public class Frame extends JXFrame {
             final String workingId2 = startWorking("Switching User...");
 
             try {
-                LoadedExtensions.getInstance().resetPlugins();
+                com.mirth.connect.client.ui.LoadedExtensions.getInstance().resetPlugins();
                 mirthClient.logout();
                 mirthClient.login(currentUser.getUsername(), newPassword);
-                PlatformUI.USER_NAME = currentUser.getUsername();
+                com.mirth.connect.client.ui.PlatformUI.USER_NAME = currentUser.getUsername();
             } catch (ClientException e) {
                 alertThrowable(parentComponent, e);
             } finally {
@@ -1943,7 +1943,7 @@ public class Frame extends JXFrame {
         try {
             retrieveUsers();
             for (User user : users) {
-                if (user.getUsername().equals(PlatformUI.USER_NAME)) {
+                if (user.getUsername().equals(com.mirth.connect.client.ui.PlatformUI.USER_NAME)) {
                     currentUser = user;
                 }
             }
@@ -1963,7 +1963,7 @@ public class Frame extends JXFrame {
 
             public Void doInBackground() {
                 try {
-                    ConnectServiceUtil.registerUser(PlatformUI.SERVER_ID, PlatformUI.SERVER_VERSION, user, PlatformUI.HTTPS_PROTOCOLS, PlatformUI.HTTPS_CIPHER_SUITES);
+                    ConnectServiceUtil.registerUser(com.mirth.connect.client.ui.PlatformUI.SERVER_ID, com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION, user, com.mirth.connect.client.ui.PlatformUI.HTTPS_PROTOCOLS, com.mirth.connect.client.ui.PlatformUI.HTTPS_CIPHER_SUITES);
                 } catch (ClientException e) {
                     // ignore errors connecting to update/stats server
                 }
@@ -1995,7 +1995,7 @@ public class Frame extends JXFrame {
                     try {
                         String usageData = mirthClient.getUsageData(getClientStats());
                         if (usageData != null) {
-                            boolean isSent = ConnectServiceUtil.sendStatistics(PlatformUI.SERVER_ID, PlatformUI.SERVER_VERSION, false, usageData, PlatformUI.HTTPS_PROTOCOLS, PlatformUI.HTTPS_CIPHER_SUITES);
+                            boolean isSent = ConnectServiceUtil.sendStatistics(com.mirth.connect.client.ui.PlatformUI.SERVER_ID, com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION, false, usageData, com.mirth.connect.client.ui.PlatformUI.HTTPS_PROTOCOLS, com.mirth.connect.client.ui.PlatformUI.HTTPS_CIPHER_SUITES);
                             if (isSent) {
                                 UpdateSettings settings = new UpdateSettings();
                                 settings.setLastStatsTime(System.currentTimeMillis());
@@ -2076,28 +2076,28 @@ public class Frame extends JXFrame {
     // --- All bound actions are beneath this point --- //
     // ////////////////////////////////////////////////////////////
     public void goToMirth() {
-        BareBonesBrowserLaunch.openURL("https://www.nextgen.com/products-and-services/integration-engine");
+        BareBonesBrowserLaunch.openURL("https://innovar-userdocuments.s3.us-east-2.amazonaws.com/index.html");
     }
 
     public void goToUserAPI() {
-        BareBonesBrowserLaunch.openURL(PlatformUI.SERVER_URL + UIConstants.USER_API_LOCATION);
+        BareBonesBrowserLaunch.openURL(com.mirth.connect.client.ui.PlatformUI.SERVER_URL + com.mirth.connect.client.ui.UIConstants.USER_API_LOCATION);
     }
 
     public void goToClientAPI() {
-        BareBonesBrowserLaunch.openURL(PlatformUI.SERVER_URL + UIConstants.CLIENT_API_LOCATION);
+        BareBonesBrowserLaunch.openURL(com.mirth.connect.client.ui.PlatformUI.SERVER_URL + com.mirth.connect.client.ui.UIConstants.CLIENT_API_LOCATION);
     }
 
     public void goToAbout() {
-        new AboutMirth();
+        new com.mirth.connect.client.ui.AboutMirth();
     }
 
     public void doReportIssue() {
-        BareBonesBrowserLaunch.openURL(UIConstants.ISSUE_TRACKER_LOCATION);
+        BareBonesBrowserLaunch.openURL(com.mirth.connect.client.ui.UIConstants.ISSUE_TRACKER_LOCATION);
     }
 
     public void doShowDashboard() {
         if (dashboardPanel == null) {
-            dashboardPanel = new DashboardPanel();
+            dashboardPanel = new com.mirth.connect.client.ui.DashboardPanel();
         }
 
         if (!confirmLeave()) {
@@ -2124,7 +2124,7 @@ public class Frame extends JXFrame {
 
     public void doShowUsers() {
         if (userPanel == null) {
-            userPanel = new UserPanel();
+            userPanel = new com.mirth.connect.client.ui.UserPanel();
         }
 
         if (!confirmLeave()) {
@@ -2155,7 +2155,7 @@ public class Frame extends JXFrame {
 
     public void doShowSettings() {
         if (settingsPane == null) {
-            settingsPane = new SettingsPane();
+            settingsPane = new com.mirth.connect.client.ui.SettingsPane();
         }
 
         if (!confirmLeave()) {
@@ -2231,7 +2231,7 @@ public class Frame extends JXFrame {
         if (!quit && !confirmFirst) {
         	inactivity = true;
         }
-        LicenseClient.stop();
+        com.mirth.connect.client.ui.LicenseClient.stop();
 
         // MIRTH-3074 Remove the keyEventDispatcher to prevent memory leak.
         KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(keyEventDispatcher);
@@ -2247,7 +2247,7 @@ public class Frame extends JXFrame {
         userPreferences.putInt("width", getWidth());
         userPreferences.putInt("height", getHeight());
 
-        LoadedExtensions.getInstance().stopPlugins();
+        com.mirth.connect.client.ui.LoadedExtensions.getInstance().stopPlugins();
 
         final Properties tagUserProperties = new Properties();
         tagUserProperties.put("initialTagsDashboard", dashboardPanel.getUserTags());
@@ -2282,7 +2282,7 @@ public class Frame extends JXFrame {
         this.dispose();
 
         if (!quit) {
-            LoginPanel.getInstance().initialize(PlatformUI.SERVER_URL, PlatformUI.CLIENT_VERSION, "", "");
+            com.mirth.connect.client.ui.LoginPanel.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
         }
 
         return true;
@@ -2298,7 +2298,7 @@ public class Frame extends JXFrame {
 
     public void doEditGlobalScripts() {
         if (globalScriptsPanel == null) {
-            globalScriptsPanel = new GlobalScriptsPanel();
+            globalScriptsPanel = new com.mirth.connect.client.ui.GlobalScriptsPanel();
         }
 
         final String workingId = startWorking("Loading global scripts...");
@@ -2357,7 +2357,7 @@ public class Frame extends JXFrame {
             if (alertOption(this, "You must save your global scripts before exporting.  Would you like to save them now?")) {
                 String validationMessage = globalScriptsPanel.validateAllScripts();
                 if (validationMessage != null) {
-                    alertCustomError(this, validationMessage, CustomErrorDialog.ERROR_VALIDATING_GLOBAL_SCRIPTS);
+                    alertCustomError(this, validationMessage, com.mirth.connect.client.ui.CustomErrorDialog.ERROR_VALIDATING_GLOBAL_SCRIPTS);
                     return;
                 }
 
@@ -2381,7 +2381,7 @@ public class Frame extends JXFrame {
     public boolean doSaveGlobalScripts() {
         String validationMessage = globalScriptsPanel.validateAllScripts();
         if (validationMessage != null) {
-            alertCustomError(this, validationMessage, CustomErrorDialog.ERROR_VALIDATING_GLOBAL_SCRIPTS);
+            alertCustomError(this, validationMessage, com.mirth.connect.client.ui.CustomErrorDialog.ERROR_VALIDATING_GLOBAL_SCRIPTS);
             return false;
         }
 
@@ -2427,7 +2427,7 @@ public class Frame extends JXFrame {
     }
 
     public void doRefreshStatuses(boolean queue) {
-        QueuingSwingWorkerTask<Void, DashboardStatus> task = new QueuingSwingWorkerTask<Void, DashboardStatus>("doRefreshStatuses", "Loading statistics...") {
+        com.mirth.connect.client.ui.QueuingSwingWorkerTask<Void, DashboardStatus> task = new com.mirth.connect.client.ui.QueuingSwingWorkerTask<Void, DashboardStatus>("doRefreshStatuses", "Loading statistics...") {
             @Override
             public Void doInBackground() {
                 try {
@@ -2439,7 +2439,7 @@ public class Frame extends JXFrame {
                         tagsPanel.refresh();
                     }
 
-                    for (DashboardColumnPlugin plugin : LoadedExtensions.getInstance().getDashboardColumnPlugins().values()) {
+                    for (DashboardColumnPlugin plugin : com.mirth.connect.client.ui.LoadedExtensions.getInstance().getDashboardColumnPlugins().values()) {
                         plugin.tableUpdate(status);
                     }
 
@@ -2474,7 +2474,7 @@ public class Frame extends JXFrame {
                 } catch (ClientException e) {
                     status = null;
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e, e.getMessage(), false, TaskConstants.DASHBOARD_REFRESH);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e, e.getMessage(), false, TaskConstants.DASHBOARD_REFRESH);
                     });
                 }
 
@@ -2507,7 +2507,7 @@ public class Frame extends JXFrame {
             }
         };
 
-        new QueuingSwingWorker<Void, DashboardStatus>(task, queue).executeDelegate();
+        new com.mirth.connect.client.ui.QueuingSwingWorker<Void, DashboardStatus>(task, queue).executeDelegate();
     }
 
     public int getDeployedChannelCount() {
@@ -2550,7 +2550,7 @@ public class Frame extends JXFrame {
                     }
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
 
@@ -2592,7 +2592,7 @@ public class Frame extends JXFrame {
                     }
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
 
@@ -2631,7 +2631,7 @@ public class Frame extends JXFrame {
                     }
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
 
@@ -2674,7 +2674,7 @@ public class Frame extends JXFrame {
                     }
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
                 return null;
@@ -2720,7 +2720,7 @@ public class Frame extends JXFrame {
                     }
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
 
@@ -2776,7 +2776,7 @@ public class Frame extends JXFrame {
                     }
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
 
@@ -2821,16 +2821,16 @@ public class Frame extends JXFrame {
     }
 
     public void doNewUser() {
-        new UserDialog(null);
+        new com.mirth.connect.client.ui.UserDialog(null);
     }
 
     public void doEditUser() {
         int index = userPanel.getUserIndex();
 
-        if (index == UIConstants.ERROR_CONSTANT) {
+        if (index == com.mirth.connect.client.ui.UIConstants.ERROR_CONSTANT) {
             alertWarning(this, "User no longer exists.");
         } else {
-            new UserDialog(users.get(index));
+            new com.mirth.connect.client.ui.UserDialog(users.get(index));
         }
     }
 
@@ -2845,20 +2845,20 @@ public class Frame extends JXFrame {
 
             public Void doInBackground() {
                 if (users.size() == 1) {
-                    alertWarning(PlatformUI.MIRTH_FRAME, "You must have at least one user account.");
+                    alertWarning(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "You must have at least one user account.");
                     return null;
                 }
 
                 int userToDelete = userPanel.getUserIndex();
 
                 try {
-                    if (userToDelete != UIConstants.ERROR_CONSTANT) {
+                    if (userToDelete != com.mirth.connect.client.ui.UIConstants.ERROR_CONSTANT) {
                         mirthClient.removeUser(users.get(userToDelete).getId());
                         retrieveUsers();
                     }
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
                 return null;
@@ -2897,7 +2897,7 @@ public class Frame extends JXFrame {
         String userName = null;
         int index = userPanel.getUserIndex();
 
-        if (index != UIConstants.ERROR_CONSTANT) {
+        if (index != com.mirth.connect.client.ui.UIConstants.ERROR_CONSTANT) {
             user = users.get(index);
         }
 
@@ -2925,7 +2925,7 @@ public class Frame extends JXFrame {
     public void doDebugDeployFromChannelView() {
         String channelId = channelEditPanel.currentChannel.getId();
         if (isSaveEnabled()) {
-            if (alertOption(PlatformUI.MIRTH_FRAME, "<html>This channel will be saved before it is deployed in debug mode.<br/>Are you sure you want to save and debug this channel?</html>")) {
+            if (alertOption(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "<html>This channel will be saved before it is deployed in debug mode.<br/>Are you sure you want to save and debug this channel?</html>")) {
                 if (channelEditPanel.saveChanges()) {
                     setSaveEnabled(false);
                 } else {
@@ -2935,7 +2935,7 @@ public class Frame extends JXFrame {
                 return;
             }
         } else {
-            if (!alertOption(PlatformUI.MIRTH_FRAME, "Are you sure you want to debug this channel?")) {
+            if (!alertOption(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "Are you sure you want to debug this channel?")) {
                 return;
             }
         }
@@ -2951,7 +2951,7 @@ public class Frame extends JXFrame {
             return;
         }
 
-        DeployInDebugModeDialog deployInDebugMode = new DeployInDebugModeDialog();
+        com.mirth.connect.client.ui.DeployInDebugModeDialog deployInDebugMode = new com.mirth.connect.client.ui.DeployInDebugModeDialog();
         debugOptions = deployInDebugMode.getDebugOptions();
         
         if (deployInDebugMode.getIsDebugChannel()) {
@@ -2963,7 +2963,7 @@ public class Frame extends JXFrame {
         String channelId = channelEditPanel.currentChannel.getId();
 
         if (isSaveEnabled()) {
-            if (alertOption(PlatformUI.MIRTH_FRAME, "<html>This channel will be saved before it is deployed.<br/>Are you sure you want to save and deploy this channel?</html>")) {
+            if (alertOption(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "<html>This channel will be saved before it is deployed.<br/>Are you sure you want to save and deploy this channel?</html>")) {
                 if (channelEditPanel.saveChanges()) {
                     setSaveEnabled(false);
                 } else {
@@ -2973,7 +2973,7 @@ public class Frame extends JXFrame {
                 return;
             }
         } else {
-            if (!alertOption(PlatformUI.MIRTH_FRAME, "Are you sure you want to deploy this channel?")) {
+            if (!alertOption(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "Are you sure you want to deploy this channel?")) {
                 return;
             }
         }
@@ -2987,7 +2987,7 @@ public class Frame extends JXFrame {
         if (!channelStatus.getChannel().getExportData().getMetadata().isEnabled()) {
         	// Check that there are no errors in the channel before enabling the channel
         	boolean channelErrorsExist = channelEditPanel.checkAllForms(channelEditPanel.currentChannel) != null;
-        	if (!channelErrorsExist && alertOption(PlatformUI.MIRTH_FRAME, "The channel is disabled. Are you sure you want to enable and deploy the channel?")) {
+        	if (!channelErrorsExist && alertOption(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "The channel is disabled. Are you sure you want to enable and deploy the channel?")) {
         		// There are no errors in the channel, and the user chose to enable the channel
         		channelEditPanel.setChannelEnabledField(true);
     			channelEditPanel.saveChanges();
@@ -3039,7 +3039,7 @@ public class Frame extends JXFrame {
             return mirthClient.getChannelDependencies();
         } catch (ClientException e) {
             SwingUtilities.invokeLater(() -> {
-                alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
             });
         }
         return null;
@@ -3113,7 +3113,7 @@ public class Frame extends JXFrame {
 
                     } catch (ClientException e) {
                         SwingUtilities.invokeLater(() -> {
-                            alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                            alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                         });
                     }
                     return null;
@@ -3266,7 +3266,7 @@ public class Frame extends JXFrame {
                     mirthClient.undeployChannels(channelIds);
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
                 return null;
@@ -3445,7 +3445,7 @@ public class Frame extends JXFrame {
                 	}
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
                 return null;
@@ -3463,7 +3463,7 @@ public class Frame extends JXFrame {
                 }
 
                 if (!retrievedMetadata) {
-                    alertError(PlatformUI.MIRTH_FRAME, "Could not retrieve metadata for channel.");
+                    alertError(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "Could not retrieve metadata for channel.");
                 } else {
                     // activeBrowser instanceOf MessageBrowser, call MessageBrowser.loadChannels()
                     // activeBrowser instanceOf EnhancedMessageBrowser, call EnhancedMessageBrowser.loadChannels()
@@ -3515,15 +3515,15 @@ public class Frame extends JXFrame {
     }
 
     public void updateFilterTaskName(int rules) {
-        updateFilterOrTransformerTaskName(UIConstants.EDIT_FILTER, UIConstants.EDIT_FILTER_TASK_NUMBER, rules, false);
+        updateFilterOrTransformerTaskName(com.mirth.connect.client.ui.UIConstants.EDIT_FILTER, com.mirth.connect.client.ui.UIConstants.EDIT_FILTER_TASK_NUMBER, rules, false);
     }
 
     public void updateTransformerTaskName(int steps, boolean outboundTemplate) {
-        updateFilterOrTransformerTaskName(UIConstants.EDIT_TRANSFORMER, UIConstants.EDIT_TRANSFORMER_TASK_NUMBER, steps, outboundTemplate);
+        updateFilterOrTransformerTaskName(com.mirth.connect.client.ui.UIConstants.EDIT_TRANSFORMER, com.mirth.connect.client.ui.UIConstants.EDIT_TRANSFORMER_TASK_NUMBER, steps, outboundTemplate);
     }
 
     public void updateResponseTransformerTaskName(int steps, boolean outboundTemplate) {
-        updateFilterOrTransformerTaskName(UIConstants.EDIT_RESPONSE_TRANSFORMER, UIConstants.EDIT_RESPONSE_TRANSFORMER_TASK_NUMBER, steps, outboundTemplate);
+        updateFilterOrTransformerTaskName(com.mirth.connect.client.ui.UIConstants.EDIT_RESPONSE_TRANSFORMER, com.mirth.connect.client.ui.UIConstants.EDIT_RESPONSE_TRANSFORMER_TASK_NUMBER, steps, outboundTemplate);
     }
 
     private void updateFilterOrTransformerTaskName(String taskName, int componentIndex, int rulesOrSteps, boolean outboundTemplate) {
@@ -3623,7 +3623,7 @@ public class Frame extends JXFrame {
 
     public String readFileToString(File file) {
         try {
-            String content = FileUtils.readFileToString(file, UIConstants.CHARSET);
+            String content = FileUtils.readFileToString(file, com.mirth.connect.client.ui.UIConstants.CHARSET);
 
             if (StringUtils.startsWith(content, EncryptionSettings.ENCRYPTION_PREFIX)) {
                 return mirthClient.getEncryptor().decrypt(StringUtils.removeStart(content, EncryptionSettings.ENCRYPTION_PREFIX));
@@ -3641,7 +3641,7 @@ public class Frame extends JXFrame {
         JFileChooser importFileChooser = new JFileChooser();
 
         if (fileExtension != null) {
-            importFileChooser.setFileFilter(new MirthFileFilter(fileExtension));
+            importFileChooser.setFileFilter(new com.mirth.connect.client.ui.MirthFileFilter(fileExtension));
         }
 
         File currentDir = new File(userPreferences.get("currentDirectory", ""));
@@ -3663,7 +3663,7 @@ public class Frame extends JXFrame {
         importFileChooser.setMultiSelectionEnabled(true);
 
         if (fileExtension != null) {
-            importFileChooser.setFileFilter(new MirthFileFilter(fileExtension));
+            importFileChooser.setFileFilter(new com.mirth.connect.client.ui.MirthFileFilter(fileExtension));
         }
 
         File currentDir = new File(userPreferences.get("currentDirectory", ""));
@@ -3695,7 +3695,7 @@ public class Frame extends JXFrame {
         }
 
         if (fileExtension != null) {
-            exportFileChooser.setFileFilter(new MirthFileFilter(fileExtension));
+            exportFileChooser.setFileFilter(new com.mirth.connect.client.ui.MirthFileFilter(fileExtension));
         }
 
         File currentDir = new File(userPreferences.get("currentDirectory", ""));
@@ -3746,7 +3746,7 @@ public class Frame extends JXFrame {
                     contentToWrite = fileContents;
                 }
 
-                FileUtils.writeStringToFile(exportFile, contentToWrite, UIConstants.CHARSET);
+                FileUtils.writeStringToFile(exportFile, contentToWrite, com.mirth.connect.client.ui.UIConstants.CHARSET);
                 alertInformation(this, name + " was written to " + exportFile.getPath() + ".");
             } catch (IOException ex) {
                 alertError(this, "File could not be written.");
@@ -3842,7 +3842,7 @@ public class Frame extends JXFrame {
 
         String dataType = "RAW";
 
-        if (AuthorizationControllerFactory.getAuthorizationController().checkTask(TaskConstants.VIEW_KEY, TaskConstants.VIEW_CHANNEL)) {
+        if (com.mirth.connect.client.ui.AuthorizationControllerFactory.getAuthorizationController().checkTask(TaskConstants.VIEW_KEY, TaskConstants.VIEW_CHANNEL)) {
             /*
              * If the user has not yet navigated to channels at this point, the cache
              * (channelStatuses object) will return null, and the resulting block will pull down the
@@ -3857,7 +3857,7 @@ public class Frame extends JXFrame {
                     channelPanel.updateChannelStatuses(mirthClient.getChannelSummary(channelHeaders, true));
                     channelStatus = channelPanel.getCachedChannelStatuses().get(channelId);
                 } catch (ClientException e) {
-                    alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                    alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                 }
             }
 
@@ -3884,7 +3884,7 @@ public class Frame extends JXFrame {
             enhancedMessageExportDialog.setVisible(true);
         } else {
             if (messageExportDialog == null) {
-                messageExportDialog = new MessageExportDialog();
+                messageExportDialog = new com.mirth.connect.client.ui.MessageExportDialog();
             }
 
             messageExportDialog.setEncryptor(mirthClient.getEncryptor());
@@ -3900,7 +3900,7 @@ public class Frame extends JXFrame {
 
     public void doImportMessages() {
         if (messageImportDialog == null) {
-            messageImportDialog = new MessageImportDialog();
+            messageImportDialog = new com.mirth.connect.client.ui.MessageImportDialog();
         }
 
         messageImportDialog.setChannelId(activeBrowser.getChannelId());
@@ -3911,7 +3911,7 @@ public class Frame extends JXFrame {
 
     public void doRemoveAllMessages() {
         if (removeMessagesDialog == null) {
-            removeMessagesDialog = new RemoveMessagesDialog(this, true);
+            removeMessagesDialog = new com.mirth.connect.client.ui.RemoveMessagesDialog(this, true);
         }
 
         Set<String> channelIds = new HashSet<String>();
@@ -3947,7 +3947,7 @@ public class Frame extends JXFrame {
         List<DashboardStatus> channelStatuses = dashboardPanel.getSelectedStatusesRecursive();
 
         if (channelStatuses.size() != 0) {
-            new DeleteStatisticsDialog(channelStatuses);
+            new com.mirth.connect.client.ui.DeleteStatisticsDialog(channelStatuses);
         } else {
             dashboardPanel.deselectRows(false);
         }
@@ -3980,7 +3980,7 @@ public class Frame extends JXFrame {
                     mirthClient.clearStatistics(channelConnectorMapFinal, deleteReceived, deleteFiltered, deleteSent, deleteErrored);
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
                 return null;
@@ -4017,7 +4017,7 @@ public class Frame extends JXFrame {
                             // The client is no longer waiting for the delete request
                         } else {
                             SwingUtilities.invokeLater(() -> {
-                                alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                                alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                             });
                         }
                     }
@@ -4056,7 +4056,7 @@ public class Frame extends JXFrame {
                         mirthClient.removeMessage(channelId, messageId, metaDataId, patientId);
                     } catch (ClientException e) {
                         SwingUtilities.invokeLater(() -> {
-                            alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                            alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                         });
                     }
                     return null;
@@ -4106,7 +4106,7 @@ public class Frame extends JXFrame {
                 stopWorking(workingId);
                 Map<Integer, String> destinationConnectors = new LinkedHashMap<Integer, String>();
                 destinationConnectors.putAll(dashboardPanel.getDestinationConnectorNames(activeBrowser.getChannelId()));
-                new ReprocessMessagesDialog(activeBrowser.getChannelId(), filter, messageId, destinationConnectors, selectedMetaDataId, showWarning);
+                new com.mirth.connect.client.ui.ReprocessMessagesDialog(activeBrowser.getChannelId(), filter, messageId, destinationConnectors, selectedMetaDataId, showWarning);
             }
         };
 
@@ -4126,7 +4126,7 @@ public class Frame extends JXFrame {
                     }
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
                 return null;
@@ -4161,7 +4161,7 @@ public class Frame extends JXFrame {
 
     public void doExportAttachment() {
         if (attachmentExportDialog == null) {
-            attachmentExportDialog = new AttachmentExportDialog();
+            attachmentExportDialog = new com.mirth.connect.client.ui.AttachmentExportDialog();
         }
 
         attachmentExportDialog.setLocationRelativeTo(this);
@@ -4178,7 +4178,7 @@ public class Frame extends JXFrame {
                     mirthClient.processMessage(channelId, rawMessage);
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
                 return null;
@@ -4213,7 +4213,7 @@ public class Frame extends JXFrame {
                         exportPath = mirthClient.exportAllEvents();
                     } catch (ClientException e) {
                         SwingUtilities.invokeLater(() -> {
-                            alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                            alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                         });
                     }
                     return null;
@@ -4221,7 +4221,7 @@ public class Frame extends JXFrame {
 
                 public void done() {
                     if (exportPath != null) {
-                        alertInformation(PlatformUI.MIRTH_FRAME, "Events have been exported to the following server path:\n" + exportPath);
+                        alertInformation(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "Events have been exported to the following server path:\n" + exportPath);
                     }
 
                     stopWorking(workingId);
@@ -4239,7 +4239,7 @@ public class Frame extends JXFrame {
     public void doRefreshAlerts(boolean queue) {
         final List<String> selectedAlertIds = alertPanel.getSelectedAlertIds();
 
-        QueuingSwingWorkerTask<Void, Void> task = new QueuingSwingWorkerTask<Void, Void>("doRefreshAlerts", "Loading alerts...") {
+        com.mirth.connect.client.ui.QueuingSwingWorkerTask<Void, Void> task = new com.mirth.connect.client.ui.QueuingSwingWorkerTask<Void, Void>("doRefreshAlerts", "Loading alerts...") {
 
             private List<AlertStatus> alertStatusList;
 
@@ -4248,7 +4248,7 @@ public class Frame extends JXFrame {
                     alertStatusList = mirthClient.getAlertStatusList();
                 } catch (ClientException e) {
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
                 return null;
@@ -4260,7 +4260,7 @@ public class Frame extends JXFrame {
             }
         };
 
-        new QueuingSwingWorker<Void, Void>(task, queue).executeDelegate();
+        new com.mirth.connect.client.ui.QueuingSwingWorker<Void, Void>(task, queue).executeDelegate();
     }
 
     public void doSaveAlerts() {
@@ -4268,10 +4268,10 @@ public class Frame extends JXFrame {
             try {
                 ServerSettings serverSettings = mirthClient.getServerSettings();
                 if (StringUtils.isBlank(serverSettings.getSmtpHost()) || StringUtils.isBlank(serverSettings.getSmtpPort())) {
-                    alertWarning(PlatformUI.MIRTH_FRAME, "The SMTP server on the settings page is not specified or is incomplete.  An SMTP server is required to send email alerts.");
+                    alertWarning(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "The SMTP server on the settings page is not specified or is incomplete.  An SMTP server is required to send email alerts.");
                 }
             } catch (ClientException e) {
-                alertThrowable(PlatformUI.MIRTH_FRAME, e, false);
+                alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e, false);
             }
 
             final String workingId = startWorking("Saving alerts...");
@@ -4312,7 +4312,7 @@ public class Frame extends JXFrame {
                         mirthClient.removeAlert(alertId);
                     } catch (ClientException e) {
                         SwingUtilities.invokeLater(() -> {
-                            alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                            alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                         });
                         return null;
                     }
@@ -4380,7 +4380,7 @@ public class Frame extends JXFrame {
                         mirthClient.enableAlert(alertId);
                     } catch (ClientException e) {
                         SwingUtilities.invokeLater(() -> {
-                            alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                            alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                         });
                         return null;
                     }
@@ -4411,7 +4411,7 @@ public class Frame extends JXFrame {
                         mirthClient.disableAlert(alertId);
                     } catch (ClientException e) {
                         SwingUtilities.invokeLater(() -> {
-                            alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                            alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                         });
                         return null;
                     }
@@ -4516,7 +4516,7 @@ public class Frame extends JXFrame {
                         }
                     }
 
-                    FileUtils.writeStringToFile(exportFile, channelXML, UIConstants.CHARSET);
+                    FileUtils.writeStringToFile(exportFile, channelXML, com.mirth.connect.client.ui.UIConstants.CHARSET);
                 }
                 alertInformation(this, "All files were written successfully to " + exportDirectory.getPath() + ".");
             } catch (IOException ex) {
@@ -4640,7 +4640,7 @@ public class Frame extends JXFrame {
                 } catch (ClientException e) {
                     success = false;
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
 
@@ -4671,7 +4671,7 @@ public class Frame extends JXFrame {
                 } catch (ClientException e) {
                     success = false;
                     SwingUtilities.invokeLater(() -> {
-                        alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                     });
                 }
 
@@ -4703,13 +4703,13 @@ public class Frame extends JXFrame {
             public Void doInBackground() {
                 String packageName = extensionsPanel.getSelectedExtension().getPath();
 
-                if (alertOkCancel(PlatformUI.MIRTH_FRAME, "Uninstalling this extension will remove all plugins and/or connectors\nin the following extension folder: " + packageName)) {
+                if (alertOkCancel(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "Uninstalling this extension will remove all plugins and/or connectors\nin the following extension folder: " + packageName)) {
                     try {
                         mirthClient.uninstallExtension(packageName);
                     } catch (ClientException e) {
                         success = false;
                         SwingUtilities.invokeLater(() -> {
-                            alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                            alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                         });
                     }
                 }
@@ -4800,13 +4800,13 @@ public class Frame extends JXFrame {
     }
 
     public void doFind(JEditTextArea text) {
-        FindRplDialog find;
+        com.mirth.connect.client.ui.FindRplDialog find;
         Window owner = getWindowForComponent(text);
 
         if (owner instanceof java.awt.Frame) {
-            find = new FindRplDialog((java.awt.Frame) owner, true, text);
+            find = new com.mirth.connect.client.ui.FindRplDialog((java.awt.Frame) owner, true, text);
         } else { // window instanceof Dialog
-            find = new FindRplDialog((java.awt.Dialog) owner, true, text);
+            find = new com.mirth.connect.client.ui.FindRplDialog((java.awt.Dialog) owner, true, text);
         }
 
         find.setVisible(true);
@@ -4818,12 +4818,12 @@ public class Frame extends JXFrame {
         SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
             @Override
             protected String doInBackground() throws Exception {
-                return HttpUtil.executeGetRequest(UIConstants.HELP_URL_LOCATION, 30000, true, PlatformUI.HTTPS_PROTOCOLS, PlatformUI.HTTPS_CIPHER_SUITES);
+                return HttpUtil.executeGetRequest(com.mirth.connect.client.ui.UIConstants.HELP_URL_LOCATION, 30000, true, com.mirth.connect.client.ui.PlatformUI.HTTPS_PROTOCOLS, com.mirth.connect.client.ui.PlatformUI.HTTPS_CIPHER_SUITES);
             }
 
             @Override
             protected void done() {
-                String url = userPreferences.get("helpDefaultLocation", UIConstants.HELP_DEFAULT_LOCATION);
+                String url = userPreferences.get("helpDefaultLocation", com.mirth.connect.client.ui.UIConstants.HELP_DEFAULT_LOCATION);
 
                 try {
                     String webhelpJson = get();
@@ -4857,7 +4857,7 @@ public class Frame extends JXFrame {
     }
 
     public void goToNotifications() {
-        new NotificationDialog();
+        new com.mirth.connect.client.ui.NotificationDialog();
     }
 
     public Map<String, PluginMetaData> getPluginMetaData() {
@@ -4968,14 +4968,14 @@ public class Frame extends JXFrame {
         if (version == null) {
             message.append("The " + objectName + " being imported is from an older or unknown version of Mirth Connect.\n");
         } else {
-            int comparison = MigrationUtil.compareVersions(version, PlatformUI.SERVER_VERSION);
+            int comparison = MigrationUtil.compareVersions(version, com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION);
 
             if (comparison == 0) {
                 return true;
             }
 
             if (comparison > 0) {
-                alertInformation(this, "The " + objectName + " being imported originated from Mirth Connect version " + version + ".\nYou are using Mirth Connect version " + PlatformUI.SERVER_VERSION + ".\nThe " + objectName + " cannot be imported, because it originated from a newer version of Mirth Connect.");
+                alertInformation(this, "The " + objectName + " being imported originated from Mirth Connect version " + version + ".\nYou are using Mirth Connect version " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + ".\nThe " + objectName + " cannot be imported, because it originated from a newer version of Mirth Connect.");
                 return false;
             }
 
@@ -4984,7 +4984,7 @@ public class Frame extends JXFrame {
             }
         }
 
-        message.append("You are using Mirth Connect version " + PlatformUI.SERVER_VERSION + ".\nWould you like to automatically convert the " + objectName + " to the " + PlatformUI.SERVER_VERSION + " format?");
+        message.append("You are using Mirth Connect version " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + ".\nWould you like to automatically convert the " + objectName + " to the " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + " format?");
         return JOptionPane.YES_OPTION == JOptionPane.showConfirmDialog(this, message.toString(), "Select an Option", JOptionPane.YES_NO_OPTION);
     }
 
@@ -5015,12 +5015,12 @@ public class Frame extends JXFrame {
 
     public List<ResourceProperties> getResources() {
         if (settingsPane == null) {
-            settingsPane = new SettingsPane();
+            settingsPane = new com.mirth.connect.client.ui.SettingsPane();
         }
 
         List<ResourceProperties> resourceProperties = null;
 
-        SettingsPanelResources resourcesPanel = (SettingsPanelResources) settingsPane.getSettingsPanel(SettingsPanelResources.TAB_NAME);
+        com.mirth.connect.client.ui.SettingsPanelResources resourcesPanel = (com.mirth.connect.client.ui.SettingsPanelResources) settingsPane.getSettingsPanel(com.mirth.connect.client.ui.SettingsPanelResources.TAB_NAME);
         if (resourcesPanel != null) {
             resourceProperties = resourcesPanel.getCachedResources();
             if (resourceProperties == null) {
@@ -5098,10 +5098,10 @@ public class Frame extends JXFrame {
             public void run() {
                 if (StringUtils.isBlank(message)) {
                     padlockWarning.setText("     ");
-                    updateBackgroundColor(getCurrentUser(PlatformUI.MIRTH_FRAME));
+                    updateBackgroundColor(getCurrentUser(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME));
                 } else {
                     padlockWarning.setText(message);
-                    Color backgroundColor = PlatformUI.BOLD_RED_BACKGROUND_COLOR;
+                    Color backgroundColor = com.mirth.connect.client.ui.PlatformUI.BOLD_RED_BACKGROUND_COLOR;
                     setupBackgroundPainters(backgroundColor);
                     padlockWarning.repaint();
                 }
@@ -5114,10 +5114,10 @@ public class Frame extends JXFrame {
     }
     
     public void updateBackgroundColor(User currentUser) {
-	    Color backgroundColor = PlatformUI.DEFAULT_BACKGROUND_COLOR;
+	    Color backgroundColor = com.mirth.connect.client.ui.PlatformUI.DEFAULT_BACKGROUND_COLOR;
 	    try {
 	        if (currentUser != null) {
-	            String backgroundColorStr = mirthClient.getUserPreference(currentUser.getId(), UIConstants.USER_PREF_KEY_BACKGROUND_COLOR);
+	            String backgroundColorStr = mirthClient.getUserPreference(currentUser.getId(), com.mirth.connect.client.ui.UIConstants.USER_PREF_KEY_BACKGROUND_COLOR);
 	            if (StringUtils.isNotBlank(backgroundColorStr)) {
 	                Color backgroundColorPreference = ObjectXMLSerializer.getInstance().deserialize(backgroundColorStr, Color.class);
 	                if (backgroundColorPreference != null) {

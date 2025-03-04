@@ -16,14 +16,14 @@ import java.util.Calendar;
 import com.mirth.connect.client.ui.util.DisplayUtil;
 
 /** Creates the About Mirth dialog. The content is loaded from about.txt. */
-public class AboutMirth extends MirthDialog {
+public class AboutMirth extends com.mirth.connect.client.ui.MirthDialog {
 
     private Frame parent;
 
     /** Creates new form AboutMirth */
     public AboutMirth() {
-        super(PlatformUI.MIRTH_FRAME);
-        this.parent = PlatformUI.MIRTH_FRAME;
+        super(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME);
+        this.parent = com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME;
         initComponents();
         loadContent();
         aboutContent.setCaretPosition(0);
@@ -54,21 +54,21 @@ public class AboutMirth extends MirthDialog {
     public void loadContent() {
         StringBuilder content = new StringBuilder();
 
-        if (PlatformUI.SERVER_VERSION != null) {
-            content.append("Mirth Connect Server " + PlatformUI.SERVER_VERSION + "\n\n");
+        if (com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION != null) {
+            content.append("BridgeLink Server " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + "\n\n");//Change to BridgeLink by Innovar Healthcare
         }
 
-        if (PlatformUI.BUILD_DATE != null) {
-            content.append("Built on " + PlatformUI.BUILD_DATE + "\n\n");
+        if (com.mirth.connect.client.ui.PlatformUI.BUILD_DATE != null) {
+            content.append("Built on " + com.mirth.connect.client.ui.PlatformUI.BUILD_DATE + "\n\n");
         }
 
-        if (PlatformUI.SERVER_ID != null) {
-            content.append("Server ID: " + PlatformUI.SERVER_ID + "\n\n");
+        if (com.mirth.connect.client.ui.PlatformUI.SERVER_ID != null) {
+            content.append("Server ID: " + com.mirth.connect.client.ui.PlatformUI.SERVER_ID + "\n\n");
         }
 
         content.append("Java version: " + System.getProperty("java.version") + "\n\n");
 
-        content.append("(c) 2005-2024 NextGen Healthcare. All rights reserved. Visit http://www.nextgen.com\n\n");
+        content.append("(c) 2025 Innovar Healthcare. All rights reserved. Visit http://www.innovarhealthcare.com\n\n");//Change to BridgeLink by Innovar Healthcare
         content.append("The following is a list of acknowledgements for third-party software that is included with Mirth Connect:\n\n");
         content.append("This product includes software developed by the Apache Software Foundation (http://www.apache.org/).\n\n");
         content.append("This product includes all or a portion of the HL7 Vocabulary database, or is derived from the HL7 Vocabulary database, subject to a license from Health Level Seven, Inc.\n\n");
@@ -116,7 +116,7 @@ public class AboutMirth extends MirthDialog {
 
         jLabel2.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
         jLabel2.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel2.setText("About Mirth Connect");
+        jLabel2.setText("About BridgeLink"); //Change to BridgeLink by Innovar Healthcare
 
         javax.swing.GroupLayout mirthHeadingPanel1Layout = new javax.swing.GroupLayout(mirthHeadingPanel1);
         mirthHeadingPanel1.setLayout(mirthHeadingPanel1Layout);

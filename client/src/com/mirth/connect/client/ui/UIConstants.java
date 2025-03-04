@@ -27,7 +27,7 @@ public class UIConstants {
     public static final String EOL_MAC = "\r";
     // for Frame
     public static final int TASK_PANE_WIDTH = 170;
-    public static final String TITLE_TEXT = "Mirth Connect Administrator";
+    public static final String TITLE_TEXT = "BridgeLink Administrator";
     public static final int MIRTH_WIDTH = 950;
     public static final int MIRTH_HEIGHT = 650;
     public static final ImageIcon MIRTH_FAVICON = new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/NG_MC_Icon_32x32.png"));
@@ -35,8 +35,9 @@ public class UIConstants {
     public static final ImageIcon MIRTHCONNECT_LOGO_GRAY = new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/MirthConnect_Logo_WM_White.png"));
     public static final String MIRTHCORP_TOOLTIP = "NextGen Healthcare";
     public static final String MIRTHCONNECT_TOOLTIP = "Mirth Connect";
-    public static final String MIRTHCORP_URL = "https://www.nextgen.com/products-and-services/integration-engine";
-    public static final String MIRTHCONNECT_URL = "https://www.nextgen.com/products-and-services/integration-engine";
+//    public static final String MIRTHCORP_URL = "https://www.nextgen.com/products-and-services/integration-engine";
+public static final String MIRTHCORP_URL = "https://www.innovarhealthcare.com";
+    public static final String MIRTHCONNECT_URL = "https://www.innovarhealthcare.com";
     public static final String EDIT_FILTER = "Edit Filter";
     public static final String EDIT_TRANSFORMER = "Edit Transformer";
     public static final String EDIT_RESPONSE_TRANSFORMER = "Edit Response";

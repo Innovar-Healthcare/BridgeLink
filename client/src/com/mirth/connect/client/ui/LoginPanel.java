@@ -9,9 +9,7 @@
 
 package com.mirth.connect.client.ui;
 
-import java.awt.Color;
-import java.awt.Cursor;
-import java.awt.Image;
+import java.awt.*;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -50,36 +48,36 @@ public class LoginPanel extends javax.swing.JFrame {
     private LoginPanel() {
         initComponents();
         DisplayUtil.setResizable(this, false);
-        jLabel2.setForeground(UIConstants.HEADER_TITLE_TEXT_COLOR);
-        jLabel5.setForeground(UIConstants.HEADER_TITLE_TEXT_COLOR);
+        jLabel2.setForeground(com.mirth.connect.client.ui.UIConstants.HEADER_TITLE_TEXT_COLOR);
+        jLabel5.setForeground(com.mirth.connect.client.ui.UIConstants.HEADER_TITLE_TEXT_COLOR);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setIconImage(UIConstants.MIRTH_FAVICON.getImage());
-        ImageIcon imageIcon = UIConstants.MIRTHCORP_LOGO; // load the image to a imageIcon
+        setIconImage(com.mirth.connect.client.ui.UIConstants.MIRTH_FAVICON.getImage());
+        ImageIcon imageIcon = com.mirth.connect.client.ui.UIConstants.MIRTHCORP_LOGO; // load the image to a imageIcon
         Image image = imageIcon.getImage(); // transform it
         Image newimg = image.getScaledInstance(175, 30, java.awt.Image.SCALE_SMOOTH); // scale it the smooth way 
         imageIcon = new ImageIcon(newimg);
         
         mirthCorpImage.setIcon(imageIcon);
         mirthCorpImage.setText("");
-        mirthCorpImage.setToolTipText(UIConstants.MIRTHCORP_TOOLTIP);
+        mirthCorpImage.setToolTipText(com.mirth.connect.client.ui.UIConstants.MIRTHCORP_TOOLTIP);
         mirthCorpImage.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
         mirthCorpImage.addMouseListener(new java.awt.event.MouseAdapter() {
 
             public void mouseClicked(java.awt.event.MouseEvent evt) {
-                BareBonesBrowserLaunch.openURL(UIConstants.MIRTHCORP_URL);
+                BareBonesBrowserLaunch.openURL(com.mirth.connect.client.ui.UIConstants.MIRTHCORP_URL);
             }
         });
 
         mirthCorpImage1.setIcon(imageIcon);
         mirthCorpImage1.setText("");
-        mirthCorpImage1.setToolTipText(UIConstants.MIRTHCORP_TOOLTIP);
+        mirthCorpImage1.setToolTipText(com.mirth.connect.client.ui.UIConstants.MIRTHCORP_TOOLTIP);
         mirthCorpImage1.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
         mirthCorpImage1.addMouseListener(new java.awt.event.MouseAdapter() {
 
             public void mouseClicked(java.awt.event.MouseEvent evt) {
-                BareBonesBrowserLaunch.openURL(UIConstants.MIRTHCORP_URL);
+                BareBonesBrowserLaunch.openURL(com.mirth.connect.client.ui.UIConstants.MIRTHCORP_URL);
             }
         });
 
@@ -105,10 +103,10 @@ public class LoginPanel extends javax.swing.JFrame {
                 return;
             }
 
-            PlatformUI.CLIENT_VERSION = version;
+            com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION = version;
 
-            setTitle("Mirth Connect " + version + " - Login");
-            setIconImage(UIConstants.MIRTH_FAVICON.getImage());
+            setTitle("BridgeLink " + version + " - Login");//Change to BridgeLink by Innovar Healthcare
+            setIconImage(com.mirth.connect.client.ui.UIConstants.MIRTH_FAVICON.getImage());
 
             serverName.setText(mirthServer);
 
@@ -171,8 +169,8 @@ public class LoginPanel extends javax.swing.JFrame {
         placeholderButton = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
-        setTitle("Mirth Connect - Login");
-        setIconImage(UIConstants.MIRTH_FAVICON.getImage());
+        setTitle("BridgeLink - Login");//Change to BridgeLink by Innovar Healthcare
+        setIconImage(com.mirth.connect.client.ui.UIConstants.MIRTH_FAVICON.getImage());
 
         loginMain.setBackground(new java.awt.Color(255, 255, 255));
         loginMain.setName(""); // NOI18N
@@ -203,7 +201,7 @@ public class LoginPanel extends javax.swing.JFrame {
 
         jLabel2.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
         jLabel2.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel2.setText("Mirth Connect Login");
+        jLabel2.setText("BridgeLink Login");//Change to BridgeLink by Innovar Healthcare
 
         javax.swing.GroupLayout mirthHeadingPanel2Layout = new javax.swing.GroupLayout(mirthHeadingPanel2);
         mirthHeadingPanel2.setLayout(mirthHeadingPanel2Layout);
@@ -320,7 +318,7 @@ public class LoginPanel extends javax.swing.JFrame {
 
         jLabel5.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
         jLabel5.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel5.setText("Mirth Connect Login");
+        jLabel5.setText("BridgeLink Login");//Change to BridgeLink by Innovar Healthcare
 
         javax.swing.GroupLayout mirthHeadingPanel1Layout = new javax.swing.GroupLayout(mirthHeadingPanel1);
         mirthHeadingPanel1.setLayout(mirthHeadingPanel1Layout);
@@ -431,14 +429,14 @@ public class LoginPanel extends javax.swing.JFrame {
 
                 try {
                     String server = serverName.getText();
-                    client = new Client(server, PlatformUI.HTTPS_PROTOCOLS, PlatformUI.HTTPS_CIPHER_SUITES);
-                    PlatformUI.SERVER_URL = server;
+                    client = new Client(server, com.mirth.connect.client.ui.PlatformUI.HTTPS_PROTOCOLS, com.mirth.connect.client.ui.PlatformUI.HTTPS_CIPHER_SUITES);
+                    com.mirth.connect.client.ui.PlatformUI.SERVER_URL = server;
 
                     // Attempt to login
                     LoginStatus loginStatus = null;
                     try {
                         Map<String, List<String>> customHeaders = new HashMap<String, List<String>>();
-                        customHeaders.put(UserServletInterface.LOGIN_SERVER_URL_HEADER, Collections.singletonList(PlatformUI.SERVER_URL));
+                        customHeaders.put(UserServletInterface.LOGIN_SERVER_URL_HEADER, Collections.singletonList(com.mirth.connect.client.ui.PlatformUI.SERVER_URL));
                         loginStatus = client.getServlet(UserServletInterface.class, null, customHeaders).login(username.getText(), String.valueOf(password.getPassword()));
                     } catch (ClientException ex) {
                         ex.printStackTrace();
@@ -457,7 +455,7 @@ public class LoginPanel extends javax.swing.JFrame {
                     if ((loginStatus != null) && ((loginStatus.getStatus() == LoginStatus.Status.SUCCESS) || (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD))) {
                         if (!handleSuccess(loginStatus)) {
                             LoginPanel.getInstance().setVisible(false);
-                            LoginPanel.getInstance().initialize(PlatformUI.SERVER_URL, PlatformUI.CLIENT_VERSION, "", "");
+                            LoginPanel.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
                         }
                     } else {
                         // Assume failure unless overridden by a plugin
@@ -476,7 +474,7 @@ public class LoginPanel extends javax.swing.JFrame {
                                     errorOccurred = false;
                                     if (!handleSuccess(loginStatus)) {
                                         LoginPanel.getInstance().setVisible(false);
-                                        LoginPanel.getInstance().initialize(PlatformUI.SERVER_URL, PlatformUI.CLIENT_VERSION, "", "");
+                                        LoginPanel.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
                                     }
                                 }
                             }
@@ -512,7 +510,7 @@ public class LoginPanel extends javax.swing.JFrame {
                     PublicServerSettings publicServerSettings = client.getPublicServerSettings();
                     
                     if (publicServerSettings.getLoginNotificationEnabled() == true) {
-                    	CustomBannerPanelDialog customBannerPanelDialog = new CustomBannerPanelDialog(LoginPanel.getInstance(), "Login Notification", publicServerSettings.getLoginNotificationMessage());
+                    	com.mirth.connect.client.ui.CustomBannerPanelDialog customBannerPanelDialog = new com.mirth.connect.client.ui.CustomBannerPanelDialog(LoginPanel.getInstance(), "Login Notification", publicServerSettings.getLoginNotificationMessage());
                     	boolean isAccepted = customBannerPanelDialog.isAccepted();
                     	
                     	if (isAccepted == true) {
@@ -525,51 +523,51 @@ public class LoginPanel extends javax.swing.JFrame {
                     
                     String environmentName = publicServerSettings.getEnvironmentName();
                     if (!StringUtils.isBlank(environmentName)) {
-                        PlatformUI.ENVIRONMENT_NAME = environmentName;
+                        com.mirth.connect.client.ui.PlatformUI.ENVIRONMENT_NAME = environmentName;
                     }
 
                     String serverName = publicServerSettings.getServerName();
                     if (!StringUtils.isBlank(serverName)) {
-                        PlatformUI.SERVER_NAME = serverName;
+                        com.mirth.connect.client.ui.PlatformUI.SERVER_NAME = serverName;
                     } else {
-                        PlatformUI.SERVER_NAME = null;
+                        com.mirth.connect.client.ui.PlatformUI.SERVER_NAME = null;
                     }
 
                     Color defaultBackgroundColor = publicServerSettings.getDefaultAdministratorBackgroundColor();
                     if (defaultBackgroundColor != null) {
-                        PlatformUI.DEFAULT_BACKGROUND_COLOR = defaultBackgroundColor;
+                        com.mirth.connect.client.ui.PlatformUI.DEFAULT_BACKGROUND_COLOR = defaultBackgroundColor;
                     }
                 } catch (ClientException e) {
-                    PlatformUI.SERVER_NAME = null;
+                    com.mirth.connect.client.ui.PlatformUI.SERVER_NAME = null;
                 }
 
                 try {
                     String database = (String) client.getAbout().get("database");
                     if (!StringUtils.isBlank(database)) {
-                        PlatformUI.SERVER_DATABASE = database;
+                        com.mirth.connect.client.ui.PlatformUI.SERVER_DATABASE = database;
                     } else {
-                        PlatformUI.SERVER_DATABASE = null;
+                        com.mirth.connect.client.ui.PlatformUI.SERVER_DATABASE = null;
                     }
                 } catch (ClientException e) {
-                    PlatformUI.SERVER_DATABASE = null;
+                    com.mirth.connect.client.ui.PlatformUI.SERVER_DATABASE = null;
                 }
 
                 try {
                     Map<String, String[]> map = client.getProtocolsAndCipherSuites();
-                    PlatformUI.SERVER_HTTPS_SUPPORTED_PROTOCOLS = map.get(MirthSSLUtil.KEY_SUPPORTED_PROTOCOLS);
-                    PlatformUI.SERVER_HTTPS_ENABLED_CLIENT_PROTOCOLS = map.get(MirthSSLUtil.KEY_ENABLED_CLIENT_PROTOCOLS);
-                    PlatformUI.SERVER_HTTPS_ENABLED_SERVER_PROTOCOLS = map.get(MirthSSLUtil.KEY_ENABLED_SERVER_PROTOCOLS);
-                    PlatformUI.SERVER_HTTPS_SUPPORTED_CIPHER_SUITES = map.get(MirthSSLUtil.KEY_SUPPORTED_CIPHER_SUITES);
-                    PlatformUI.SERVER_HTTPS_ENABLED_CIPHER_SUITES = map.get(MirthSSLUtil.KEY_ENABLED_CIPHER_SUITES);
+                    com.mirth.connect.client.ui.PlatformUI.SERVER_HTTPS_SUPPORTED_PROTOCOLS = map.get(MirthSSLUtil.KEY_SUPPORTED_PROTOCOLS);
+                    com.mirth.connect.client.ui.PlatformUI.SERVER_HTTPS_ENABLED_CLIENT_PROTOCOLS = map.get(MirthSSLUtil.KEY_ENABLED_CLIENT_PROTOCOLS);
+                    com.mirth.connect.client.ui.PlatformUI.SERVER_HTTPS_ENABLED_SERVER_PROTOCOLS = map.get(MirthSSLUtil.KEY_ENABLED_SERVER_PROTOCOLS);
+                    com.mirth.connect.client.ui.PlatformUI.SERVER_HTTPS_SUPPORTED_CIPHER_SUITES = map.get(MirthSSLUtil.KEY_SUPPORTED_CIPHER_SUITES);
+                    com.mirth.connect.client.ui.PlatformUI.SERVER_HTTPS_ENABLED_CIPHER_SUITES = map.get(MirthSSLUtil.KEY_ENABLED_CIPHER_SUITES);
                 } catch (ClientException e) {
                 }
 
-                PlatformUI.USER_NAME = StringUtils.defaultString(loginStatus.getUpdatedUsername(), username.getText());
+                com.mirth.connect.client.ui.PlatformUI.USER_NAME = StringUtils.defaultString(loginStatus.getUpdatedUsername(), username.getText());
                 setStatus("Authenticated...");
                 new Mirth(client);
                 LoginPanel.getInstance().setVisible(false);
 
-                User currentUser = PlatformUI.MIRTH_FRAME.getCurrentUser(PlatformUI.MIRTH_FRAME);
+                User currentUser = com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.getCurrentUser(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME);
                 Properties userPreferences = new Properties();
                 Set<String> preferenceNames = new HashSet<String>();
                 preferenceNames.add("firstlogin");
@@ -603,13 +601,13 @@ public class LoginPanel extends javax.swing.JFrame {
                             	currentUser.setDescription(info[10]);
                         	}
                     	}
-                        FirstLoginDialog firstLoginDialog = new FirstLoginDialog(currentUser);
+                        com.mirth.connect.client.ui.FirstLoginDialog firstLoginDialog = new com.mirth.connect.client.ui.FirstLoginDialog(currentUser);
                         // if leaving the first login dialog without saving
                         if (!firstLoginDialog.getResult()) {
                         	return false;
                         }
                     } else if (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD) {
-                        new ChangePasswordDialog(currentUser, loginStatus.getMessage());
+                        new com.mirth.connect.client.ui.ChangePasswordDialog(currentUser, loginStatus.getMessage());
                     }
 
                     // Check for new notifications from update server if enabled
@@ -621,22 +619,22 @@ public class LoginPanel extends javax.swing.JFrame {
                             archivedNotifications = ObjectXMLSerializer.getInstance().deserialize(archivedNotificationString, Set.class);
                         }
                         // Update the Other Tasks pane with the unarchived notification count
-                        int unarchivedNotifications = ConnectServiceUtil.getNotificationCount(PlatformUI.SERVER_ID, PlatformUI.SERVER_VERSION, LoadedExtensions.getInstance().getExtensionVersions(), archivedNotifications, PlatformUI.HTTPS_PROTOCOLS, PlatformUI.HTTPS_CIPHER_SUITES);
-                        PlatformUI.MIRTH_FRAME.updateNotificationTaskName(unarchivedNotifications);
+                        int unarchivedNotifications = ConnectServiceUtil.getNotificationCount(com.mirth.connect.client.ui.PlatformUI.SERVER_ID, com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION, com.mirth.connect.client.ui.LoadedExtensions.getInstance().getExtensionVersions(), archivedNotifications, com.mirth.connect.client.ui.PlatformUI.HTTPS_PROTOCOLS, com.mirth.connect.client.ui.PlatformUI.HTTPS_CIPHER_SUITES);
+                        com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.updateNotificationTaskName(unarchivedNotifications);
 
                         // Display notification dialog if enabled and if there are new notifications
                         String showNotificationPopup = userPreferences.getProperty("showNotificationPopup");
                         if (showNotificationPopup == null || BooleanUtils.toBoolean(showNotificationPopup)) {
                             if (unarchivedNotifications > 0) {
-                                new NotificationDialog();
+                                new com.mirth.connect.client.ui.NotificationDialog();
                             }
                         }
                     }
                 } catch (ClientException e) {
-                    PlatformUI.MIRTH_FRAME.alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                    com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                 }
 
-                PlatformUI.MIRTH_FRAME.sendUsageStatistics();
+                com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.sendUsageStatistics();
                 
                 return true;
             }

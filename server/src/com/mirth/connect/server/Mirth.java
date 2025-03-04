@@ -77,8 +77,8 @@ public class Mirth extends Thread {
     private boolean running = false;
     private PropertiesConfiguration mirthProperties = PropertiesConfigurationUtil.create();
     private PropertiesConfiguration versionProperties = PropertiesConfigurationUtil.create();
-    private MirthWebServer webServer;
-    private CommandQueue commandQueue = CommandQueue.getInstance();
+    private com.mirth.connect.server.MirthWebServer webServer;
+    private com.mirth.connect.server.CommandQueue commandQueue = com.mirth.connect.server.CommandQueue.getInstance();
     private EngineController engineController = ControllerFactory.getFactory().createEngineController();
     private ConfigurationController configurationController = ControllerFactory.getFactory().createConfigurationController();
     private UserController userController = ControllerFactory.getFactory().createUserController();
@@ -130,7 +130,7 @@ public class Mirth extends Thread {
         initializeLogging();
 
         if (initResources()) {
-            logger.debug("starting Mirth Connect server...");
+            logger.debug("starting BridgeLink server...");
 
             // Initialize TLS system properties as early as possible, because otherwise they will be cached
             if (System.getProperty("jdk.tls.ephemeralDHKeySize") == null) {
@@ -155,18 +155,18 @@ public class Mirth extends Thread {
             running = true;
 
             // add the start command to the queue
-            CommandQueue.getInstance().clear();
-            CommandQueue.getInstance().addCommand(new Command(Command.Operation.START_SERVER));
+            com.mirth.connect.server.CommandQueue.getInstance().clear();
+            com.mirth.connect.server.CommandQueue.getInstance().addCommand(new com.mirth.connect.server.Command(com.mirth.connect.server.Command.Operation.START_SERVER));
 
             Runtime.getRuntime().addShutdownHook(new ShutdownHook());
 
             // pulls commands off of the command queue
             while (running) {
-                Command command = commandQueue.getCommand();
+                com.mirth.connect.server.Command command = commandQueue.getCommand();
 
-                if (command.getOperation().equals(Command.Operation.START_SERVER)) {
+                if (command.getOperation().equals(com.mirth.connect.server.Command.Operation.START_SERVER)) {
                     startup();
-                } else if (command.getOperation().equals(Command.Operation.SHUTDOWN_SERVER)) {
+                } else if (command.getOperation().equals(com.mirth.connect.server.Command.Operation.SHUTDOWN_SERVER)) {
                     shutdown();
                 }
             }
@@ -469,7 +469,7 @@ public class Mirth extends Thread {
         logger.debug("starting jetty web server");
 
         try {
-            webServer = new MirthWebServer(mirthProperties);
+            webServer = new com.mirth.connect.server.MirthWebServer(mirthProperties);
             webServer.startup();
         } catch (Exception e) {
             logger.warn("Could not start web server.", e);
@@ -539,8 +539,8 @@ public class Mirth extends Thread {
      * system console.
      */
     private void printSplashScreen() {
-        logger.info("Mirth Connect " + versionProperties.getString("mirth.version") + " (Built on " + versionProperties.getString("mirth.date") + ") server successfully started.");
-        logger.info("This product was developed by NextGen Healthcare (https://www.nextgen.com) and its contributors (c)2005-2024.");
+        logger.info("BridgeLink " + versionProperties.getString("mirth.version") + " (Built on " + versionProperties.getString("mirth.date") + ") server successfully started.");//changed to BridgeLink by Innovar Healthcare
+        logger.info("This product was developed by Innovar Healthcare (https://www.innovarhealthcare.com) and its contributors (c)2025-now."); //changed by Innovar Healthcare
         logger.info("Running " + System.getProperty("java.vm.name") + " " + System.getProperty("java.version") + " on " + System.getProperty("os.name") + " (" + System.getProperty("os.version") + ", " + System.getProperty("os.arch") + "), " + configurationController.getDatabaseType() + ", with charset " + Charset.defaultCharset() + ".");
 
         if (webServer != null) {

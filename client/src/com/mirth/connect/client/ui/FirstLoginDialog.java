@@ -32,7 +32,7 @@ import com.mirth.connect.model.User;
 /**
  * A dialog for creating a new user or editing a current user
  */
-public class FirstLoginDialog extends javax.swing.JDialog implements UserDialogInterface {
+public class FirstLoginDialog extends javax.swing.JDialog implements com.mirth.connect.client.ui.UserDialogInterface {
 
     private Frame parent;
     private boolean result = false;
@@ -40,19 +40,19 @@ public class FirstLoginDialog extends javax.swing.JDialog implements UserDialogI
 
     /** Creates new form UserDialog */
     public FirstLoginDialog(User currentUser) {
-        super(PlatformUI.MIRTH_FRAME);
-        this.parent = PlatformUI.MIRTH_FRAME;
+        super(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME);
+        this.parent = com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME;
         initComponents();
         DisplayUtil.setResizable(this, false);
         finishButton.setEnabled(false);
 
         userEditPanel.setUser(this, currentUser);
-        userEditPanel.setRequiredFields(true, true);
+        userEditPanel.setRequiredFields(false, true); //Change AllRequired to False by Innovar Healthcare
         if (currentUser.getId() == 1) {
             registerCheckBox.setVisible(false);
         }
 
-        jLabel2.setForeground(UIConstants.HEADER_TITLE_TEXT_COLOR);
+        jLabel2.setForeground(com.mirth.connect.client.ui.UIConstants.HEADER_TITLE_TEXT_COLOR);
         setModal(true);
 
         setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
@@ -109,7 +109,7 @@ public class FirstLoginDialog extends javax.swing.JDialog implements UserDialogI
         contentTextPane = new javax.swing.JTextPane();
         
         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
-        setTitle("Welcome to Mirth Connect");
+        setTitle("Welcome to BridgeLink");//Change to BridgeLink by Innovar Healthcare
 
         channelOverview.setBackground(new java.awt.Color(255, 255, 255));
         channelOverview.setName(""); // NOI18N
@@ -123,7 +123,8 @@ public class FirstLoginDialog extends javax.swing.JDialog implements UserDialogI
 
         jLabel2.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
         jLabel2.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel2.setText("<html>Welcome to Mirth<sup>&#174;</sup> Connect by NextGen<sup>&#174;</sup> Healthcare</html>");
+//        jLabel2.setText("<html>Welcome to Mirth<sup>&#174;</sup> Connect by NextGen<sup>&#174;</sup> Healthcare</html>");
+        jLabel2.setText("<html>Welcome to BridgeLink<sup>&#174;</sup> by Innovar Healthcare</html>");//Change to BridgeLink by Innovar Healthcare
 
         javax.swing.GroupLayout mirthHeadingPanel1Layout = new javax.swing.GroupLayout(mirthHeadingPanel1);
         mirthHeadingPanel1.setLayout(mirthHeadingPanel1Layout);
@@ -144,16 +145,16 @@ public class FirstLoginDialog extends javax.swing.JDialog implements UserDialogI
 
         jTextPane1.setEditable(false);
         jTextPane1.setBackground(new java.awt.Color(250, 250, 210));
-        jTextPane1.setText("You may now customize your Mirth Connect user account information. You also have the option of changing your account password.");
+        jTextPane1.setText("You may now customize your BridgeLink user account information. You also have the option of changing your account password.");//Change to BridgeLink by Innovar Healthcare
         jTextPane1.setAutoscrolls(false);
         jTextPane1.setDisabledTextColor(new java.awt.Color(0, 0, 0));
         jTextPane1.setEnabled(false);
         jScrollPane1.setViewportView(jTextPane1);
         
         registerCheckBox.setBackground(new java.awt.Color(255, 255, 255));
-        registerCheckBox.setSelected(true);
-        registerCheckBox.setText("Register user with NextGen Healthcare");
-        registerCheckBox.setToolTipText("<html>Register your user information with NextGen Healthcare to help us<br>improve the product and provide better service.</html>");
+        registerCheckBox.setSelected(false);
+        registerCheckBox.setText("Register user with Innovar Healthcare");
+        registerCheckBox.setToolTipText("<html>Register your user information with Innovar Healthcare to help us<br>improve the product and provide better service.</html>");
         registerCheckBox.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 registerCheckBoxActionPerformed(evt);
@@ -162,7 +163,7 @@ public class FirstLoginDialog extends javax.swing.JDialog implements UserDialogI
         
         userConsentCheckBox.setBackground(new java.awt.Color(255, 255, 255));
         userConsentCheckBox.setSelected(true);
-        userConsentCheckBox.setText("I consent to receive email updates and marketing messages from NextGen Healthcare.");
+        userConsentCheckBox.setText("I consent to receive email updates and marketing messages from Innovar Healthcare.");
         userConsentCheckBox.setToolTipText("<html></html>"); 
 
         contentTextPane.setContentType("text/html");
@@ -209,9 +210,9 @@ public class FirstLoginDialog extends javax.swing.JDialog implements UserDialogI
                     .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 353, Short.MAX_VALUE)
                     .addGroup(channelOverviewLayout.createSequentialGroup()
                         .addGroup(channelOverviewLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(registerCheckBox)
-                            .addComponent(userConsentCheckBox)
-                            .addComponent(contentTextPane)
+//                            .addComponent(registerCheckBox)  //remove by Innovar Healthcare
+//                            .addComponent(userConsentCheckBox) //remove by Innovar Healthcare
+//                            .addComponent(contentTextPane)//remove by Innovar Healthcare
                             .addComponent(userEditPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                         .addGap(0, 19, Short.MAX_VALUE)))
                 .addContainerGap())
@@ -224,12 +225,12 @@ public class FirstLoginDialog extends javax.swing.JDialog implements UserDialogI
                 .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(userEditPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(registerCheckBox)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(userConsentCheckBox)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(contentTextPane)
+//                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+//                .addComponent(registerCheckBox) //remove by Innovar Healthcare
+//                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+//                .addComponent(userConsentCheckBox) //remove by Innovar Healthcare
+//                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+//                .addComponent(contentTextPane) //remove by Innovar Healthcare
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                 .addComponent(jSeparator1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
@@ -309,6 +310,7 @@ public class FirstLoginDialog extends javax.swing.JDialog implements UserDialogI
 
     private void registerCheckBoxActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_registerCheckBoxActionPerformed
         boolean allRequired = registerCheckBox.isSelected();
+        allRequired = false; //Change to consent false by Innovar Healthcare
         if (allRequired) {
             userConsentCheckBox.setSelected(true);
             userConsentCheckBox.setEnabled(true);

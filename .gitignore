@@ -8,6 +8,7 @@ donkey/donkey-test
 .sonar
 **/junit-reports
 **/code-coverage-reports
+.DS_Store
 
 # /client/
 /client/logs
