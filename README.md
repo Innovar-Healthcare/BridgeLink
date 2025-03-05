@@ -40,14 +40,14 @@ BridgeLink installers are available for individual operating systems (.exe for W
 
 BridgeLink installers also come with the option to install and start a service that will run in the background. You also have the option of installing and running the BridgeLink Server Manager, which allows you to start and stop the service on some operating systems, change BridgeLink properties and backend database settings, and view the server logs.
 
-An optional BridgeLink Command Line Interface can be installed, allowing you to connect to a running BridgeLink Server using a command line. This tool is useful for performing or scripting server tasks without opening the BridgeLink Administrator.
+An optional Command Line Interface can be installed, allowing you to connect to a running BridgeLink Server using a command line. This tool is useful for performing or scripting server tasks without opening the BridgeLink Administrator.
 
 The BridgeLink Administrator Launcher can also be installed, allowing you to manage connections to multiple BridgeLink servers and configure options such as Java runtime, max heap size, and security protocols.
 
 After the installation, the BridgeLink directory layout will look as follows:
 
-- /appdata/bridgeLinkdb: The embedded database (Do NOT delete if you specify Derby as your database). This will be created when the BridgeLink Server is started. The path for appdata is defined by the dir.appdata property in bridgeLink.properties.
-- /cli-lib: Libraries for the BridgeLink Command Line Interface (if installed)
+- /appdata/mirthdb: The embedded database (Do NOT delete if you specify Derby as your database). This will be created when the BridgeLink Server is started. The path for appdata is defined by the dir.appdata property in mirth.properties.
+- /cli-lib: Libraries for the Command Line Interface (if installed)
 - /client-lib: Libraries for the BridgeLink Administrator
 - /conf: Configuration files
 - /custom-lib: Place your custom user libraries here to be used by the default library resource.
@@ -81,7 +81,7 @@ You may also notice a security warning when starting the administrator (dialog b
 ## 5. Running BridgeLink in Java 9 or greater
 In order to run BridgeLink in Java 9 or greater, copy the options from `docs/blservice-java9+.vmoptions` and append them to either blserver.vmoptions or blservice.vmoptions, depending on your deployment. Then restart BridgeLink.
 
-To run the BridgeLink Command Line Interface, create a new file named blcommand.vmoptions in the BridgeLink root directory. Copy all of the options from `docs/blservice-java9+.vmoptions` into blcommand.vmoptions and save before launching the Command Line Interface.
+To run the Command Line Interface, create a new file named blcommand.vmoptions in the BridgeLink root directory. Copy all of the options from `docs/blservice-java9+.vmoptions` into blcommand.vmoptions and save before launching the Command Line Interface.
 
 ------------
 
