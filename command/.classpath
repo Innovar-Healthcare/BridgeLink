@@ -2,7 +2,6 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="src" path="conf"/>
-	<classpathentry kind="src" path="test"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/Server">
 		<accessrules>
@@ -48,47 +47,44 @@
 			<attribute name="javadoc_location" value="http://commons.apache.org/cli/api-release/"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry kind="lib" path="lib/commons-lang3-3.13.0.jar"/>
+	<classpathentry kind="lib" path="lib/commons-lang-2.6.jar">
+		<attributes>
+			<attribute name="javadoc_location" value="http://commons.apache.org/lang/api-2.6/"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="lib" path="lib/commons-lang3-3.4.jar"/>
+	<classpathentry kind="lib" path="lib/commons-codec-1.10.jar">
+		<attributes>
+			<attribute name="javadoc_location" value="http://commons.apache.org/codec/api-release/"/>
+		</attributes>
+	</classpathentry>
 	<classpathentry kind="lib" path="lib/commons-logging-1.2.jar">
 		<attributes>
 			<attribute name="javadoc_location" value="http://commons.apache.org/logging/apidocs/"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry kind="lib" path="lib/log4j-1.2-api-2.17.2.jar">
+	<classpathentry kind="lib" path="lib/log4j-1.2.16.jar">
 		<attributes>
-			<attribute name="javadoc_location" value="https://logging.apache.org/log4j/2.x/log4j-1.2-api/apidocs/"/>
-		</attributes>
-	</classpathentry>
-	<classpathentry kind="lib" path="lib/log4j-api-2.17.2.jar">
-		<attributes>
-			<attribute name="javadoc_location" value="https://logging.apache.org/log4j/2.x/log4j-api/apidocs/"/>
-		</attributes>
-	</classpathentry>
-	<classpathentry kind="lib" path="lib/log4j-core-2.17.2.jar">
-		<attributes>
-			<attribute name="javadoc_location" value="https://logging.apache.org/log4j/2.x/log4j-core/apidocs/"/>
+			<attribute name="javadoc_location" value="http://logging.apache.org/log4j/1.2/apidocs/"/>
 		</attributes>
 	</classpathentry>
 	<classpathentry kind="lib" path="lib/xpp3-1.1.4c.jar"/>
-	<classpathentry kind="lib" path="lib/commons-io-2.13.0.jar"/>
-	<classpathentry kind="lib" path="lib/commons-collections4-4.4.jar"/>
-	<classpathentry kind="lib" path="lib/velocity-engine-core-2.3.jar"/>
-	<classpathentry kind="lib" path="lib/velocity-tools-generic-3.1.jar"/>
-	<classpathentry kind="lib" path="lib/commons-configuration2-2.8.0.jar"/>
-	<classpathentry kind="lib" path="lib/bcpkix-jdk18on-1.78.1.jar"/>
-	<classpathentry kind="lib" path="lib/bcprov-jdk18on-1.78.1.jar"/>
-	<classpathentry kind="lib" path="lib/bcutil-jdk18on-1.78.1.jar"/>
-	<classpathentry kind="lib" path="lib/commons-vfs2-2.9.0.jar"/>
-	<classpathentry kind="lib" path="lib/jetty-util-9.4.53.v20231009.jar"/>
-	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
-	<classpathentry kind="lib" path="lib/commons-codec-1.16.0.jar"/>
-	<classpathentry kind="lib" path="lib/httpcore-4.4.13.jar"/>
-	<classpathentry kind="lib" path="lib/httpclient-4.5.13.jar"/>
-	<classpathentry kind="lib" path="lib/httpmime-4.5.13.jar"/>
-	<classpathentry kind="lib" path="lib/rhino-1.7.13.jar"/>
-	<classpathentry kind="lib" path="lib/xstream-1.4.20.jar"/>
-	<classpathentry kind="lib" path="lib/commons-pool2-2.3.jar"/>
-	<classpathentry kind="lib" path="lib/slf4j-api-1.7.30.jar"/>
-	<classpathentry kind="lib" path="lib/slf4j-log4j12-1.7.30.jar"/>
+	<classpathentry kind="lib" path="lib/commons-io-2.3.jar"/>
+	<classpathentry kind="lib" path="lib/mirth-crypto.jar"/>
+	<classpathentry kind="lib" path="lib/not-yet-commons-ssl-0.3.11.jar"/>
+	<classpathentry kind="lib" path="lib/xstream-1.4.7.jar"/>
+	<classpathentry kind="lib" path="lib/commons-collections-3.2.1.jar"/>
+	<classpathentry kind="lib" path="lib/velocity-1.7.jar"/>
+	<classpathentry kind="lib" path="lib/velocity-tools-2.0.jar"/>
+	<classpathentry kind="lib" path="lib/commons-configuration-1.7.jar"/>
+	<classpathentry kind="lib" path="lib/httpclient-4.5.3.jar"/>
+	<classpathentry kind="lib" path="lib/httpcore-4.4.6.jar"/>
+	<classpathentry kind="lib" path="lib/httpmime-4.5.3.jar"/>
+	<classpathentry kind="lib" path="lib/bcpkix-jdk15on-157.jar"/>
+	<classpathentry kind="lib" path="lib/bcprov-ext-jdk15on-157.jar"/>
+	<classpathentry kind="lib" path="lib/bcprov-jdk15on-157.jar"/>
+	<classpathentry kind="lib" path="lib/rhino-1.7.7.1.jar"/>
+	<classpathentry kind="lib" path="lib/commons-vfs2-2.1.jar"/>
+	<classpathentry kind="lib" path="lib/jetty-util-9.4.6.v20170531.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
