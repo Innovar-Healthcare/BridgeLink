@@ -36,14 +36,14 @@ public class ManagerTray {
     public ManagerTray() {}
 
     public void setupTray() {
-        menu = new PopupMenu("Mirth Connect Server Manager");
+        menu = new PopupMenu("BridgeLink Server Manager");
 
         viewItem = new MenuItem("Show Manager");
 //        viewItem.setIcon(new ImageIcon(this.getClass().getResource("images/start.png")));
         viewItem.addActionListener(new ActionListener() {
 
             public void actionPerformed(ActionEvent e) {
-                PlatformUI.MANAGER_DIALOG.open();
+                com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.open();
             }
         });
         menu.add(viewItem);
@@ -54,37 +54,37 @@ public class ManagerTray {
         administratorItem.addActionListener(new ActionListener() {
 
             public void actionPerformed(ActionEvent e) {
-                ManagerController.getInstance().launchAdministrator(null);
+                com.mirth.connect.manager.ManagerController.getInstance().launchAdministrator(null);
             }
         });
         menu.add(administratorItem);
 
-        startItem = new MenuItem("Start Mirth Connect");
+        startItem = new MenuItem("Start BridgeLink");
 //        startItem.setIcon(new ImageIcon(this.getClass().getResource("images/start.png")));
         startItem.addActionListener(new ActionListener() {
 
             public void actionPerformed(ActionEvent e) {
-                ManagerController.getInstance().startMirthWorker();
+                com.mirth.connect.manager.ManagerController.getInstance().startMirthWorker();
             }
         });
         menu.add(startItem);
 
-        stopItem = new MenuItem("Stop Mirth Connect");
+        stopItem = new MenuItem("Stop BridgeLink");
 //        stopItem.setIcon(new ImageIcon(this.getClass().getResource("images/stop.png")));
         stopItem.addActionListener(new ActionListener() {
 
             public void actionPerformed(ActionEvent e) {
-                ManagerController.getInstance().stopMirthWorker();
+                com.mirth.connect.manager.ManagerController.getInstance().stopMirthWorker();
             }
         });
         menu.add(stopItem);
 
-        restartItem = new MenuItem("Restart Mirth Connect");
+        restartItem = new MenuItem("Restart BridgeLink");
 //        restartItem.setIcon(new ImageIcon(this.getClass().getResource("images/restart.png")));
         restartItem.addActionListener(new ActionListener() {
 
             public void actionPerformed(ActionEvent e) {
-                ManagerController.getInstance().restartMirthWorker();
+                com.mirth.connect.manager.ManagerController.getInstance().restartMirthWorker();
             }
         });
         menu.add(restartItem);
@@ -95,26 +95,26 @@ public class ManagerTray {
         quitItem.addActionListener(new ActionListener() {
 
             public void actionPerformed(ActionEvent evt) {
-                PlatformUI.MANAGER_DIALOG.close();
-                Manager.shutdown();
+                com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.close();
+                com.mirth.connect.manager.Manager.shutdown();
             }
         });
         menu.add(quitItem);
 
         ImageIcon icon = new ImageIcon(this.getClass().getResource("images/NG_MC_Icon_Grey_32x32.png"));
-        mirthTrayIcon = new TrayIcon(icon.getImage(), "Mirth Connect Server Manager", menu);
+        mirthTrayIcon = new TrayIcon(icon.getImage(), "BridgeLink Server Manager", menu);
         mirthTrayIcon.setImageAutoSize(true);
 
         // Action listener for left click.
         mirthTrayIcon.addActionListener(new ActionListener() {
 
             public void actionPerformed(ActionEvent e) {
-                PlatformUI.MANAGER_DIALOG.open();
+                com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.open();
             }
         });
 
         try {
-            if (ServiceControllerFactory.getServiceController().isShowTrayIcon()) {
+            if (com.mirth.connect.manager.ServiceControllerFactory.getServiceController().isShowTrayIcon()) {
                 SystemTray tray = null;
                 try {
                     tray = SystemTray.getSystemTray();
@@ -127,7 +127,7 @@ public class ManagerTray {
                 }
             } else {
                 // If no tray dialog is being shown, open the manager dialog automatically
-                PlatformUI.MANAGER_DIALOG.open();
+                com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.open();
             }
         } catch (Exception e) {
             // Ignore exceptions getting the service controller.

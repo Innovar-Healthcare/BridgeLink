@@ -51,8 +51,8 @@ import com.mirth.connect.manager.components.MirthTextField;
 
 public class ManagerDialog extends JDialog {
 
-    private ServiceController serviceController = null;
-    private ManagerController managerController = null;
+    private com.mirth.connect.manager.ServiceController serviceController = null;
+    private com.mirth.connect.manager.ManagerController managerController = null;
     private boolean loading = false;
     private String lastSelectedDatabaseType;
     private Map<String, String> databaseUrls = new HashMap<String, String>();
@@ -70,14 +70,14 @@ public class ManagerDialog extends JDialog {
             LookAndFeelAddons.setAddon(WindowsLookAndFeelAddons.class);
 
             getContentPane().setBackground(Color.WHITE);
-            setTitle("Mirth Connect Server Manager");
+            setTitle("BridgeLink Server Manager");
             setIconImage(new ImageIcon(this.getClass().getResource("images/NG_MC-ServerManager_Icon_F_32x32.png")).getImage());
             
             DisplayUtil.setResizable(this, false);
 
-            serviceController = ServiceControllerFactory.getServiceController();
-            managerController = ManagerController.getInstance();
-            heapSize = (String) managerController.getServerProperties().getProperty(ManagerConstants.ADMINISTRATOR_MAX_HEAP_SIZE);
+            serviceController = com.mirth.connect.manager.ServiceControllerFactory.getServiceController();
+            managerController = com.mirth.connect.manager.ManagerController.getInstance();
+            heapSize = (String) managerController.getServerProperties().getProperty(com.mirth.connect.manager.ManagerConstants.ADMINISTRATOR_MAX_HEAP_SIZE);
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
@@ -138,7 +138,7 @@ public class ManagerDialog extends JDialog {
 
         // if there is no tray icon, shutdown and exit the manager
         if (!serviceController.isShowTrayIcon()) {
-            Manager.shutdown();
+            com.mirth.connect.manager.Manager.shutdown();
         }
     }
 
@@ -149,7 +149,6 @@ public class ManagerDialog extends JDialog {
     public boolean isApplyEnabled() {
         return applyButton.isEnabled();
     }
-
     private void initServicePanel() {
         servicePanel = new JPanel(new MigLayout("insets 8, novisualpadding, hidemode 3", "24[][][]", "[]12[]12[]12[]12[]"));
         servicePanel.setBackground(new Color(255, 255, 255));
@@ -162,7 +161,7 @@ public class ManagerDialog extends JDialog {
                 startButtonActionPerformed(evt);
             }
         });
-        startLabel = new JLabel("Starts the Mirth Connect service");
+        startLabel = new JLabel("Starts the BridgeLink service");
 
         restartButton = new JButton("Restart");
         restartButton.addActionListener(new ActionListener() {
@@ -170,7 +169,7 @@ public class ManagerDialog extends JDialog {
                 restartButtonActionPerformed(evt);
             }
         });
-        restartLabel = new JLabel("Restarts the Mirth Connect service");
+        restartLabel = new JLabel("Restarts the BridgeLink service");
 
         stopButton = new JButton("Stop");
         stopButton.addActionListener(new ActionListener() {
@@ -178,7 +177,7 @@ public class ManagerDialog extends JDialog {
                 stopButtonActionPerformed(evt);
             }
         });
-        stopLabel = new JLabel("Stops the Mirth Connect service");
+        stopLabel = new JLabel("Stops the BridgeLink service");
 
         refreshButton = new JButton("Refresh");
         refreshButton.addActionListener(new ActionListener() {
@@ -186,9 +185,9 @@ public class ManagerDialog extends JDialog {
                 refreshButtonActionPerformed(evt);
             }
         });
-        refreshLabel = new JLabel("Refreshes the Mirth Connect service status");
+        refreshLabel = new JLabel("Refreshes the BridgeLink service status");
 
-        startup = new JCheckBox("Start Mirth Connect Server Manager on system startup");
+        startup = new JCheckBox("Start BridgeLink Server Manager on system startup");
         startup.setFocusable(false);
         startup.setToolTipText("Starts this application when logging into the operating system. Currently only enabled for Windows.");
         startup.setBackground(new Color(255, 255, 255));
@@ -240,15 +239,15 @@ public class ManagerDialog extends JDialog {
 
         mainLogLevelLabel = new JLabel("Main Log Level:");
         mainLogLevelCombobox = new MirthComboBox();
-        mainLogLevelCombobox.setModel(new DefaultComboBoxModel(ManagerConstants.LOG4J_ERROR_CODES)); // This can be combined with the above as a new ctor
+        mainLogLevelCombobox.setModel(new DefaultComboBoxModel(com.mirth.connect.manager.ManagerConstants.LOG4J_ERROR_CODES)); // This can be combined with the above as a new ctor
 
         databaseLogLevelLabel = new JLabel("Database Log Level:");
         databaseLogLevelCombobox = new MirthComboBox();
-        databaseLogLevelCombobox.setModel(new DefaultComboBoxModel(ManagerConstants.LOG4J_ERROR_CODES));
+        databaseLogLevelCombobox.setModel(new DefaultComboBoxModel(com.mirth.connect.manager.ManagerConstants.LOG4J_ERROR_CODES));
 
         channelLogLevelLabel = new JLabel("Channel Log Level:");
         channelLogLevelCombobox = new MirthComboBox();
-        channelLogLevelCombobox.setModel(new DefaultComboBoxModel(ManagerConstants.LOG4J_ERROR_CODES_WITH_BLANK));
+        channelLogLevelCombobox.setModel(new DefaultComboBoxModel(com.mirth.connect.manager.ManagerConstants.LOG4J_ERROR_CODES_WITH_BLANK));
 
         refreshServiceButton = new JButton("Refresh");
         refreshServiceButton.addActionListener(new ActionListener() {
@@ -306,8 +305,8 @@ public class ManagerDialog extends JDialog {
         javaVersionField = new JLabel("javaVersion");
 
         contactPrefixLabel = new JLabel("Need Help?  Contact");
-        mirthSupportLink = new JLabel("<html><font color=blue><u>NextGen Healthcare</u></font></html>");
-        mirthSupportLink.setToolTipText("Visit NextGen Healthcare's website.");
+        mirthSupportLink = new JLabel("<html><font color=blue><u>Innovar Healthcare</u></font></html>");
+        mirthSupportLink.setToolTipText("Visit Innovar Healthcare's website.");
         mirthSupportLink.setCursor(new Cursor(Cursor.HAND_CURSOR));
         mirthSupportLink.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent evt) {
@@ -437,7 +436,7 @@ public class ManagerDialog extends JDialog {
     }
 
     private void mirthSupportLinkMouseClicked(MouseEvent evt) {
-        BareBonesBrowserLaunch.openURL("https://www.nextgen.com/contact-us");
+        BareBonesBrowserLaunch.openURL("https://www.innovarhealthcare.com");
     }
 
     private void startupActionPerformed(ActionEvent evt) {
@@ -508,7 +507,7 @@ public class ManagerDialog extends JDialog {
     }
 
     private void viewFileButtonActionPerformed(ActionEvent evt) {
-        managerController.openLogFile(managerController.getLog4jProperties().getString(ManagerConstants.DIR_LOGS) + System.getProperty("file.separator") + (String) serverLogFiles.getSelectedValue());
+        managerController.openLogFile(managerController.getLog4jProperties().getString(com.mirth.connect.manager.ManagerConstants.DIR_LOGS) + System.getProperty("file.separator") + (String) serverLogFiles.getSelectedValue());
     }
 
     private void restartButtonActionPerformed(ActionEvent evt) {
@@ -524,7 +523,7 @@ public class ManagerDialog extends JDialog {
     }
 
     private void heapSizeButtonActionPerformed(ActionEvent evt) {
-        HeapSizeDialog dialog = new HeapSizeDialog(heapSize);
+        com.mirth.connect.manager.HeapSizeDialog dialog = new com.mirth.connect.manager.HeapSizeDialog(heapSize);
         heapSize = dialog.getHeapSize();
     }
 
@@ -535,33 +534,33 @@ public class ManagerDialog extends JDialog {
         serverMemoryField.setText(managerController.getServiceXmx());
         serverVersionField.setText(managerController.getServerVersion());
         javaVersionField.setText(System.getProperty("java.version"));
-        httpPortField.setText(managerController.getServerProperties().getString(ManagerConstants.SERVER_HTTP_PORT));
-        httpsPortField.setText(managerController.getServerProperties().getString(ManagerConstants.SERVER_HTTPS_PORT));
+        httpPortField.setText(managerController.getServerProperties().getString(com.mirth.connect.manager.ManagerConstants.SERVER_HTTP_PORT));
+        httpsPortField.setText(managerController.getServerProperties().getString(com.mirth.connect.manager.ManagerConstants.SERVER_HTTPS_PORT));
 
         boolean applyEnabled = isApplyEnabled();
 
-        databaseTypeCombobox.setSelectedItem(managerController.getServerProperties().getString(ManagerConstants.DATABASE_TYPE));
-        databaseUrlField.setText((String) managerController.getServerProperties().getProperty(ManagerConstants.DATABASE_URL));
-        databaseUsernameField.setText(managerController.getServerProperties().getString(ManagerConstants.DATABASE_USERNAME));
-        databasePasswordField.setText(managerController.getServerProperties().getString(ManagerConstants.DATABASE_PASSWORD));
+        databaseTypeCombobox.setSelectedItem(managerController.getServerProperties().getString(com.mirth.connect.manager.ManagerConstants.DATABASE_TYPE));
+        databaseUrlField.setText((String) managerController.getServerProperties().getProperty(com.mirth.connect.manager.ManagerConstants.DATABASE_URL));
+        databaseUsernameField.setText(managerController.getServerProperties().getString(com.mirth.connect.manager.ManagerConstants.DATABASE_USERNAME));
+        databasePasswordField.setText(managerController.getServerProperties().getString(com.mirth.connect.manager.ManagerConstants.DATABASE_PASSWORD));
 
-        String rootLogCode = managerController.getLog4jProperties().getStringArray(ManagerConstants.LOG4J_MIRTH_LOG_LEVEL)[0];
-        if (ArrayUtils.contains(ManagerConstants.LOG4J_ERROR_CODES, rootLogCode)) {
+        String rootLogCode = managerController.getLog4jProperties().getStringArray(com.mirth.connect.manager.ManagerConstants.LOG4J_MIRTH_LOG_LEVEL)[0];
+        if (ArrayUtils.contains(com.mirth.connect.manager.ManagerConstants.LOG4J_ERROR_CODES, rootLogCode)) {
             mainLogLevelCombobox.setSelectedItem(rootLogCode);
         }
 
-        databaseLogLevelCombobox.setSelectedItem(managerController.getLog4jProperties().getString(ManagerConstants.LOG4J_DATABASE_LOG_LEVEL));
+        databaseLogLevelCombobox.setSelectedItem(managerController.getLog4jProperties().getString(com.mirth.connect.manager.ManagerConstants.LOG4J_DATABASE_LOG_LEVEL));
 
         String channelLogCode = null;
-        for (int i = 0; (i < ManagerConstants.LOG4J_CHANNEL_LOG_LEVELS.length) && !ManagerConstants.LOG4J_ERROR_CODES_WITH_BLANK[0].equals(channelLogCode); i++) {
-            String tempLogCode = managerController.getLog4jProperties().getString(ManagerConstants.LOG4J_CHANNEL_LOG_LEVELS[i]);
+        for (int i = 0; (i < com.mirth.connect.manager.ManagerConstants.LOG4J_CHANNEL_LOG_LEVELS.length) && !com.mirth.connect.manager.ManagerConstants.LOG4J_ERROR_CODES_WITH_BLANK[0].equals(channelLogCode); i++) {
+            String tempLogCode = managerController.getLog4jProperties().getString(com.mirth.connect.manager.ManagerConstants.LOG4J_CHANNEL_LOG_LEVELS[i]);
 
             if (tempLogCode == null) { // log code not found, stop
-                channelLogCode = ManagerConstants.LOG4J_ERROR_CODES_WITH_BLANK[0];
+                channelLogCode = com.mirth.connect.manager.ManagerConstants.LOG4J_ERROR_CODES_WITH_BLANK[0];
             } else if (channelLogCode == null) { // first code found, save and continue
                 channelLogCode = tempLogCode;
             } else if (!channelLogCode.equalsIgnoreCase(tempLogCode)) { // different code, stop
-                channelLogCode = ManagerConstants.LOG4J_ERROR_CODES_WITH_BLANK[0];
+                channelLogCode = com.mirth.connect.manager.ManagerConstants.LOG4J_ERROR_CODES_WITH_BLANK[0];
             }
         }
 
@@ -590,13 +589,13 @@ public class ManagerDialog extends JDialog {
             managerController.reloadLog4jProperties();
         }
 
-        managerController.getServerProperties().setProperty(ManagerConstants.SERVER_HTTP_PORT, httpPortField.getText());
-        managerController.getServerProperties().setProperty(ManagerConstants.SERVER_HTTPS_PORT, httpsPortField.getText());
+        managerController.getServerProperties().setProperty(com.mirth.connect.manager.ManagerConstants.SERVER_HTTP_PORT, httpPortField.getText());
+        managerController.getServerProperties().setProperty(com.mirth.connect.manager.ManagerConstants.SERVER_HTTPS_PORT, httpsPortField.getText());
 
-        managerController.getServerProperties().setProperty(ManagerConstants.DATABASE_TYPE, ((String) databaseTypeCombobox.getSelectedItem()));
-        managerController.getServerProperties().setProperty(ManagerConstants.DATABASE_URL, databaseUrlField.getText());
-        managerController.getServerProperties().setProperty(ManagerConstants.DATABASE_USERNAME, databaseUsernameField.getText());
-        managerController.getServerProperties().setProperty(ManagerConstants.DATABASE_PASSWORD, new String(databasePasswordField.getPassword()));
+        managerController.getServerProperties().setProperty(com.mirth.connect.manager.ManagerConstants.DATABASE_TYPE, ((String) databaseTypeCombobox.getSelectedItem()));
+        managerController.getServerProperties().setProperty(com.mirth.connect.manager.ManagerConstants.DATABASE_URL, databaseUrlField.getText());
+        managerController.getServerProperties().setProperty(com.mirth.connect.manager.ManagerConstants.DATABASE_USERNAME, databaseUsernameField.getText());
+        managerController.getServerProperties().setProperty(com.mirth.connect.manager.ManagerConstants.DATABASE_PASSWORD, new String(databasePasswordField.getPassword()));
 
         try {
             managerController.saveServerProperties();
@@ -604,17 +603,17 @@ public class ManagerDialog extends JDialog {
             managerController.alertErrorDialog(this, "Error saving " + managerController.getServerPropertiesBuilder().getFileHandler().getFile().getPath() + ":\n" + e.getMessage());
         }
 
-        String[] logLevel = managerController.getLog4jProperties().getStringArray(ManagerConstants.LOG4J_MIRTH_LOG_LEVEL);
+        String[] logLevel = managerController.getLog4jProperties().getStringArray(com.mirth.connect.manager.ManagerConstants.LOG4J_MIRTH_LOG_LEVEL);
         logLevel[0] = (String) mainLogLevelCombobox.getSelectedItem();
-        managerController.getLog4jProperties().setProperty(ManagerConstants.LOG4J_MIRTH_LOG_LEVEL, logLevel);
+        managerController.getLog4jProperties().setProperty(com.mirth.connect.manager.ManagerConstants.LOG4J_MIRTH_LOG_LEVEL, logLevel);
 
-        managerController.getLog4jProperties().setProperty(ManagerConstants.LOG4J_DATABASE_LOG_LEVEL, (String) databaseLogLevelCombobox.getSelectedItem());
+        managerController.getLog4jProperties().setProperty(com.mirth.connect.manager.ManagerConstants.LOG4J_DATABASE_LOG_LEVEL, (String) databaseLogLevelCombobox.getSelectedItem());
 
         String channelLogLevelCode = (String) channelLogLevelCombobox.getSelectedItem();
 
         // Only set all of the log levels if the selected value is not blank
-        if (!ManagerConstants.LOG4J_ERROR_CODES_WITH_BLANK[0].equals(channelLogLevelCode)) {
-            for (String channelLogLevel : ManagerConstants.LOG4J_CHANNEL_LOG_LEVELS) {
+        if (!com.mirth.connect.manager.ManagerConstants.LOG4J_ERROR_CODES_WITH_BLANK[0].equals(channelLogLevelCode)) {
+            for (String channelLogLevel : com.mirth.connect.manager.ManagerConstants.LOG4J_CHANNEL_LOG_LEVELS) {
                 managerController.getLog4jProperties().setProperty(channelLogLevel, channelLogLevelCode);
             }
         }
@@ -632,7 +631,7 @@ public class ManagerDialog extends JDialog {
     }
 
     private void refreshLogs() {
-        String logPath = managerController.getLog4jProperties().getString(ManagerConstants.DIR_LOGS);
+        String logPath = managerController.getLog4jProperties().getString(com.mirth.connect.manager.ManagerConstants.DIR_LOGS);
         serverLogFiles.setListData(managerController.getLogFiles(logPath).toArray());
     }
 

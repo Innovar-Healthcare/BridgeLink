@@ -60,8 +60,8 @@ public class SwaggerServlet extends HttpServlet {
 		servers.add(new Server().url(basePath));
 		oas.servers(servers);
 		
-		Info info = new Info().title("NextGen Connect Client API")
-				.description("Swagger documentation for the NextGen Connect Client API.")
+		Info info = new Info().title("BridgeLink Client API")
+				.description("Swagger documentation for the BridgeLink Client API.")
 				.version(apiVersion.toString());
 
 		oas.info(info);

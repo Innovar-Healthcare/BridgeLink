@@ -40,7 +40,7 @@ import com.mirth.connect.donkey.util.ResourceUtil;
 public class ManagerController {
 
     private static ManagerController managerController = null;
-    private static ServiceController serviceController = null;
+    private static com.mirth.connect.manager.ServiceController serviceController = null;
     
     private ReloadingFileBasedConfigurationBuilder<PropertiesConfiguration> serverPropertiesBuilder;
     private ReloadingFileBasedConfigurationBuilder<PropertiesConfiguration> log4jPropertiesBuilder;
@@ -58,7 +58,7 @@ public class ManagerController {
             managerController.initialize();
 
             try {
-                serviceController = ServiceControllerFactory.getServiceController();
+                serviceController = com.mirth.connect.manager.ServiceControllerFactory.getServiceController();
             } catch (Exception e) {
                 e.printStackTrace();
                 System.exit(1);
@@ -69,14 +69,14 @@ public class ManagerController {
     }
 
     public void initialize() {
-        serverPropertiesBuilder = initializeProperties(PlatformUI.MIRTH_PATH + ManagerConstants.PATH_SERVER_PROPERTIES, true);
+        serverPropertiesBuilder = initializeProperties(com.mirth.connect.manager.PlatformUI.MIRTH_PATH + com.mirth.connect.manager.ManagerConstants.PATH_SERVER_PROPERTIES, true);
         try {
             serverProperties = serverPropertiesBuilder.getConfiguration();
         } catch (ConfigurationException e) {
             e.printStackTrace();
         }
 
-        log4jPropertiesBuilder = initializeProperties(PlatformUI.MIRTH_PATH + ManagerConstants.PATH_LOG4J_PROPERTIES, true, true);
+        log4jPropertiesBuilder = initializeProperties(com.mirth.connect.manager.PlatformUI.MIRTH_PATH + com.mirth.connect.manager.ManagerConstants.PATH_LOG4J_PROPERTIES, true, true);
         try {
             log4jProperties = log4jPropertiesBuilder.getConfiguration();
         } catch (ConfigurationException e) {
@@ -84,23 +84,23 @@ public class ManagerController {
         }
 
         try {
-            serverIdProperties = initializeProperties(PlatformUI.MIRTH_PATH + getServerProperties().getString(ManagerConstants.DIR_APPDATA) + System.getProperty("file.separator") + ManagerConstants.PATH_SERVER_ID_FILE, false).getConfiguration();
+            serverIdProperties = initializeProperties(com.mirth.connect.manager.PlatformUI.MIRTH_PATH + getServerProperties().getString(com.mirth.connect.manager.ManagerConstants.DIR_APPDATA) + System.getProperty("file.separator") + com.mirth.connect.manager.ManagerConstants.PATH_SERVER_ID_FILE, false).getConfiguration();
         } catch (ConfigurationException e) {
             e.printStackTrace();
         }
 
-        InputStream is = getClass().getResourceAsStream(ManagerConstants.PATH_VERSION_FILE);
+        InputStream is = getClass().getResourceAsStream(com.mirth.connect.manager.ManagerConstants.PATH_VERSION_FILE);
         if (is != null) {
             try {
                 versionProperties = PropertiesConfigurationUtil.create(is);
             } catch (ConfigurationException e) {
-                alertErrorDialog("Could not load resource: " + ManagerConstants.PATH_VERSION_FILE);
+                alertErrorDialog("Could not load resource: " + com.mirth.connect.manager.ManagerConstants.PATH_VERSION_FILE);
             } finally {
                 ResourceUtil.closeResourceQuietly(is);
             }
         } else {
             try {
-                versionProperties = initializeProperties(PlatformUI.MIRTH_PATH + ManagerConstants.PATH_VERSION_FILE, true).getConfiguration();
+                versionProperties = initializeProperties(com.mirth.connect.manager.PlatformUI.MIRTH_PATH + com.mirth.connect.manager.ManagerConstants.PATH_VERSION_FILE, true).getConfiguration();
             } catch (ConfigurationException e) {
                 e.printStackTrace();
             }
@@ -160,7 +160,7 @@ public class ManagerController {
     }
 
     public void startMirthWorker() {
-        PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         ManagerController.getInstance().setEnabledOptions(false, false, false, false);
 
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
@@ -173,13 +173,13 @@ public class ManagerController {
 
             public void done() {
                 if (errorMessage == null) {
-                    PlatformUI.MANAGER_TRAY.alertInfo("The Mirth Connect Service was started successfully.");
+                    com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.alertInfo("The BridgeLink Service was started successfully.");
                 } else {
-                    PlatformUI.MANAGER_TRAY.alertError(errorMessage);
+                    com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.alertError(errorMessage);
                 }
 
                 updateMirthServiceStatus();
-                PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
             }
         };
 
@@ -189,11 +189,11 @@ public class ManagerController {
     private String startMirth() {
         String httpPortResult = null;
         if (isUsingHttp()) {
-            String httpPort = getServerProperties().getString(ManagerConstants.SERVER_HTTP_PORT);
+            String httpPort = getServerProperties().getString(com.mirth.connect.manager.ManagerConstants.SERVER_HTTP_PORT);
             httpPortResult = testPort(httpPort, "WebStart");
         }
 
-        String httpsPort = getServerProperties().getString(ManagerConstants.SERVER_HTTPS_PORT);
+        String httpsPort = getServerProperties().getString(com.mirth.connect.manager.ManagerConstants.SERVER_HTTPS_PORT);
         String httpsPortResult = testPort(httpsPort, "Administrator");
 
         if (httpPortResult != null || httpsPortResult != null) {
@@ -215,11 +215,11 @@ public class ManagerController {
             updating = true;
 
             if (!serviceController.startService()) {
-                errorMessage = "The Mirth Connect Service could not be started.  Please verify that it is installed and not already started.";
+                errorMessage = "The BridgeLink Service could not be started.  Please verify that it is installed and not already started.";
             } else {
                 String contextPath = getContextPath();
 
-                client = new Client(ManagerConstants.CMD_TEST_JETTY_PREFIX + getServerProperties().getString("https.port") + contextPath);
+                client = new Client(com.mirth.connect.manager.ManagerConstants.CMD_TEST_JETTY_PREFIX + getServerProperties().getString("https.port") + contextPath);
 
                 int retriesLeft = 30;
                 long waitTime = 2000;
@@ -240,13 +240,13 @@ public class ManagerController {
                 }
 
                 if (!started) {
-                    errorMessage = "The Mirth Connect Service could not be started.";
+                    errorMessage = "The BridgeLink Service could not be started.";
                 }
             }
         } catch (Throwable t) { // Need to catch Throwable in case Client fails
             // internally
             t.printStackTrace();
-            errorMessage = "The Mirth Connect Service could not be started.";
+            errorMessage = "The BridgeLink Service could not be started.";
         } finally {
             if (client != null) {
                 client.close();
@@ -258,7 +258,7 @@ public class ManagerController {
     }
 
     public void stopMirthWorker() {
-        PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         setEnabledOptions(false, false, false, false);
 
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
@@ -271,13 +271,13 @@ public class ManagerController {
 
             public void done() {
                 if (errorMessage == null) {
-                    PlatformUI.MANAGER_TRAY.alertInfo("The Mirth Connect Service was stopped successfully.");
+                    com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.alertInfo("The BridgeLink Service was stopped successfully.");
                 } else {
-                    PlatformUI.MANAGER_TRAY.alertError(errorMessage);
+                    com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.alertError(errorMessage);
                 }
 
                 updateMirthServiceStatus();
-                PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
             }
         };
 
@@ -289,11 +289,11 @@ public class ManagerController {
         try {
             updating = true;
             if (!serviceController.stopService()) {
-                errorMessage = "The Mirth Connect Service could not be stopped.  Please verify that it is installed and started.";
+                errorMessage = "The BridgeLink Service could not be stopped.  Please verify that it is installed and started.";
             }
         } catch (Exception e) {
             e.printStackTrace();
-            errorMessage = "The Mirth Connect Service could not be stopped.  Please verify that it is installed and started.";
+            errorMessage = "The BridgeLink Service could not be stopped.  Please verify that it is installed and started.";
         }
 
         updating = false;
@@ -301,7 +301,7 @@ public class ManagerController {
     }
 
     public void restartMirthWorker() {
-        PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         setEnabledOptions(false, false, false, false);
 
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
@@ -314,13 +314,13 @@ public class ManagerController {
 
             public void done() {
                 if (errorMessage == null) {
-                    PlatformUI.MANAGER_TRAY.alertInfo("The Mirth Connect Service was restarted successfully.");
+                    com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.alertInfo("The BridgeLink Service was restarted successfully.");
                 } else {
-                    PlatformUI.MANAGER_TRAY.alertError(errorMessage);
+                    com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.alertError(errorMessage);
                 }
 
                 updateMirthServiceStatus();
-                PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
             }
         };
 
@@ -346,13 +346,13 @@ public class ManagerController {
         boolean success = false;
         boolean usingHttp = isUsingHttp();
 
-        String port = getServerProperties().getString(usingHttp ? ManagerConstants.SERVER_HTTP_PORT : ManagerConstants.SERVER_HTTPS_PORT);
+        String port = getServerProperties().getString(usingHttp ? com.mirth.connect.manager.ManagerConstants.SERVER_HTTP_PORT : com.mirth.connect.manager.ManagerConstants.SERVER_HTTPS_PORT);
         String contextPath = getContextPath();
 
         try {
             maxHeapSize = StringUtils.isBlank(maxHeapSize) ? "512m" : maxHeapSize;
             String scheme = usingHttp ? "http" : "https";
-            String url = scheme + ManagerConstants.CMD_WEBSTART_PREFIX2 + port + contextPath + ManagerConstants.CMD_WEBSTART_SUFFIX + "?maxHeapSize=" + maxHeapSize + "&time=" + new Date().getTime();
+            String url = scheme + com.mirth.connect.manager.ManagerConstants.CMD_WEBSTART_PREFIX2 + port + contextPath + com.mirth.connect.manager.ManagerConstants.CMD_WEBSTART_SUFFIX + "?maxHeapSize=" + maxHeapSize + "&time=" + new Date().getTime();
 
             // Try opening the URL with the default browser first
             if (Desktop.isDesktopSupported()) {
@@ -366,9 +366,9 @@ public class ManagerController {
 
             // If that failed, and we're not on JDK 11+, try with Java Web Start
             if (!success && !DisplayUtil.isJDK11OrGreater()) {
-                String cmd = ManagerConstants.CMD_WEBSTART_PREFIX1 + url;
+                String cmd = com.mirth.connect.manager.ManagerConstants.CMD_WEBSTART_PREFIX1 + url;
 
-                if (CmdUtil.execCmd(new String[] { cmd }, false) == 0) {
+                if (com.mirth.connect.manager.CmdUtil.execCmd(new String[] { cmd }, false) == 0) {
                     success = true;
                 }
             }
@@ -377,12 +377,12 @@ public class ManagerController {
         }
 
         if (!success) {
-            PlatformUI.MANAGER_TRAY.alertError("The Mirth Connect Administator could not be launched.");
+            com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.alertError("The BridgeLink Administator could not be launched.");
         }
     }
 
     public boolean isUsingHttp() {
-        return getServerProperties().containsKey(ManagerConstants.SERVER_HTTP_PORT) && getServerProperties().getInt(ManagerConstants.SERVER_HTTP_PORT) > 0;
+        return getServerProperties().containsKey(com.mirth.connect.manager.ManagerConstants.SERVER_HTTP_PORT) && getServerProperties().getInt(com.mirth.connect.manager.ManagerConstants.SERVER_HTTP_PORT) > 0;
     }
     
     public ReloadingFileBasedConfigurationBuilder<PropertiesConfiguration> getServerPropertiesBuilder() {
@@ -402,7 +402,7 @@ public class ManagerController {
     }
 
     public void saveServerProperties() throws ConfigurationException {
-        PropertiesConfigurationUtil.saveTo(serverProperties, new File(PlatformUI.MIRTH_PATH + ManagerConstants.PATH_SERVER_PROPERTIES));
+        PropertiesConfigurationUtil.saveTo(serverProperties, new File(com.mirth.connect.manager.PlatformUI.MIRTH_PATH + com.mirth.connect.manager.ManagerConstants.PATH_SERVER_PROPERTIES));
     }
 
     public ReloadingFileBasedConfigurationBuilder<PropertiesConfiguration> getLog4jPropertiesBuilder() {
@@ -422,19 +422,19 @@ public class ManagerController {
     }
 
     public void saveLog4jProperties() throws ConfigurationException {
-        PropertiesConfigurationUtil.saveTo(log4jProperties, new File(PlatformUI.MIRTH_PATH + ManagerConstants.PATH_LOG4J_PROPERTIES));
+        PropertiesConfigurationUtil.saveTo(log4jProperties, new File(com.mirth.connect.manager.PlatformUI.MIRTH_PATH + com.mirth.connect.manager.ManagerConstants.PATH_LOG4J_PROPERTIES));
     }
 
     public String getServerVersion() {
     	if (versionProperties != null) {
-    		return versionProperties.getString(ManagerConstants.PROPERTY_SERVER_VERSION, "");
+    		return versionProperties.getString(com.mirth.connect.manager.ManagerConstants.PROPERTY_SERVER_VERSION, "");
     	}
     	return "";
     }
 
     public String getServerId() {
     	if (serverIdProperties != null) {
-    		return serverIdProperties.getString(ManagerConstants.PROPERTY_SERVER_ID, "");
+    		return serverIdProperties.getString(com.mirth.connect.manager.ManagerConstants.PROPERTY_SERVER_ID, "");
     	}
     	return "";
     }
@@ -468,7 +468,7 @@ public class ManagerController {
 
             for (int i = 0; (i < apps.length) && !editorOpened; i++) {
                 try {
-                    String output = CmdUtil.execCmdWithErrorOutput(new String[] {
+                    String output = com.mirth.connect.manager.CmdUtil.execCmdWithErrorOutput(new String[] {
                             apps[i] + " \"" + path + "\"" });
 
                     if (output.length() == 0) {
@@ -490,7 +490,7 @@ public class ManagerController {
     public String getServiceXmx() {
         String match = "";
 
-        File file = new File(PlatformUI.MIRTH_PATH + ManagerConstants.PATH_SERVICE_VMOPTIONS);
+        File file = new File(com.mirth.connect.manager.PlatformUI.MIRTH_PATH + com.mirth.connect.manager.ManagerConstants.PATH_SERVICE_VMOPTIONS);
         String contents = "";
         try {
             contents = FileUtils.readFileToString(file);
@@ -509,7 +509,7 @@ public class ManagerController {
     }
 
     public void setServiceXmx(String xmx) {
-        File file = new File(PlatformUI.MIRTH_PATH + ManagerConstants.PATH_SERVICE_VMOPTIONS);
+        File file = new File(com.mirth.connect.manager.PlatformUI.MIRTH_PATH + com.mirth.connect.manager.ManagerConstants.PATH_SERVICE_VMOPTIONS);
         String contents = "";
 
         try {
@@ -553,26 +553,26 @@ public class ManagerController {
     }
 
     public void setEnabledOptions(boolean start, boolean stop, boolean restart, boolean launch) {
-        PlatformUI.MANAGER_DIALOG.setStartButtonActive(start);
-        PlatformUI.MANAGER_DIALOG.setStopButtonActive(stop);
-        PlatformUI.MANAGER_DIALOG.setRestartButtonActive(restart);
-        PlatformUI.MANAGER_DIALOG.setLaunchButtonActive(launch);
-        PlatformUI.MANAGER_TRAY.setStartButtonActive(start);
-        PlatformUI.MANAGER_TRAY.setStopButtonActive(stop);
-        PlatformUI.MANAGER_TRAY.setRestartButtonActive(restart);
-        PlatformUI.MANAGER_TRAY.setLaunchButtonActive(launch);
+        com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.setStartButtonActive(start);
+        com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.setStopButtonActive(stop);
+        com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.setRestartButtonActive(restart);
+        com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.setLaunchButtonActive(launch);
+        com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.setStartButtonActive(start);
+        com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.setStopButtonActive(stop);
+        com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.setRestartButtonActive(restart);
+        com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.setLaunchButtonActive(launch);
 
         if (start) {
-            PlatformUI.MANAGER_TRAY.setTrayIcon(ManagerTray.STOPPED);
+            com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.setTrayIcon(com.mirth.connect.manager.ManagerTray.STOPPED);
         } else if (stop) {
-            PlatformUI.MANAGER_TRAY.setTrayIcon(ManagerTray.STARTED);
+            com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.setTrayIcon(com.mirth.connect.manager.ManagerTray.STARTED);
         } else {
-            PlatformUI.MANAGER_TRAY.setTrayIcon(ManagerTray.BUSY);
+            com.mirth.connect.manager.PlatformUI.MANAGER_TRAY.setTrayIcon(com.mirth.connect.manager.ManagerTray.BUSY);
         }
     }
 
     public void setApplyEnabled(boolean enabled) {
-        PlatformUI.MANAGER_DIALOG.setApplyEnabled(enabled);
+        com.mirth.connect.manager.PlatformUI.MANAGER_DIALOG.setApplyEnabled(enabled);
     }
 
     public void alertErrorDialog(String message) {
@@ -620,7 +620,7 @@ public class ManagerController {
      * @return Either "" or "/contextPath"
      */
     private String getContextPath() {
-        String contextPath = getServerProperties().getString(ManagerConstants.PROPERTY_HTTP_CONTEXT_PATH, "");
+        String contextPath = getServerProperties().getString(com.mirth.connect.manager.ManagerConstants.PROPERTY_HTTP_CONTEXT_PATH, "");
 
         // Add a starting slash if one does not exist
         if (!contextPath.startsWith("/")) {
