@@ -65,7 +65,7 @@ import com.mirth.connect.util.ConnectionTestResponse;
 
 import net.miginfocom.swing.MigLayout;
 
-public class SettingsPanelServer extends AbstractSettingsPanel {
+public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSettingsPanel {
 
     public static final String TAB_NAME = "Server";
 
@@ -81,7 +81,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
         addTask(TaskConstants.SETTINGS_SERVER_RESTORE, "Restore Config", "Restore your server configuration from a server configuration XML file. This will remove and restore your channels, alerts, code templates, server properties, global scripts, and plugin properties.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/report_go.png")));
         addTask(TaskConstants.SETTINGS_CLEAR_ALL_STATS, "Clear All Statistics", "Reset the current and lifetime statistics for all channels.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/chart_bar_delete.png")));
 
-        provideUsageStatsMoreInfoLabel.setToolTipText(UIConstants.PRIVACY_TOOLTIP);
+        provideUsageStatsMoreInfoLabel.setToolTipText(com.mirth.connect.client.ui.UIConstants.PRIVACY_TOOLTIP);
         provideUsageStatsMoreInfoLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
         queueBufferSizeField.setDocument(new MirthFieldConstraints(8, false, false, true));
         smtpTimeoutField.setDocument(new MirthFieldConstraints(0, false, false, false));
@@ -91,7 +91,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
     }
 
     public void doRefresh() {
-        if (PlatformUI.MIRTH_FRAME.alertRefresh()) {
+        if (com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertRefresh()) {
             return;
         }
 
@@ -150,7 +150,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
         // Integer queueBufferSize will be null if it was invalid
         queueBufferSizeField.setBackground(null);
         if (serverSettings.getQueueBufferSize() == null) {
-            queueBufferSizeField.setBackground(UIConstants.INVALID_COLOR);
+            queueBufferSizeField.setBackground(com.mirth.connect.client.ui.UIConstants.INVALID_COLOR);
             getFrame().alertWarning(this, "Please enter a valid queue buffer size.");
             return false;
         }
@@ -161,7 +161,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
                 new InternetAddress(emailAddress).validate();
             }
         } catch (Exception e) {
-            PlatformUI.MIRTH_FRAME.alertWarning(PlatformUI.MIRTH_FRAME, "The Default From Address is invalid: " + e.getMessage());
+            com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertWarning(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "The Default From Address is invalid: " + e.getMessage());
             return false;
         }
 
@@ -191,19 +191,19 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
                             statusBarText.append(" | ");
                         }
 
-                        PlatformUI.ENVIRONMENT_NAME = environmentName;
+                        com.mirth.connect.client.ui.PlatformUI.ENVIRONMENT_NAME = environmentName;
                     }
 
                     if (!StringUtils.isBlank(serverName)) {
                         titleText.append(serverName);
                         statusBarText.append(serverName + " | ");
-                        PlatformUI.SERVER_NAME = serverName;
+                        com.mirth.connect.client.ui.PlatformUI.SERVER_NAME = serverName;
                     } else {
-                        titleText.append(PlatformUI.SERVER_URL);
+                        titleText.append(com.mirth.connect.client.ui.PlatformUI.SERVER_URL);
                     }
-                    titleText.append(" - " + UIConstants.TITLE_TEXT);
-                    statusBarText.append(PlatformUI.SERVER_URL);
-                    titleText.append(" - (" + PlatformUI.SERVER_VERSION + ")");
+                    titleText.append(" - " + com.mirth.connect.client.ui.UIConstants.TITLE_TEXT);
+                    statusBarText.append(com.mirth.connect.client.ui.PlatformUI.SERVER_URL);
+                    titleText.append(" - (" + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + ")");
                     getFrame().setTitle(titleText.toString());
                     User currentUser = getFrame().mirthClient.getCurrentUser();
                     statusBarText.append(" as " + currentUser.getUsername());
@@ -229,10 +229,10 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
                 try {
                     Color defaultBackgroundColor = serverSettings.getDefaultAdministratorBackgroundColor();
                     if (defaultBackgroundColor != null) {
-                        PlatformUI.DEFAULT_BACKGROUND_COLOR = defaultBackgroundColor;
+                        com.mirth.connect.client.ui.PlatformUI.DEFAULT_BACKGROUND_COLOR = defaultBackgroundColor;
                     }
 
-                    String backgroundColorStr = getFrame().mirthClient.getUserPreference(getFrame().getCurrentUser(getFrame()).getId(), UIConstants.USER_PREF_KEY_BACKGROUND_COLOR);
+                    String backgroundColorStr = getFrame().mirthClient.getUserPreference(getFrame().getCurrentUser(getFrame()).getId(), com.mirth.connect.client.ui.UIConstants.USER_PREF_KEY_BACKGROUND_COLOR);
                     if (StringUtils.isNotBlank(backgroundColorStr)) {
                         Color backgroundColor = ObjectXMLSerializer.getInstance().deserialize(backgroundColorStr, Color.class);
                         if (backgroundColor != null) {
@@ -249,7 +249,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
             @Override
             public void done() {
                 if (usingServerDefaultColor) {
-                    getFrame().setupBackgroundPainters(PlatformUI.DEFAULT_BACKGROUND_COLOR);
+                    getFrame().setupBackgroundPainters(com.mirth.connect.client.ui.PlatformUI.DEFAULT_BACKGROUND_COLOR);
                 }
                 setSaveEnabled(false);
                 getFrame().stopWorking(workingId);
@@ -396,7 +396,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
         if (updateSettings.getStatsEnabled() != null && !updateSettings.getStatsEnabled()) {
             provideUsageStatsNoRadio.setSelected(true);
         } else {
-            provideUsageStatsYesRadio.setSelected(true);
+            provideUsageStatsYesRadio.setSelected(false);
         }
     }
 
@@ -497,7 +497,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
     public UpdateSettings getUpdateSettings() {
         UpdateSettings updateSettings = new UpdateSettings();
 
-        updateSettings.setStatsEnabled(provideUsageStatsYesRadio.isSelected());
+        updateSettings.setStatsEnabled(false);
 
         return updateSettings;
     }
@@ -585,7 +585,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
 
                 if (option == JOptionPane.YES_OPTION) {
                     final Set<String> alertIds = new HashSet<String>();
-                    for (AlertStatus alertStatus : PlatformUI.MIRTH_FRAME.mirthClient.getAlertStatusList()) {
+                    for (AlertStatus alertStatus : com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.mirthClient.getAlertStatusList()) {
                         alertIds.add(alertStatus.getId());
                     }
 
@@ -677,7 +677,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
     }
 
     private void initComponents() {
-        setBackground(UIConstants.BACKGROUND_COLOR);
+        setBackground(com.mirth.connect.client.ui.UIConstants.BACKGROUND_COLOR);
 
         generalPanel = new JPanel();
         generalPanel.setBackground(getBackground());
@@ -700,7 +700,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
         defaultAdministratorColorButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent evt) {
-                Color color = JColorChooser.showDialog(PlatformUI.MIRTH_FRAME, "Edit Background Color", defaultAdministratorColorButton.getBackground());
+                Color color = JColorChooser.showDialog(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "Edit Background Color", defaultAdministratorColorButton.getBackground());
                 if (color != null) {
                     defaultAdministratorColorButton.setBackground(color);
                     getFrame().setSaveEnabled(true);
@@ -709,17 +709,23 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
         });
 
         provideUsageStatsLabel = new JLabel("Provide usage statistics:");
+        provideUsageStatsLabel.setVisible(false);
         provideUsageStatsButtonGroup = new ButtonGroup();
 
         provideUsageStatsYesRadio = new MirthRadioButton("Yes");
         provideUsageStatsYesRadio.setBackground(getBackground());
         provideUsageStatsYesRadio.setToolTipText("<html>Toggles sending usage statistics to NextGen Healthcare.  These statistics <br>do not contain any PHI or channel/script implementations,<br> and help NextGen Healthcare determine which connectors or areas of<br>Mirth Connect are most widely used.</html>");
         provideUsageStatsButtonGroup.add(provideUsageStatsYesRadio);
+        provideUsageStatsYesRadio.setVisible(false);
 
         provideUsageStatsNoRadio = new MirthRadioButton("No");
         provideUsageStatsNoRadio.setBackground(getBackground());
         provideUsageStatsNoRadio.setToolTipText("<html>Toggles sending usage statistics to NextGen Healthcare.  These statistics <br>do not contain any PHI or channel/script implementations,<br> and help NextGen Healthcare determine which connectors or areas of<br>Mirth Connect are most widely used.</html>");
         provideUsageStatsButtonGroup.add(provideUsageStatsNoRadio);
+        provideUsageStatsNoRadio.setVisible(false);
+
+
+
 
         provideUsageStatsMoreInfoLabel = new JLabel("<html><font color=blue><u>More Info</u></font></html>");
         provideUsageStatsMoreInfoLabel.addMouseListener(new MouseAdapter() {
@@ -727,6 +733,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
                 provideUsageStatsMoreInfoLabelMouseClicked(evt);
             }
         });
+        provideUsageStatsMoreInfoLabel.setVisible(false);
         
         administratorAutoLogoutIntervalLabel = new JLabel("Enable Auto Logout:");
         administratorAutoLogoutIntervalButtonGroup = new ButtonGroup();
@@ -969,7 +976,7 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
     }
 
     private void provideUsageStatsMoreInfoLabelMouseClicked(MouseEvent evt) {
-        BareBonesBrowserLaunch.openURL(UIConstants.PRIVACY_URL);
+        BareBonesBrowserLaunch.openURL(com.mirth.connect.client.ui.UIConstants.PRIVACY_URL);
     }
 
     private void requireAuthenticationNoRadioActionPerformed(ActionEvent evt) {
@@ -1012,50 +1019,50 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
         StringBuilder invalidFields = new StringBuilder();
 
         if (StringUtils.isBlank(serverSettings.getSmtpHost())) {
-            smtpHostField.setBackground(UIConstants.INVALID_COLOR);
+            smtpHostField.setBackground(com.mirth.connect.client.ui.UIConstants.INVALID_COLOR);
             invalidFields.append("\"SMTP Host\" is required\n");
         }
 
         if (StringUtils.isBlank(serverSettings.getSmtpPort())) {
-            smtpPortField.setBackground(UIConstants.INVALID_COLOR);
+            smtpPortField.setBackground(com.mirth.connect.client.ui.UIConstants.INVALID_COLOR);
             invalidFields.append("\"SMTP Port\" is required\n");
         }
 
         if (StringUtils.isBlank(serverSettings.getSmtpTimeout())) {
-            smtpTimeoutField.setBackground(UIConstants.INVALID_COLOR);
+            smtpTimeoutField.setBackground(com.mirth.connect.client.ui.UIConstants.INVALID_COLOR);
             invalidFields.append("\"Send Timeout\" is required\n");
         }
 
         if (StringUtils.isBlank(serverSettings.getSmtpFrom())) {
-            defaultFromAddressField.setBackground(UIConstants.INVALID_COLOR);
+            defaultFromAddressField.setBackground(com.mirth.connect.client.ui.UIConstants.INVALID_COLOR);
             invalidFields.append("\"Default From Address\" is required\n");
         }
 
         if (serverSettings.getSmtpAuth()) {
             if (StringUtils.isBlank(serverSettings.getSmtpUsername())) {
-                usernameField.setBackground(UIConstants.INVALID_COLOR);
+                usernameField.setBackground(com.mirth.connect.client.ui.UIConstants.INVALID_COLOR);
                 invalidFields.append("\"Username\" is required\n");
             }
 
             if (StringUtils.isBlank(serverSettings.getSmtpPassword())) {
-                passwordField.setBackground(UIConstants.INVALID_COLOR);
+                passwordField.setBackground(com.mirth.connect.client.ui.UIConstants.INVALID_COLOR);
                 invalidFields.append("\"Password\" is required\n");
             }
         }
 
         String errors = invalidFields.toString();
         if (StringUtils.isNotBlank(errors)) {
-            PlatformUI.MIRTH_FRAME.alertCustomError(PlatformUI.MIRTH_FRAME, errors, "Please fix the following errors before sending a test email:");
+            com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertCustomError(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, errors, "Please fix the following errors before sending a test email:");
             return;
         }
 
-        String sendToEmail = (String) DisplayUtil.showInputDialog(PlatformUI.MIRTH_FRAME, "Send test email to:", "Send Test Email", JOptionPane.INFORMATION_MESSAGE, null, null, serverSettings.getSmtpFrom());
+        String sendToEmail = (String) DisplayUtil.showInputDialog(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "Send test email to:", "Send Test Email", JOptionPane.INFORMATION_MESSAGE, null, null, serverSettings.getSmtpFrom());
 
         if (StringUtils.isNotBlank(sendToEmail)) {
             try {
                 new InternetAddress(sendToEmail).validate();
             } catch (Exception error) {
-                PlatformUI.MIRTH_FRAME.alertWarning(PlatformUI.MIRTH_FRAME, "The Send To Address is invalid: " + error.getMessage());
+                com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertWarning(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "The Send To Address is invalid: " + error.getMessage());
                 return;
             }
 
@@ -1070,32 +1077,32 @@ public class SettingsPanelServer extends AbstractSettingsPanel {
             properties.put("toAddress", sendToEmail);
             properties.put("fromAddress", serverSettings.getSmtpFrom());
 
-            final String workingId = PlatformUI.MIRTH_FRAME.startWorking("Sending test email...");
+            final String workingId = com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.startWorking("Sending test email...");
 
             SwingWorker worker = new SwingWorker<Void, Void>() {
 
                 public Void doInBackground() {
 
                     try {
-                        ConnectionTestResponse response = (ConnectionTestResponse) PlatformUI.MIRTH_FRAME.mirthClient.sendTestEmail(properties);
+                        ConnectionTestResponse response = (ConnectionTestResponse) com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.mirthClient.sendTestEmail(properties);
 
                         if (response == null) {
-                            PlatformUI.MIRTH_FRAME.alertError(PlatformUI.MIRTH_FRAME, "Failed to send email.");
+                            com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertError(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, "Failed to send email.");
                         } else if (response.getType().equals(ConnectionTestResponse.Type.SUCCESS)) {
-                            PlatformUI.MIRTH_FRAME.alertInformation(PlatformUI.MIRTH_FRAME, response.getMessage());
+                            com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertInformation(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, response.getMessage());
                         } else {
-                            PlatformUI.MIRTH_FRAME.alertWarning(PlatformUI.MIRTH_FRAME, response.getMessage());
+                            com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertWarning(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, response.getMessage());
                         }
 
                         return null;
                     } catch (Exception e) {
-                        PlatformUI.MIRTH_FRAME.alertThrowable(PlatformUI.MIRTH_FRAME, e);
+                        com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                         return null;
                     }
                 }
 
                 public void done() {
-                    PlatformUI.MIRTH_FRAME.stopWorking(workingId);
+                    com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.stopWorking(workingId);
                 }
             };
 

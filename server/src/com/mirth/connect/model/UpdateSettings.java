@@ -24,12 +24,12 @@ import com.mirth.connect.donkey.util.purge.Purgable;
 import com.thoughtworks.xstream.annotations.XStreamAlias;
 
 @XStreamAlias("updateSettings")
-public class UpdateSettings extends AbstractSettings implements Serializable, Auditable, Purgable, Migratable {
+public class UpdateSettings extends com.mirth.connect.model.AbstractSettings implements Serializable, com.mirth.connect.model.Auditable, Purgable, Migratable {
 
     private static final String STATS_ENABLED = "stats.enabled";
     private static final String LAST_STATS_TIME = "stats.time";
 
-    private Boolean statsEnabled;
+    private Boolean statsEnabled = false;
     private Long lastStatsTime;
 
     public UpdateSettings() {

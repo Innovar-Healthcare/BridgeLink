@@ -1201,12 +1201,46 @@
 		
 		<javac srcdir="${test}" destdir="${test_classes}" debug="on" includeAntRuntime="false">
 			<classpath refid="testclasspath" />
-			<!-- Uncomment the following and add additional dashes in front of the arguments to allow Java 9+
-				<compilerarg value="-add-modules" />
-				<compilerarg value="java.sql.rowset,java.xml.ws" />
-				<compilerarg value="-add-exports" />
-				<compilerarg value="java.sql.rowset/com.sun.rowset=ALL-UNNAMED" />
-			-->
+			<!-- Uncomment the following and add additional dashes in front of the arguments to allow Java 9+			-->
+<!--				<compilerarg value="&#45;&#45;add-modules" />-->
+<!--				<compilerarg value="java.sql.rowset" />-->
+<!--				<compilerarg value="&#45;&#45;add-exports" />-->
+<!--				<compilerarg value="java.sql.rowset/com.sun.rowset=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-exports" />-->
+<!--			<compilerarg value="java.base/com.sun.crypto.provider=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-exports" />-->
+<!--			<compilerarg value="java.base/sun.security.provider=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.base/java.lang=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.base/java.lang.reflect=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.base/java.math=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.base/java.net=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.base/java.security=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.base/java.security.cert=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.base/java.text=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.base/java.util=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.base/sun.security.pkcs=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.base/sun.security.rsa=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.base/sun.security.x509=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.desktop/java.awt=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.desktop/java.awt.color=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.desktop/java.awt.font=ALL-UNNAMED" />-->
+<!--			<compilerarg value="&#45;&#45;add-opens" />-->
+<!--			<compilerarg value="java.xml/com.sun.org.apache.xalan.internal.xsltc.trax=ALL-UNNAMED" />-->
+
 		</javac>
 		
 		<copy todir="${test_classes}">
