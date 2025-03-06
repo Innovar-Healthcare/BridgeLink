@@ -21,7 +21,6 @@ public enum Version {
      * 2) Specify a Migrator class for the new version in the ServerMigrator class
      * 3) Add migration code/classes for any plugins that need to be migrated (don't forget the MigratableConverter class)
      */
-
     V0("0"),
     V1("1"),
     V2("2"),
@@ -75,7 +74,8 @@ public enum Version {
     v4_4_2("4.4.2"),
     v4_5_0("4.5.0"),
     v4_5_1("4.5.1"),
-    v4_5_2("4.5.2");
+    v4_5_2("4.5.2"),
+    v1_0_0("1.0.0");//BridgeLink V1.0.0
     
     // @formatter:on
 

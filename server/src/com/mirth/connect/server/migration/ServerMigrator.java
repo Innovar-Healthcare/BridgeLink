@@ -40,7 +40,7 @@ import com.mirth.connect.model.converters.ObjectXMLSerializer;
 import com.mirth.connect.model.util.MigrationException;
 import com.mirth.connect.server.util.DatabaseUtil;
 
-public class ServerMigrator extends Migrator {
+public class ServerMigrator extends com.mirth.connect.server.migration.Migrator {
     private Logger logger = LogManager.getLogger(getClass());
 
     public ServerMigrator() {
@@ -67,7 +67,7 @@ public class ServerMigrator extends Migrator {
         Version version = startingVersion.getNextVersion();
 
         while (version != null) {
-            Migrator migrator = getMigrator(version);
+            com.mirth.connect.server.migration.Migrator migrator = getMigrator(version);
 
             if (migrator != null) {
                 logger.info("Migrating server to version " + version);
@@ -96,11 +96,11 @@ public class ServerMigrator extends Migrator {
         Version version = Version.values()[1];
 
         while (version != null) {
-            Migrator migrator = getMigrator(version);
+            com.mirth.connect.server.migration.Migrator migrator = getMigrator(version);
 
-            if (migrator != null && migrator instanceof ConfigurationMigrator) {
+            if (migrator != null && migrator instanceof com.mirth.connect.server.migration.ConfigurationMigrator) {
                 migrator.setStartingVersion(startingVersion);
-                runConfigurationMigrator((ConfigurationMigrator) migrator, mirthConfig, version);
+                runConfigurationMigrator((com.mirth.connect.server.migration.ConfigurationMigrator) migrator, mirthConfig, version);
             }
 
             version = version.getNextVersion();
@@ -111,7 +111,7 @@ public class ServerMigrator extends Migrator {
         mirthConfig.getLayout().setComment("version", "Only used for migration purposes, do not modify");
     }
 
-    private void runConfigurationMigrator(ConfigurationMigrator configurationMigrator, PropertiesConfiguration mirthConfig, Version version) {
+    private void runConfigurationMigrator(com.mirth.connect.server.migration.ConfigurationMigrator configurationMigrator, PropertiesConfiguration mirthConfig, Version version) {
         configurationMigrator.updateConfiguration(mirthConfig);
 
         HashMap<String, Object> addedProperties = new LinkedHashMap<String, Object>();
@@ -179,61 +179,62 @@ public class ServerMigrator extends Migrator {
         }
     }
 
-    private Migrator getMigrator(Version version) {
+    private com.mirth.connect.server.migration.Migrator getMigrator(Version version) {
         switch (version) {// @formatter:off
-            case V0: return new LegacyMigrator(0);
-            case V1: return new LegacyMigrator(1);
-            case V2: return new LegacyMigrator(2);
-            case V3: return new LegacyMigrator(3);
-            case V4: return new LegacyMigrator(4);
-            case V5: return new LegacyMigrator(5);
-            case V6: return new LegacyMigrator(6);
-            case V7: return new Migrate2_0_0();
-            case V8: return new LegacyMigrator(8);
-            case V9: return new Migrate2_2_0();
-            case V3_0_0: return new Migrate3_0_0();
+            case V0: return new com.mirth.connect.server.migration.LegacyMigrator(0);
+            case V1: return new com.mirth.connect.server.migration.LegacyMigrator(1);
+            case V2: return new com.mirth.connect.server.migration.LegacyMigrator(2);
+            case V3: return new com.mirth.connect.server.migration.LegacyMigrator(3);
+            case V4: return new com.mirth.connect.server.migration.LegacyMigrator(4);
+            case V5: return new com.mirth.connect.server.migration.LegacyMigrator(5);
+            case V6: return new com.mirth.connect.server.migration.LegacyMigrator(6);
+            case V7: return new com.mirth.connect.server.migration.Migrate2_0_0();
+            case V8: return new com.mirth.connect.server.migration.LegacyMigrator(8);
+            case V9: return new com.mirth.connect.server.migration.Migrate2_2_0();
+            case V3_0_0: return new com.mirth.connect.server.migration.Migrate3_0_0();
             case V3_0_1: return null;
-            case V3_0_2: return new Migrate3_0_2();
+            case V3_0_2: return new com.mirth.connect.server.migration.Migrate3_0_2();
             case V3_0_3: return null;
-            case V3_1_0: return new Migrate3_1_0();
-            case V3_1_1: return new Migrate3_1_1();
-            case V3_2_0: return new Migrate3_2_0();
+            case V3_1_0: return new com.mirth.connect.server.migration.Migrate3_1_0();
+            case V3_1_1: return new com.mirth.connect.server.migration.Migrate3_1_1();
+            case V3_2_0: return new com.mirth.connect.server.migration.Migrate3_2_0();
             case V3_2_1: return null;
-            case V3_2_2: return new Migrate3_2_2();
-            case V3_3_0: return new Migrate3_3_0();
+            case V3_2_2: return new com.mirth.connect.server.migration.Migrate3_2_2();
+            case V3_3_0: return new com.mirth.connect.server.migration.Migrate3_3_0();
             case V3_3_1: return null;
             case V3_3_2: return null;
-            case V3_4_0: return new Migrate3_4_0();
+            case V3_4_0: return new com.mirth.connect.server.migration.Migrate3_4_0();
             case V3_4_1: return null;
             case V3_4_2: return null;
-            case V3_5_0: return new Migrate3_5_0();
+            case V3_5_0: return new com.mirth.connect.server.migration.Migrate3_5_0();
             case V3_5_1: return null;
             case V3_5_2: return null;
             case V3_6_0: return null;
             case V3_6_1: return null;
             case V3_6_2: return null;
-            case V3_7_0: return new Migrate3_7_0();
+            case V3_7_0: return new com.mirth.connect.server.migration.Migrate3_7_0();
             case V3_7_1: return null;
-            case V3_8_0: return new Migrate3_8_0();
+            case V3_8_0: return new com.mirth.connect.server.migration.Migrate3_8_0();
             case V3_8_1: return null;
             case V3_9_0: return null;
             case v3_9_1: return null;
             case v3_10_0: return null;
             case v3_10_1: return null;
-            case v3_11_0: return new Migrate3_11_0();
+            case v3_11_0: return new com.mirth.connect.server.migration.Migrate3_11_0();
             case v3_11_1: return null;
-            case v3_12_0: return new Migrate3_12_0();
-            case v4_0_0: return new Migrate4_0_0();
+            case v3_12_0: return new com.mirth.connect.server.migration.Migrate3_12_0();
+            case v4_0_0: return new com.mirth.connect.server.migration.Migrate4_0_0();
             case v4_0_1: return null;
-            case v4_1_0: return new Migrate4_1_0();
+            case v4_1_0: return new com.mirth.connect.server.migration.Migrate4_1_0();
             case v4_1_1: return null;
             case v4_2_0: return null;
-            case v4_3_0: return new Migrate4_3_0();
-            case v4_4_0: return new Migrate4_4_0();
+            case v4_3_0: return new com.mirth.connect.server.migration.Migrate4_3_0();
+            case v4_4_0: return new com.mirth.connect.server.migration.Migrate4_4_0();
             case v4_4_1: return null;
 			case v4_5_0: return null;
 			case v4_5_1: return null;
-			case v4_5_2: return new Migrate4_5_2();
+			case v4_5_2: return new com.mirth.connect.server.migration.Migrate4_5_2();
+            case v1_0_0: return new com.mirth.connect.server.migration.Migrate4_5_2();
         } // @formatter:on
 
         return null;

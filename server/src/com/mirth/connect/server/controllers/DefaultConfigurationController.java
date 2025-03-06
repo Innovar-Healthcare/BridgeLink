@@ -136,7 +136,7 @@ import com.mirth.connect.util.MirthSSLUtil;
  * The ConfigurationController provides access to the Mirth configuration.
  * 
  */
-public class DefaultConfigurationController extends ConfigurationController {
+public class DefaultConfigurationController extends com.mirth.connect.server.controllers.ConfigurationController {
     public static final String PROPERTIES_CORE = "core";
     public static final String PROPERTIES_RESOURCES = "resources";
     public static final String PROPERTIES_DEPENDENCIES = "channelDependencies";
@@ -152,8 +152,8 @@ public class DefaultConfigurationController extends ConfigurationController {
     private String configurationFile = null;
     private static String serverId = null;
     private String serverName = null;
-    private int status = ConfigurationController.STATUS_UNAVAILABLE;
-    private ScriptController scriptController = ControllerFactory.getFactory().createScriptController();
+    private int status = com.mirth.connect.server.controllers.ConfigurationController.STATUS_UNAVAILABLE;
+    private com.mirth.connect.server.controllers.ScriptController scriptController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createScriptController();
     private PasswordRequirements passwordRequirements;
     private int maxInactiveSessionInterval;
     private String[] httpsClientProtocols;
@@ -197,16 +197,16 @@ public class DefaultConfigurationController extends ConfigurationController {
     private static final String DEFAULT_STOREPASS = "81uWxplDtB";
 
     // singleton pattern
-    private static ConfigurationController instance = null;
+    private static com.mirth.connect.server.controllers.ConfigurationController instance = null;
 
     public DefaultConfigurationController() {
 
     }
     
-    public static ConfigurationController create() {
+    public static com.mirth.connect.server.controllers.ConfigurationController create() {
         synchronized (DefaultConfigurationController.class) {
             if (instance == null) {
-                instance = ExtensionLoader.getInstance().getControllerInstance(ConfigurationController.class);
+                instance = ExtensionLoader.getInstance().getControllerInstance(com.mirth.connect.server.controllers.ConfigurationController.class);
                 if (instance == null) {
                     instance = new DefaultConfigurationController();
                     ((DefaultConfigurationController) instance).initialize();
@@ -230,7 +230,7 @@ public class DefaultConfigurationController extends ConfigurationController {
             mirthConfigBuilder = PropertiesConfigurationUtil.createBuilder(new File(ClassPathResource.getResourceURI("mirth.properties")));
             mirthConfig = mirthConfigBuilder.getConfiguration();
 
-            MigrationController.getInstance().migrateConfiguration(mirthConfig);
+            com.mirth.connect.server.controllers.MigrationController.getInstance().migrateConfiguration(mirthConfig);
             try {
                 mirthConfigBuilder.save();
             } catch (ConfigurationException e) {
@@ -812,7 +812,7 @@ public class DefaultConfigurationController extends ConfigurationController {
         logger.debug("getting Mirth status");
 
         // If the database isn't running or the engine isn't running (only if it isn't starting) return STATUS_UNAVAILABLE.
-        if ((checkDatabase && !isDatabaseRunning()) || (!ControllerFactory.getFactory().createEngineController().isRunning() && status != STATUS_ENGINE_STARTING)) {
+        if ((checkDatabase && !isDatabaseRunning()) || (!com.mirth.connect.server.controllers.ControllerFactory.getFactory().createEngineController().isRunning() && status != STATUS_ENGINE_STARTING)) {
             return STATUS_UNAVAILABLE;
         }
 
@@ -821,9 +821,9 @@ public class DefaultConfigurationController extends ConfigurationController {
 
     @Override
     public ServerConfiguration getServerConfiguration() throws ControllerException {
-        ChannelController channelController = ControllerFactory.getFactory().createChannelController();
-        AlertController alertController = ControllerFactory.getFactory().createAlertController();
-        CodeTemplateController codeTemplateController = ControllerFactory.getFactory().createCodeTemplateController();
+        ChannelController channelController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createChannelController();
+        com.mirth.connect.server.controllers.AlertController alertController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createAlertController();
+        com.mirth.connect.server.controllers.CodeTemplateController codeTemplateController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createCodeTemplateController();
 
         ServerConfiguration serverConfiguration = new ServerConfiguration();
         serverConfiguration.setChannelGroups(channelController.getChannelGroups(null));
@@ -847,7 +847,7 @@ public class DefaultConfigurationController extends ConfigurationController {
 
         // Put the properties for every plugin with properties in a map.
         Map<String, Properties> pluginProperties = new HashMap<String, Properties>();
-        ExtensionController extensionController = ControllerFactory.getFactory().createExtensionController();
+        com.mirth.connect.server.controllers.ExtensionController extensionController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createExtensionController();
 
         for (PluginMetaData pluginMetaData : extensionController.getPluginMetaData().values()) {
             String pluginName = pluginMetaData.getName();
@@ -869,14 +869,14 @@ public class DefaultConfigurationController extends ConfigurationController {
 
     @Override
     public void setServerConfiguration(ServerConfiguration serverConfiguration, boolean deploy, boolean overwriteConfigMap) throws ControllerException {
-        ChannelController channelController = ControllerFactory.getFactory().createChannelController();
-        AlertController alertController = ControllerFactory.getFactory().createAlertController();
-        CodeTemplateController codeTemplateController = ControllerFactory.getFactory().createCodeTemplateController();
-        EngineController engineController = ControllerFactory.getFactory().createEngineController();
-        ExtensionController extensionController = ControllerFactory.getFactory().createExtensionController();
-        ContextFactoryController contextFactoryController = ControllerFactory.getFactory().createContextFactoryController();
+        ChannelController channelController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createChannelController();
+        com.mirth.connect.server.controllers.AlertController alertController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createAlertController();
+        com.mirth.connect.server.controllers.CodeTemplateController codeTemplateController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createCodeTemplateController();
+        com.mirth.connect.server.controllers.EngineController engineController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createEngineController();
+        com.mirth.connect.server.controllers.ExtensionController extensionController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createExtensionController();
+        com.mirth.connect.server.controllers.ContextFactoryController contextFactoryController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createContextFactoryController();
 
-        ServerConfigurationRestorer restorer = new ServerConfigurationRestorer(this, channelController, alertController, codeTemplateController, engineController, scriptController, extensionController, contextFactoryController);
+        com.mirth.connect.server.controllers.ServerConfigurationRestorer restorer = new com.mirth.connect.server.controllers.ServerConfigurationRestorer(this, channelController, alertController, codeTemplateController, engineController, scriptController, extensionController, contextFactoryController);
         restorer.restoreServerConfiguration(serverConfiguration, deploy, overwriteConfigMap);
     }
 
@@ -1227,11 +1227,12 @@ public class DefaultConfigurationController extends ConfigurationController {
             KeyStore keyStore = null;
 
             // if the current server version is pre-2.2, load the keystore as JKS
-            if (MigrationUtil.compareVersions("2.2.0", getServerVersion()) == 1) {
-                keyStore = KeyStore.getInstance("JKS");
-            } else {
-                keyStore = KeyStore.getInstance(mirthConfig.getString("keystore.type", "JCEKS"));
-            }
+//            if (MigrationUtil.compareVersions("2.2.0", getServerVersion()) == 1) {
+//                keyStore = KeyStore.getInstance("JKS");
+//            } else {
+//                keyStore = KeyStore.getInstance(mirthConfig.getString("keystore.type", "JCEKS"));
+//            }
+            keyStore = KeyStore.getInstance(mirthConfig.getString("keystore.type", "JCEKS"));
 
             if (keyStoreFile.exists()) {
                 keyStoreFileIs = new FileInputStream(keyStoreFile);
@@ -1297,7 +1298,7 @@ public class DefaultConfigurationController extends ConfigurationController {
             String readOnlyPassword = databaseConfig.getDatabaseReadOnlyPassword();
 
             if (StringUtils.isNotEmpty(password) || StringUtils.isNotEmpty(readOnlyPassword)) {
-                ConfigurationController configurationController = ControllerFactory.getFactory().createConfigurationController();
+                com.mirth.connect.server.controllers.ConfigurationController configurationController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createConfigurationController();
                 EncryptionSettings encryptionSettings = configurationController.getEncryptionSettings();
                 Encryptor encryptor = configurationController.getEncryptor();
 
@@ -1345,7 +1346,7 @@ public class DefaultConfigurationController extends ConfigurationController {
          * Save using a FileOutputStream so that the file will be saved to the proper location, even
          * if running from the IDE.
          */
-        File confDir = new File(ControllerFactory.getFactory().createConfigurationController().getConfigurationDir());
+        File confDir = new File(com.mirth.connect.server.controllers.ControllerFactory.getFactory().createConfigurationController().getConfigurationDir());
         OutputStream os = new FileOutputStream(new File(confDir, "mirth.properties"));
 
         try {
@@ -1458,7 +1459,7 @@ public class DefaultConfigurationController extends ConfigurationController {
         SecretKey secretKey = null;
 
         if (!keyStore.containsAlias(SECRET_KEY_ALIAS)) {
-            logger.debug("encryption key not found, generating new one");
+            logger.error("encryption key not found, generating new one");
             KeyGenerator keyGenerator = KeyGenerator.getInstance(encryptionConfig.getEncryptionBaseAlgorithm(), provider);
             keyGenerator.init(encryptionConfig.getEncryptionKeyLength());
             secretKey = keyGenerator.generateKey();
@@ -1666,7 +1667,7 @@ public class DefaultConfigurationController extends ConfigurationController {
         }
 
         // These have to be set after the authenticator, so that a new mail session isn't created
-        ConfigurationController configurationController = ControllerFactory.getFactory().createConfigurationController();
+        com.mirth.connect.server.controllers.ConfigurationController configurationController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createConfigurationController();
         String protocols = properties.getProperty("protocols", StringUtils.join(MirthSSLUtil.getEnabledHttpsProtocols(configurationController.getHttpsClientProtocols()), ' '));
         String cipherSuites = properties.getProperty("cipherSuites", StringUtils.join(MirthSSLUtil.getEnabledHttpsCipherSuites(configurationController.getHttpsCipherSuites()), ' '));
         email.getMailSession().getProperties().setProperty("mail.smtp.ssl.protocols", protocols);
