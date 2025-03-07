@@ -16,7 +16,7 @@ import javax.swing.Icon;
 import javax.swing.UIManager;
 
 /** Creates the error dialog. */
-public class ErrorDialog extends MirthDialog {
+public class ErrorDialog extends com.mirth.connect.client.ui.MirthDialog {
 
     private Frame parent;
 
@@ -31,7 +31,7 @@ public class ErrorDialog extends MirthDialog {
     }
 
     private void initialize(String message) {
-        this.parent = PlatformUI.MIRTH_FRAME;
+        this.parent = com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME;
         initComponents();
         question.setBackground(UIManager.getColor("Control"));
         errorContent.setBackground(UIManager.getColor("Control"));
@@ -100,7 +100,7 @@ public class ErrorDialog extends MirthDialog {
         question.setBackground(new java.awt.Color(224, 223, 227));
         question.setBorder(null);
         question.setEditable(false);
-        question.setText("An unexpected error has occurred.  If this is a severe error and you are on NextGen Healthcare Support, please contact the NextGen Healthcare Help Desk.");
+        question.setText("An unexpected error has occurred.");
         question.setFocusable(false);
         questionPane.setViewportView(question);
 
