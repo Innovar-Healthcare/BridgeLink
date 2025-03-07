@@ -1030,7 +1030,7 @@ public class Frame extends JXFrame {
         addTask(TaskConstants.VIEW_SETTINGS, "Settings", "Contains local and system settings.", "S", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/wrench.png")), viewPane, null);
         addTask(TaskConstants.VIEW_ALERTS, "Alerts", "Contains alert settings.", "A", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/error.png")), viewPane, null);
         addTask(TaskConstants.VIEW_EVENTS, "Events", "Show the event logs for the system.", "E", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/table.png")), viewPane, null);
-        addTask(TaskConstants.VIEW_EXTENSIONS, "Extensions", "View and manage Mirth Connect extensions", "X", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/plugin.png")), viewPane, null);
+        addTask(TaskConstants.VIEW_EXTENSIONS, "Extensions", "View and manage BridgeLink extensions", "X", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/plugin.png")), viewPane, null);
 
         setNonFocusable(viewPane);
         taskPaneContainer.add(viewPane);
@@ -1258,13 +1258,13 @@ public class Frame extends JXFrame {
         otherPane.setTitle("Other");
         otherPane.setName(TaskConstants.OTHER_KEY);
         otherPane.setFocusable(false);
-        addTask(TaskConstants.OTHER_NOTIFICATIONS, com.mirth.connect.client.ui.UIConstants.VIEW_NOTIFICATIONS, "View notifications from NextGen Healthcare.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/flag_orange.png")), otherPane, null);
-        addTask(TaskConstants.OTHER_VIEW_USER_API, "View User API", "View documentation for the Mirth Connect User API.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/page_white_text.png")), otherPane, null);
-        addTask(TaskConstants.OTHER_VIEW_CLIENT_API, "View Client API", "View documentation for the Mirth Connect Client API.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/page_white_text.png")), otherPane, null);
-        addTask(TaskConstants.OTHER_HELP, "Help", "View the Mirth Connect wiki.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/help.png")), otherPane, null);
+        addTask(TaskConstants.OTHER_NOTIFICATIONS, com.mirth.connect.client.ui.UIConstants.VIEW_NOTIFICATIONS, "View notifications from Innovar Healthcare.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/flag_orange.png")), otherPane, null);
+        addTask(TaskConstants.OTHER_VIEW_USER_API, "View User API", "View documentation for the BridgeLink User API.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/page_white_text.png")), otherPane, null);
+        addTask(TaskConstants.OTHER_VIEW_CLIENT_API, "View Client API", "View documentation for the BridgeLink Client API.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/page_white_text.png")), otherPane, null);
+        addTask(TaskConstants.OTHER_HELP, "Help", "View the BridgeLink wiki.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/help.png")), otherPane, null);
         addTask(TaskConstants.OTHER_ABOUT, "About BridgeLink", "View the about page for BridgeLink.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/information.png")), otherPane, null);//Change to BridgeLink by Innovar Healthcare
         addTask(TaskConstants.OTHER_VISIT_MIRTH, "Visit innovarhealthcare", "View innovarhealthcare's homepage.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/house.png")), otherPane, null);//Change to Innovar Healthcare
-        addTask(TaskConstants.OTHER_REPORT_ISSUE, "Report Issue", "Visit Mirth Connect's issue tracker.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/bug.png")), otherPane, null);
+        addTask(TaskConstants.OTHER_REPORT_ISSUE, "Report Issue", "Visit BridgeLink's issue tracker.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/bug.png")), otherPane, null);
         addTask(TaskConstants.OTHER_LOGOUT, "Logout", "Logout and return to the login screen.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/disconnect.png")), otherPane, null);
         setNonFocusable(otherPane);
         taskPaneContainer.add(otherPane);
@@ -1516,7 +1516,7 @@ public class Frame extends JXFrame {
                     connectionError = true;
                     statusUpdaterExecutor.shutdownNow();
 
-                    alertWarning(parentComponent, "Sorry your connection to Mirth Connect has either timed out or there was an error in the connection.  Please login again.");
+                    alertWarning(parentComponent, "Sorry your connection to BridgeLink has either timed out or there was an error in the connection.  Please login again.");
                     if (!exportChannelOnError()) {
                         return;
                     }
@@ -1534,7 +1534,7 @@ public class Frame extends JXFrame {
                     } else {
                         server = com.mirth.connect.client.ui.PlatformUI.SERVER_URL;
                     }
-                    alertWarning(parentComponent, "The Mirth Connect server " + server + " is no longer running.  Please start it and log in again.");
+                    alertWarning(parentComponent, "The BridgeLink server " + server + " is no longer running.  Please start it and log in again.");
                     if (!exportChannelOnError()) {
                         return;
                     }
@@ -4813,51 +4813,54 @@ public class Frame extends JXFrame {
     }
 
     public void doHelp() {
-        final String workingId = startWorking("Retrieving help URL...");
-
-        SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
-            @Override
-            protected String doInBackground() throws Exception {
-                return HttpUtil.executeGetRequest(com.mirth.connect.client.ui.UIConstants.HELP_URL_LOCATION, 30000, true, com.mirth.connect.client.ui.PlatformUI.HTTPS_PROTOCOLS, com.mirth.connect.client.ui.PlatformUI.HTTPS_CIPHER_SUITES);
-            }
-
-            @Override
-            protected void done() {
-                String url = userPreferences.get("helpDefaultLocation", com.mirth.connect.client.ui.UIConstants.HELP_DEFAULT_LOCATION);
-
-                try {
-                    String webhelpJson = get();
-                    ObjectNode webhelpObj = (ObjectNode) new ObjectMapper().readTree(webhelpJson);
-
-                    // Get version-specific node, or "default"
-                    JsonNode urlNode;
-                    if (webhelpObj.has(Version.getLatest().toString())) {
-                        urlNode = webhelpObj.get(Version.getLatest().toString());
-                    } else {
-                        urlNode = webhelpObj.get("default");
-                    }
-
-                    String newUrl = urlNode.asText();
-                    
-                    if (StringUtils.isNotBlank(newUrl)) {
-                        url = newUrl;
-                        userPreferences.put("helpDefaultLocation", url);
-                    }
-                } catch (Throwable t) {
-                    logger.error("Unable to retrieve help URL, using default.", t);
-                } finally {
-                    stopWorking(workingId);
-                }
-
-                BareBonesBrowserLaunch.openURL(url);
-            }
-        };
-
-        worker.execute();
+        BareBonesBrowserLaunch.openURL(com.mirth.connect.client.ui.UIConstants.HELP_URL_LOCATION);
+//        final String workingId = startWorking("Retrieving help URL...");
+//
+//        SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
+//            @Override
+//            protected String doInBackground() throws Exception {
+//
+//                return HttpUtil.executeGetRequest(com.mirth.connect.client.ui.UIConstants.HELP_URL_LOCATION, 30000, true, com.mirth.connect.client.ui.PlatformUI.HTTPS_PROTOCOLS, com.mirth.connect.client.ui.PlatformUI.HTTPS_CIPHER_SUITES);
+//            }
+//
+//            @Override
+//            protected void done() {
+//                String url = userPreferences.get("helpDefaultLocation", com.mirth.connect.client.ui.UIConstants.HELP_DEFAULT_LOCATION);
+//
+//                try {
+//                    String webhelpJson = get();
+//                    ObjectNode webhelpObj = (ObjectNode) new ObjectMapper().readTree(webhelpJson);
+//
+//                    // Get version-specific node, or "default"
+//                    JsonNode urlNode;
+//                    if (webhelpObj.has(Version.getLatest().toString())) {
+//                        urlNode = webhelpObj.get(Version.getLatest().toString());
+//                    } else {
+//                        urlNode = webhelpObj.get("default");
+//                    }
+//
+//                    String newUrl = urlNode.asText();
+//
+//                    if (StringUtils.isNotBlank(newUrl)) {
+//                        url = newUrl;
+//                        userPreferences.put("helpDefaultLocation", url);
+//                    }
+//                } catch (Throwable t) {
+//                    logger.error(com.mirth.connect.client.ui.UIConstants.HELP_URL_LOCATION+ " " + com.mirth.connect.client.ui.UIConstants.HELP_DEFAULT_LOCATION );
+//                    logger.error("Unable to retrieve help URL, using default.", t);
+//                } finally {
+//                    stopWorking(workingId);
+//                }
+//
+//                BareBonesBrowserLaunch.openURL(url);
+//            }
+//        };
+//
+//        worker.execute();
     }
 
     public void goToNotifications() {
-        new com.mirth.connect.client.ui.NotificationDialog();
+//        new com.mirth.connect.client.ui.NotificationDialog();
     }
 
     public Map<String, PluginMetaData> getPluginMetaData() {
@@ -4966,7 +4969,7 @@ public class Frame extends JXFrame {
         StringBuilder message = new StringBuilder();
 
         if (version == null) {
-            message.append("The " + objectName + " being imported is from an older or unknown version of Mirth Connect.\n");
+            message.append("The " + objectName + " being imported is from an older or unknown version of BridgeLink.\n");
         } else {
             int comparison = MigrationUtil.compareVersions(version, com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION);
 
@@ -4975,16 +4978,16 @@ public class Frame extends JXFrame {
             }
 
             if (comparison > 0) {
-                alertInformation(this, "The " + objectName + " being imported originated from Mirth Connect version " + version + ".\nYou are using Mirth Connect version " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + ".\nThe " + objectName + " cannot be imported, because it originated from a newer version of Mirth Connect.");
+                alertInformation(this, "The " + objectName + " being imported originated from BridgeLink version " + version + ".\nYou are using BridgeLink version " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + ".\nThe " + objectName + " cannot be imported, because it originated from a newer version of BridgeLink.");
                 return false;
             }
 
             if (comparison < 0) {
-                message.append("The " + objectName + " being imported originated from Mirth Connect version " + version + ".\n");
+                message.append("The " + objectName + " being imported originated from BridgeLink version " + version + ".\n");
             }
         }
 
-        message.append("You are using Mirth Connect version " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + ".\nWould you like to automatically convert the " + objectName + " to the " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + " format?");
+        message.append("You are using BridgeLink version " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + ".\nWould you like to automatically convert the " + objectName + " to the " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + " format?");
         return JOptionPane.YES_OPTION == JOptionPane.showConfirmDialog(this, message.toString(), "Select an Option", JOptionPane.YES_NO_OPTION);
     }
 

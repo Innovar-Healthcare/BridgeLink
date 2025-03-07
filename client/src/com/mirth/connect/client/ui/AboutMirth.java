@@ -69,7 +69,7 @@ public class AboutMirth extends com.mirth.connect.client.ui.MirthDialog {
         content.append("Java version: " + System.getProperty("java.version") + "\n\n");
 
         content.append("(c) 2025 Innovar Healthcare. All rights reserved. Visit http://www.innovarhealthcare.com\n\n");//Change to BridgeLink by Innovar Healthcare
-        content.append("The following is a list of acknowledgements for third-party software that is included with Mirth Connect:\n\n");
+        content.append("The following is a list of acknowledgements for third-party software that is included with BridgeLink:\n\n");
         content.append("This product includes software developed by the Apache Software Foundation (http://www.apache.org/).\n\n");
         content.append("This product includes all or a portion of the HL7 Vocabulary database, or is derived from the HL7 Vocabulary database, subject to a license from Health Level Seven, Inc.\n\n");
         content.append("This product includes a portion of images from http://www.famfamfam.com/lab/icons/silk/.\n\n");

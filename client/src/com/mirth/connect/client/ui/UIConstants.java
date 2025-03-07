@@ -76,11 +76,11 @@ public static final String MIRTHCORP_URL = "https://www.innovarhealthcare.com";
     public static final Font MONOSPACED_FONT = new Font(MONOSPACED_FONT_NAME, Font.PLAIN, 12);
 
     // issue link
-    public static final String ISSUE_TRACKER_LOCATION = "https://github.com/nextgenhealthcare/connect/issues";
+    public static final String ISSUE_TRACKER_LOCATION = "https://www.innovarhealthcare.com";
     // help link
-    public static String HELP_URL_LOCATION = "https://s3.amazonaws.com/downloads.mirthcorp.com/connect-user-guide/webhelp.json";
+    public static String HELP_URL_LOCATION = "https://www.innovarhealthcare.com";
     // help link
-    public static String HELP_DEFAULT_LOCATION = "https://github.com/nextgenhealthcare/connect/wiki";
+    public static String HELP_DEFAULT_LOCATION = "https://www.innovarhealthcare.com";
     // user api
     public static String USER_API_LOCATION = "/javadocs/user-api/";
     // user api

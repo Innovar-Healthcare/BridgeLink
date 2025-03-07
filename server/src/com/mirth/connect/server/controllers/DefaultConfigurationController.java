@@ -1459,7 +1459,7 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
         SecretKey secretKey = null;
 
         if (!keyStore.containsAlias(SECRET_KEY_ALIAS)) {
-            logger.error("encryption key not found, generating new one");
+            logger.debug("encryption key not found, generating new one");
             KeyGenerator keyGenerator = KeyGenerator.getInstance(encryptionConfig.getEncryptionBaseAlgorithm(), provider);
             keyGenerator.init(encryptionConfig.getEncryptionKeyLength());
             secretKey = keyGenerator.generateKey();
