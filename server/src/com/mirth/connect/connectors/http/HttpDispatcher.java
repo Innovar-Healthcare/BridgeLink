@@ -583,7 +583,7 @@ public class HttpDispatcher extends DestinationConnector {
             }
         }
         if (!userAgentFound) {
-            httpMethod.addHeader("user-agent", "Mirth Connect");
+            httpMethod.addHeader("user-agent", "BridgeLink");
         }
 
         // Only set the Content-Type for entity-enclosing methods, but not if multipart is used

@@ -191,7 +191,7 @@ public class CommandLineInterface {
             } catch (Exception e) {
             }
 
-            out.println("Connected to Mirth Connect server @ " + server + " (" + serverVersion + ")");
+            out.println("Connected to BridgeLink server @ " + server + " (" + serverVersion + ")");
             currentUser = StringUtils.defaultString(loginStatus.getUpdatedUsername(), user);
 
             if (script != null) {
@@ -569,7 +569,7 @@ public class CommandLineInterface {
         out.println("user add username \"password\" \"firstName\" \"lastName\" \"organization\" \"email\"\n\tAdds the specified user\n");
         out.println("user remove id|username\n\tRemoves the specified user\n");
         out.println("user changepw id|username \"newpassword\"\n\tChanges the specified user's password\n");
-        out.println("quit\n\tQuits Mirth Connect Shell");
+        out.println("quit\n\tQuits BridgeLink Shell");
     }
 
     private void commandUserList(Token[] arguments) throws ClientException {
@@ -1851,7 +1851,7 @@ public class CommandLineInterface {
         dumpFilename = replaceValues(dumpFilename);
 
         StringBuilder builder = new StringBuilder();
-        builder.append("Mirth Connect Event Log Dump: " + (new Date()).toString() + "\n");
+        builder.append("BridgeLink Event Log Dump: " + (new Date()).toString() + "\n");
         builder.append(ServerEvent.getExportHeader() + "\n");
 
         File dumpFile = new File(dumpFilename);
@@ -1898,7 +1898,7 @@ public class CommandLineInterface {
         dumpFilename = replaceValues(dumpFilename);
 
         StringBuilder builder = new StringBuilder();
-        builder.append("Mirth Connect Channel Statistics Dump: " + (new Date()).toString() + "\n");
+        builder.append("BridgeLink Channel Statistics Dump: " + (new Date()).toString() + "\n");
         builder.append("Name, Received, Filtered, Queued, Sent, Errored\n");
 
         List<DashboardStatus> channelStatuses = client.getAllChannelStatuses();

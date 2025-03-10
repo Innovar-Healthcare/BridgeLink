@@ -146,7 +146,7 @@ public class ListenerSettingsPanel extends JPanel {
         });
         
         portsInUse.setText("Ports in Use");
-        portsInUse.setToolTipText("<html>View all listener ports currently used by Mirth Connect.<br>"
+        portsInUse.setToolTipText("<html>View all listener ports currently used by BridgeLink.<br>"
         		+ "Any port number can be entered even if it's already in use;<br>"
         		+ "however, only one channel can be deployed per port.</html>");
         portsInUse.addActionListener(new ActionListener() {

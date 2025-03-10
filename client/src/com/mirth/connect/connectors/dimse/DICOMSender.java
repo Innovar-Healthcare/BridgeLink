@@ -420,7 +420,7 @@ public class DICOMSender extends ConnectorSettingsPanel {
         localPortField.setToolTipText("Local port that the client socket will be bound to.");
         
         portsInUse.setText("Ports in Use");
-        portsInUse.setToolTipText("View all ports currently used by Mirth Connect.");
+        portsInUse.setToolTipText("View all ports currently used by BridgeLink.");
         portsInUse.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent evt) {
                 portsInUseActionPerformed(evt);

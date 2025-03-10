@@ -1226,7 +1226,7 @@ public class HttpSender extends ConnectorSettingsPanel {
         passwordField.setToolTipText("The password used to connect to the HTTP server.");
         authenticationTypeDigestRadio.setToolTipText("Use the digest authentication scheme.");
         authenticationTypeBasicRadio.setToolTipText("Use the basic authentication scheme.");
-        charsetEncodingCombobox.setToolTipText("<html>Select the character set encoding used by the sender of the message,<br> or Default to assume the default character set encoding for the JVM running Mirth Connect.</html>");
+        charsetEncodingCombobox.setToolTipText("<html>Select the character set encoding used by the sender of the message,<br> or Default to assume the default character set encoding for the JVM running BridgeLink.</html>");
         sendTimeoutField.setToolTipText("<html>Sets the socket timeout (SO_TIMEOUT) in milliseconds to be used when executing the method.<br>A timeout value of zero is interpreted as an infinite timeout.</html>");
         parseMultipartYesRadio.setToolTipText("<html>Select Yes to automatically parse multipart responses into separate XML nodes.<br/>Select No to always keep the response body as a single XML node.</html>");
         parseMultipartNoRadio.setToolTipText("<html>Select Yes to automatically parse multipart responses into separate XML nodes.<br/>Select No to always keep the response body as a single XML node.</html>");

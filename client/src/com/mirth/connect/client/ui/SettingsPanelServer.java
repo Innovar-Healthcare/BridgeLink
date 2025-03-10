@@ -685,7 +685,7 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
 
         environmentNameLabel = new JLabel("Environment name:");
         environmentNameField = new MirthTextField();
-        environmentNameField.setToolTipText("<html>The name of this Mirth Connect environment. There is one environment name per Mirth Connect database.</html>");
+        environmentNameField.setToolTipText("<html>The name of this BridgeLink environment. There is one environment name per BridgeLink database.</html>");
 
         serverNameLabel = new JLabel("Server name:");
         serverNameField = new MirthTextField();

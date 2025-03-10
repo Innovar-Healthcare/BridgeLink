@@ -111,7 +111,7 @@ public class SystemServlet extends MirthServlet implements SystemServletInterfac
 
                     root = pathRoot;
                 } catch (Exception e) {
-                    logger.warn("Unable to infer filesystem root from Mirth Connect base directory, defaulting to: " + root, e);
+                    logger.warn("Unable to infer filesystem root from BridgeLink base directory, defaulting to: " + root, e);
                 }
             }
 

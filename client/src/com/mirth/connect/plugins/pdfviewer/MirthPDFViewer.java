@@ -18,7 +18,7 @@ import javax.swing.ImageIcon;
 
 public class MirthPDFViewer extends com.sun.pdfview.PDFViewer {
 
-    public final static String TITLE = "Mirth Connect PDF Viewer";
+    public final static String TITLE = "BridgeLink PDF Viewer";
     private File tempFile;
 
     /**

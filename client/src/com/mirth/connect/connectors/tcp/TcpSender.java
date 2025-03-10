@@ -422,7 +422,7 @@ public class TcpSender extends ConnectorSettingsPanel implements ActionListener 
         remotePortField.setToolTipText("<html>The port on which to connect.</html>");
         
         portsInUse.setText("Ports in Use");
-        portsInUse.setToolTipText("View all ports currently used by Mirth Connect.");
+        portsInUse.setToolTipText("View all ports currently used by BridgeLink.");
         portsInUse.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent evt) {
                 portsInUseActionPerformed(evt);
@@ -466,7 +466,7 @@ public class TcpSender extends ConnectorSettingsPanel implements ActionListener 
         responseTimeoutLabel.setText("Response Timeout (ms):");
 
         charsetEncodingCombobox.setModel(new DefaultComboBoxModel(new String[] { "Default", "UTF-8", "ISO-8859-1", "UTF-16 (le)", "UTF-16 (be)", "UTF-16 (bom)", "US-ASCII" }));
-        charsetEncodingCombobox.setToolTipText("<html>The character set encoding to use when converting the outbound message to a byte stream if Data Type Text is selected.<br>Select Default to use the default character set encoding for the JVM running the Mirth Connect server.</html>");
+        charsetEncodingCombobox.setToolTipText("<html>The character set encoding to use when converting the outbound message to a byte stream if Data Type Text is selected.<br>Select Default to use the default character set encoding for the JVM running the BridgeLink server.</html>");
         charsetEncodingCombobox.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent evt) {
                 charsetEncodingComboboxActionPerformed(evt);

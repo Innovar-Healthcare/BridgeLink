@@ -345,7 +345,7 @@ public class WebStartServlet extends HttpServlet {
         Element informationElement = document.createElement("information");
 
         Element titleElement = document.createElement("title");
-        titleElement.setTextContent("Mirth Connect Extension - [" + StringUtils.join(extensionsWithThePath, ",") + "]");
+        titleElement.setTextContent("BridgeLink Extension - [" + StringUtils.join(extensionsWithThePath, ",") + "]");
         informationElement.appendChild(titleElement);
 
         Element vendorElement = document.createElement("vendor");

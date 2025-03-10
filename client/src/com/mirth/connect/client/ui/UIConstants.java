@@ -34,9 +34,8 @@ public class UIConstants {
     public static final ImageIcon MIRTHCORP_LOGO = new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/MirthConnect_NLogo_RGB.png"));
     public static final ImageIcon MIRTHCONNECT_LOGO_GRAY = new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/MirthConnect_Logo_WM_White.png"));
     public static final String MIRTHCORP_TOOLTIP = "NextGen Healthcare";
-    public static final String MIRTHCONNECT_TOOLTIP = "Mirth Connect";
-//    public static final String MIRTHCORP_URL = "https://www.nextgen.com/products-and-services/integration-engine";
-public static final String MIRTHCORP_URL = "https://www.innovarhealthcare.com";
+    public static final String MIRTHCONNECT_TOOLTIP = "BridgeLink";
+    public static final String MIRTHCORP_URL = "https://www.innovarhealthcare.com";
     public static final String MIRTHCONNECT_URL = "https://www.innovarhealthcare.com";
     public static final String EDIT_FILTER = "Edit Filter";
     public static final String EDIT_TRANSFORMER = "Edit Transformer";

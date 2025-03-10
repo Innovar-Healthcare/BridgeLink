@@ -629,7 +629,7 @@ public class DatabaseReader extends ConnectorSettingsPanel {
         fetchSizeField.setToolTipText("<html>The JDBC ResultSet fetch size to be used when fetching results from the current cursor position.</html>");
         retryCountField.setToolTipText("<html>The number of times to retry executing the statement or script if an error occurs.</html>");
         retryIntervalField.setToolTipText("<html>The amount of time that should elapse between retry attempts.</html>");
-        encodingComboBox.setToolTipText("<html>Select the character set encoding used by the source database,<br/>or select Default to use the default character set encoding for the JVM running Mirth Connect.</html>");
+        encodingComboBox.setToolTipText("<html>Select the character set encoding used by the source database,<br/>or select Default to use the default character set encoding for the JVM running BridgeLink.</html>");
         generateConnectionButton.setToolTipText("<html>If \"Yes\" is selected for Use JavaScript, this button is enabled.<br>When clicked, it inserts boilerplate Connection construction code into the JavaScript control at the current caret location.</html>");
         generateSelectButton.setToolTipText("<html>Opens a window to assist in building a select query to select records from the database specified in the URL above.</html>");
         runPostProcessSQLLabel.setToolTipText("<html>When using a database reader, it is usually necessary to execute a separate SQL statement<br>to mark the message that was just fetched as processed, so it will not be fetched again the next time a poll occurs.</html>");

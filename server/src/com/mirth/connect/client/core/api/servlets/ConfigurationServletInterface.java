@@ -73,20 +73,20 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
     @GET
     @Path("/version")
     @Produces(MediaType.TEXT_PLAIN)
-    @Operation(summary = "Returns the version of the Mirth Connect server.")
+    @Operation(summary = "Returns the version of the BridgeLink server.")
     @MirthOperation(name = "getVersion", display = "Get version", auditable = false)
     public String getVersion() throws ClientException;
 
     @GET
     @Path("/buildDate")
     @Produces(MediaType.TEXT_PLAIN)
-    @Operation(summary = "Returns the build date of the Mirth Connect server.")
+    @Operation(summary = "Returns the build date of the BridgeLink server.")
     @MirthOperation(name = "getBuildDate", display = "Get build date", auditable = false)
     public String getBuildDate() throws ClientException;
 
     @GET
     @Path("/status")
-    @Operation(summary = "Returns the status of the Mirth Connect server.")
+    @Operation(summary = "Returns the status of the BridgeLink server.")
     @ApiResponse(content = {
             @Content(mediaType = MediaType.APPLICATION_XML, examples = {
                     @ExampleObject(name = "status", ref = "../apiexamples/integer_xml") }),
@@ -116,13 +116,13 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
     @GET
     @Path("/jvm")
     @Produces(MediaType.TEXT_PLAIN)
-    @Operation(summary = "Returns the name of the JVM running Mirth Connect.")
+    @Operation(summary = "Returns the name of the JVM running BridgeLink.")
     @MirthOperation(name = "getJVMName", display = "Get JVM name", auditable = false)
     public String getJVMName() throws ClientException;
 
     @GET
     @Path("/about")
-    @Operation(summary = "Returns a map of common information about the Mirth Connect server.")
+    @Operation(summary = "Returns a map of common information about the BridgeLink server.")
     @ApiResponse(content = {
             @Content(mediaType = MediaType.APPLICATION_XML, examples = {
                     @ExampleObject(name = "aboutMap", ref = "../apiexamples/generic_map_xml") }),
@@ -133,7 +133,7 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
 
     @GET
     @Path("/configuration")
-    @Operation(summary = "Returns a ServerConfiguration object which contains all of the channels, alerts, configuration map, and properties stored on the Mirth Connect server.")
+    @Operation(summary = "Returns a ServerConfiguration object which contains all of the channels, alerts, configuration map, and properties stored on the BridgeLink server.")
     @ApiResponse(content = { @Content(mediaType = MediaType.APPLICATION_XML, examples = {
             @ExampleObject(name = "serverConfiguration", ref = "../apiexamples/server_configuration_xml") }),
             @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
@@ -147,7 +147,7 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
 
     @PUT
     @Path("/configuration")
-    @Operation(summary = "Updates all of the channels, alerts and properties stored on the Mirth Connect server.")
+    @Operation(summary = "Updates all of the channels, alerts and properties stored on the BridgeLink server.")
     @MirthOperation(name = "setServerConfiguration", display = "Set server configuration", permission = Permissions.SERVER_CONFIGURATION_RESTORE, type = ExecuteType.ASYNC)
     public void setServerConfiguration(// @formatter:off
             @Param("serverConfiguration") @RequestBody(description = "The ServerConfiguration object containing all channels, users, alerts, and properties to update.", required = true, content = {

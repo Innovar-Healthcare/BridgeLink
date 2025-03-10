@@ -329,7 +329,7 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
      ****************/
 
     /**
-     * Logs in to the Mirth Connect server using the specified name and password.
+     * Logs in to the BridgeLink server using the specified name and password.
      * 
      * @see UserServletInterface#login
      */
@@ -535,7 +535,7 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     }
 
     /**
-     * Returns the version of the Mirth Connect server.
+     * Returns the version of the BridgeLink server.
      * 
      * @see ConfigurationServletInterface#getVersion
      */
@@ -545,7 +545,7 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     }
 
     /**
-     * Returns the build date of the Mirth Connect server.
+     * Returns the build date of the BridgeLink server.
      * 
      * @see ConfigurationServletInterface#getBuildDate
      */
@@ -555,7 +555,7 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     }
 
     /**
-     * Returns the status of the Mirth Connect server.
+     * Returns the status of the BridgeLink server.
      * 
      * @see ConfigurationServletInterface#getStatus
      */
@@ -585,7 +585,7 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     }
 
     /**
-     * Returns the name of the JVM running Mirth Connect.
+     * Returns the name of the JVM running BridgeLink.
      * 
      * @see ConfigurationServletInterface#getJVMName
      */
@@ -595,7 +595,7 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     }
 
     /**
-     * Returns a map of common information about the Mirth Connect server.
+     * Returns a map of common information about the BridgeLink server.
      * 
      * @see ConfigurationServletInterface#getAbout
      */
@@ -606,7 +606,7 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
 
     /**
      * Returns a ServerConfiguration object which contains all of the channels, users, alerts and
-     * properties stored on the Mirth Connect server.
+     * properties stored on the BridgeLink server.
      * 
      * @see ConfigurationServletInterface#getServerConfiguration
      */
@@ -616,7 +616,7 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
 
     /**
      * Returns a ServerConfiguration object which contains all of the channels, users, alerts and
-     * properties stored on the Mirth Connect server.
+     * properties stored on the BridgeLink server.
      * 
      * @see ConfigurationServletInterface#getServerConfiguration
      */
@@ -626,7 +626,7 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     }
 
     /**
-     * Updates all of the channels, alerts and properties stored on the Mirth Connect server.
+     * Updates all of the channels, alerts and properties stored on the BridgeLink server.
      * 
      * @see ConfigurationServletInterface#setServerConfiguration
      */

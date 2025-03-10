@@ -1110,7 +1110,7 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             DirectoryResourceProperties defaultResource = new DirectoryResourceProperties();
             defaultResource.setId(ResourceProperties.DEFAULT_RESOURCE_ID);
             defaultResource.setName(ResourceProperties.DEFAULT_RESOURCE_NAME);
-            defaultResource.setDescription("Loads libraries from the custom-lib folder in the Mirth Connect home directory.");
+            defaultResource.setDescription("Loads libraries from the custom-lib folder in the BridgeLink home directory.");
             defaultResource.setIncludeWithGlobalScripts(true);
             defaultResource.setDirectory("custom-lib");
 
@@ -1503,7 +1503,7 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             // @formatter:off
             logger.error("Encryption algorithm is currently set to: \"" + encryptionConfig.getEncryptionAlgorithm() + "\"\n"
                 + "You should update the \"encryption.algorithm\" in mirth.properties to a more secure option, such as \"" + encryptionConfig.getEncryptionAlgorithm() + "/CBC/PKCS5Padding\".\n"
-                + "Support for the currently set algorithm will be REMOVED in a future version, so if you do not update it, Mirth Connect will fail to start.\n"
+                + "Support for the currently set algorithm will be REMOVED in a future version, so if you do not update it, BridgeLink will fail to start.\n"
                 + "Please see the Security Best Practices -> Encryption Settings section of the User Guide for more information.");
             // @formatter:on
         }
@@ -1528,7 +1528,7 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             logger.debug("generated new key pair for CA cert using provider: " + provider.getName());
 
             // Generate CA cert
-            X500Name caSubjectName = new X500Name("CN=Mirth Connect Certificate Authority");
+            X500Name caSubjectName = new X500Name("CN=BridgeLink Certificate Authority");
             SubjectPublicKeyInfo caSubjectKey = SubjectPublicKeyInfo.getInstance(caKeyPair.getPublic().getEncoded());
             X509v3CertificateBuilder certBuilder = new X509v3CertificateBuilder(caSubjectName, BigInteger.ONE, startDate, expiryDate, caSubjectName, caSubjectKey);
             certBuilder.addExtension(org.bouncycastle.asn1.x509.Extension.basicConstraints, true, new BasicConstraints(0));
@@ -1681,7 +1681,7 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             }
         }
 
-        email.setSubject("Mirth Connect Test Email");
+        email.setSubject("BridgeLink Test Email");
 
         try {
             for (String toAddress : StringUtils.split(to, ",")) {
@@ -1689,7 +1689,7 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             }
 
             email.setFrom(from);
-            email.setMsg("Receipt of this email confirms that mail originating from this Mirth Connect Server is capable of reaching its intended destination.\n\nSMTP Configuration:\n- Host: " + host + "\n- Port: " + port);
+            email.setMsg("Receipt of this email confirms that mail originating from this BridgeLink Server is capable of reaching its intended destination.\n\nSMTP Configuration:\n- Host: " + host + "\n- Port: " + port);
 
             email.send();
             return new ConnectionTestResponse(ConnectionTestResponse.Type.SUCCESS, "Sucessfully sent test email to: " + to);

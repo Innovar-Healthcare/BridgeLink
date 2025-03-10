@@ -537,7 +537,7 @@ public class WebStartServletTest {
 	}
 
 	private static String CORE_JNLP = "<jnlp codebase=\"https://localhost:8443\" version=\"4.5.2\">\n"
-			+ "	<information>\n" + "		<title>Mirth Connect Administrator 4.5.2</title>\n"
+			+ "	<information>\n" + "		<title>BridgeLink Administrator 4.5.2</title>\n"
 			+ "		<vendor>NextGen Healthcare</vendor>\n" + "		<homepage href=\"http://www.nextgen.com\"/>\n"
 			+ "		<description>Open Source Healthcare Integration Engine</description>\n" + "		\n"
 			+ "		<icon href=\"images/NG_MC_Icon_128x128.png\"/>\n"
@@ -545,7 +545,7 @@ public class WebStartServletTest {
 			+ "		<offline-allowed/>\n" + "\n" + "		<shortcut online=\"true\">\n"
 			+ "            <!-- put a shortcut on the desktop -->\n" + "            <desktop/>\n"
 			+ "            <!-- put shortcut in start menu too -->\n"
-			+ "            <menu submenu=\"Mirth Connect\"/>\n" + "    	</shortcut>\n" + "    	\n"
+			+ "            <menu submenu=\"BridgeLink\"/>\n" + "    	</shortcut>\n" + "    	\n"
 			+ "	</information>\n" + "	\n" + "	<security>\n" + "		<all-permissions/>\n" + "	</security>\n"
 			+ "	\n" + "	<update check=\"timeout\" policy=\"always\"/>\n" + "	\n" + "	<resources>\n"
 			+ "		<j2se href=\"http://java.sun.com/products/autodl/j2se\" java-vm-args=\"--add-modules=java.sql.rowset --add-exports=java.base/com.sun.crypto.provider=ALL-UNNAMED --add-exports=java.base/sun.security.provider=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.math=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.security=ALL-UNNAMED --add-opens=java.base/java.security.cert=ALL-UNNAMED --add-opens=java.base/java.text=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/sun.security.pkcs=ALL-UNNAMED --add-opens=java.base/sun.security.rsa=ALL-UNNAMED --add-opens=java.base/sun.security.x509=ALL-UNNAMED --add-opens=java.desktop/com.apple.eawt=ALL-UNNAMED --add-opens=java.desktop/com.apple.eio=ALL-UNNAMED --add-opens=java.desktop/java.awt=ALL-UNNAMED --add-opens=java.desktop/java.awt.color=ALL-UNNAMED --add-opens=java.desktop/java.awt.font=ALL-UNNAMED --add-opens=java.desktop/javax.swing=ALL-UNNAMED --add-opens=java.xml/com.sun.org.apache.xalan.internal.xsltc.trax=ALL-UNNAMED\" max-heap-size=\"512m\" version=\"1.9+\"/>\n"
@@ -558,7 +558,7 @@ public class WebStartServletTest {
 			+ "    </application-desc>\n" + "</jnlp>";
 
 	private static String EXTENSION_JNLP = "<jnlp>\n" + "    <information>\n"
-			+ "        <title>Mirth Connect Extension - [Test Writer,Test Reader]</title>\n"
+			+ "        <title>BridgeLink Extension - [Test Writer,Test Reader]</title>\n"
 			+ "        <vendor>NextGen Healthcare</vendor>\n" + "    </information>\n" + "    <security>\n"
 			+ "        <all-permissions/>\n" + "    </security>\n" + "    <resources>\n"
 			+ "        <jar download=\"eager\" href=\"libs/file/test-client.jar\" sha256=\"testsha256\"/>\n"

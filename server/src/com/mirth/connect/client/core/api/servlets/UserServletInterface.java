@@ -55,7 +55,7 @@ public interface UserServletInterface extends BaseServletInterface {
     @POST
     @Path("/_login")
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-    @Operation(summary = "Logs in to the Mirth Connect server using the specified name and password.")
+    @Operation(summary = "Logs in to the BridgeLink server using the specified name and password.")
     @ApiResponse(content = { @Content(mediaType = MediaType.APPLICATION_XML, examples = {
             @ExampleObject(name = "loginStatus", ref = "../apiexamples/login_status_xml") }),
             @Content(mediaType = MediaType.APPLICATION_JSON, examples = {

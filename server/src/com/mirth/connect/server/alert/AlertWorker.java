@@ -43,8 +43,8 @@ import com.mirth.connect.server.event.EventListener;
 import com.mirth.connect.server.util.ServerSMTPConnectionFactory;
 import com.mirth.connect.server.util.TemplateValueReplacer;
 
-public abstract class AlertWorker extends EventListener implements AlertActionAcceptor {
-    private static final String DEFAULT_SUBJECT = "Mirth Connect Alert";
+public abstract class AlertWorker extends EventListener implements com.mirth.connect.server.alert.AlertActionAcceptor {
+    private static final String DEFAULT_SUBJECT = "BridgeLink Alert";
 
     protected Logger logger = LogManager.getLogger(this.getClass());
     protected ExecutorService actionExecutor = new ThreadPoolExecutor(0, 1, 60L, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
@@ -54,14 +54,14 @@ public abstract class AlertWorker extends EventListener implements AlertActionAc
 
     private AlertController alertController;
     private String serverId = ControllerFactory.getFactory().createConfigurationController().getServerId();
-    private List<AlertActionAcceptor> alertActionAcceptors = new ArrayList<AlertActionAcceptor>();
+    private List<com.mirth.connect.server.alert.AlertActionAcceptor> alertActionAcceptors = new ArrayList<com.mirth.connect.server.alert.AlertActionAcceptor>();
 
     public AlertWorker() {
         super();
 
         for (ServerPlugin serverPlugin : extensionController.getServerPlugins()) {
-            if (serverPlugin instanceof AlertActionAcceptor) {
-                alertActionAcceptors.add((AlertActionAcceptor) serverPlugin);
+            if (serverPlugin instanceof com.mirth.connect.server.alert.AlertActionAcceptor) {
+                alertActionAcceptors.add((com.mirth.connect.server.alert.AlertActionAcceptor) serverPlugin);
             }
         }
     }
@@ -98,8 +98,8 @@ public abstract class AlertWorker extends EventListener implements AlertActionAc
     }
 
     @Override
-    public boolean acceptAlertAction(Alert alert, Map<String, Object> context) {
-        for (AlertActionAcceptor acceptor : alertActionAcceptors) {
+    public boolean acceptAlertAction(com.mirth.connect.server.alert.Alert alert, Map<String, Object> context) {
+        for (com.mirth.connect.server.alert.AlertActionAcceptor acceptor : alertActionAcceptors) {
             if (!acceptor.acceptAlertAction(alert, context)) {
                 return false;
             }
