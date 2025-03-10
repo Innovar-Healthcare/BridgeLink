@@ -2076,7 +2076,7 @@ public class Frame extends JXFrame {
     // --- All bound actions are beneath this point --- //
     // ////////////////////////////////////////////////////////////
     public void goToMirth() {
-        BareBonesBrowserLaunch.openURL("https://innovar-userdocuments.s3.us-east-2.amazonaws.com/index.html");
+        BareBonesBrowserLaunch.openURL("https://www.innovarhealthcare.com");
     }
 
     public void goToUserAPI() {
