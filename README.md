@@ -1,4 +1,4 @@
-# BridgeLink by Innovar Healthcare
+# BridgeLink - an interop Open Source Community
 
 1. [Useful Links](#useful-links)
 2. [General Information](#general-information)
