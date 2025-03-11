@@ -70,21 +70,23 @@ After the installation, the Mirth Connect directory layout will look as follows:
 ------------
 
 <a name="starting-mirth-connect"></a>
-## 4. Starting Mirth Connect
-Once Mirth Connect has been installed, there are several ways to connect to launch the Mirth Connect Administrator. On a Windows installation, there is a Mirth Connect Administrator item in the Start Menu which launches the application directly.
+## 4. Starting BridgeLink - an OSS Mirth Connect Fork
+Once BridgeLink is installed, there are a few ways to launch the Mirth Connect Administrator. On Windows, you’ll find a shortcut in the Start Menu that launches it directly.
 
-If the option is not available, you can connect to the Mirth Connect Administrator launch page which by default should be available at `http://[server address]:8080` (i.e. `http://localhost:8080`). It is recommended to use the Administrator Launcher to start the Administrator, which can be downloaded by clicking on the Download Administrator Launcher button. Clicking the Launch Mirth Connect Administrator button will download the Java Web Start file for your server. Opening the file with the Administrator Launcher connects you to the server, which will be listening on `https://[server address]:8443` (i.e. `https://localhost:8443`). 
+If that option isn’t available, you can access the BridgeLink Administrator launch page, which by default should be at http://[server address]:8080 (e.g., http://localhost:8080). The recommended method is using the Administrator Launcher, which you can download by clicking the Download Administrator Launcher button. When you click Launch BridgeLink Administrator, it will download a Java Web Start file for your server. Open that file with the Administrator Launcher to connect. The server listens on https://[server address]:8443 (e.g., https://localhost:8443).
 
-If running a new installation, the default username and password for the login screen is admin and admin. This should be changed immediately for security purposes.
+For a fresh install, the default login credentials are admin/admin, but be sure to change them immediately for security reasons.
 
-If you are launching the administrator for the first time, you will notice that the libraries for the Mirth Connect Administrator will be loaded. This feature allows you run the Administrator from any remote Mirth Connect server without having to download and install a separate client.
+The first time you launch the administrator, it will load the necessary libraries. This lets you run the Administrator from any remote BridgeLink server without needing to install a separate client.
 
-You may also notice a security warning when starting the administrator (dialog box depends on browser being used). This is because by default Mirth Connect creates a self-signed certificate for its web server. For now click Run to continue launching the administrator, but check out the User Guide for instructions on how to replace the certificate.
+You may also see a security warning when launching (the exact dialog depends on your browser). This happens because BridgeLink generates a self-signed certificate by default. 
+
+Click Run to proceed.
 
 ------------
 
 <a name="java9"></a>
-## 5. Running Mirth Connect in Java 9 or greater
+## 5. Running BridgeLink - an OSS Mirth Connect Fork -  in Java 9 or greater
 In order to run Mirth Connect in Java 9 or greater, copy the options from `docs/mcservice-java9+.vmoptions` and append them to either mcserver.vmoptions or mcservice.vmoptions, depending on your deployment. Then restart Mirth Connect.
 
 To run the Mirth Connect Command Line Interface, create a new file named mccommand.vmoptions in the Mirth Connect root directory. Copy all of the options from `docs/mcservice-java9+.vmoptions` into mccommand.vmoptions and save before launching the Command Line Interface.
