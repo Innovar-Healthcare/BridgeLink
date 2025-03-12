@@ -1,11 +1,20 @@
 /*
  * Copyright (c) Mirth Corporation. All rights reserved.
- * 
+ *
  * http://www.mirthcorp.com
- * 
+ *
  * The software in this package is published under the terms of the MPL license a copy of which has
  * been included with this distribution in the LICENSE.txt file.
+ *
+ * Copyright (c) NextGen Healthcare. All rights reserved.
+ * https://www.nextgen.com/products-and-services/integration-engine
+ *
+ * Copyright (c) 2025 Innovar Healthcare. All rights reserved
+ * This project is a fork of Mirth Connect by Nextgen Healthcare.
+ * It has been modified and maintained independently by Innovar Healthcare.
  */
+
+
 
 package com.mirth.connect.server.controllers;
 
@@ -1227,12 +1236,11 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             KeyStore keyStore = null;
 
             // if the current server version is pre-2.2, load the keystore as JKS
-//            if (MigrationUtil.compareVersions("2.2.0", getServerVersion()) == 1) {
-//                keyStore = KeyStore.getInstance("JKS");
-//            } else {
-//                keyStore = KeyStore.getInstance(mirthConfig.getString("keystore.type", "JCEKS"));
-//            }
-            keyStore = KeyStore.getInstance(mirthConfig.getString("keystore.type", "JCEKS"));
+            if (MigrationUtil.compareVersions("2.2.0", getServerVersion()) == 1) {
+                keyStore = KeyStore.getInstance("JKS");
+            } else {
+                keyStore = KeyStore.getInstance(mirthConfig.getString("keystore.type", "JCEKS"));
+            }
 
             if (keyStoreFile.exists()) {
                 keyStoreFileIs = new FileInputStream(keyStoreFile);

@@ -1,10 +1,17 @@
 /*
  * Copyright (c) Mirth Corporation. All rights reserved.
- * 
+ *
  * http://www.mirthcorp.com
- * 
+ *
  * The software in this package is published under the terms of the MPL license a copy of which has
  * been included with this distribution in the LICENSE.txt file.
+ *
+ * Copyright (c) NextGen Healthcare. All rights reserved.
+ * https://www.nextgen.com/products-and-services/integration-engine
+ *
+ * Copyright (c) 2025 Innovar Healthcare. All rights reserved
+ * This project is a fork of Mirth Connect by Nextgen Healthcare.
+ * It has been modified and maintained independently by Innovar Healthcare.
  */
 
 package com.mirth.connect.client.ui;
@@ -39,15 +46,15 @@ import com.mirth.connect.util.MessageImporter.MessageImportInvalidPathException;
 import com.mirth.connect.util.messagewriter.MessageWriter;
 import com.mirth.connect.util.messagewriter.MessageWriterException;
 
-public class MessageImportDialog extends MirthDialog {
+public class MessageImportDialog extends com.mirth.connect.client.ui.MirthDialog {
     private String channelId;
     private Frame parent;
     private Preferences userPreferences;
 
     public MessageImportDialog() {
-        super(PlatformUI.MIRTH_FRAME);
-        parent = PlatformUI.MIRTH_FRAME;
-        userPreferences = Frame.userPreferences;
+        super(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME);
+        parent = com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME;
+        userPreferences = com.mirth.connect.client.ui.Frame.userPreferences;
 
         setTitle("Import Messages");
         setLocationRelativeTo(null);
@@ -66,7 +73,7 @@ public class MessageImportDialog extends MirthDialog {
     }
 
     private void initComponents() {
-        getContentPane().setBackground(UIConstants.BACKGROUND_COLOR);
+        getContentPane().setBackground(com.mirth.connect.client.ui.UIConstants.BACKGROUND_COLOR);
 
         importFromLabel = new JLabel("Import From:");
 
@@ -85,12 +92,12 @@ public class MessageImportDialog extends MirthDialog {
 
         importServerRadio = new MirthRadioButton("Server");
         importServerRadio.setSelected(true);
-        importServerRadio.setBackground(UIConstants.BACKGROUND_COLOR);
+        importServerRadio.setBackground(com.mirth.connect.client.ui.UIConstants.BACKGROUND_COLOR);
         importServerRadio.addActionListener(importDestinationChanged);
         importServerRadio.setToolTipText("<html>Import messages from a file, folder or archive<br />on the BridgeLink Server.</html>");
 
         importLocalRadio = new MirthRadioButton("My Computer");
-        importLocalRadio.setBackground(UIConstants.BACKGROUND_COLOR);
+        importLocalRadio.setBackground(com.mirth.connect.client.ui.UIConstants.BACKGROUND_COLOR);
         importLocalRadio.addActionListener(importDestinationChanged);
         importLocalRadio.setToolTipText("<html>Import messages from a file, folder<br />or archive on this computer.</html>");
 
@@ -114,7 +121,7 @@ public class MessageImportDialog extends MirthDialog {
 
         subfoldersCheckbox = new MirthCheckBox("Include Sub-folders");
         subfoldersCheckbox.setSelected(true);
-        subfoldersCheckbox.setBackground(UIConstants.BACKGROUND_COLOR);
+        subfoldersCheckbox.setBackground(com.mirth.connect.client.ui.UIConstants.BACKGROUND_COLOR);
         subfoldersCheckbox.setToolTipText("<html>If checked, sub-folders of the folder/archive shown above<br />will be searched for messages to import.</html>");
 
         noteLabel = new JLabel("<html><i>Note: RECEIVED, QUEUED, or PENDING messages will be set to ERROR upon import.</i></html>");
@@ -178,7 +185,7 @@ public class MessageImportDialog extends MirthDialog {
 
     private void importMessages() {
         if (StringUtils.isBlank(fileTextField.getText())) {
-            fileTextField.setBackground(UIConstants.INVALID_COLOR);
+            fileTextField.setBackground(com.mirth.connect.client.ui.UIConstants.INVALID_COLOR);
             parent.alertError(parent, "Please enter a file/folder to import.");
             setVisible(true);
             return;

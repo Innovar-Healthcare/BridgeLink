@@ -1,11 +1,19 @@
 /*
  * Copyright (c) Mirth Corporation. All rights reserved.
- * 
+ *
  * http://www.mirthcorp.com
- * 
+ *
  * The software in this package is published under the terms of the MPL license a copy of which has
  * been included with this distribution in the LICENSE.txt file.
+ *
+ * Copyright (c) NextGen Healthcare. All rights reserved.
+ * https://www.nextgen.com/products-and-services/integration-engine
+ *
+ * Copyright (c) 2025 Innovar Healthcare. All rights reserved
+ * This project is a fork of Mirth Connect by Nextgen Healthcare.
+ * It has been modified and maintained independently by Innovar Healthcare.
  */
+
 
 package com.mirth.connect.connectors.tcp;
 
@@ -90,12 +98,12 @@ public class TcpSender extends ConnectorSettingsPanel implements ActionListener 
 
     @Override
     public String getConnectorName() {
-        return new TcpDispatcherProperties().getName();
+        return new com.mirth.connect.connectors.tcp.TcpDispatcherProperties().getName();
     }
 
     @Override
     public ConnectorProperties getProperties() {
-        TcpDispatcherProperties properties = new TcpDispatcherProperties();
+        com.mirth.connect.connectors.tcp.TcpDispatcherProperties properties = new com.mirth.connect.connectors.tcp.TcpDispatcherProperties();
 
         if (transmissionModeProvider != null) {
             properties.setTransmissionModeProperties((TransmissionModeProperties) transmissionModeProvider.getProperties());
@@ -126,7 +134,7 @@ public class TcpSender extends ConnectorSettingsPanel implements ActionListener 
     @Override
     public void setProperties(ConnectorProperties properties) {
         logger.debug("setProperties: properties=" + properties);
-        TcpDispatcherProperties props = (TcpDispatcherProperties) properties;
+        com.mirth.connect.connectors.tcp.TcpDispatcherProperties props = (com.mirth.connect.connectors.tcp.TcpDispatcherProperties) properties;
 
         TransmissionModeProperties modeProps = props.getTransmissionModeProperties();
         String name = "Basic TCP";
@@ -210,7 +218,7 @@ public class TcpSender extends ConnectorSettingsPanel implements ActionListener 
 
     @Override
     public ConnectorProperties getDefaults() {
-        TcpDispatcherProperties props = new TcpDispatcherProperties();
+        com.mirth.connect.connectors.tcp.TcpDispatcherProperties props = new com.mirth.connect.connectors.tcp.TcpDispatcherProperties();
         if (defaultProvider != null) {
             props.setTransmissionModeProperties(defaultProvider.getDefaultProperties());
         }
@@ -220,7 +228,7 @@ public class TcpSender extends ConnectorSettingsPanel implements ActionListener 
     @Override
     public boolean checkProperties(ConnectorProperties properties, boolean highlight) {
         logger.debug("checkProperties: properties=" + properties);
-        TcpDispatcherProperties props = (TcpDispatcherProperties) properties;
+        com.mirth.connect.connectors.tcp.TcpDispatcherProperties props = (com.mirth.connect.connectors.tcp.TcpDispatcherProperties) properties;
 
         boolean valid = true;
 
@@ -726,7 +734,7 @@ public class TcpSender extends ConnectorSettingsPanel implements ActionListener 
         };
 
         try {
-            getServlet(TcpConnectorServletInterface.class, "Testing connection...", "Failed to test connection: ", handler).testConnection(getChannelId(), getChannelName(), (TcpDispatcherProperties) getFilledProperties());
+            getServlet(com.mirth.connect.connectors.tcp.TcpConnectorServletInterface.class, "Testing connection...", "Failed to test connection: ", handler).testConnection(getChannelId(), getChannelName(), (com.mirth.connect.connectors.tcp.TcpDispatcherProperties) getFilledProperties());
         } catch (ClientException e) {
             // Should not happen
         }

@@ -1,10 +1,17 @@
 /*
  * Copyright (c) Mirth Corporation. All rights reserved.
- * 
+ *
  * http://www.mirthcorp.com
- * 
+ *
  * The software in this package is published under the terms of the MPL license a copy of which has
  * been included with this distribution in the LICENSE.txt file.
+ *
+ * Copyright (c) NextGen Healthcare. All rights reserved.
+ * https://www.nextgen.com/products-and-services/integration-engine
+ *
+ * Copyright (c) 2025 Innovar Healthcare. All rights reserved
+ * This project is a fork of Mirth Connect by Nextgen Healthcare.
+ * It has been modified and maintained independently by Innovar Healthcare.
  */
 
 package com.mirth.connect.client.ui.panels.export;
@@ -165,16 +172,16 @@ public class MessageExportPanel extends JPanel {
     public MessageWriterOptions getMessageWriterOptions() {
         MessageWriterOptions options = new MessageWriterOptions();
 
-        if (contentComboBox.getSelectedItem() instanceof ExportFormat) {
-            ExportFormat exportFormat = (ExportFormat) contentComboBox.getSelectedItem();
+        if (contentComboBox.getSelectedItem() instanceof com.mirth.connect.client.ui.panels.export.ExportFormat) {
+            com.mirth.connect.client.ui.panels.export.ExportFormat exportFormat = (com.mirth.connect.client.ui.panels.export.ExportFormat) contentComboBox.getSelectedItem();
             options.setContentType(exportFormat.getContentType());
             options.setDestinationContent(exportFormat.isDestination());
         }
 
         options.setEncrypt(encryptCheckBox.isSelected());
 
-        if (compressComboBox.getSelectedItem() instanceof ArchiveFormat) {
-            ArchiveFormat archiveFormat = (ArchiveFormat) compressComboBox.getSelectedItem();
+        if (compressComboBox.getSelectedItem() instanceof com.mirth.connect.client.ui.panels.export.ArchiveFormat) {
+            com.mirth.connect.client.ui.panels.export.ArchiveFormat archiveFormat = (com.mirth.connect.client.ui.panels.export.ArchiveFormat) compressComboBox.getSelectedItem();
             options.setArchiveFormat(archiveFormat.getArchiver());
             options.setCompressFormat(archiveFormat.getCompressor());
         }
@@ -199,8 +206,8 @@ public class MessageExportPanel extends JPanel {
             for (int i = 0; i < model.getSize(); i++) {
                 Object element = model.getElementAt(i);
 
-                if (element instanceof ExportFormat) {
-                    ExportFormat exportFormat = (ExportFormat) element;
+                if (element instanceof com.mirth.connect.client.ui.panels.export.ExportFormat) {
+                    com.mirth.connect.client.ui.panels.export.ExportFormat exportFormat = (com.mirth.connect.client.ui.panels.export.ExportFormat) element;
 
                     if (exportFormat.getContentType().equals(options.getContentType()) && exportFormat.isDestination() == options.isDestinationContent()) {
                         contentComboBox.setSelectedItem(exportFormat);
@@ -211,7 +218,7 @@ public class MessageExportPanel extends JPanel {
 
         encryptCheckBox.setSelected(options.isEncrypt());
 
-        ArchiveFormat archiveFormat = ArchiveFormat.lookup(options.getArchiveFormat(), options.getCompressFormat());
+        com.mirth.connect.client.ui.panels.export.ArchiveFormat archiveFormat = com.mirth.connect.client.ui.panels.export.ArchiveFormat.lookup(options.getArchiveFormat(), options.getCompressFormat());
 
         if (archiveFormat == null) {
             compressComboBox.setSelectedItem(NO_COMPRESSION);
@@ -327,21 +334,21 @@ public class MessageExportPanel extends JPanel {
 
         DefaultComboBoxModel model = new DefaultComboBoxModel();
         model.addElement(XML_EXPORT_FORMAT);
-        model.addElement(new ExportFormat(false, "Source", ContentType.RAW));
-        model.addElement(new ExportFormat(false, "Source", ContentType.PROCESSED_RAW));
-        model.addElement(new ExportFormat(false, "Source", ContentType.TRANSFORMED));
-        model.addElement(new ExportFormat(false, "Source", ContentType.ENCODED));
-        model.addElement(new ExportFormat(false, "Source", ContentType.RESPONSE));
-        model.addElement(new ExportFormat(true, "Destination", ContentType.RAW));
-        model.addElement(new ExportFormat(true, "Destination", ContentType.TRANSFORMED));
-        model.addElement(new ExportFormat(true, "Destination", ContentType.ENCODED));
-        model.addElement(new ExportFormat(true, "Destination", ContentType.SENT));
-        model.addElement(new ExportFormat(true, "Destination", ContentType.RESPONSE));
-        model.addElement(new ExportFormat(true, "Destination", ContentType.PROCESSED_RESPONSE));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(false, "Source", ContentType.RAW));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(false, "Source", ContentType.PROCESSED_RAW));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(false, "Source", ContentType.TRANSFORMED));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(false, "Source", ContentType.ENCODED));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(false, "Source", ContentType.RESPONSE));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(true, "Destination", ContentType.RAW));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(true, "Destination", ContentType.TRANSFORMED));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(true, "Destination", ContentType.ENCODED));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(true, "Destination", ContentType.SENT));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(true, "Destination", ContentType.RESPONSE));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(true, "Destination", ContentType.PROCESSED_RESPONSE));
 
-        model.addElement(new ExportFormat(false, "", ContentType.SOURCE_MAP));
-        model.addElement(new ExportFormat(false, "", ContentType.CHANNEL_MAP));
-        model.addElement(new ExportFormat(false, "", ContentType.RESPONSE_MAP));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(false, "", ContentType.SOURCE_MAP));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(false, "", ContentType.CHANNEL_MAP));
+        model.addElement(new com.mirth.connect.client.ui.panels.export.ExportFormat(false, "", ContentType.RESPONSE_MAP));
         contentComboBox.setModel(model);
 
         contentComboBox.addActionListener(new ActionListener() {
@@ -361,7 +368,7 @@ public class MessageExportPanel extends JPanel {
         model = new DefaultComboBoxModel();
         model.addElement(NO_COMPRESSION);
 
-        for (ArchiveFormat archiveFormat : ArchiveFormat.values()) {
+        for (com.mirth.connect.client.ui.panels.export.ArchiveFormat archiveFormat : com.mirth.connect.client.ui.panels.export.ArchiveFormat.values()) {
             model.addElement(archiveFormat);
         }
 
@@ -523,7 +530,7 @@ public class MessageExportPanel extends JPanel {
 
     private void compressComboBoxChanged() {
         Object archiveFormat = compressComboBox.getSelectedItem();
-        boolean isArchiveableFormat = archiveFormat instanceof ArchiveFormat;
+        boolean isArchiveableFormat = archiveFormat instanceof com.mirth.connect.client.ui.panels.export.ArchiveFormat;
 
         if (isArchiveableFormat) {
             rootPathExtLabel.setText("/" + ((archiverMode) ? ARCHIVER_MODE_PATTERN : EXPORT_MODE_PATTERN) + "." + archiveFormat);
@@ -534,7 +541,7 @@ public class MessageExportPanel extends JPanel {
             rootPathExtLabel.setVisible(false);
         }
 
-        boolean enabled = isArchiveableFormat && archiveFormat == ArchiveFormat.ZIP;
+        boolean enabled = isArchiveableFormat && archiveFormat == com.mirth.connect.client.ui.panels.export.ArchiveFormat.ZIP;
         passwordProtectionLabel.setEnabled(enabled);
         passwordYesButton.setEnabled(enabled);
         passwordNoButton.setEnabled(enabled);

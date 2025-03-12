@@ -1,11 +1,19 @@
 /*
  * Copyright (c) Mirth Corporation. All rights reserved.
- * 
+ *
  * http://www.mirthcorp.com
- * 
+ *
  * The software in this package is published under the terms of the MPL license a copy of which has
  * been included with this distribution in the LICENSE.txt file.
+ *
+ * Copyright (c) NextGen Healthcare. All rights reserved.
+ * https://www.nextgen.com/products-and-services/integration-engine
+ *
+ * Copyright (c) 2025 Innovar Healthcare. All rights reserved
+ * This project is a fork of Mirth Connect by Nextgen Healthcare.
+ * It has been modified and maintained independently by Innovar Healthcare.
  */
+
 
 package com.mirth.connect.client.ui.browsers.message;
 
@@ -60,10 +68,10 @@ public class MessageBrowserAdvancedFilter extends MirthDialog {
     private static Map<String, Object> cachedSettings;
     private static Map<String, MetaDataColumn> cachedMetaDataColumns;
 
-    private MessageBrowser messageBrowser;
+    private com.mirth.connect.client.ui.browsers.message.MessageBrowser messageBrowser;
 
     /** Creates new form MessageBrowserAdvancedFilter */
-    public MessageBrowserAdvancedFilter(com.mirth.connect.client.ui.Frame parent, MessageBrowser messageBrowser, String title, boolean modal, boolean allowSearch) {
+    public MessageBrowserAdvancedFilter(com.mirth.connect.client.ui.Frame parent, com.mirth.connect.client.ui.browsers.message.MessageBrowser messageBrowser, String title, boolean modal, boolean allowSearch) {
         super(parent, title, modal);
         this.parent = parent;
         this.messageBrowser = messageBrowser;

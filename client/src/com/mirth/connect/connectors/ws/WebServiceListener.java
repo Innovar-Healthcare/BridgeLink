@@ -1,10 +1,17 @@
 /*
  * Copyright (c) Mirth Corporation. All rights reserved.
- * 
+ *
  * http://www.mirthcorp.com
- * 
+ *
  * The software in this package is published under the terms of the MPL license a copy of which has
  * been included with this distribution in the LICENSE.txt file.
+ *
+ * Copyright (c) NextGen Healthcare. All rights reserved.
+ * https://www.nextgen.com/products-and-services/integration-engine
+ *
+ * Copyright (c) 2025 Innovar Healthcare. All rights reserved
+ * This project is a fork of Mirth Connect by Nextgen Healthcare.
+ * It has been modified and maintained independently by Innovar Healthcare.
  */
 
 package com.mirth.connect.connectors.ws;
@@ -47,22 +54,22 @@ public class WebServiceListener extends ConnectorSettingsPanel {
 
     @Override
     public String getConnectorName() {
-        return new WebServiceReceiverProperties().getName();
+        return new com.mirth.connect.connectors.ws.WebServiceReceiverProperties().getName();
     }
 
     @Override
     public ConnectorProperties getProperties() {
-        WebServiceReceiverProperties properties = new WebServiceReceiverProperties();
+        com.mirth.connect.connectors.ws.WebServiceReceiverProperties properties = new com.mirth.connect.connectors.ws.WebServiceReceiverProperties();
         properties.setClassName(classNameField.getText());
         properties.setServiceName(serviceNameField.getText());
-        properties.setSoapBinding(Binding.fromDisplayName((String) versionComboBox.getSelectedItem()));
+        properties.setSoapBinding(com.mirth.connect.connectors.ws.Binding.fromDisplayName((String) versionComboBox.getSelectedItem()));
 
         return properties;
     }
 
     @Override
     public void setProperties(ConnectorProperties properties) {
-        WebServiceReceiverProperties props = (WebServiceReceiverProperties) properties;
+        com.mirth.connect.connectors.ws.WebServiceReceiverProperties props = (com.mirth.connect.connectors.ws.WebServiceReceiverProperties) properties;
 
         versionComboBox.setSelectedIndex(0);
         versionComboBox.setSelectedItem(props.getSoapBinding().getName());
@@ -77,11 +84,11 @@ public class WebServiceListener extends ConnectorSettingsPanel {
 
     @Override
     public ConnectorProperties getDefaults() {
-        return new WebServiceReceiverProperties();
+        return new com.mirth.connect.connectors.ws.WebServiceReceiverProperties();
     }
 
     private void updateClassNameRadio() {
-        if (classNameField.getText().equals(new WebServiceReceiverProperties().getClassName())) {
+        if (classNameField.getText().equals(new com.mirth.connect.connectors.ws.WebServiceReceiverProperties().getClassName())) {
             classNameDefaultRadio.setSelected(true);
             classNameDefaultRadioActionPerformed();
         } else {
@@ -98,12 +105,12 @@ public class WebServiceListener extends ConnectorSettingsPanel {
             // ignore exceptions getting the server ip
         }
 
-        wsdlField.setText("http" + (usingHttps ? "s" : "") + "://" + server + ":" + ((WebServiceReceiverProperties) getFilledProperties()).getListenerConnectorProperties().getPort() + "/services/" + serviceNameField.getText() + "?wsdl");
+        wsdlField.setText("http" + (usingHttps ? "s" : "") + "://" + server + ":" + ((com.mirth.connect.connectors.ws.WebServiceReceiverProperties) getFilledProperties()).getListenerConnectorProperties().getPort() + "/services/" + serviceNameField.getText() + "?wsdl");
     }
 
     @Override
     public boolean checkProperties(ConnectorProperties properties, boolean highlight) {
-        WebServiceReceiverProperties props = (WebServiceReceiverProperties) properties;
+        com.mirth.connect.connectors.ws.WebServiceReceiverProperties props = (com.mirth.connect.connectors.ws.WebServiceReceiverProperties) properties;
 
         boolean valid = true;
 
@@ -163,9 +170,9 @@ public class WebServiceListener extends ConnectorSettingsPanel {
         methodField.setToolTipText("Displays the generated web service operation signature the client will call.");
 
         versionComboBox = new MirthComboBox();
-        versionComboBox.addItem(Binding.DEFAULT.getName());
-        versionComboBox.addItem(Binding.SOAP11HTTP.getName());
-        versionComboBox.addItem(Binding.SOAP12HTTP.getName());
+        versionComboBox.addItem(com.mirth.connect.connectors.ws.Binding.DEFAULT.getName());
+        versionComboBox.addItem(com.mirth.connect.connectors.ws.Binding.SOAP11HTTP.getName());
+        versionComboBox.addItem(com.mirth.connect.connectors.ws.Binding.SOAP12HTTP.getName());
         versionComboBox.setSelectedIndex(0);
         versionComboBox.setToolTipText("<html>The selected binding version defines the structure of the generated envelope.<br/>Selecting default will publish this endpoint with the specified binding annotation.<br/>If no annotation is provided, a SOAP 1.1 binding will be used.</html>");
 
@@ -237,7 +244,7 @@ public class WebServiceListener extends ConnectorSettingsPanel {
     }
 
     private void classNameDefaultRadioActionPerformed() {
-        classNameField.setText(new WebServiceReceiverProperties().getClassName());
+        classNameField.setText(new com.mirth.connect.connectors.ws.WebServiceReceiverProperties().getClassName());
         methodField.setText("String acceptMessage(String message)");
         classNameLabel.setEnabled(false);
         classNameField.setEnabled(false);

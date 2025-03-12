@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) Mirth Corporation. All rights reserved.
+ *
+ * http://www.mirthcorp.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ *
+ * Copyright (c) NextGen Healthcare. All rights reserved.
+ * https://www.nextgen.com/products-and-services/integration-engine
+ *
+ * Copyright (c) 2025 Innovar Healthcare. All rights reserved
+ * This project is a fork of Mirth Connect by Nextgen Healthcare.
+ * It has been modified and maintained independently by Innovar Healthcare.
+ */
+
 package com.mirth.connect.server.servlets;
 
 import static org.junit.Assert.assertEquals;
@@ -35,7 +51,7 @@ import org.w3c.dom.Document;
 
 public class WebStartServletTest {
 
-	private static WebStartServlet webStartServlet;
+	private static com.mirth.connect.server.servlets.WebStartServlet webStartServlet;
 
 	@BeforeClass
 	public static void setupClass() {
@@ -502,7 +518,7 @@ public class WebStartServletTest {
 
 	}
 
-	private static class TestWebStartServlet extends WebStartServlet {
+	private static class TestWebStartServlet extends com.mirth.connect.server.servlets.WebStartServlet {
 		private static final long serialVersionUID = 1L;
 
 		@Override

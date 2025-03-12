@@ -1,10 +1,17 @@
 /*
  * Copyright (c) Mirth Corporation. All rights reserved.
- * 
+ *
  * http://www.mirthcorp.com
- * 
+ *
  * The software in this package is published under the terms of the MPL license a copy of which has
  * been included with this distribution in the LICENSE.txt file.
+ *
+ * Copyright (c) NextGen Healthcare. All rights reserved.
+ * https://www.nextgen.com/products-and-services/integration-engine
+ *
+ * Copyright (c) 2025 Innovar Healthcare. All rights reserved
+ * This project is a fork of Mirth Connect by Nextgen Healthcare.
+ * It has been modified and maintained independently by Innovar Healthcare.
  */
 
 package com.mirth.connect.server.controllers;
@@ -75,10 +82,10 @@ import com.mirth.connect.server.util.DatabaseUtil;
 import com.mirth.connect.server.util.ResourceUtil;
 import com.mirth.connect.server.util.ServerUUIDGenerator;
 
-public class DefaultExtensionController extends ExtensionController {
+public class DefaultExtensionController extends com.mirth.connect.server.controllers.ExtensionController {
     private Logger logger = LogManager.getLogger(this.getClass());
     private ObjectXMLSerializer serializer = ObjectXMLSerializer.getInstance();
-    private ConfigurationController configurationController = ControllerFactory.getFactory().createConfigurationController();
+    private com.mirth.connect.server.controllers.ConfigurationController configurationController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createConfigurationController();
 
     // these are plugins for specific extension points, keyed by plugin name
     // (not path)
@@ -95,12 +102,12 @@ public class DefaultExtensionController extends ExtensionController {
     private ExtensionStatuses extensionStatuses = ExtensionStatuses.getInstance();
 
     // singleton pattern
-    private static ExtensionController instance = null;
+    private static com.mirth.connect.server.controllers.ExtensionController instance = null;
 
-    public static ExtensionController create() {
+    public static com.mirth.connect.server.controllers.ExtensionController create() {
         synchronized (DefaultExtensionController.class) {
             if (instance == null) {
-                instance = ExtensionLoader.getInstance().getControllerInstance(ExtensionController.class);
+                instance = ExtensionLoader.getInstance().getControllerInstance(com.mirth.connect.server.controllers.ExtensionController.class);
 
                 if (instance == null) {
                     instance = new DefaultExtensionController();
@@ -371,7 +378,7 @@ public class DefaultExtensionController extends ExtensionController {
 
         // Get all of the server plugin extension permissions and add those to
         // the authorization controller.
-        AuthorizationController authorizationController = ControllerFactory.getFactory().createAuthorizationController();
+        AuthorizationController authorizationController = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createAuthorizationController();
 
         for (ServicePlugin plugin : servicePlugins.values()) {
             if (plugin.getExtensionPermissions() != null) {
@@ -405,7 +412,7 @@ public class DefaultExtensionController extends ExtensionController {
         Throwable cause = null;
         Set<MetaData> metaDataSet = new HashSet<MetaData>();
 
-        File installTempDir = new File(ExtensionController.getExtensionsPath(), "install_temp");
+        File installTempDir = new File(com.mirth.connect.server.controllers.ExtensionController.getExtensionsPath(), "install_temp");
 
         if (!installTempDir.exists()) {
             installTempDir.mkdir();
@@ -495,7 +502,7 @@ public class DefaultExtensionController extends ExtensionController {
                 if (plugin.getMigratorClass() != null) {
                     try {
                         Migrator migrator = (Migrator) Class.forName(plugin.getMigratorClass()).newInstance();
-                        migrator.setDatabaseType(ConfigurationController.getInstance().getDatabaseType());
+                        migrator.setDatabaseType(com.mirth.connect.server.controllers.ConfigurationController.getInstance().getDatabaseType());
                         migrator.setDefaultScriptPath("extensions/" + plugin.getPath());
                         appendToUninstallScript(migrator.getUninstallStatements());
                     } catch (Exception e) {
@@ -571,7 +578,7 @@ public class DefaultExtensionController extends ExtensionController {
 		dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
     	Document document = dbf.newDocumentBuilder().parse(new InputSource(new StringReader(pluginSqlScripts)));
         Element uninstallElement = (Element) document.getElementsByTagName("uninstall").item(0);
-        String databaseType = ControllerFactory.getFactory().createConfigurationController().getDatabaseType();
+        String databaseType = com.mirth.connect.server.controllers.ControllerFactory.getFactory().createConfigurationController().getDatabaseType();
         NodeList scriptNodes = uninstallElement.getElementsByTagName("script");
         String script = null;
 
@@ -603,7 +610,7 @@ public class DefaultExtensionController extends ExtensionController {
 
     @Override
     public Properties getPluginProperties(String pluginName, Set<String> propertyKeys) throws ControllerException {
-        return ControllerFactory.getFactory().createConfigurationController().getPropertiesForGroup(pluginName, propertyKeys);
+        return com.mirth.connect.server.controllers.ControllerFactory.getFactory().createConfigurationController().getPropertiesForGroup(pluginName, propertyKeys);
     }
 
     @Override

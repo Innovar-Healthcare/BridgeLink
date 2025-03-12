@@ -1,11 +1,19 @@
 /*
  * Copyright (c) Mirth Corporation. All rights reserved.
- * 
+ *
  * http://www.mirthcorp.com
- * 
+ *
  * The software in this package is published under the terms of the MPL license a copy of which has
  * been included with this distribution in the LICENSE.txt file.
+ *
+ * Copyright (c) NextGen Healthcare. All rights reserved.
+ * https://www.nextgen.com/products-and-services/integration-engine
+ *
+ * Copyright (c) 2025 Innovar Healthcare. All rights reserved
+ * This project is a fork of Mirth Connect by Nextgen Healthcare.
+ * It has been modified and maintained independently by Innovar Healthcare.
  */
+
 
 package com.mirth.connect.client.ui.editors;
 
@@ -189,12 +197,12 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
 
     protected boolean allowEnableEdit(int rowIndex, int columnIndex) {
         TreePath path = treeTable.getPathForRow(rowIndex);
-        FilterTransformerTreeTableNode traverseUp = path != null ? (FilterTransformerTreeTableNode) path.getLastPathComponent() : null;
-        traverseUp = traverseUp != null && traverseUp.getParent() instanceof DefaultMutableTreeTableNode == false ? (FilterTransformerTreeTableNode) traverseUp.getParent() : null;
+        com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode traverseUp = path != null ? (com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode) path.getLastPathComponent() : null;
+        traverseUp = traverseUp != null && traverseUp.getParent() instanceof DefaultMutableTreeTableNode == false ? (com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode) traverseUp.getParent() : null;
         boolean enabled = true;
         while (traverseUp != null && enabled) {
             enabled = traverseUp.getElement().isEnabled();
-            traverseUp = traverseUp.getParent() instanceof DefaultMutableTreeTableNode ? null : (FilterTransformerTreeTableNode) traverseUp.getParent();
+            traverseUp = traverseUp.getParent() instanceof DefaultMutableTreeTableNode ? null : (com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode) traverseUp.getParent();
         }
         return enabled;
     }
@@ -328,7 +336,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
     public List<C> getElements() {
         List<C> elements = new ArrayList<C>();
         for (Enumeration<? extends TreeTableNode> en = treeTableModel.getRoot().children(); en.hasMoreElements();) {
-            elements.add(((FilterTransformerTreeTableNode<T, C>) en.nextElement()).getElementWithChildren());
+            elements.add(((com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) en.nextElement()).getElementWithChildren());
         }
         return elements;
     }
@@ -344,7 +352,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
         treeTable.expandPath(new TreePath(treeTableModel.getPathToRoot(treeTableModel.getRoot())));
     }
 
-    protected abstract FilterTransformerTreeTableNode<T, C> createTreeTableNode(C element);
+    protected abstract com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> createTreeTableNode(C element);
 
     public String getInboundTemplate() {
         return templatePanel.getIncomingMessage();
@@ -422,15 +430,15 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
                 TreePath path = treeTable.getPathForRow(selectedRow);
                 if (path != null) {
                     parent = (MutableTreeTableNode) path.getLastPathComponent();
-                    if (!((FilterTransformerTreeTableNode<T, C>) parent).isIteratorNode()) {
+                    if (!((com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) parent).isIteratorNode()) {
                         parent = (MutableTreeTableNode) parent.getParent();
                     }
                 }
             }
 
-            if (parent instanceof FilterTransformerTreeTableNode) {
-                variable = IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(variable), parent);
-                mapping = IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(mapping), parent);
+            if (parent instanceof com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode) {
+                variable = com.mirth.connect.client.ui.editors.IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(variable), parent);
+                mapping = com.mirth.connect.client.ui.editors.IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(mapping), parent);
             }
 
             Pair<String, String> info = plugin.getIteratorInfo(variable, mapping);
@@ -448,7 +456,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
                 }
 
                 if (result == JOptionPane.YES_OPTION) {
-                    IteratorWizardDialog<T, C> dialog = new IteratorWizardDialog<T, C>(target, null, parent, treeTableModel, outbound);
+                    com.mirth.connect.client.ui.editors.IteratorWizardDialog<T, C> dialog = new com.mirth.connect.client.ui.editors.IteratorWizardDialog<T, C>(target, null, parent, treeTableModel, outbound);
                     if (!dialog.wasAccepted()) {
                         return;
                     }
@@ -457,18 +465,18 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
                         FilterTransformerTypePlugin<T, C> iteratorPlugin = getPlugins().get(IteratorProperties.PLUGIN_POINT);
                         IteratorElement<C> iteratorElement = (IteratorElement<C>) iteratorPlugin.getDefaults();
                         dialog.fillIteratorProperties(iteratorElement.getProperties());
-                        ((IteratorPanel<C>) iteratorPlugin.getPanel()).setName(iteratorElement);
+                        ((com.mirth.connect.client.ui.editors.IteratorPanel<C>) iteratorPlugin.getPanel()).setName(iteratorElement);
 
-                        variable = IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(variable), iteratorElement);
-                        mapping = IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(mapping), iteratorElement);
+                        variable = com.mirth.connect.client.ui.editors.IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(variable), iteratorElement);
+                        mapping = com.mirth.connect.client.ui.editors.IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(mapping), iteratorElement);
 
                         parent = insertNode(parent, (C) iteratorElement);
-                        replaceIteratorVariables((FilterTransformerTreeTableNode<T, C>) parent);
+                        replaceIteratorVariables((com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) parent);
                     } else {
                         parent = dialog.getSelectedParent();
 
-                        variable = IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(variable), parent);
-                        mapping = IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(mapping), parent);
+                        variable = com.mirth.connect.client.ui.editors.IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(variable), parent);
+                        mapping = com.mirth.connect.client.ui.editors.IteratorUtil.replaceIteratorVariables(JavaScriptSharedUtil.removeNumberLiterals(mapping), parent);
                     }
                 } else if (result != JOptionPane.NO_OPTION) {
                     return;
@@ -478,7 +486,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
             C element = plugin.newObject(variable, mapping);
             element.setName(name);
             element.setEnabled(true);
-            FilterTransformerTreeTableNode<T, C> node = insertNode(parent, element);
+            com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = insertNode(parent, element);
             replaceIteratorVariables(node);
 
             TreePath path = new TreePath(treeTableModel.getPathToRoot(node));
@@ -498,15 +506,15 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
     }
 
     public String replaceIteratorVariables(String expression) {
-        return IteratorUtil.replaceIteratorVariables(expression, treeTable);
+        return com.mirth.connect.client.ui.editors.IteratorUtil.replaceIteratorVariables(expression, treeTable);
     }
 
-    private FilterTransformerTreeTableNode<T, C> insertNode(MutableTreeTableNode parent, C element) {
+    private com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> insertNode(MutableTreeTableNode parent, C element) {
         return insertNode(parent, element, parent.getChildCount());
     }
 
-    private FilterTransformerTreeTableNode<T, C> insertNode(MutableTreeTableNode parent, C element, int index) {
-        FilterTransformerTreeTableNode<T, C> node = createTreeTableNode(element);
+    private com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> insertNode(MutableTreeTableNode parent, C element, int index) {
+        com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = createTreeTableNode(element);
         treeTableModel.insertNodeInto(node, parent, index);
         return node;
     }
@@ -517,7 +525,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
         if (isValidViewRow(selectedRow)) {
             saveData(selectedRow);
 
-            FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(selectedRow);
+            com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(selectedRow);
             if (node.getChildCount() > 0 && !PlatformUI.MIRTH_FRAME.alertOkCancel(PlatformUI.MIRTH_FRAME, "All child " + getElementName().toLowerCase() + "s will be removed along with the Iterator. Are you sure you wish to continue?")) {
                 return;
             }
@@ -548,9 +556,9 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
     }
 
     @SuppressWarnings("unchecked")
-    private boolean hasIteratorNodes(MutableTreeTableNode node, FilterTransformerTreeTableNode<T, C> excluded) {
+    private boolean hasIteratorNodes(MutableTreeTableNode node, com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> excluded) {
         if (!Objects.equals(node, excluded)) {
-            if (node instanceof FilterTransformerTreeTableNode && ((FilterTransformerTreeTableNode<T, C>) node).isIteratorNode()) {
+            if (node instanceof com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode && ((com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) node).isIteratorNode()) {
                 return true;
             }
             for (Enumeration<? extends MutableTreeTableNode> en = node.children(); en.hasMoreElements();) {
@@ -577,7 +585,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
                 return;
             }
 
-            FilterTransformerTreeTableNode<T, C> node = (FilterTransformerTreeTableNode<T, C>) path.getLastPathComponent();
+            com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = (com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) path.getLastPathComponent();
             MutableTreeTableNode parent = (MutableTreeTableNode) node.getParent();
             int childIndex = parent.getIndex(node);
             String type = node.getElement().getType();
@@ -603,15 +611,15 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
                  * most we can do is add a new default iterator and add the node to that.
                  */
                 IteratorElement<C> iteratorElement = (IteratorElement<C>) iteratorPlugin.getDefaults();
-                iteratorElement.getProperties().setIndexVariable(IteratorUtil.getValidIndexVariable(parent, node));
+                iteratorElement.getProperties().setIndexVariable(com.mirth.connect.client.ui.editors.IteratorUtil.getValidIndexVariable(parent, node));
 
                 treeTableModel.removeNodeFromParent(node);
                 parent = insertNode(parent, (C) iteratorElement, childIndex);
-                iteratorElement = (IteratorElement<C>) ((FilterTransformerTreeTableNode<T, C>) parent).getElement();
-                replaceIteratorVariables((FilterTransformerTreeTableNode<T, C>) parent);
-                ((IteratorPanel<C>) iteratorPlugin.getPanel()).setName(iteratorElement);
+                iteratorElement = (IteratorElement<C>) ((com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) parent).getElement();
+                replaceIteratorVariables((com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) parent);
+                ((com.mirth.connect.client.ui.editors.IteratorPanel<C>) iteratorPlugin.getPanel()).setName(iteratorElement);
             } else {
-                IteratorWizardDialog<T, C> dialog = new IteratorWizardDialog<T, C>(target, node, parent, treeTableModel, outbound);
+                com.mirth.connect.client.ui.editors.IteratorWizardDialog<T, C> dialog = new com.mirth.connect.client.ui.editors.IteratorWizardDialog<T, C>(target, node, parent, treeTableModel, outbound);
                 if (!dialog.wasAccepted()) {
                     return;
                 }
@@ -623,19 +631,19 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
                     dialog.fillIteratorProperties(iteratorElement.getProperties());
 
                     parent = insertNode(parent, (C) iteratorElement, childIndex);
-                    iteratorElement = (IteratorElement<C>) ((FilterTransformerTreeTableNode<T, C>) parent).getElement();
-                    replaceIteratorVariables((FilterTransformerTreeTableNode<T, C>) parent);
-                    ((IteratorPanel<C>) iteratorPlugin.getPanel()).setName(iteratorElement);
+                    iteratorElement = (IteratorElement<C>) ((com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) parent).getElement();
+                    replaceIteratorVariables((com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) parent);
+                    ((com.mirth.connect.client.ui.editors.IteratorPanel<C>) iteratorPlugin.getPanel()).setName(iteratorElement);
                 } else {
-                    target = IteratorUtil.removeIteratorVariables(target, parent);
-                    outbound = IteratorUtil.removeIteratorVariables(outbound, parent);
+                    target = com.mirth.connect.client.ui.editors.IteratorUtil.removeIteratorVariables(target, parent);
+                    outbound = com.mirth.connect.client.ui.editors.IteratorUtil.removeIteratorVariables(outbound, parent);
 
                     parent = dialog.getSelectedParent();
                 }
             }
 
-            target = IteratorUtil.replaceIteratorVariables(target, parent);
-            outbound = IteratorUtil.replaceIteratorVariables(outbound, parent);
+            target = com.mirth.connect.client.ui.editors.IteratorUtil.replaceIteratorVariables(target, parent);
+            outbound = com.mirth.connect.client.ui.editors.IteratorUtil.replaceIteratorVariables(outbound, parent);
 
             C element = node.getElementWithChildren();
             plugin.setIteratorInfo(element, target, outbound);
@@ -675,9 +683,9 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
                 return;
             }
 
-            FilterTransformerTreeTableNode<T, C> node = (FilterTransformerTreeTableNode<T, C>) path.getLastPathComponent();
+            com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = (com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) path.getLastPathComponent();
             MutableTreeTableNode parent = (MutableTreeTableNode) node.getParent();
-            if (!(node.getParent() instanceof FilterTransformerTreeTableNode)) {
+            if (!(node.getParent() instanceof com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode)) {
                 return;
             }
 
@@ -706,36 +714,36 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
     }
 
     @SuppressWarnings("unchecked")
-    private void replaceIteratorVariables(FilterTransformerTreeTableNode<T, C> node) {
-        if (node.getParent() instanceof FilterTransformerTreeTableNode) {
+    private void replaceIteratorVariables(com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node) {
+        if (node.getParent() instanceof com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode) {
             FilterTransformerTypePlugin<T, C> plugin = getPlugins().get(node.getElement().getType());
             if (plugin == null) {
                 PlatformUI.MIRTH_FRAME.alertError(PlatformUI.MIRTH_FRAME, "Could not find plugin of type: " + node.getElement().getType());
                 return;
             }
 
-            plugin.replaceIteratorVariables(node.getElement(), (FilterTransformerTreeTableNode<T, C>) node.getParent());
+            plugin.replaceIteratorVariables(node.getElement(), (com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) node.getParent());
         }
 
         for (Enumeration<? extends MutableTreeTableNode> en = node.children(); en.hasMoreElements();) {
-            replaceIteratorVariables((FilterTransformerTreeTableNode<T, C>) en.nextElement());
+            replaceIteratorVariables((com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) en.nextElement());
         }
     }
 
     @SuppressWarnings("unchecked")
-    private void removeIteratorVariables(FilterTransformerTreeTableNode<T, C> node) {
+    private void removeIteratorVariables(com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node) {
         for (Enumeration<? extends MutableTreeTableNode> en = node.children(); en.hasMoreElements();) {
-            removeIteratorVariables((FilterTransformerTreeTableNode<T, C>) en.nextElement());
+            removeIteratorVariables((com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) en.nextElement());
         }
 
-        if (node.getParent() instanceof FilterTransformerTreeTableNode) {
+        if (node.getParent() instanceof com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode) {
             FilterTransformerTypePlugin<T, C> plugin = getPlugins().get(node.getElement().getType());
             if (plugin == null) {
                 PlatformUI.MIRTH_FRAME.alertError(PlatformUI.MIRTH_FRAME, "Could not find plugin of type: " + node.getElement().getType());
                 return;
             }
 
-            plugin.removeIteratorVariables(node.getElement(), (FilterTransformerTreeTableNode<T, C>) node.getParent());
+            plugin.removeIteratorVariables(node.getElement(), (com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) node.getParent());
         }
     }
 
@@ -799,7 +807,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
         String selectedSequenceNumber = null;
         if (isValidViewRow(selectedRow)) {
             saveData(selectedRow);
-            selectedSequenceNumber = ((FilterTransformerTreeTableNode<T, C>) treeTable.getPathForRow(selectedRow).getLastPathComponent()).getElement().getSequenceNumber();
+            selectedSequenceNumber = ((com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) treeTable.getPathForRow(selectedRow).getLastPathComponent()).getElement().getSequenceNumber();
         }
 
         String containerName = getContainerName().toLowerCase();
@@ -913,7 +921,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
             MutableTreeTableNode targetParent = null;
             int targetIndex = -1;
 
-            FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(selectedRow);
+            com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(selectedRow);
             MutableTreeTableNode parent = (MutableTreeTableNode) node.getParent();
             int index = parent.getIndex(node);
 
@@ -1111,7 +1119,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
 
                 if (isValidViewRow(selectedRow)) {
                     if (!updating.getAndSet(true)) {
-                        final FilterTransformerTreeTableNode<T, C> selectedNode = getNodeAtRow(selectedRow);
+                        final com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> selectedNode = getNodeAtRow(selectedRow);
 
                         try {
                             saveData(selectedRow);
@@ -1204,7 +1212,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
         generatedScriptTextArea.getTextArea().setDropTarget(null);
         tabPane.addTab("Generated Script", generatedScriptTextArea);
 
-        templatePanel = new TabbedTemplatePanel(this);
+        templatePanel = new com.mirth.connect.client.ui.editors.TabbedTemplatePanel(this);
         templatePanel.setBorder(BorderFactory.createEmptyBorder());
 
         nameActionListener = new ActionListener() {
@@ -1438,7 +1446,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
     private void loadData(int viewRow) {
         if (isValidViewRow(viewRow)) {
             previouslySelectedIndex = viewRow;
-            FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(viewRow);
+            com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(viewRow);
             C element = node.getElement();
             String type = element.getType();
 
@@ -1541,7 +1549,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
     private void saveData(int viewRow) {
         stopTableEditing();
         if (isValidViewRow(viewRow)) {
-            FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(viewRow);
+            com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(viewRow);
             String type = node.getElement().getType();
             try {
                 C element = getPlugins().get(type).getProperties();
@@ -1573,7 +1581,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
 
         int viewRow = treeTable.getSelectedRow();
         if (isValidViewRow(viewRow)) {
-            FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(viewRow);
+            com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(viewRow);
             if (node != null) {
                 FilterTransformerTypePlugin<T, C> plugin = getPlugins().get(node.getElement().getType());
                 if (plugin != null) {
@@ -1588,8 +1596,8 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
     }
 
     @SuppressWarnings("unchecked")
-    private FilterTransformerTreeTableNode<T, C> getNodeAtRow(int viewRow) {
-        return (FilterTransformerTreeTableNode<T, C>) treeTable.getPathForRow(viewRow).getLastPathComponent();
+    private com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> getNodeAtRow(int viewRow) {
+        return (com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) treeTable.getPathForRow(viewRow).getLastPathComponent();
     }
 
     private BoundAction initActionCallback(String callbackMethod, String toolTip, BoundAction boundAction, ImageIcon icon) {
@@ -1668,7 +1676,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
             saveData(selectedRow);
 
             TreePath path = treeTable.getPathForRow(selectedRow);
-            FilterTransformerTreeTableNode<T, C> node = (FilterTransformerTreeTableNode<T, C>) path.getLastPathComponent();
+            com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = (com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) path.getLastPathComponent();
             C element = node.getElementWithChildren();
             try {
                 generatedScriptTextArea.setText(JavaScriptSharedUtil.prettyPrint(element.getScript(false)));
@@ -1686,7 +1694,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
 
         if (selectedRow >= 0 && !updating.getAndSet(true)) {
             try {
-                FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(selectedRow);
+                com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = getNodeAtRow(selectedRow);
 
                 String selectedType = ((JComboBox<?>) evt.getSource()).getSelectedItem().toString();
                 String previousType = (String) treeTableModel.getValueAt(node, typeColumn);
@@ -1871,8 +1879,8 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
         @Override
         @SuppressWarnings("unchecked")
         public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded, boolean leaf, int row, boolean hasFocus) {
-            if (row >= 0 && value instanceof FilterTransformerTreeTableNode) {
-                FilterTransformerTreeTableNode<T, C> node = (FilterTransformerTreeTableNode<T, C>) value;
+            if (row >= 0 && value instanceof com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode) {
+                com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = (com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) value;
 
                 if (node.getElement() instanceof IteratorElement) {
                     bulletLabel.setIcon(UIConstants.ICON_BULLET_YELLOW);
@@ -2023,7 +2031,7 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
         public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
             if (row >= 0) {
                 TreePath path = treeTable.getPathForRow(row);
-                FilterTransformerTreeTableNode<T, C> node = (FilterTransformerTreeTableNode<T, C>) path.getLastPathComponent();
+                com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C> node = (com.mirth.connect.client.ui.editors.FilterTransformerTreeTableNode<T, C>) path.getLastPathComponent();
 
                 if (node.getElement() instanceof IteratorElement) {
                     bulletLabel.setIcon(UIConstants.ICON_BULLET_YELLOW);
@@ -2164,5 +2172,5 @@ public abstract class BaseEditorPane<T extends FilterTransformer<C>, C extends F
     private JScrollPane propertiesScrollPane;
     private MirthRTextScrollPane generatedScriptTextArea;
 
-    public TabbedTemplatePanel templatePanel;
+    public com.mirth.connect.client.ui.editors.TabbedTemplatePanel templatePanel;
 }
