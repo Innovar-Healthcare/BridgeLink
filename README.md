@@ -3,8 +3,8 @@
 1. [Useful Links](#useful-links)
 2. [General Information](#general-information)
 3. [Installation and Upgrade](#installation-and-upgrade)
-4. [Starting Mirth Connect](#starting-mirth-connect)
-5. [Running Mirth Connect in Java 9 or greater](#java9)
+4. [Starting BridgeLink - an Open Source Fork of Mirth Connect](#starting-mirth-connect)
+5. [Running BridgeLink - an Open Source Fork of Mirth Connect in Java 9 or greater](#java9)
 6. [Java Licensing](#java-licensing)
 7. [License](#license)
 
