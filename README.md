@@ -1,4 +1,4 @@
-# BridgeLink by Innovar Healthcare
+# BridgeLink - an interop Open Source Community
 
 1. [Useful Links](#useful-links)
 2. [General Information](#general-information)
@@ -36,7 +36,7 @@ Users manage and develop channels (message pathways) using the interface known a
 
 <a name="installation-and-upgrade"></a>
 ## 3. Installation and Upgrade
-BridgeLink installers are available for individual operating systems (.exe for Windows, .rpm and .sh for Linux, and .dmg for Mac OS X). Pre-packaged distributions are also available for individual operating systems (ZIP for Windows, tar.gz for Linux, and tar.gz for Mac OS X). The installer allows you to automatically upgrade previous BridgeLink installations (starting with version 1.5).
+BridgeLink installers are available for individual operating systems (.exe for Windows, .sh for Linux, and .dmg for Mac OS X). Pre-packaged distributions are also available for individual operating systems (ZIP for Windows, tar.gz for Linux, and tar.gz for Mac OS X). 
 
 BridgeLink installers also come with the option to install and start a service that will run in the background. You also have the option of installing and running the BridgeLink Server Manager, which allows you to start and stop the service on some operating systems, change BridgeLink properties and backend database settings, and view the server logs.
 
