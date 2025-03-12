@@ -87,7 +87,7 @@ Click Run to proceed.
 
 <a name="java9"></a>
 ## 5. Running BridgeLink - an OSS Mirth Connect Fork -  in Java 9 or greater
-In order to run Mirth Connect in Java 9 or greater, copy the options from `docs/mcservice-java9+.vmoptions` and append them to either mcserver.vmoptions or mcservice.vmoptions, depending on your deployment. Then restart Mirth Connect.
+In order to run BridgeLink - an OSS Mirth Connect fork in Java 9 or greater, copy the options from `docs/mcservice-java9+.vmoptions` and append them to either mcserver.vmoptions or mcservice.vmoptions, depending on your deployment. Then restart BridgeLink.
 
 To run the Mirth Connect Command Line Interface, create a new file named mccommand.vmoptions in the Mirth Connect root directory. Copy all of the options from `docs/mcservice-java9+.vmoptions` into mccommand.vmoptions and save before launching the Command Line Interface.
 
