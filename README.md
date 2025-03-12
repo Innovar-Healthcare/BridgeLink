@@ -18,8 +18,8 @@
   - [FAQ](https://github.com/nextgenhealthcare/connect/wiki/Frequently-Asked-Questions)
   - [What's New in Mirth Connect](https://github.com/nextgenhealthcare/connect/wiki/Release-Notes)
 - [Forums](https://forums.mirthproject.io/)
-- [Slack Channel](https://mirthconnect.slack.com/) 
-  - [Slack Registration](https://join.slack.com/t/mirthconnect/shared_invite/zt-1prqon9tg-UQ_~6AsV8IwdITTo3z1aoA)
+- [Slack Channel](https://bridgelink.slack.com/) 
+  - [Slack Registration](https://join.slack.com/t/bridgelink01/shared_invite/zt-30u96gq8l-ComYEZEf1UzvSmavP7VXuQ)
 
 ------------
 
