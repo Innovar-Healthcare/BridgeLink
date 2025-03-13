@@ -722,13 +722,13 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
 
         provideUsageStatsYesRadio = new MirthRadioButton("Yes");
         provideUsageStatsYesRadio.setBackground(getBackground());
-        provideUsageStatsYesRadio.setToolTipText("<html>Toggles sending usage statistics to NextGen Healthcare.  These statistics <br>do not contain any PHI or channel/script implementations,<br> and help NextGen Healthcare determine which connectors or areas of<br>Mirth Connect are most widely used.</html>");
+        provideUsageStatsYesRadio.setToolTipText("<html>Toggles was used to send usage statistics to NextGen Healthcare. Disabled it in BrdgeLink.</html>");
         provideUsageStatsButtonGroup.add(provideUsageStatsYesRadio);
         provideUsageStatsYesRadio.setVisible(false);
 
         provideUsageStatsNoRadio = new MirthRadioButton("No");
         provideUsageStatsNoRadio.setBackground(getBackground());
-        provideUsageStatsNoRadio.setToolTipText("<html>Toggles sending usage statistics to NextGen Healthcare.  These statistics <br>do not contain any PHI or channel/script implementations,<br> and help NextGen Healthcare determine which connectors or areas of<br>Mirth Connect are most widely used.</html>");
+        provideUsageStatsNoRadio.setToolTipText("<html>Toggles was used to send usage statistics to NextGen Healthcare. Disabled it in BrdgeLink.</html>");
         provideUsageStatsButtonGroup.add(provideUsageStatsNoRadio);
         provideUsageStatsNoRadio.setVisible(false);
 

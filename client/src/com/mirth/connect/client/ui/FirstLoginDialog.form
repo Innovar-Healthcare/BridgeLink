@@ -165,8 +165,8 @@
               <Color blue="ff" green="ff" red="ff" type="rgb"/>
             </Property>
             <Property name="selected" type="boolean" value="true"/>
-            <Property name="text" type="java.lang.String" value="Register user with NextGen Healthcare"/>
-            <Property name="toolTipText" type="java.lang.String" value="&lt;html&gt;Register your user information with NextGen Healthcare to help us&lt;br&gt;improve the product and provide better service.&lt;/html&gt;"/>
+            <Property name="text" type="java.lang.String" value="Register user with XXXX Healthcare"/>
+            <Property name="toolTipText" type="java.lang.String" value="&lt;html&gt;Register your user information with XXXX Healthcare to help us&lt;br&gt;improve the product and provide better service.&lt;/html&gt;"/>
           </Properties>
           <Events>
             <EventHandler event="actionPerformed" listener="java.awt.event.ActionListener" parameters="java.awt.event.ActionEvent" handler="registerCheckBoxActionPerformed"/>

@@ -1,10 +1,17 @@
 /*
  * Copyright (c) Mirth Corporation. All rights reserved.
- * 
+ *
  * http://www.mirthcorp.com
- * 
+ *
  * The software in this package is published under the terms of the MPL license a copy of which has
  * been included with this distribution in the LICENSE.txt file.
+ *
+ * Copyright (c) NextGen Healthcare. All rights reserved.
+ * https://www.nextgen.com/products-and-services/integration-engine
+ *
+ * Copyright (c) 2025 Innovar Healthcare. All rights reserved
+ * This project is a fork of Mirth Connect by Nextgen Healthcare.
+ * It has been modified and maintained independently by Innovar Healthcare.
  */
 
 package com.mirth.connect.connectors.http;
@@ -42,7 +49,7 @@ public class SSLWarningPanel extends JPanel implements HyperlinkListener {
         editorPane.setBackground(getBackground());
         editorPane.setEditable(false);
         editorPane.addHyperlinkListener(this);
-        editorPane.setText("<html><body class=\"ssl-warning-panel\"><b><span style=\"color:#404040\">Important Notice:</span></b> The default system certificate store will be used for this connection. As a result, certain security options are not available and mutual authentication (two-way authentication) is not supported.<br/><br/>The <a href=\"https://www.nextgen.com/products-and-services/integration-engine#tab_extensions?extension=ssl-manager\">SSL Manager extension</a> for NextGen Connect provides advanced security and certificate management enhancements, including the ability to import certificates for use by source or destination connectors, as well as the ability to configure hostname verification and client authentication settings. For more information please contact <a href=\"https://www.nextgen.com/contact-us\">NextGen Healthcare sales</a>.</body></html>");
+        editorPane.setText("<html><body class=\\\"ssl-warning-panel\\\"><b><span style=\\\"color:#404040\\\">Important Notice:</span></b> The default system certificate store will be used for this connection. As a result, certain security options are not available and mutual authentication (two-way authentication) is not supported.<br/><br/>The <a href=\\\"https://innovar-userdocuments.s3.us-east-2.amazonaws.com/index.html?prefix=mirth_plugins/ssl-settings\\\">Innovar SSL Plugin</a> for BridgeLink provides advanced security and certificate management enhancements, including the ability to import certificates for use by source or destination connectors, as well as the ability to configure hostname verification and client authentication settings. For more information please contact <a href=\\\"https://www.innovarhealthcare.com\\\">Innovar Healthcare sales</a>.</body></html>");
         add(editorPane, "grow");
     }
 

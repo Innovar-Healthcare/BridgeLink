@@ -49,7 +49,7 @@ public class ManagerConstants {
     public static final String PATH_LOG4J_PROPERTIES = "conf" + System.getProperty("file.separator") + "log4j2.properties";
     public static final String PATH_VERSION_FILE = "version.properties";
     public static final String PATH_SERVER_ID_FILE = "server.id";
-    public static final String PATH_SERVICE_VMOPTIONS = "mcservice.vmoptions";
+    public static final String PATH_SERVICE_VMOPTIONS = "blservice.vmoptions";
 
     // Webstart commands
     public static final String CMD_WEBSTART_PREFIX1 = "javaws ";
