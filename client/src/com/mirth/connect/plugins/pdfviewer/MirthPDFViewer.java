@@ -87,7 +87,7 @@ public class MirthPDFViewer extends com.sun.pdfview.PDFViewer {
     }
 
     /**
-     * Set the title to "Mirth Connect PDF Viewer: <name of file>"
+     * Set the title to "BridgeLink PDF Viewer: <name of file>"
      */
     @Override
     public void setTitle(String title) {

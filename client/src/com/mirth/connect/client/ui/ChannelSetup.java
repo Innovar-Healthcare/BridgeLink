@@ -780,7 +780,7 @@ public class ChannelSetup extends JPanel {
         encryptAttachmentsCheckBox.setSelected(properties.isEncryptAttachments());
         encryptCustomMetaDataCheckBox.setSelected(properties.isEncryptCustomMetaData());
 
-        // Fix dataTypes and properties not set by previous versions of Mirth Connect
+        // Fix dataTypes and properties not set by previous versions of BridgeLink
         fixNullDataTypesAndProperties();
 
         // load message storage settings

@@ -9,10 +9,10 @@
 
 package com.mirth.connect.manager;
 
-public class MacServiceController implements ServiceController {
+public class MacServiceController implements com.mirth.connect.manager.ServiceController {
 
-    private final String MAC_SERVICE_NAME = "Mirth\\ Connect\\ Service";
-    private final String MAC_SERVICE_CMD = "/Library/StartupItems/Mirth\\ Connect\\ Service/";
+    private final String MAC_SERVICE_NAME = "BridgeLink Service";
+    private final String MAC_SERVICE_CMD = "/Library/StartupItems/BridgeLink Service/";
     private final String MAC_SERVICE_START = "start";
     private final String MAC_SERVICE_STOP = "stop";
     private final String MAC_SERVICE_STATUS = "status";
@@ -22,7 +22,7 @@ public class MacServiceController implements ServiceController {
         try {
             String[] input = new String[] {
                     MAC_SERVICE_CMD + MAC_SERVICE_NAME + " " + MAC_SERVICE_STATUS };
-            String output = CmdUtil.execCmdWithOutput(input);
+            String output = com.mirth.connect.manager.CmdUtil.execCmdWithOutput(input);
             System.out.println(output);
             if (output.indexOf("running") != -1) {
                 return 1;
@@ -39,7 +39,7 @@ public class MacServiceController implements ServiceController {
     @Override
     public boolean startService() {
         try {
-            if (CmdUtil.execCmd(new String[] {
+            if (com.mirth.connect.manager.CmdUtil.execCmd(new String[] {
                     MAC_SERVICE_CMD + MAC_SERVICE_NAME + " " + MAC_SERVICE_START }, true) == 0) {
                 return true;
             }
@@ -53,7 +53,7 @@ public class MacServiceController implements ServiceController {
     @Override
     public boolean stopService() {
         try {
-            if (CmdUtil.execCmd(new String[] {
+            if (com.mirth.connect.manager.CmdUtil.execCmd(new String[] {
                     MAC_SERVICE_CMD + MAC_SERVICE_NAME + " " + MAC_SERVICE_STOP }, true) == 0) {
                 return true;
             }

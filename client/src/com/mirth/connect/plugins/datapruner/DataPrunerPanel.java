@@ -303,7 +303,7 @@ public class DataPrunerPanel extends AbstractSettingsPanel {
 
         /*
          * archiverOptions might be empty if the pruner settings were migrated from a previous
-         * version of Mirth Connect.
+         * version of BridgeLink.
          */
         if (archiverOptions == null) {
             archiverPanel.setMessageWriterOptions(new MessageWriterOptions());

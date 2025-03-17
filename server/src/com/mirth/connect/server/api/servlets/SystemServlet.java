@@ -92,7 +92,7 @@ public class SystemServlet extends MirthServlet implements SystemServletInterfac
             // Windows systems have multiple roots, like "A:" and "C:".
             if (StringUtils.containsIgnoreCase(System.getProperty("os.name"), "Windows")) {
                 try {
-                    // Attempt to get the correct root from the Mirth Connect base directory
+                    // Attempt to get the correct root from the BridgeLink base directory
                     File baseDir = new File(configurationController.getBaseDir());
                     // Split on the file separator
                     String[] path = StringUtils.split(baseDir.getCanonicalPath(), File.separatorChar);
