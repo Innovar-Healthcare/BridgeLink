@@ -547,8 +547,8 @@ public class Mirth extends Thread {
      * system console.
      */
     private void printSplashScreen() {
-        logger.info("BridgeLink " + versionProperties.getString("mirth.version") + " (Built on " + versionProperties.getString("mirth.date") + ") server successfully started.");//changed to BridgeLink by Innovar Healthcare
-        logger.info("This product was developed by Innovar Healthcare (https://www.innovarhealthcare.com) and its contributors (c)2025-now."); //changed by Innovar Healthcare
+        logger.info("BridgeLink " + versionProperties.getString("mirth.version") + " (Built on " + versionProperties.getString("mirth.date") + ") server successfully started.");
+        logger.info("This product was developed by Innovar Healthcare (https://www.innovarhealthcare.com) and its contributors (c)2025-now.");
         logger.info("Running " + System.getProperty("java.vm.name") + " " + System.getProperty("java.version") + " on " + System.getProperty("os.name") + " (" + System.getProperty("os.version") + ", " + System.getProperty("os.arch") + "), " + configurationController.getDatabaseType() + ", with charset " + Charset.defaultCharset() + ".");
 
         if (webServer != null) {

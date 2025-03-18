@@ -55,7 +55,7 @@ public class FirstLoginDialog extends javax.swing.JDialog implements com.mirth.c
         finishButton.setEnabled(false);
 
         userEditPanel.setUser(this, currentUser);
-        userEditPanel.setRequiredFields(false, true); //Change AllRequired to False by Innovar Healthcare
+        userEditPanel.setRequiredFields(false, true); 
         if (currentUser.getId() == 1) {
             registerCheckBox.setVisible(false);
         }
@@ -117,7 +117,7 @@ public class FirstLoginDialog extends javax.swing.JDialog implements com.mirth.c
         contentTextPane = new javax.swing.JTextPane();
         
         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
-        setTitle("Welcome to BridgeLink");//Change to BridgeLink by Innovar Healthcare
+        setTitle("Welcome to BridgeLink");
 
         channelOverview.setBackground(new java.awt.Color(255, 255, 255));
         channelOverview.setName(""); // NOI18N
@@ -132,7 +132,7 @@ public class FirstLoginDialog extends javax.swing.JDialog implements com.mirth.c
         jLabel2.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
         jLabel2.setForeground(new java.awt.Color(255, 255, 255));
 //        jLabel2.setText("<html>Welcome to Mirth<sup>&#174;</sup> Connect by NextGen<sup>&#174;</sup> Healthcare</html>");
-        jLabel2.setText("<html>Welcome to BridgeLink<sup>&#174;</sup> by Innovar Healthcare</html>");//Change to BridgeLink by Innovar Healthcare
+        jLabel2.setText("<html>Welcome to BridgeLink<sup>&#174;</sup> by Innovar Healthcare</html>");
 
         javax.swing.GroupLayout mirthHeadingPanel1Layout = new javax.swing.GroupLayout(mirthHeadingPanel1);
         mirthHeadingPanel1.setLayout(mirthHeadingPanel1Layout);
@@ -153,7 +153,7 @@ public class FirstLoginDialog extends javax.swing.JDialog implements com.mirth.c
 
         jTextPane1.setEditable(false);
         jTextPane1.setBackground(new java.awt.Color(250, 250, 210));
-        jTextPane1.setText("You may now customize your BridgeLink user account information. You also have the option of changing your account password.");//Change to BridgeLink by Innovar Healthcare
+        jTextPane1.setText("You may now customize your BridgeLink user account information. You also have the option of changing your account password.");
         jTextPane1.setAutoscrolls(false);
         jTextPane1.setDisabledTextColor(new java.awt.Color(0, 0, 0));
         jTextPane1.setEnabled(false);
@@ -318,7 +318,7 @@ public class FirstLoginDialog extends javax.swing.JDialog implements com.mirth.c
 
     private void registerCheckBoxActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_registerCheckBoxActionPerformed
         boolean allRequired = registerCheckBox.isSelected();
-        allRequired = false; //Change to consent false by Innovar Healthcare
+        allRequired = false; 
         if (allRequired) {
             userConsentCheckBox.setSelected(true);
             userConsentCheckBox.setEnabled(true);

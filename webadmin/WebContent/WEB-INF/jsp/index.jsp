@@ -55,7 +55,7 @@
                     
                     <div>
 	                    <div class="help-block">
-	                        <strong>Ballista Administrator Launcher:</strong><br /> This is a separate application that replaces<br/>Java Web Start and allows you to launch the Administrator from your local workstation.  This tool is an Open Source contribution from the Community. Innovar Healthcare will be releasing our own launcher soon.
+	                        <strong>BridgeLink Administrator Launcher:</strong><br /> This is a separate application that replaces<br/>Java Web Start and allows you to launch the Administrator from your local workstation.
 	                    </div>
                         <a class="btn btn-md btn-downloadbutton" href="javascript:downloadAdministratorLauncher()">Download Administrator Launcher</a>
                         <!-- <div id="administratorLauncherOptionsDropdownContainer" class="dropdown">
@@ -307,7 +307,7 @@
         			if (suffix == 'linux.sh') {
         				suffix = 'unix.sh';
         			}
-        			window.location.href = 'https://github.com/kayyagari/ballista/releases/tag/0.4.0';
+        			window.location.href = 'https://innovar-oss-mirth-mirror.s3.us-east-2.amazonaws.com/index.html';
         		}});
        		}
         

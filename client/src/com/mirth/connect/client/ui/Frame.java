@@ -1270,8 +1270,8 @@ public class Frame extends JXFrame {
         addTask(TaskConstants.OTHER_VIEW_USER_API, "View User API", "View documentation for the BridgeLink User API.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/page_white_text.png")), otherPane, null);
         addTask(TaskConstants.OTHER_VIEW_CLIENT_API, "View Client API", "View documentation for the BridgeLink Client API.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/page_white_text.png")), otherPane, null);
         addTask(TaskConstants.OTHER_HELP, "Help", "View the BridgeLink wiki.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/help.png")), otherPane, null);
-        addTask(TaskConstants.OTHER_ABOUT, "About BridgeLink", "View the about page for BridgeLink.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/information.png")), otherPane, null);//Change to BridgeLink by Innovar Healthcare
-        addTask(TaskConstants.OTHER_VISIT_MIRTH, "Visit innovarhealthcare", "View innovarhealthcare's homepage.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/house.png")), otherPane, null);//Change to Innovar Healthcare
+        addTask(TaskConstants.OTHER_ABOUT, "About BridgeLink", "View the about page for BridgeLink.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/information.png")), otherPane, null);
+        addTask(TaskConstants.OTHER_VISIT_MIRTH, "Visit innovarhealthcare", "View innovarhealthcare's homepage.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/house.png")), otherPane, null);
         addTask(TaskConstants.OTHER_REPORT_ISSUE, "Report Issue", "Visit BridgeLink's issue tracker.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/bug.png")), otherPane, null);
         addTask(TaskConstants.OTHER_LOGOUT, "Logout", "Logout and return to the login screen.", "", new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/disconnect.png")), otherPane, null);
         setNonFocusable(otherPane);

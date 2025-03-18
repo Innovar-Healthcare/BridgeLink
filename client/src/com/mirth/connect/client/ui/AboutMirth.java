@@ -62,7 +62,7 @@ public class AboutMirth extends com.mirth.connect.client.ui.MirthDialog {
         StringBuilder content = new StringBuilder();
 
         if (com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION != null) {
-            content.append("BridgeLink Server " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + "\n\n");//Change to BridgeLink by Innovar Healthcare
+            content.append("BridgeLink Server " + com.mirth.connect.client.ui.PlatformUI.SERVER_VERSION + "\n\n");
         }
 
         if (com.mirth.connect.client.ui.PlatformUI.BUILD_DATE != null) {
@@ -75,7 +75,7 @@ public class AboutMirth extends com.mirth.connect.client.ui.MirthDialog {
 
         content.append("Java version: " + System.getProperty("java.version") + "\n\n");
 
-        content.append("(c) 2025 Innovar Healthcare. All rights reserved. Visit http://www.innovarhealthcare.com\n\n");//Change to BridgeLink by Innovar Healthcare
+        content.append("(c) 2025 Innovar Healthcare. All rights reserved. Visit http://www.innovarhealthcare.com\n\n");
         content.append("The following is a list of acknowledgements for third-party software that is included with BridgeLink:\n\n");
         content.append("This product includes software developed by the Apache Software Foundation (http://www.apache.org/).\n\n");
         content.append("This product includes all or a portion of the HL7 Vocabulary database, or is derived from the HL7 Vocabulary database, subject to a license from Health Level Seven, Inc.\n\n");
@@ -123,7 +123,7 @@ public class AboutMirth extends com.mirth.connect.client.ui.MirthDialog {
 
         jLabel2.setFont(new java.awt.Font("Tahoma", 1, 18)); // NOI18N
         jLabel2.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel2.setText("About BridgeLink"); //Change to BridgeLink by Innovar Healthcare
+        jLabel2.setText("About BridgeLink"); 
 
         javax.swing.GroupLayout mirthHeadingPanel1Layout = new javax.swing.GroupLayout(mirthHeadingPanel1);
         mirthHeadingPanel1.setLayout(mirthHeadingPanel1Layout);
