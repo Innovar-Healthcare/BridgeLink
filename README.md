@@ -16,7 +16,7 @@
 - [User Guide]()
 - Wiki -> Coming Soon!!
 - Forums -> Coming Soon!!
-- Slack Channel -> Coming Soon!!
+- [Slack Channel](https://bridgelink01.slack.com/)
 
 ------------
 
