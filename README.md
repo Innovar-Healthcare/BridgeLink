@@ -12,7 +12,7 @@
 
 <a name="useful-links"></a>
 ## 1. Useful Links
-- [Downloads]() 
+- [Downloads](https://innovar-oss-mirth-mirror.s3.us-east-2.amazonaws.com/index.html) 
 - [User Guide]()
 - Wiki -> Coming Soon!!
 - Forums -> Coming Soon!!
