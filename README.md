@@ -14,8 +14,6 @@
 ## 1. Useful Links
 - [Downloads](https://innovar-oss-mirth-mirror.s3.us-east-2.amazonaws.com/index.html) 
 - [User Guide]()
-- Wiki -> Coming Soon!!
-- Forums -> Coming Soon!!
 - [Slack Channel](https://bridgelink01.slack.com/)
 
 ------------
