@@ -275,7 +275,7 @@ public class ServerConfigurationRestorerTest {
         verify(restorer.getEngineController(), times(1)).undeployChannels(channelIds, ServerEventContext.SYSTEM_USER_EVENT_CONTEXT, null);
 
         EngineController engineController = restorer.getEngineController();
-        doThrow(ControllerException.class).when(engineController).undeployChannels(any(), any(), any());
+        doThrow(new RuntimeException(new ControllerException("exception"))).when(engineController).undeployChannels(any(), any(), any());
         MultiException multiException = new MultiException();
         restorer.undeployChannels(multiException);
         assertEquals(1, multiException.size());
@@ -717,7 +717,7 @@ public class ServerConfigurationRestorerTest {
         }
         assertEquals(0, multiException.size());
 
-        doThrow(ControllerException.class).when(restorer).restorePluginProperties(anyString(), any(), any());
+        doThrow(new RuntimeException(new ControllerException("exception"))).when(restorer).restorePluginProperties(anyString(), any(), any());
         restorer.restorePluginProperties(config, multiException);
         assertEquals(2, multiException.size());
     }
@@ -800,7 +800,7 @@ public class ServerConfigurationRestorerTest {
         verify(restorer.getConfigurationController(), times(1)).setChannelDependencies(config.getChannelDependencies());
 
         ConfigurationController configurationController = restorer.getConfigurationController();
-        doThrow(ControllerException.class).when(configurationController).setChannelDependencies(any());
+        doThrow(new RuntimeException(new ControllerException("exception"))).when(configurationController).setChannelDependencies(any());
         restorer.restoreChannelDependencies(config, multiException);
         assertEquals(1, multiException.size());
     }
@@ -820,7 +820,7 @@ public class ServerConfigurationRestorerTest {
         verify(restorer.getConfigurationController(), times(1)).setChannelTags(config.getChannelTags());
 
         ConfigurationController configurationController = restorer.getConfigurationController();
-        doThrow(ControllerException.class).when(configurationController).setChannelTags(any());
+        doThrow(new RuntimeException(new ControllerException("exception"))).when(configurationController).setChannelTags(any());
         restorer.restoreChannelTags(config, multiException);
         assertEquals(1, multiException.size());
     }
@@ -863,7 +863,7 @@ public class ServerConfigurationRestorerTest {
         verify(restorer.getEngineController(), times(1)).deployChannels(eq(channelIds), eq(ServerEventContext.SYSTEM_USER_EVENT_CONTEXT), isNull(), any());
 
         EngineController engineController = restorer.getEngineController();
-        doThrow(ControllerException.class).when(engineController).deployChannels(any(), any(), any(), any());
+        doThrow(new RuntimeException(new ControllerException("exception"))).when(engineController).deployChannels(any(), any(), any(), any());
         restorer.deployAllChannels(deploy, multiException);
         assertEquals(1, multiException.size());
     }

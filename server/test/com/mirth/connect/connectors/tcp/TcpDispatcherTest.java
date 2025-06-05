@@ -5,6 +5,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -95,7 +96,7 @@ public class TcpDispatcherTest {
 			dispatcher.stop();
 			log("Undeploying TCP Dispatcher...");
 			dispatcher.onUndeploy();
-			Thread.sleep(1000);
+			Thread.sleep(3000);
 		}
 	}
 	
@@ -122,7 +123,7 @@ public class TcpDispatcherTest {
 		Thread.sleep(1000);
 	}
 	
-	private TcpDispatcherProperties createTcpDispatcherProperties() {
+	private TcpDispatcherProperties createTcpDispatcherProperties() throws IOException {
 		TcpDispatcherProperties dispatcherProps = new TcpDispatcherProperties();
 		dispatcherProps.getTransmissionModeProperties().setPluginPointName("Basic");
 		FrameModeProperties frameProps = new FrameModeProperties();
@@ -138,6 +139,7 @@ public class TcpDispatcherTest {
 	}
 	
 	private TcpDispatcher createTcpDispatcher(TcpDispatcherProperties dispatcherProps) {
+
 		TcpDispatcher dispatcher = new TestTcpDispatcher(TEST_CHANNEL_ID, TEST_SERVER_ID, 1, dispatcherProps);
 		dispatcher.setChannelId(TEST_CHANNEL_ID);
 		
@@ -175,6 +177,7 @@ public class TcpDispatcherTest {
         
         assertEquals(TEST_MESSAGE_TEMPLATE, socketResult.get("result" + socketListenerId));
 	}
+
 	
 	/*
 	 * testMLLPMessageSent()
@@ -682,7 +685,7 @@ public class TcpDispatcherTest {
 	
 	private static void logError(String message) {
 		if (PRINT_DEBUG_MESSAGES) {
-			logError(message);
+			System.out.println(message);
 		}
 	}
 	

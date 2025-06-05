@@ -71,11 +71,23 @@
 			<classpath refid="testclasspath" />
 		</javac>
 	</target>
-	
-	<taskdef uri="antlib:org.jacoco.ant" resource="org/jacoco/ant/antlib.xml">
-		<classpath path="${server}/lib/ant/jacocoant.jar"/>
-	</taskdef>	
-	
+
+	<path id="jacoco.classpath">
+		<fileset dir="/Users/wengmark/mirthdev/mirth450/connect/server/lib/ant">
+			<include name="org.jacoco.ant-0.8.8.jar"/>
+			<include name="org.jacoco.core-0.8.8.jar"/>
+			<include name="org.jacoco.report-0.8.8.jar"/>
+			<include name="org.jacoco.agent-0.8.8.jar"/>
+			<include name="asm-9.2.jar"/>
+			<include name="asm-tree-9.2.jar"/>
+			<include name="asm-commons-9.2.jar"/>
+		</fileset>
+	</path>
+
+	<taskdef uri="antlib:org.jacoco.ant"
+			 resource="org/jacoco/ant/antlib.xml"
+			 classpathref="jacoco.classpath"/>
+
 	<target name="test-run" depends="test-compile">
 		<property name="junit-reports" value="junit-reports" />
 		<property name="code-coverage-reports" value="code-coverage-reports" />
@@ -86,6 +98,13 @@
 			<junit haltonfailure="false" fork="true" forkmode="once">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
+				<jvmarg value="--add-opens=java.base/sun.misc=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/com.sun.rowset=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/com.sun.rowset.internal=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/com.sun.rowset.providers=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/javax.sql.rowset=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql/java.sql=ALL-UNNAMED"/>
 				<classpath>
 					<path refid="testclasspath" />
 					<dirset dir="${test_classes}"/>
