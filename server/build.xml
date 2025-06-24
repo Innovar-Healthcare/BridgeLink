@@ -1254,7 +1254,7 @@
 	</target>
 
 	<path id="jacoco.classpath">
-		<fileset dir="/Users/wengmark/mirthdev/mirth450/connect/server/lib/ant">
+		<fileset dir="lib/ant">
 			<include name="org.jacoco.ant-0.8.8.jar"/>
 			<include name="org.jacoco.core-0.8.8.jar"/>
 			<include name="org.jacoco.report-0.8.8.jar"/>
@@ -1276,7 +1276,7 @@
 		<mkdir dir="${code-coverage-reports}" />
 
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
-			<junit haltonfailure="false" fork="true" forkmode="once">
+			<junit haltonfailure="false" fork="true" forkmode="perTest">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 <!--				&lt;!&ndash;Uncomment the following and add additional dashes in front of the arguments to allow Java 9+-->
