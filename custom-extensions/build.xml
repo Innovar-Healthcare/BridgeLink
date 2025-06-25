@@ -1,0 +1,10 @@
+<project name="custom-extensions" default="build">
+
+    <target name="build">
+        <subant target="build" inheritall="true">
+            <fileset dir="." includes="*/build.xml"/>
+        </subant>
+    </target>
+
+</project>
+

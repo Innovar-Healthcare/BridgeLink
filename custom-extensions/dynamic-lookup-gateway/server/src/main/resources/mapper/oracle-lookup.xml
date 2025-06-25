@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "conf/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="Lookup">
+    <resultMap id="lookup-group" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup">
+        <id property="id" column="ID" javaType="Integer"/>
+        <result property="name" column="NAME" javaType="String"/>
+        <result property="description" column="DESCRIPTION" javaType="String"/>
+        <result property="version" column="VERSION" javaType="String"/>
+        <result property="cacheSize" column="CACHE_SIZE" javaType="Integer"/>
+        <result property="cachePolicy" column="CACHE_POLICY" javaType="String"/>
+        <result property="createdDate" column="CREATED_DATE" javaType="java.sql.Timestamp"/>
+        <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
+    </resultMap>
+
+    <resultMap id="lookup-value" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue">
+        <id property="keyValue" column="KEY_VALUE" javaType="String"/>
+        <result property="valueData" column="VALUE_DATA" javaType="String"/>
+        <result property="createdDate" column="CREATED_DATE" javaType="java.sql.Timestamp"/>
+        <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
+    </resultMap>
+
+    <resultMap id="lookup-statistics" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupStatistics">
+        <id property="groupId" column="GROUP_ID" javaType="Integer"/>
+        <result property="totalLookups" column="TOTAL_LOOKUPS" javaType="Long"/>
+        <result property="cacheHits" column="CACHE_HITS" javaType="Long"/>
+        <result property="lastAccessed" column="LAST_ACCESSED" javaType="java.sql.Timestamp"/>
+        <result property="resetDate" column="RESET_DATE" javaType="java.sql.Timestamp"/>
+    </resultMap>
+
+    <resultMap id="lookup-audit" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupAudit">
+        <id property="id" column="ID" javaType="Long"/>
+        <result property="groupId" column="GROUP_ID" javaType="Integer"/>
+        <result property="tableName" column="TABLE_NAME" javaType="String"/>
+        <result property="keyValue" column="KEY_VALUE" javaType="String"/>
+        <result property="action" column="ACTION" javaType="String"/>
+        <result property="oldValue" column="OLD_VALUE" javaType="String"/>
+        <result property="newValue" column="NEW_VALUE" javaType="String"/>
+        <result property="userId" column="USER_ID" javaType="String"/>
+        <result property="timestamp" column="AUDIT_TIMESTAMP" javaType="java.sql.Timestamp"/>
+    </resultMap>
+
+    <sql id="searchLookupValuesBody">
+        <where>
+            <if test='pattern != null'>
+                LOWER(KEY_VALUE) LIKE LOWER('%' || #{pattern} || '%')
+                OR LOWER(VALUE_DATA) LIKE LOWER('%' || #{pattern} || '%')
+            </if>
+        </where>
+    </sql>
+
+    <sql id="oraclePagination">
+        <if test="offset != null and limit != null">
+            <![CDATA[
+        SELECT A.* FROM (
+            SELECT B.*, ROWNUM B_ROWNUM FROM (
+        ]]>
+        </if>
+    </sql>
+
+    <sql id="oraclePaginationEnd">
+        <if test="offset != null and limit != null">
+            <![CDATA[
+            ) B WHERE ROWNUM <= #{offset} + #{limit}
+        ) A WHERE B_ROWNUM > #{offset}
+        ]]>
+        </if>
+    </sql>
+
+    <!-- Group Operations -->
+    <select id="getGroupById" parameterType="Integer" resultMap="lookup-group">
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        FROM LOOKUP_GROUP
+        WHERE ID = #{value}
+    </select>
+
+    <select id="getGroupByName" parameterType="String" resultMap="lookup-group">
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        FROM LOOKUP_GROUP
+        WHERE NAME = #{value}
+    </select>
+
+    <select id="getAllGroups" resultMap="lookup-group">
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        FROM LOOKUP_GROUP
+    </select>
+
+    <insert id="insertGroup" parameterType="map" useGeneratedKeys="true" keyProperty="id" keyColumn="ID">
+        INSERT INTO LOOKUP_GROUP (NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY)
+        VALUES (#{name}, #{description}, #{version}, #{cacheSize}, #{cachePolicy})
+    </insert>
+
+    <update id="updateGroup" parameterType="map">
+        UPDATE LOOKUP_GROUP
+        SET NAME = #{name},
+        DESCRIPTION = #{description},
+        VERSION = #{version},
+        CACHE_SIZE = #{cacheSize},
+        CACHE_POLICY = #{cachePolicy},
+        UPDATED_DATE = SYSDATE
+        WHERE ID = #{id}
+    </update>
+
+    <delete id="deleteGroup" parameterType="Integer">
+        DELETE FROM LOOKUP_GROUP
+        WHERE ID = #{value}
+    </delete>
+
+    <!-- Value Operations -->
+    <select id="getLookupValues" parameterType="map" resultMap="lookup-value">
+        SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
+        FROM ${tableName}
+        ORDER BY KEY_VALUE ASC
+    </select>
+
+    <select id="getLookupValue" parameterType="map" resultMap="lookup-value">
+        SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
+        FROM ${tableName}
+        WHERE KEY_VALUE = #{keyValue}
+    </select>
+
+    <select id="getMatchingLookupValues" parameterType="map" resultMap="lookup-value">
+        SELECT KEY_VALUE, VALUE_DATA
+        FROM ${tableName}
+        WHERE LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyPattern} || '%')
+    </select>
+
+    <select id="getValue" parameterType="map" resultType="String">
+        SELECT VALUE_DATA
+        FROM ${tableName}
+        WHERE KEY_VALUE = #{keyValue}
+    </select>
+
+    <insert id="insertValue" parameterType="map">
+        INSERT INTO ${tableName} (KEY_VALUE, VALUE_DATA)
+        VALUES (#{keyValue}, #{valueData})
+    </insert>
+
+    <update id="updateValue" parameterType="map">
+        UPDATE ${tableName}
+        SET VALUE_DATA = #{valueData},
+        UPDATED_DATE = SYSDATE
+        WHERE KEY_VALUE = #{keyValue}
+    </update>
+
+    <delete id="deleteValue" parameterType="map">
+        DELETE FROM ${tableName}
+        WHERE KEY_VALUE = #{keyValue}
+    </delete>
+
+    <delete id="deleteAllValues" parameterType="map">
+        DELETE FROM ${tableName}
+    </delete>
+
+    <select id="getValueCount" parameterType="map" resultType="long">
+        SELECT COUNT(*) FROM ${tableName}
+    </select>
+
+    <update id="createLookupValueTable" parameterType="map">
+        CREATE TABLE ${tableName} (
+        KEY_VALUE VARCHAR2(255) NOT NULL,
+        VALUE_DATA CLOB,
+        CREATED_DATE TIMESTAMP DEFAULT SYSDATE,
+        UPDATED_DATE TIMESTAMP DEFAULT SYSDATE,
+        PRIMARY KEY (KEY_VALUE)
+        )
+    </update>
+
+    <update id="dropLookupValueTable" parameterType="map">
+        BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE ${tableName}';
+        EXCEPTION
+        WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+        RAISE;
+        END IF;
+        END;
+    </update>
+
+    <select id="searchLookupValuesCount" parameterType="map" resultType="long">
+        SELECT COUNT(*) FROM ${tableName}
+        <include refid="searchLookupValuesBody"/>
+    </select>
+
+    <select id="searchLookupValues" parameterType="map" resultMap="lookup-value">
+        <include refid="oraclePagination"/>
+
+        SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
+        FROM ${tableName}
+        <include refid="searchLookupValuesBody"/>
+        ORDER BY KEY_VALUE ASC
+
+        <include refid="oraclePaginationEnd"/>
+    </select>
+
+    <!-- Statistics Operations -->
+    <insert id="insertStatistics" parameterType="map">
+        INSERT INTO LOOKUP_STATISTICS (
+        GROUP_ID, TOTAL_LOOKUPS, CACHE_HITS, LAST_ACCESSED, RESET_DATE
+        ) VALUES (
+        #{groupId}, 0, 0, NULL, NULL
+        )
+    </insert>
+
+    <select id="getStatistics" parameterType="Integer" resultMap="lookup-statistics">
+        SELECT GROUP_ID, TOTAL_LOOKUPS, CACHE_HITS, LAST_ACCESSED, RESET_DATE
+        FROM LOOKUP_STATISTICS
+        WHERE GROUP_ID = #{value}
+    </select>
+
+    <update id="updateStatistics" parameterType="map">
+        UPDATE LOOKUP_STATISTICS
+        SET TOTAL_LOOKUPS = TOTAL_LOOKUPS + 1,
+        CACHE_HITS = CACHE_HITS +
+        <choose>
+            <when test="cacheHit">1</when>
+            <otherwise>0</otherwise>
+        </choose>
+        ,
+        LAST_ACCESSED = #{lastAccessed}
+        WHERE GROUP_ID = #{groupId}
+    </update>
+
+    <update id="resetStatistics" parameterType="map">
+        UPDATE LOOKUP_STATISTICS
+        SET TOTAL_LOOKUPS = 0,
+        CACHE_HITS = 0,
+        LAST_ACCESSED = NULL,
+        RESET_DATE = #{resetDate}
+        WHERE GROUP_ID = #{groupId}
+    </update>
+
+    <!-- AuditEntry Operations -->
+    <insert id="insertAuditEntry" parameterType="map">
+        INSERT INTO LOOKUP_AUDIT (
+        GROUP_ID, TABLE_NAME, KEY_VALUE, ACTION, OLD_VALUE, NEW_VALUE, USER_ID, AUDIT_TIMESTAMP
+        ) VALUES (
+        #{groupId}, #{tableName}, #{keyValue}, #{action}, #{oldValue}, #{newValue}, #{userId}, SYSDATE
+        )
+    </insert>
+
+    <select id="getAuditEntriesByGroup" parameterType="map" resultMap="lookup-audit">
+        <include refid="oraclePagination"/>
+
+        SELECT *
+        FROM LOOKUP_AUDIT
+        WHERE GROUP_ID = #{groupId}
+
+        <include refid="oraclePaginationEnd"/>
+    </select>
+
+    <select id="getAuditEntryCount" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM LOOKUP_AUDIT
+        WHERE GROUP_ID = #{groupId}
+    </select>
+
+    <sql id="searchAuditEntriesBody">
+        <where>
+            GROUP_ID = #{groupId}
+            <if test="keyValue != null and keyValue != ''">
+                AND LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyValue} || '%')
+            </if>
+            <if test="action != null and action != ''">
+                AND ACTION = #{action}
+            </if>
+            <if test="userId != null and userId != ''">
+                AND USER_ID = #{userId}
+            </if>
+            <if test="startDate != null">
+                AND AUDIT_TIMESTAMP <![CDATA[ >= ]]> #{startDate}
+            </if>
+            <if test="endDate != null">
+                AND AUDIT_TIMESTAMP <![CDATA[ <= ]]> #{endDate}
+            </if>
+        </where>
+    </sql>
+
+    <select id="searchAuditEntriesByGroup" parameterType="map" resultMap="lookup-audit">
+        <include refid="oraclePagination"/>
+
+        SELECT *
+        FROM LOOKUP_AUDIT
+        <include refid="searchAuditEntriesBody"/>
+        ORDER BY AUDIT_TIMESTAMP DESC
+
+        <include refid="oraclePaginationEnd"/>
+    </select>
+
+    <select id="searchAuditEntryCount" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM LOOKUP_AUDIT
+        <include refid="searchAuditEntriesBody"/>
+    </select>
+</mapper>
