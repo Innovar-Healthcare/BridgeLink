@@ -1144,8 +1144,10 @@
 
 	<target name="create-derby-db" depends="compile">
 		<!-- re-create the embedded database -->
-		<delete dir="mirthdb" />
+		<delete dir="appdata/mirthdb" />
 		<java classname="com.mirth.connect.server.tools.ScriptRunner" fork="true" dir="${basedir}" failonerror="true">
+			<!-- Set Derby home so it creates mirthdb inside appdata -->
+			<jvmarg value="-Dderby.system.home=appdata" />
 			<classpath>
 				<pathelement location="${setup.server.lib}/${server.jar}" />
 				<pathelement location="classes" />
@@ -1271,9 +1273,15 @@
 
 	<target name="test-run" depends="test-compile">
 		<property name="junit-reports" value="junit-reports" />
+		<property name="junit-html" value="junit-html" />
 		<property name="code-coverage-reports" value="code-coverage-reports" />
+		<delete dir="${junit-reports}" />
+		<delete dir="${code-coverage-reports}" />
+		<delete dir="${junit-html}" />
+
 		<mkdir dir="${junit-reports}" />
 		<mkdir dir="${code-coverage-reports}" />
+		<mkdir dir="${junit-html}" />
 
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
 			<junit haltonfailure="false" fork="true" forkmode="perTest">
@@ -1314,6 +1322,14 @@
 				</batchtest>
 			</junit>
 		</jacoco:coverage>
+
+		<!-- Generate HTML report from JUnit XML output -->
+		<junitreport todir="${junit-reports}">
+			<fileset dir="${junit-reports}">
+				<include name="TEST-*.xml"/>
+			</fileset>
+			<report format="frames" todir="${junit-html}" />
+		</junitreport>
 	</target>
 
 	<target name="remove-classes" depends="init">

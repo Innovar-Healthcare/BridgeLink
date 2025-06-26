@@ -1,4 +1,5 @@
 <project name="mirth-client" basedir="." default="help">
+	<property file="build.properties" />
 	<target name="help">
 		<echo>Mirth Client Build Help</echo>
 		<echo>-----------------------</echo>
@@ -340,7 +341,7 @@
 	</target>
 
 	<path id="jacoco.classpath">
-		<fileset dir="/Users/wengmark/mirthdev/mirth450/connect/server/lib/ant">
+		<fileset dir="${server}/lib/ant">
 			<include name="org.jacoco.ant-0.8.8.jar"/>
 			<include name="org.jacoco.core-0.8.8.jar"/>
 			<include name="org.jacoco.report-0.8.8.jar"/>
