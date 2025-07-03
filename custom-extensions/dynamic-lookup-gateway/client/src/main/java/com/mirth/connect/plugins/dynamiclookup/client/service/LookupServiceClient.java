@@ -1,3 +1,13 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
 package com.mirth.connect.plugins.dynamiclookup.client.service;
 
 import com.mirth.connect.client.core.Client;
@@ -175,7 +185,25 @@ public class LookupServiceClient {
             return null; // unreachable — rethrowParsedClientError always throws
         } catch (Exception e) {
             // 3. JSON serialization or unexpected errors
-            throw new RuntimeException("Failed to import group", e);
+            throw new RuntimeException("Failed to export group", e);
+        }
+    }
+
+    public ExportGroupPagedResponse exportGroupPaged(Integer groupId, int offset, int limit) throws ClientException {
+        try {
+            // 1. Make the call
+            String response = getServlet().exportGroupPaged(groupId, offset, limit);
+
+            // 2. Parse successful response
+            return JsonUtils.fromJson(response, ExportGroupPagedResponse.class);
+        } catch (ClientException e) {
+            // 2. Rethrow ClientException with parsed ErrorResponse if available
+            rethrowParsedClientError(e);
+
+            return null; // unreachable — rethrowParsedClientError always throws
+        } catch (Exception e) {
+            // 3. JSON serialization or unexpected errors
+            throw new RuntimeException("Failed to export group (paged)", e);
         }
     }
 

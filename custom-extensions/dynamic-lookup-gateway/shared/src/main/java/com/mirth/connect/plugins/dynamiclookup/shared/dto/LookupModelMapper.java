@@ -1,3 +1,13 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
 package com.mirth.connect.plugins.dynamiclookup.shared.dto;
 
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.BatchGetValuesRequest;
@@ -8,13 +18,17 @@ import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupValueRe
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 
-import java.util.*;
+import java.util.Date;
+import java.util.Map;
+import java.util.Collections;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 
 public class LookupModelMapper {
     // --- Group Mapping ---
     public static LookupGroup fromGroupDto(LookupGroupRequest dto) {
         LookupGroup group = new LookupGroup();
-//        group.setId(generateId());
         group.setName(dto.getName());
         group.setDescription(dto.getDescription());
         group.setVersion(dto.getVersion());
@@ -28,7 +42,6 @@ public class LookupModelMapper {
     public static LookupValue fromValueDto(LookupValueRequest dto) {
         LookupValue value = new LookupValue();
 
-//        value.setKeyValue(dto.getKeyValue());
         value.setValueData(dto.getValue());
         value.setCreatedDate(new Date());
         value.setCreatedDate(new Date());

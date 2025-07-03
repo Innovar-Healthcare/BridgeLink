@@ -1,19 +1,31 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
 package com.mirth.connect.plugins.dynamiclookup.shared.dto.response;
 
-import java.util.Map;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
+
+import java.util.List;
 
 public class LookupAllValuesResponse {
     private int groupId;
     private String groupName;
     private int totalCount;
-    private Map<String, String> values;
+    private List<LookupValue> values;
     private Pagination pagination;
 
     // Constructors
     public LookupAllValuesResponse() {
     }
 
-    public LookupAllValuesResponse(int groupId, String groupName, int totalCount, Map<String, String> values, Pagination pagination) {
+    public LookupAllValuesResponse(int groupId, String groupName, int totalCount, List<LookupValue> values, Pagination pagination) {
         this.groupId = groupId;
         this.groupName = groupName;
         this.totalCount = totalCount;
@@ -46,11 +58,11 @@ public class LookupAllValuesResponse {
         this.totalCount = totalCount;
     }
 
-    public Map<String, String> getValues() {
+    public List<LookupValue> getValues() {
         return values;
     }
 
-    public void setValues(Map<String, String> values) {
+    public void setValues(List<LookupValue> values) {
         this.values = values;
     }
 
@@ -66,7 +78,7 @@ public class LookupAllValuesResponse {
             Integer groupId,
             String groupName,
             int totalCount,
-            Map<String, String> paginated,
+            List<LookupValue> paginated,
             int limit,
             int offset
     ) {

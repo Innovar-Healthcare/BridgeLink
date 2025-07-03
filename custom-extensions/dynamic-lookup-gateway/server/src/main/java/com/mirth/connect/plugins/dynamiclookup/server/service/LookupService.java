@@ -1,3 +1,13 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
 package com.mirth.connect.plugins.dynamiclookup.server.service;
 
 import com.mirth.connect.plugins.dynamiclookup.server.cache.LookupCacheManager;
@@ -12,12 +22,18 @@ import com.mirth.connect.plugins.dynamiclookup.server.exception.ValueTableCreati
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.CacheStatistics;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.*;
 
+import com.mirth.connect.plugins.dynamiclookup.shared.util.TtlUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.google.common.cache.CacheStats;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.ArrayList;
 
 public class LookupService {
     private static LookupService instance = null;
@@ -253,7 +269,17 @@ public class LookupService {
     // Value Management
 
     /**
-     * Retrieves a value from a lookup group
+     * Retrieves a raw lookup value (including its metadata) directly from the database.
+     * <p>
+     * This method bypasses the cache and is typically used by administrative tools
+     * or the UI to display the current value and its update metadata.
+     * </p>
+     *
+     * @param groupId the ID of the lookup group
+     * @param key     the lookup key
+     * @return a {@link LookupValue} containing the value and updated timestamp,
+     * or {@code null} if the key is not found in the specified group
+     * @throws GroupNotFoundException if the group does not exist
      */
     public LookupValue getLookupValue(int groupId, String key) {
         validateKey(key);
@@ -268,9 +294,35 @@ public class LookupService {
     }
 
     /**
-     * Retrieves a value from a lookup group
+     * Retrieves a value from a lookup group without applying TTL validation.
+     * <p>
+     * This method always returns the value if found, regardless of how old it is.
+     * It is equivalent to calling {@code getValue(groupId, key, 0)}.
+     * </p>
+     *
+     * @param groupId the lookup group ID
+     * @param key     the lookup key
+     * @return the value if found in cache or database, otherwise null
      */
     public String getValue(int groupId, String key) {
+        return getValue(groupId, key, 0);
+    }
+
+    /**
+     * Retrieves a value from a lookup group using the following flow:
+     * <ol>
+     *   <li>Attempt to retrieve from cache.</li>
+     *   <li>If not present or stale (based on TTL), load from the database.</li>
+     *   <li>If loaded from the database, cache the value (along with its updatedAt timestamp).</li>
+     *   <li>If the database value is also stale (based on TTL), return null.</li>
+     * </ol>
+     *
+     * @param groupId  the lookup group ID
+     * @param key      the lookup key
+     * @param ttlHours if > 0, the cached value must have an updatedAt within this TTL
+     * @return the value if found and valid, otherwise null
+     */
+    public String getValue(int groupId, String key, long ttlHours) {
         validateKey(key);
 
         // Verify group exists
@@ -279,17 +331,27 @@ public class LookupService {
         }
 
         // Try to get from cache first
-        String value = cacheManager.getValue(groupId, key);
+        String value = cacheManager.getValue(groupId, key, ttlHours);
         boolean cacheHit = (value != null);
 
         if (!cacheHit) {
             // Not in cache, get from database
             String tableName = getTableNameForGroup(groupId);
-            value = valueDao.getValue(tableName, key);
+            LookupValue lookupValue = valueDao.getLookupValue(tableName, key);
 
-            if (value != null) {
-                // Add to cache if found
-                cacheManager.putValue(groupId, key, value);
+            if (lookupValue != null) {
+                value = lookupValue.getValueData();
+                Date updatedAt = lookupValue.getUpdatedDate();
+
+                if (value != null && updatedAt != null) {
+                    // Add to cache
+                    cacheManager.putValue(groupId, key, value, updatedAt);
+
+                    // Re-validate against TTL
+                    if (!TtlUtils.isWithinTtl(updatedAt, ttlHours)) {
+                        value = null; // Reject if data is stale
+                    }
+                }
             }
         }
 
@@ -343,7 +405,7 @@ public class LookupService {
     /**
      * Retrieves key-value pairs from the specified lookup group that match the given pattern.
      */
-    public Map<String, String> searchLookupValues(Integer groupId, Integer offset, Integer limit, String pattern) {
+    public List<LookupValue> searchLookupValues(Integer groupId, Integer offset, Integer limit, String pattern) {
         // Verify group exists
         if (groupDao.getGroupById(groupId) == null) {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
@@ -351,14 +413,7 @@ public class LookupService {
 
         String tableName = getTableNameForGroup(groupId);
 
-        List<LookupValue> values = valueDao.searchLookupValues(tableName, offset, limit, pattern);
-
-        Map<String, String> map = new LinkedHashMap<>();
-        for (LookupValue value : values) {
-            map.put(value.getKeyValue(), value.getValueData());
-        }
-
-        return map;
+        return valueDao.searchLookupValues(tableName, offset, limit, pattern);
     }
 
     /**
@@ -382,9 +437,41 @@ public class LookupService {
     }
 
     /**
-     * Retrieves multiple values at once from a lookup group
+     * Retrieves multiple values from a lookup group without applying TTL validation.
+     * <p>
+     * This method checks the cache first. Any missing values are retrieved from the database
+     * and added to the cache. Values are returned regardless of how old they are.
+     * </p>
+     *
+     * @param groupId the lookup group ID
+     * @param keys    the list of lookup keys to retrieve
+     * @return a map of keys to values for those that were found
+     * @throws GroupNotFoundException if the group does not exist
      */
     public Map<String, String> getBatchValues(int groupId, List<String> keys) {
+        return getBatchValues(groupId, keys, 0);
+    }
+
+
+    /**
+     * Retrieves multiple values from a lookup group, applying optional TTL validation.
+     * <p>
+     * Lookup flow for each key:
+     * <ol>
+     *   <li>Try to retrieve from cache.</li>
+     *   <li>If not found or stale (based on TTL), load from the database and cache it.</li>
+     *   <li>If the database value is also stale, it is excluded from the result.</li>
+     * </ol>
+     * TTL is based on the value's {@code updatedAt} timestamp.
+     * </p>
+     *
+     * @param groupId  the lookup group ID
+     * @param keys     the list of lookup keys to retrieve
+     * @param ttlHours time-to-live in hours; if 0 or less, TTL is ignored
+     * @return a map of keys to values that passed TTL validation (if applicable)
+     * @throws GroupNotFoundException if the group does not exist
+     */
+    public Map<String, String> getBatchValues(int groupId, List<String> keys, long ttlHours) {
         // Verify group exists
         if (groupDao.getGroupById(groupId) == null) {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
@@ -398,7 +485,7 @@ public class LookupService {
         List<String> keysToFetch = new ArrayList<>();
 
         for (String key : keys) {
-            String value = cacheManager.getValue(groupId, key);
+            String value = cacheManager.getValue(groupId, key, ttlHours);
             if (value != null) {
                 result.put(key, value);
                 cacheHits++;
@@ -410,10 +497,20 @@ public class LookupService {
         // Fetch any keys not found in cache
         if (!keysToFetch.isEmpty()) {
             for (String key : keysToFetch) {
-                String value = valueDao.getValue(tableName, key);
-                if (value != null) {
-                    result.put(key, value);
-                    cacheManager.putValue(groupId, key, value);
+                LookupValue lookupValue = valueDao.getLookupValue(tableName, key);
+                if (lookupValue != null) {
+                    String value = lookupValue.getValueData();
+                    Date updatedAt = lookupValue.getUpdatedDate();
+
+                    if (value != null && updatedAt != null) {
+                        cacheManager.putValue(groupId, key, value, updatedAt);
+
+                        if (TtlUtils.isWithinTtl(updatedAt, ttlHours)) {
+                            result.put(key, value);
+                        } else {
+                            logger.debug("DB value for key '{}' excluded due to TTL (updatedAt={}, ttlHours={})", key, updatedAt, ttlHours);
+                        }
+                    }
                 }
             }
         }
@@ -473,7 +570,8 @@ public class LookupService {
             }
 
             // Update cache
-            cacheManager.putValue(groupId, key, value);
+            LookupValue lookupValue = valueDao.getLookupValue(tableName, key);
+            cacheManager.putValue(groupId, key, value, lookupValue.getUpdatedDate());
         } catch (Exception e) {
             throw new ValueOperationException("Failed to set value: " + e.getMessage(), e);
         }

@@ -1,14 +1,31 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
 package com.mirth.connect.plugins.dynamiclookup.client.model;
 
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 
 import javax.swing.table.AbstractTableModel;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 
 public class LookupValueTableModel extends AbstractTableModel {
-    private final String[] columnNames = {"Key", "Value", "Action"};
+    public static final int KEY_COLUMN = 0;
+    public static final int VALUE_COLUMN = 1;
+    public static final int UPDATED_DATE_COLUMN = 2;
+    public static final int ACTION_COLUMN = 3;
+
+    private final String[] columnNames = {"Key", "Value", "Updated Date", "Action"};
     private final List<LookupValue> values = new ArrayList<>();
+    private final SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd hh:mm a");
 
     @Override
     public int getRowCount() {
@@ -34,6 +51,8 @@ public class LookupValueTableModel extends AbstractTableModel {
             case 1:
                 return value.getValueData();
             case 2:
+                return formatter.format(value.getUpdatedDate());
+            case 3:
                 return null;
             default:
                 return null;
@@ -42,7 +61,7 @@ public class LookupValueTableModel extends AbstractTableModel {
 
     @Override
     public boolean isCellEditable(int rowIndex, int columnIndex) {
-        return columnIndex == 2;
+        return columnIndex == ACTION_COLUMN;
     }
 
     public void addValue(LookupValue value) {

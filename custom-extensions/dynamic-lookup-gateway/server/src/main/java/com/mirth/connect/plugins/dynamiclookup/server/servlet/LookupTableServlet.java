@@ -1,4 +1,14 @@
-package com.mirth.connect.plugins.dynamiclookup.server;
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
+package com.mirth.connect.plugins.dynamiclookup.server.servlet;
 
 import com.mirth.connect.client.core.api.MirthApiException;
 import com.mirth.connect.model.User;
@@ -27,7 +37,12 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
 
-import java.util.*;
+import java.util.Map;
+import java.util.Date;
+import java.util.List;
+import java.util.Collections;
+import java.util.HashMap;
+
 import java.util.stream.Collectors;
 
 public class LookupTableServlet extends MirthServlet implements LookupTableServletInterface {
@@ -219,6 +234,35 @@ public class LookupTableServlet extends MirthServlet implements LookupTableServl
     }
 
     @Override
+    public String exportGroupPaged(Integer groupId, Integer offset, Integer limit) throws ClientException {
+        try {
+            // Validate group first
+            LookupGroup lookupGroup = LookupService.getInstance().getGroupById(groupId);
+            if (lookupGroup == null) {
+                throw new LookupApiException(Response.Status.NOT_FOUND, LookupErrorCode.GROUP_NOT_FOUND, "Lookup group not found with ID: " + groupId);
+            }
+
+            // Normalize pagination and pattern
+            int safeOffset = offset != null ? offset : 0;
+            int safeLimit = limit != null ? limit : 10000;
+
+            List<LookupValue> paginated = LookupService.getInstance().searchLookupValues(groupId, safeOffset, safeLimit, null);
+            int totalCount = LookupService.getInstance().searchLookupValuesCount(groupId, null);
+
+            // create response
+            ExportGroupPagedResponse response = ExportGroupPagedResponse.fromResult(groupId, safeOffset, safeLimit, totalCount, paginated);
+
+            return JsonUtils.toJson(response);
+        } catch (GroupNotFoundException e) {
+            throw new LookupApiException(Response.Status.NOT_FOUND, LookupErrorCode.GROUP_NOT_FOUND, "Lookup group not found with ID: " + groupId);
+        } catch (LookupApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ClientException("Failed to process exportGroupPaged request. Error: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
+        }
+    }
+
+    @Override
     public String importGroup(boolean updateIfExists, String requestBody) throws ClientException {
         try {
             // Step 1: Parse and validate JSON input
@@ -273,7 +317,7 @@ public class LookupTableServlet extends MirthServlet implements LookupTableServl
             int safeLimit = limit != null ? limit : Integer.MAX_VALUE;
             String safePattern = (pattern != null) ? pattern.trim() : null;
 
-            Map<String, String> paginated = LookupService.getInstance().searchLookupValues(groupId, safeOffset, safeLimit, safePattern);
+            List<LookupValue> paginated = LookupService.getInstance().searchLookupValues(groupId, safeOffset, safeLimit, safePattern);
             int totalCount = LookupService.getInstance().searchLookupValuesCount(groupId, safePattern);
 
             LookupAllValuesResponse response = LookupAllValuesResponse.fromResult(

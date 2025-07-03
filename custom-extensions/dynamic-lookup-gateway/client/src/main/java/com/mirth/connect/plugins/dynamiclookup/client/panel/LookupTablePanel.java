@@ -1,15 +1,32 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
 package com.mirth.connect.plugins.dynamiclookup.client.panel;
 
 import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.ui.Frame;
 import com.mirth.connect.client.ui.PlatformUI;
+
 import com.mirth.connect.plugins.dynamiclookup.client.service.LookupServiceClient;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
+
 import net.miginfocom.swing.MigLayout;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import javax.swing.*;
+import javax.swing.JPanel;
+import javax.swing.JTabbedPane;
+import javax.swing.JSplitPane;
+import javax.swing.SwingWorker;
+
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -22,6 +39,7 @@ public class LookupTablePanel extends JPanel {
 
     private final DataStorePanel taskPane;
     private final GroupPanel groupPanel;
+    private final DetailsPanel detailsPanel;
     private final ValuePanel valuePanel;
     private final CacheStatusPanel cachePanel;
     private final HistoryPanel historyPanel;
@@ -33,6 +51,7 @@ public class LookupTablePanel extends JPanel {
         this.taskPane = taskPane;
 
         this.groupPanel = new GroupPanel();
+        this.detailsPanel = new DetailsPanel();
         this.valuePanel = new ValuePanel();
         this.cachePanel = new CacheStatusPanel();
         this.historyPanel = new HistoryPanel();
@@ -49,12 +68,15 @@ public class LookupTablePanel extends JPanel {
             int selectedTab = tabbedPane.getSelectedIndex();
             switch (selectedTab) {
                 case 0: // Values tab
+                    detailsPanel.updateDetails(selectedGroup);
+                    break;
+                case 1: // Values tab
                     valuePanel.updateValues(selectedGroup);
                     break;
-                case 1: // Cache tab
+                case 2: // Cache tab
                     cachePanel.updateCaches(selectedGroup);
                     break;
-                case 2: // History tab
+                case 3: // History tab
                     historyPanel.updateHistory(selectedGroup);
                     break;
             }
@@ -66,12 +88,15 @@ public class LookupTablePanel extends JPanel {
             int selectedTab = tabbedPane.getSelectedIndex();
             switch (selectedTab) {
                 case 0:
-                    valuePanel.updateValues(selectedGroup);
+                    detailsPanel.updateDetails(selectedGroup);
                     break;
                 case 1:
-                    cachePanel.updateCaches(selectedGroup);
+                    valuePanel.updateValues(selectedGroup);
                     break;
                 case 2:
+                    cachePanel.updateCaches(selectedGroup);
+                    break;
+                case 3:
                     historyPanel.updateCachedUserMap(); // this will call retrieveUsers()
                     historyPanel.updateHistory(selectedGroup);
                     break;
@@ -83,6 +108,7 @@ public class LookupTablePanel extends JPanel {
         setLayout(new MigLayout("insets 0, novisualpadding, hidemode 3, fill"));
 
         // Setup tabbed pane with panels
+        tabbedPane.addTab("Details", detailsPanel);
         tabbedPane.addTab("Values", valuePanel);
         tabbedPane.addTab("Cache Status", cachePanel);
         tabbedPane.addTab("History", historyPanel);

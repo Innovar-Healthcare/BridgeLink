@@ -1,4 +1,14 @@
-package com.mirth.connect.plugins.dynamiclookup.server;
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
+package com.mirth.connect.plugins.dynamiclookup.server.plugin;
 
 import static com.mirth.connect.plugins.dynamiclookup.shared.interfaces.LookupTableServletInterface.PERMISSION_ACCESS;
 
@@ -19,8 +29,9 @@ import com.mirth.connect.plugins.dynamiclookup.server.userutil.LookupHelper;
 import com.mirth.connect.plugins.dynamiclookup.server.util.SqlSessionManagerProvider;
 import com.mirth.connect.plugins.dynamiclookup.shared.interfaces.LookupTableServletInterface;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 import com.mirth.connect.server.util.DatabaseUtil;
-import com.mirth.connect.server.util.SqlConfig;
+
 import org.apache.commons.io.IOUtils;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionManager;
@@ -34,7 +45,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -64,7 +74,6 @@ public class LookupTableServicePlugin implements ServicePlugin {
             // Create cache manager
             cacheManager = new LookupCacheManager(groupDao);
             // Init lookup service
-//            lookupService = new LookupService(groupDao, valueDao, auditDao, statisticsDao, cacheManager);
             lookupService.init(groupDao, valueDao, auditDao, statisticsDao, cacheManager);
             // Initialize helper methods for transformers
             LookupHelper.initialize(lookupService);
@@ -240,7 +249,6 @@ public class LookupTableServicePlugin implements ServicePlugin {
      * Get SqlSessionManager from Mirth's context
      */
     private SqlSessionManager getSqlSessionManager() {
-//        return SqlConfig.getInstance().getSqlSessionManager();
         return SqlSessionManagerProvider.get();
     }
 
@@ -248,34 +256,6 @@ public class LookupTableServicePlugin implements ServicePlugin {
      * Register JavaScript functions for transformers
      */
     private void registerScriptingFunctions() {
-//        ScriptController.addScriptFunction("LookupTable.get",
-//                "function(groupName, key, defaultValue) { " +
-//                        "    if (arguments.length < 3) { " +
-//                        "        return Packages.com.mirth.connect.plugins.dynamiclookup.server.util.LookupHelper.get(groupName, key); " +
-//                        "    } else { " +
-//                        "        return Packages.com.mirth.connect.plugins.dynamiclookup.server.util.LookupHelper.get(groupName, key, defaultValue); " +
-//                        "    } " +
-//                        "}");
-//        ScriptController.addScriptFunction("LookupTable.getMatching",
-//                "function(groupName, keyPattern) { " +
-//                        "    return Packages.com.mirth.connect.plugins.dynamiclookup.server.util.LookupHelper.getMatching(groupName, keyPattern); " +
-//                        "}");
-//        ScriptController.addScriptFunction("LookupTable.getBatch",
-//                "function(groupName, keys) { " +
-//                        "    var keyList = new java.util.ArrayList(); " +
-//                        "    for (var i = 0; i < keys.length; i++) { " +
-//                        "        keyList.add(keys[i]); " +
-//                        "    } " +
-//                        "    return Packages.com.mirth.connect.plugins.dynamiclookup.server.util.LookupHelper.getBatch(groupName, keyList); " +
-//                        "}");
-//        ScriptController.addScriptFunction("LookupTable.exists",
-//                "function(groupName, key) { " +
-//                        "    return Packages.com.mirth.connect.plugins.dynamiclookup.server.util.LookupHelper.exists(groupName, key); " +
-//                        "}");
-//        ScriptController.addScriptFunction("LookupTable.getCacheStats",
-//                "function(groupName) { " +
-//                        "    return Packages.com.mirth.connect.plugins.dynamiclookup.server.util.LookupHelper.getCacheStats(groupName); " +
-//                        "}");
     }
 
     /**
@@ -309,15 +289,15 @@ public class LookupTableServicePlugin implements ServicePlugin {
     private int preloadGroupValues(LookupGroup group) {
         try {
             int limit = group.getCacheSize() * 2;
-            Map<String, String> values = lookupService.searchLookupValues(group.getId(), 0, limit, null);
+            List<LookupValue> values = lookupService.searchLookupValues(group.getId(), 0, limit, null);
 
             // Skip if the group is empty or too large for caching
             if (values.isEmpty()) {
                 return 0;
             }
             // Load values into cache
-            for (Map.Entry<String, String> entry : values.entrySet()) {
-                cacheManager.putValue(group.getId(), entry.getKey(), entry.getValue());
+            for (LookupValue value : values) {
+                cacheManager.putValue(group.getId(), value.getKeyValue(), value.getValueData(), value.getUpdatedDate());
             }
             return values.size();
         } catch (Exception e) {

@@ -1,5 +1,19 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
 package com.mirth.connect.plugins.dynamiclookup.client.panel;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mirth.connect.client.ui.Frame;
 import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.client.ui.UIConstants;
@@ -8,6 +22,8 @@ import com.mirth.connect.plugins.dynamiclookup.client.exception.LookupApiClientE
 import com.mirth.connect.plugins.dynamiclookup.client.model.LookupGroupTableModel;
 import com.mirth.connect.plugins.dynamiclookup.client.service.LookupServiceClient;
 import com.mirth.connect.plugins.dynamiclookup.client.util.FileChooser;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.ImportLookupGroupRequest;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ExportGroupPagedResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ExportLookupGroupResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ImportLookupGroupResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
@@ -30,29 +46,33 @@ import javax.swing.JOptionPane;
 import javax.swing.JFileChooser;
 import javax.swing.JDialog;
 import javax.swing.JProgressBar;
-import javax.swing.SwingUtilities;
 import javax.swing.BorderFactory;
 import javax.swing.ListSelectionModel;
-import javax.swing.JTextArea;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.event.ListSelectionListener;
 
 import java.awt.BorderLayout;
+import java.awt.FlowLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 import java.io.File;
 import java.io.IOException;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Collections;
+import java.util.concurrent.ExecutionException;
 
 /**
  * @author Thai Tran (thaitran@innovarhealthcare.com)
@@ -114,25 +134,6 @@ public class GroupPanel extends JPanel {
 
         // Popup Menu
         groupPopupMenu = new JPopupMenu();
-        JMenuItem detailsItem = new JMenuItem("Detail");
-        detailsItem.addActionListener(e -> {
-            int selectedRow = groupTable.getSelectedRow();
-            if (selectedRow >= 0) {
-                LookupGroup group = groupTableModel.getGroup(selectedRow);
-                String details = String.format(
-                        "ID: %d\nName: %s\nDescription: %s\nVersion: %s\nCache Size: %d\nCache Policy: %s\nCreated Date: %s\nUpdated Date: %s",
-                        group.getId(),
-                        group.getName(),
-                        group.getDescription() != null ? group.getDescription() : "",
-                        group.getVersion() != null ? group.getVersion() : "",
-                        group.getCacheSize(),
-                        group.getCachePolicy() != null ? group.getCachePolicy() : "",
-                        new SimpleDateFormat("yyyy-MM-dd hh:mm a").format(group.getCreatedDate()),
-                        new SimpleDateFormat("yyyy-MM-dd hh:mm a").format(group.getUpdatedDate())
-                );
-                JOptionPane.showMessageDialog(parent, details, "Group Details", JOptionPane.INFORMATION_MESSAGE);
-            }
-        });
         JMenuItem editItem = new JMenuItem("Edit");
         editItem.addActionListener(e -> handleEditGroup());
         JMenuItem removeItem = new JMenuItem("Remove");
@@ -140,7 +141,6 @@ public class GroupPanel extends JPanel {
         JMenuItem exportItem = new JMenuItem("Export JSON");
         exportItem.addActionListener(e -> handleExportJson());
 
-        groupPopupMenu.add(detailsItem);
         groupPopupMenu.add(editItem);
         groupPopupMenu.add(removeItem);
         groupPopupMenu.add(exportItem);
@@ -215,123 +215,186 @@ public class GroupPanel extends JPanel {
 
         if (importFileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             File file = importFileChooser.getSelectedFile();
-            if (file != null) {
-                if (!checkJsonFile(file)) {
-                    return;
+            if (file == null || !checkJsonFile(file)) return;
+
+            int result = JOptionPane.showConfirmDialog(
+                    parent,
+                    "<html>If the group you're importing already exists,<br>"
+                            + "<b>its information will be updated</b> and <b>all existing values will be permanently deleted</b> and replaced.<br><br>"
+                            + "Do you want to proceed with updating the group?</html>",
+                    "Confirm Import Overwrite",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE
+            );
+
+            if (result != JOptionPane.YES_OPTION) return;
+
+            JDialog progressDialog = new JDialog(parent, "Importing JSON", true);
+            JProgressBar progressBar = new JProgressBar(0, 100);
+            progressBar.setStringPainted(true);
+            JLabel statusLabel = new JLabel("Imported 0 entries");
+            JButton cancelButton = new JButton("Cancel");
+            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            buttonPanel.add(cancelButton);
+
+            progressDialog.setLayout(new BorderLayout(10, 10));
+            progressDialog.add(statusLabel, BorderLayout.NORTH);
+            progressDialog.add(progressBar, BorderLayout.CENTER);
+            progressDialog.add(buttonPanel, BorderLayout.SOUTH);
+            progressDialog.setSize(350, 120);
+            progressDialog.setLocationRelativeTo(parent);
+            progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+
+            SwingWorker<Void, int[]> importWorker = new SwingWorker<Void, int[]>() {
+                int finalGroupId = -1;
+
+                @Override
+                protected Void doInBackground() throws Exception {
+                    ObjectMapper mapper = new ObjectMapper();
+                    JsonNode root = mapper.readTree(file);
+                    int totalCount = 0;
+                    JsonNode valuesNode = root.get("values");
+                    if (valuesNode != null && valuesNode.isObject()) {
+                        totalCount = valuesNode.size();
+                    }
+
+                    try (JsonParser parser = mapper.getFactory().createParser(file)) {
+                        int groupId = -1;
+                        boolean groupImported = false;
+                        int batchSize = 1000;
+                        int processed = 0;
+                        Map<String, String> batch = new LinkedHashMap<>();
+
+                        JsonToken token = parser.nextToken(); // Advance to first token
+                        if (token != JsonToken.START_OBJECT) {
+                            throw new IllegalStateException("Expected START_OBJECT at beginning of JSON file.");
+                        }
+
+                        while (parser.nextToken() != JsonToken.END_OBJECT) {
+                            String fieldName = parser.getCurrentName();
+                            if ("group".equals(fieldName)) {
+                                parser.nextToken();
+                                JsonNode groupNode = parser.readValueAsTree();
+
+                                ImportLookupGroupRequest request = new ImportLookupGroupRequest();
+                                request.setGroup(JsonUtils.fromJson(groupNode.toString(), LookupGroup.class));
+                                request.setValues(Collections.emptyMap());
+                                request.validate();
+
+                                ImportLookupGroupResponse response = LookupServiceClient.getInstance().importGroup(true, JsonUtils.toJson(request));
+                                groupId = response.getGroupId();
+                                groupImported = true;
+                                finalGroupId = groupId;
+                            } else if ("values".equals(fieldName)) {
+                                if (!groupImported) {
+                                    throw new IllegalStateException("JSON file does not contain a valid 'group' object.");
+                                }
+                                parser.nextToken();
+                                while (parser.nextToken() != JsonToken.END_OBJECT && !isCancelled()) {
+                                    String key = parser.getCurrentName();
+                                    parser.nextToken();
+                                    String value = parser.getValueAsString();
+                                    batch.put(key, value);
+                                    processed++;
+
+                                    if (batch.size() >= batchSize) {
+                                        LookupServiceClient.getInstance().importValues(groupId, false, batch);
+                                        batch.clear();
+                                        publishProgress(processed, totalCount);
+                                    }
+                                }
+
+                                if (!batch.isEmpty() && !isCancelled()) {
+                                    LookupServiceClient.getInstance().importValues(groupId, false, batch);
+                                    publishProgress(processed, totalCount);
+                                }
+                            } else {
+                                parser.skipChildren();
+                            }
+                        }
+
+                        Frame.userPreferences.put("currentDirectory", file.getParent());
+                    } catch (Exception e) {
+                        logger.error("Failed to import lookup group from JSON file", e);
+                        throw e;
+                    }
+
+                    return null;
                 }
 
-                int result = JOptionPane.showConfirmDialog(
-                        parent,
-                        "<html>If the group you're importing already exists,<br>"
-                                + "<b>its information will be updated</b> and <b>all existing values will be permanently deleted</b> and replaced.<br><br>"
-                                + "Do you want to proceed with updating the group?</html>",
-                        "Confirm Import Overwrite",
-                        JOptionPane.YES_NO_OPTION,
-                        JOptionPane.WARNING_MESSAGE
-                );
+                private void publishProgress(int processed, int total) {
+                    int progress = total > 0 ? (int) ((processed / (double) total) * 100) : 0;
+                    progress = Math.min(progress, 100);
 
-                boolean updateIfExists = (result == JOptionPane.YES_OPTION);
+                    publish(new int[]{progress, processed, total});
+                }
 
-                LoadingDialog loadingDialog = new LoadingDialog(parent, "Importing group, please wait...");
+                @Override
+                protected void process(List<int[]> chunks) {
+                    if (!chunks.isEmpty()) {
+                        int[] latest = chunks.get(chunks.size() - 1);
+                        progressBar.setIndeterminate(false);
+                        progressBar.setValue(latest[0]);
+                        statusLabel.setText("Imported " + latest[1] + " of " + latest[2] + " entries");
+                    }
+                }
 
-                SwingWorker<ImportLookupGroupResponse, Void> worker = new SwingWorker<ImportLookupGroupResponse, Void>() {
-                    @Override
-                    protected ImportLookupGroupResponse doInBackground() {
-                        try {
-                            String jsonContent = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
-                            return LookupServiceClient.getInstance().importGroup(updateIfExists, jsonContent);
-                        } catch (LookupApiClientException e) {
-                            SwingUtilities.invokeLater(() -> showError(e.getError().getMessage()));
-                        } catch (Exception e) {
-                            logger.error("Unexpected error during import", e);
-                            SwingUtilities.invokeLater(() ->
-                                    showError("Unexpected error: " + e.getClass().getSimpleName() + " - " + e.getMessage()));
-                        }
-                        return null;
+                @Override
+                protected void done() {
+                    progressDialog.dispose();
+
+                    if (isCancelled()) {
+                        JOptionPane.showMessageDialog(parent, "Import cancelled by user.", "Import Cancelled", JOptionPane.WARNING_MESSAGE);
+                        return;
                     }
 
-                    @Override
-                    protected void done() {
-                        loadingDialog.dispose();
+                    try {
+                        get(); // triggers exception handling if doInBackground failed
 
-                        try {
-                            ImportLookupGroupResponse response = get();
-                            if (response == null) {
-                                return;
-                            }
+                        JOptionPane.showMessageDialog(parent, "Import completed successfully.", "Import Complete", JOptionPane.INFORMATION_MESSAGE);
 
-                            String nl = System.lineSeparator();
-                            StringBuilder message = new StringBuilder();
-                            message.append("Group ID: ").append(response.getGroupId()).append(nl)
-                                    .append("Imported Values: ").append(response.getImportedCount()).append(nl);
+                        // Update table
+                        if (finalGroupId != -1) {
+                            LookupGroup selectedGroup = groupTable.getSelectedRow() >= 0
+                                    ? groupTableModel.getGroup(groupTable.getSelectedRow())
+                                    : null;
+                            try {
+                                LookupGroup importedGroup = LookupServiceClient.getInstance().getGroupById(finalGroupId);
+                                groupTableModel.addOrUpdateGroup(importedGroup);
 
-                            if (response.isSuccessful() && !response.hasErrors()) {
-                                JOptionPane.showMessageDialog(parent, message.toString(), "Import Successful", JOptionPane.INFORMATION_MESSAGE);
-                            } else if (response.isSuccessful() && response.hasErrors()) {
-                                message.insert(0, "Import completed with warnings." + nl + nl);
-
-                                StringBuilder errorText = new StringBuilder();
-                                for (String err : response.getErrors()) {
-                                    errorText.append("- ").append(err).append(nl);
-                                }
-
-                                JTextArea textArea = new JTextArea(errorText.toString(), 10, 50);
-                                textArea.setEditable(false);
-                                textArea.setLineWrap(true);
-                                textArea.setWrapStyleWord(true);
-
-                                JScrollPane scrollPane = new JScrollPane(textArea);
-                                scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-
-                                JPanel panel = new JPanel(new BorderLayout(10, 10));
-                                panel.add(new JLabel(message.toString()), BorderLayout.NORTH);
-                                panel.add(scrollPane, BorderLayout.CENTER);
-
-                                JOptionPane.showMessageDialog(parent, panel, "Import Completed with Warnings", JOptionPane.WARNING_MESSAGE);
-                            } else {
-                                message.insert(0, "Import failed." + nl + nl);
-                                if (response.getErrors() != null && !response.getErrors().isEmpty()) {
-                                    for (String err : response.getErrors()) {
-                                        message.append("- ").append(err).append(nl);
+                                if (selectedGroup != null) {
+                                    int visibleIndex = groupTableModel.getFilteredIndexByGroupId(selectedGroup.getId());
+                                    if (visibleIndex >= 0) {
+                                        groupTable.setRowSelectionInterval(visibleIndex, visibleIndex);
+                                        groupTable.scrollRectToVisible(groupTable.getCellRect(visibleIndex, 0, true));
                                     }
                                 }
-                                JOptionPane.showMessageDialog(parent, message.toString(), "Import Failed", JOptionPane.ERROR_MESSAGE);
+                            } catch (Exception ex) {
+                                logger.warn("Imported group added, but failed to update table", ex);
                             }
-
-                            // Update table
-                            if (response.isSuccessful()) {
-                                // Capture selected group before update
-                                LookupGroup selectedGroup = groupTable.getSelectedRow() >= 0
-                                        ? groupTableModel.getGroup(groupTable.getSelectedRow())
-                                        : null;
-                                try {
-                                    LookupGroup importedGroup = LookupServiceClient.getInstance().getGroupById(response.getGroupId());
-                                    groupTableModel.addOrUpdateGroup(importedGroup);
-
-                                    if (selectedGroup != null) {
-                                        int visibleIndex = groupTableModel.getFilteredIndexByGroupId(selectedGroup.getId());
-                                        if (visibleIndex >= 0) {
-                                            groupTable.setRowSelectionInterval(visibleIndex, visibleIndex);
-                                            groupTable.scrollRectToVisible(groupTable.getCellRect(visibleIndex, 0, true));
-                                        }
-                                    }
-                                } catch (Exception ex) {
-                                    logger.warn("Imported group added, but failed to update table", ex);
-                                }
-                            }
-
-                            Frame.userPreferences.put("currentDirectory", file.getParent());
-
-                        } catch (Exception ex) {
-                            logger.error("Failed to retrieve import result", ex);
-                            showError("Unexpected error: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());
                         }
-                    }
-                };
 
-                worker.execute();
-                loadingDialog.setVisible(true); // Blocks until dialog is disposed
-            }
+                    } catch (ExecutionException e) {
+                        Throwable cause = e.getCause();
+                        showError("Import failed: " + (cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt(); // restore interrupt status
+                        showError("Import was interrupted.");
+                    }
+                }
+            };
+
+            cancelButton.addActionListener(e -> importWorker.cancel(true));
+            progressDialog.addWindowListener(new WindowAdapter() {
+                public void windowClosing(WindowEvent e) {
+                    if (JOptionPane.showConfirmDialog(progressDialog, "Cancel import?", "Confirm", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+                        importWorker.cancel(true);
+                    }
+                }
+            });
+
+            importWorker.execute();
+            progressDialog.setVisible(true);
         }
     }
 
@@ -431,20 +494,126 @@ public class GroupPanel extends JPanel {
             return;
         }
 
-        try {
-            ExportLookupGroupResponse response = LookupServiceClient.getInstance().exportGroup(group.getId());
+        // Progress UI setup
+        JDialog progressDialog = new JDialog(parent, "Exporting JSON", true);
+        JProgressBar progressBar = new JProgressBar(0, 100);
+        progressBar.setStringPainted(true);
+        JLabel statusLabel = new JLabel("Exported 0 of ? entries");
 
-            // Serialize response to JSON
-            String json = JsonUtils.toJsonPretty(response);
+        JButton cancelButton = new JButton("Cancel");
 
-            // Write to file
-            java.nio.file.Files.write(file.toPath(), json.getBytes());
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttonPanel.add(cancelButton);
 
-            JOptionPane.showMessageDialog(parent, "Exported successfully to:\n" + file.getAbsolutePath(), "Success", JOptionPane.INFORMATION_MESSAGE);
-        } catch (Exception ex) {
-            logger.error("Failed to export group JSON", ex);
-            showError("Failed to export JSON: " + ex.getMessage());
-        }
+        progressDialog.setLayout(new BorderLayout(10, 10));
+        progressDialog.add(statusLabel, BorderLayout.NORTH);
+        progressDialog.add(progressBar, BorderLayout.CENTER);
+        progressDialog.add(buttonPanel, BorderLayout.SOUTH);
+        progressDialog.setSize(350, 120);
+        progressDialog.setLocationRelativeTo(parent);
+        progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+
+        SwingWorker<Void, int[]> exportWorker = new SwingWorker<Void, int[]>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                int offset = 0;
+                int limit = 10000;
+                int processed = 0;
+                int total = -1;
+                Date exportDate = null;
+
+                Map<String, String> allValues = new LinkedHashMap<>();
+
+                try {
+                    ExportGroupPagedResponse page = LookupServiceClient.getInstance().exportGroupPaged(group.getId(), offset, limit);
+
+                    exportDate = page.getExportDate();
+                    total = page.getTotalCount();
+                    allValues.putAll(page.getValues());
+                    processed += page.getValues().size();
+                    publishProgress(processed, total);
+
+                    while (!isCancelled() && page.getPagination().isHasMore()) {
+                        offset += limit;
+                        page = LookupServiceClient.getInstance().exportGroupPaged(group.getId(), offset, limit);
+                        allValues.putAll(page.getValues());
+                        processed += page.getValues().size();
+                        publishProgress(processed, total);
+                    }
+
+                    ExportLookupGroupResponse exportResponse = new ExportLookupGroupResponse();
+                    exportResponse.setGroup(group);
+                    exportResponse.setValues(allValues);
+                    exportResponse.setExportDate(exportDate);
+
+                    String json = JsonUtils.toJsonPretty(exportResponse);
+                    java.nio.file.Files.write(file.toPath(), json.getBytes());
+
+                } catch (Exception ex) {
+                    logger.error("Failed to export group to JSON", ex);
+                    throw ex;
+                }
+
+                return null;
+            }
+
+            private void publishProgress(int processed, int total) {
+                int progress = total > 0 ? (int) ((processed / (double) total) * 100) : 0;
+                progress = Math.min(progress, 100);
+
+                publish(new int[]{progress, processed, total});
+            }
+
+            @Override
+            protected void process(List<int[]> chunks) {
+                if (!chunks.isEmpty()) {
+                    int[] latest = chunks.get(chunks.size() - 1);
+                    progressBar.setValue(latest[0]);
+                    statusLabel.setText("Exported " + latest[1] + " of " + latest[2] + " entries");
+                }
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+                if (isCancelled()) {
+                    JOptionPane.showMessageDialog(parent, "Export cancelled by user.", "Cancelled", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                try {
+                    get(); // triggers exception handling if doInBackground failed
+
+                    JOptionPane.showMessageDialog(parent, "JSON export completed.", "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+                } catch (ExecutionException e) {
+                    Throwable cause = e.getCause();
+                    showError("Export failed: " + (cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt(); // restore interrupt status
+                    showError("Export was interrupted.");
+                }
+            }
+        };
+
+        cancelButton.addActionListener(e -> exportWorker.cancel(true));
+
+        progressDialog.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                int confirm = JOptionPane.showConfirmDialog(
+                        progressDialog,
+                        "Export is still in progress. Do you want to cancel?",
+                        "Confirm Cancel",
+                        JOptionPane.YES_NO_OPTION
+                );
+                if (confirm == JOptionPane.YES_OPTION) {
+                    exportWorker.cancel(true);
+                }
+            }
+        });
+
+        exportWorker.execute();
+        progressDialog.setVisible(true);
     }
 
     // Public methods for external interaction
@@ -467,27 +636,5 @@ public class GroupPanel extends JPanel {
 
     private void showError(String err) {
         PlatformUI.MIRTH_FRAME.alertError(parent, err);
-    }
-
-    public class LoadingDialog extends JDialog {
-        public LoadingDialog(Frame parent, String message) {
-            super(parent, "Please wait...", true);
-            setLayout(new BorderLayout(10, 10));
-            setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
-            setResizable(false);
-
-            JLabel label = new JLabel(message);
-            JProgressBar progressBar = new JProgressBar();
-            progressBar.setIndeterminate(true);
-
-            JPanel panel = new JPanel(new BorderLayout(10, 10));
-            panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-            panel.add(label, BorderLayout.NORTH);
-            panel.add(progressBar, BorderLayout.CENTER);
-
-            add(panel);
-            pack();
-            setLocationRelativeTo(parent);
-        }
     }
 }

@@ -1,3 +1,13 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
 package com.mirth.connect.plugins.dynamiclookup.shared.dto.response;
 
 import com.mirth.connect.model.User;
@@ -24,9 +34,12 @@ public class GroupAuditEntriesResponse {
     ) {
         Map<String, String> userIdToName = users.stream()
                 .collect(Collectors.toMap(
-                        user -> String.valueOf(user.getId()),     // Convert int → String
+                        user -> String.valueOf(user.getId()),
                         User::getUsername
                 ));
+
+        // Ensure system user is included
+        userIdToName.putIfAbsent("0", "System");
 
         List<AuditEntryResponse> enrichedEntries = rawEntries.stream()
                 .map(audit -> {
@@ -58,7 +71,7 @@ public class GroupAuditEntriesResponse {
     }
 
     // Getters and setters...
-    
+
     public int getGroupId() {
         return groupId;
     }

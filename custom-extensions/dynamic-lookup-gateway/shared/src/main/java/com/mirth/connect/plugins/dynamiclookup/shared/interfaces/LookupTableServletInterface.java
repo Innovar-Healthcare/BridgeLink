@@ -1,27 +1,40 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
 package com.mirth.connect.plugins.dynamiclookup.shared.interfaces;
 
 import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.core.api.BaseServletInterface;
 
-import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.mirth.connect.client.core.api.MirthOperation;
-
-import javax.ws.rs.*;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
-
 import com.mirth.connect.client.core.api.Param;
+
+import javax.ws.rs.Consumes;
+import javax.ws.rs.GET;
+import javax.ws.rs.POST;
+import javax.ws.rs.PUT;
+import javax.ws.rs.DELETE;
+import javax.ws.rs.DefaultValue;
+import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
+import javax.ws.rs.Produces;
+import javax.ws.rs.QueryParam;
+import javax.ws.rs.core.MediaType;
 
 /**
  * @author Thai Tran (thaitran@innovarhealthcare.com)
@@ -227,15 +240,26 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                             value = "{\n" +
                                     "  \"groupId\": 1,\n" +
                                     "  \"groupName\": \"Billing Codes\",\n" +
-                                    "  \"totalCount\": 267,\n" +
-                                    "  \"values\": {\n" +
-                                    "    \"99213\": \"Office Visit, Established Patient\",\n" +
-                                    "    \"99214\": \"Office Visit, Level 4\"\n" +
-                                    "  },\n" +
+                                    "  \"totalCount\": 7,\n" +
+                                    "  \"values\": [\n" +
+                                    "    {\n" +
+                                    "      \"keyValue\": \"99213\",\n" +
+                                    "      \"valueData\": \"Office Visit\",\n" +
+                                    "      \"createdDate\": \"2025-06-22T01:19:25.213+00:00\",\n" +
+                                    "      \"updatedDate\": \"2025-06-22T01:29:45.123+00:00\"\n" +
+                                    "    },\n" +
+                                    "    {\n" +
+                                    "      \"keyValue\": \"99214\",\n" +
+                                    "      \"valueData\": \"Office Visit, Level 4\",\n" +
+                                    "      \"createdDate\": \"2025-06-22T01:19:25.213+00:00\",\n" +
+                                    "      \"updatedDate\": \"2025-06-22T01:19:25.213+00:00\"\n" +
+                                    "    }\n" +
+                                    "    // truncated for brevity\n" +
+                                    "  ],\n" +
                                     "  \"pagination\": {\n" +
                                     "    \"limit\": 100,\n" +
                                     "    \"offset\": 0,\n" +
-                                    "    \"hasMore\": true\n" +
+                                    "    \"hasMore\": false\n" +
                                     "  }\n" +
                                     "}"
                     )
@@ -485,6 +509,47 @@ public interface LookupTableServletInterface extends BaseServletInterface {
             @Param("groupId")
             @Parameter(description = "The ID of the lookup group to export.", required = true)
             @PathParam("groupId") Integer groupId
+    ) throws ClientException;
+
+    @GET
+    @Path("/groups/{groupId}/exportPaged")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Exports values for a lookup group in pages, for large backups or migrations.")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Successfully exported a page of values for the specified lookup group.",
+            content = @Content(
+                    mediaType = MediaType.APPLICATION_JSON,
+                    examples = @ExampleObject(
+                            name = "PagedExportExample",
+                            summary = "A single page of lookup values",
+                            value = "{\n" +
+                                    "  \"groupId\": 1,\n" +
+                                    "  \"offset\": 0,\n" +
+                                    "  \"limit\": 10000,\n" +
+                                    "  \"values\": {\n" +
+                                    "    \"99213\": \"Office Visit, Established Patient\",\n" +
+                                    "    \"99214\": \"Office Visit, Level 4\"\n" +
+                                    "  }\n" +
+                                    "}"
+                    )
+            )
+    )
+    @MirthOperation(name = "exportGroupPaged", display = "Export Paged Lookup Group", permission = PERMISSION_ACCESS)
+    public String exportGroupPaged(
+            @Param("groupId")
+            @Parameter(description = "The ID of the lookup group to export.", required = true)
+            @PathParam("groupId") Integer groupId,
+
+            @QueryParam("offset")
+            @DefaultValue("0")
+            @Parameter(description = "Offset for pagination.")
+            Integer offset,
+
+            @QueryParam("limit")
+            @DefaultValue("10000")
+            @Parameter(description = "Maximum number of entries to return.")
+            Integer limit
     ) throws ClientException;
 
     @POST

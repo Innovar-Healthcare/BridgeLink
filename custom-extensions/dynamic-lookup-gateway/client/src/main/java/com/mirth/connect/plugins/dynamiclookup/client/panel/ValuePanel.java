@@ -1,3 +1,13 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
 package com.mirth.connect.plugins.dynamiclookup.client.panel;
 
 import com.mirth.connect.client.ui.Frame;
@@ -8,6 +18,7 @@ import com.mirth.connect.plugins.dynamiclookup.client.dialog.LookupValueDialog;
 import com.mirth.connect.plugins.dynamiclookup.client.exception.LookupApiClientException;
 import com.mirth.connect.plugins.dynamiclookup.client.model.LookupValueTableModel;
 import com.mirth.connect.plugins.dynamiclookup.client.service.LookupServiceClient;
+import com.mirth.connect.plugins.dynamiclookup.client.util.CsvLineParser;
 import com.mirth.connect.plugins.dynamiclookup.client.util.FileChooser;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ImportValuesResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupAllValuesResponse;
@@ -51,7 +62,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.SimpleDateFormat;
 
-import java.util.*;
+import java.util.Objects;
+import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.Date;
+
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -112,11 +128,11 @@ public class ValuePanel extends JPanel {
         valueTableModel = new LookupValueTableModel();
         valueTable = new JTable(valueTableModel);
         valueTable.setRowHeight(26);
-        valueTable.getColumnModel().getColumn(2).setCellRenderer(new ButtonRenderer());
-        valueTable.getColumnModel().getColumn(2).setCellEditor(new ButtonEditor(valueTable, valueTableModel,
+        valueTable.getColumnModel().getColumn(LookupValueTableModel.ACTION_COLUMN).setCellRenderer(new ButtonRenderer());
+        valueTable.getColumnModel().getColumn(LookupValueTableModel.ACTION_COLUMN).setCellEditor(new ButtonEditor(valueTable, valueTableModel,
                 e -> handleEditValue((Integer) e.getSource()),
                 e -> handleRemoveValue((Integer) e.getSource())));
-        valueTable.getColumnModel().getColumn(2).setPreferredWidth(120); // Adjust for button width
+        valueTable.getColumnModel().getColumn(LookupValueTableModel.ACTION_COLUMN).setPreferredWidth(120); // Adjust for button width
 
         // Search/Filter button
         searchButton = new JButton("Search", UIManager.getIcon("FileView.fileIcon"));
@@ -245,11 +261,7 @@ public class ValuePanel extends JPanel {
             protected void done() {
                 try {
                     LookupAllValuesResponse response = get();
-                    List<LookupValue> values = new ArrayList<>();
-                    Map<String, String> map = response.getValues();
-                    for (Map.Entry<String, String> entry : map.entrySet()) {
-                        values.add(new LookupValue(entry.getKey(), entry.getValue()));
-                    }
+                    List<LookupValue> values = response.getValues();
                     totalCount = response.getTotalCount();
                     valueTableModel.setValues(values);
                     currentPage = page;
@@ -411,7 +423,7 @@ public class ValuePanel extends JPanel {
 
                 SwingWorker<Void, int[]> importWorker = new SwingWorker<Void, int[]>() {
                     @Override
-                    protected Void doInBackground() {
+                    protected Void doInBackground() throws Exception {
                         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                             // Count total lines for accurate progress
                             int totalLines = -1; // skip header
@@ -438,24 +450,16 @@ public class ValuePanel extends JPanel {
 
                                     if (line.trim().isEmpty()) continue;
 
-                                    String[] parts = line.split(",", -1);
-                                    if (parts.length < 2) {
-                                        logger.warn("Skipping malformed line " + lineNumber + ": " + line);
+                                    Map.Entry<String, String> entry = CsvLineParser.parseLine(line, lineNumber);
+                                    if (entry == null) {
+                                        logger.warn("Skipping malformed or empty entry at line " + lineNumber + ": " + line);
                                         continue;
                                     }
 
-                                    String key = parts[0].trim();
-                                    String value = parts[1].trim();
-
-                                    if (!key.isEmpty() && !value.isEmpty()) {
-                                        batchMap.put(key, value);
-                                    } else {
-                                        logger.warn("Skipping entry with empty key or value at line " + lineNumber + ": " + line);
-                                    }
+                                    batchMap.put(entry.getKey(), entry.getValue());
 
                                     processedLines++;
-                                    int progress = (int) ((processedLines / (double) totalLines) * 100);
-                                    publish(new int[]{progress, processedLines, totalLines});
+                                    publishProgress(processedLines, totalLines);
 
                                     if (batchMap.size() == batchSize) {
                                         importValues(selectedGroup.getId(), batchMap, clearExisting && isFirstBatch);
@@ -471,16 +475,19 @@ public class ValuePanel extends JPanel {
                                 Frame.userPreferences.put("currentDirectory", file.getParent());
                             }
 
-                        } catch (IOException e) {
-                            SwingUtilities.invokeLater(() ->
-                                    showError("Unable to read file. Error: " + e.getMessage()));
                         } catch (Exception e) {
-                            logger.error("Unexpected error while importing CSV", e);
-                            SwingUtilities.invokeLater(() ->
-                                    showError("Unexpected error: " + e.getClass().getSimpleName() + " - " + e.getMessage()));
+                            logger.error("Failed to import lookup values from CSV file", e);
+                            throw e;
                         }
 
                         return null;
+                    }
+
+                    private void publishProgress(int processed, int total) {
+                        int progress = total > 0 ? (int) ((processed / (double) total) * 100) : 0;
+                        progress = Math.min(progress, 100);
+
+                        publish(new int[]{progress, processed, total});
                     }
 
                     @Override
@@ -503,8 +510,19 @@ public class ValuePanel extends JPanel {
 
                         if (isCancelled()) {
                             JOptionPane.showMessageDialog(parent, "CSV import was cancelled.", "Import Cancelled", JOptionPane.WARNING_MESSAGE);
-                        } else {
+                            return;
+                        }
+
+                        try {
+                            get(); // triggers exception handling if doInBackground failed
+
                             JOptionPane.showMessageDialog(parent, "CSV import completed.", "Import Complete", JOptionPane.INFORMATION_MESSAGE);
+                        } catch (ExecutionException e) {
+                            Throwable cause = e.getCause();
+                            showError("Import failed: " + (cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt(); // restore interrupt status
+                            showError("Import was interrupted.");
                         }
                     }
                 };
@@ -622,7 +640,7 @@ public class ValuePanel extends JPanel {
 
         SwingWorker<Void, int[]> exportWorker = new SwingWorker<Void, int[]>() {
             @Override
-            protected Void doInBackground() {
+            protected Void doInBackground() throws Exception {
                 int offset = 0;
                 int limit = 1000;
                 int processed = 0;
@@ -633,7 +651,7 @@ public class ValuePanel extends JPanel {
                     while (!isCancelled()) {
                         LookupAllValuesResponse page = LookupServiceClient.getInstance().getAllValues(selectedGroup.getId(), offset, limit, "");
 
-                        Map<String, String> pageValues = page.getValues();
+                        List<LookupValue> pageValues = page.getValues();
                         if (pageValues == null || pageValues.isEmpty()) {
                             break;
                         }
@@ -644,24 +662,20 @@ public class ValuePanel extends JPanel {
                             wroteHeader = true;
                         }
 
-                        for (Map.Entry<String, String> entry : pageValues.entrySet()) {
+                        for (LookupValue value : pageValues) {
                             if (isCancelled()) {
                                 break;
                             }
 
-                            writer.write(String.format("%s,%s", escapeCsv(entry.getKey()), escapeCsv(entry.getValue())));
+                            writer.write(String.format("%s,%s", escapeCsv(value.getKeyValue()), escapeCsv(value.getValueData())));
                             writer.newLine();
 
                             processed++;
                             if (total < 0) {
                                 total = page.getTotalCount();
-                                if (total <= 0) {
-                                    total = 10000;
-                                }
                             }
 
-                            int progress = (int) ((processed / (double) total) * 100);
-                            publish(new int[]{progress, processed, total});
+                            publishProgress(processed, total);
                         }
 
                         if (pageValues.size() < limit || isCancelled()) {
@@ -673,16 +687,19 @@ public class ValuePanel extends JPanel {
 
                     Frame.userPreferences.put("currentDirectory", file.getParent());
 
-                } catch (IOException e) {
-                    SwingUtilities.invokeLater(() ->
-                            showError("Failed to export values: " + e.getMessage()));
                 } catch (Exception e) {
-                    logger.error("Unexpected error while exporting CSV", e);
-                    SwingUtilities.invokeLater(() ->
-                            showError("Unexpected error: " + e.getClass().getSimpleName() + " - " + e.getMessage()));
+                    logger.error("Failed to export values to CSV", e);
+                    throw e;
                 }
 
                 return null;
+            }
+
+            private void publishProgress(int processed, int total) {
+                int progress = total > 0 ? (int) ((processed / (double) total) * 100) : 0;
+                progress = Math.min(progress, 100);
+
+                publish(new int[]{progress, processed, total});
             }
 
             @Override
@@ -699,8 +716,19 @@ public class ValuePanel extends JPanel {
                 progressDialog.dispose();
                 if (isCancelled()) {
                     JOptionPane.showMessageDialog(parent, "Export cancelled by user.", "Cancelled", JOptionPane.WARNING_MESSAGE);
-                } else {
+                    return;
+                }
+
+                try {
+                    get(); // triggers exception handling if doInBackground failed
+
                     JOptionPane.showMessageDialog(parent, "CSV export completed.", "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+                } catch (ExecutionException e) {
+                    Throwable cause = e.getCause();
+                    showError("Export failed: " + (cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt(); // restore interrupt status
+                    showError("Export was interrupted.");
                 }
             }
         };

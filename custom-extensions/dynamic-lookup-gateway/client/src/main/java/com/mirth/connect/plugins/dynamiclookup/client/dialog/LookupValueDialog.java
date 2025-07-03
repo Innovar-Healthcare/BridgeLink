@@ -1,3 +1,13 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
 package com.mirth.connect.plugins.dynamiclookup.client.dialog;
 
 import com.mirth.connect.client.ui.Frame;
@@ -18,12 +28,14 @@ import org.apache.logging.log4j.Logger;
 
 import javax.swing.JLabel;
 import javax.swing.JTextField;
+import javax.swing.JTextArea;
 import javax.swing.JButton;
 import javax.swing.WindowConstants;
 import javax.swing.JPanel;
 import javax.swing.BorderFactory;
 import javax.swing.JSeparator;
 import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
 
 public class LookupValueDialog extends MirthDialog {
     private final Logger logger = LogManager.getLogger(this.getClass());
@@ -31,8 +43,8 @@ public class LookupValueDialog extends MirthDialog {
     private JTextField keyField;
 
     private JLabel valueLabel;
-    private JTextField valueField;
-
+    private JTextArea valueField;
+    private JScrollPane valueScrollPane;
     private JButton saveButton;
     private JButton cancelButton;
 
@@ -70,7 +82,12 @@ public class LookupValueDialog extends MirthDialog {
         keyField = new JTextField();
 
         valueLabel = new JLabel("Value:");
-        valueField = new JTextField();
+        valueField = new JTextArea(3, 20);
+        valueField.setLineWrap(true);
+        valueField.setWrapStyleWord(true);
+        valueScrollPane = new JScrollPane(valueField);
+        valueScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        valueScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 
         saveButton = new JButton("Save");
         saveButton.addActionListener(evt -> save());
@@ -93,7 +110,7 @@ public class LookupValueDialog extends MirthDialog {
         addPanel.add(keyField, "w 200!");
 
         addPanel.add(valueLabel, "newline, right");
-        addPanel.add(valueField, "w 200!");
+        addPanel.add(valueScrollPane, "w 200!, h 80!");
 
         add(addPanel, "growx");
         add(new JSeparator(), "newline, sx, growx");
