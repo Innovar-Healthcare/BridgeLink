@@ -44,20 +44,20 @@ public class PublicServerSettingsTest {
         serverSettings.setDefaultMetaDataColumns(null);
         serverSettings.setQueueBufferSize(1000);
         COLUMNS = new ArrayList<MetaDataColumn>();
-        COLUMNS.add(new MetaDataColumn("SOURCE", MetaDataColumnType.STRING, "mirth_source"));
-        COLUMNS.add(new MetaDataColumn("TYPE", MetaDataColumnType.STRING, "mirth_type"));
+        COLUMNS.add(new MetaDataColumn("SOURCE", MetaDataColumnType.STRING, "message_source"));
+        COLUMNS.add(new MetaDataColumn("TYPE", MetaDataColumnType.STRING, "message_type"));
         
     }
     
     @Test
     public void defaultMetaDataColumnsTest() {
-        PublicServerSettings publicServerSettings = new PublicServerSettings(serverSettings);      
+        PublicServerSettings publicServerSettings = new PublicServerSettings(serverSettings);
         assertEquals(COLUMNS, publicServerSettings.getDefaultMetaDataColumns());
     }
     
     @Test
     public void queueBufferSizeTest() {
-        PublicServerSettings publicServerSettings = new PublicServerSettings(serverSettings);
+        com.mirth.connect.model.PublicServerSettings publicServerSettings = new com.mirth.connect.model.PublicServerSettings(serverSettings);
         assertTrue(1000 == publicServerSettings.getQueueBufferSize());
     }
     

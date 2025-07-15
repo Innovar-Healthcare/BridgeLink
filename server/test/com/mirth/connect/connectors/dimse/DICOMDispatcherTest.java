@@ -100,7 +100,7 @@ public class DICOMDispatcherTest {
         Response response = dispatcher.send(props, message);
         String responseData = response.getMessage();
 
-        String expectedResponseString = "<dicom>\n" + "<tag00000900 len=\"2\" tag=\"00000900\" vr=\"IS\">0</tag00000900>\n" + "</dicom>\n" + "";
+        String expectedResponseString = "<dicom><tag00000900 len=\"2\" tag=\"00000900\" vr=\"IS\">0</tag00000900></dicom>";
         DonkeyElement dicom = new DonkeyElement(expectedResponseString);
         assertEquals(dicom.toXml(), responseData);
     }

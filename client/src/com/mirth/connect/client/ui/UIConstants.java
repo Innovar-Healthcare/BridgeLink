@@ -83,11 +83,11 @@ public class UIConstants {
     public static final Font MONOSPACED_FONT = new Font(MONOSPACED_FONT_NAME, Font.PLAIN, 12);
 
     // issue link
-    public static final String ISSUE_TRACKER_LOCATION = "https://www.innovarhealthcare.com";
+    public static final String ISSUE_TRACKER_LOCATION = "https://github.com/Innovar-Healthcare/BridgeLink/issues";
     // help link
-    public static String HELP_URL_LOCATION = "https://www.innovarhealthcare.com";
+    public static String HELP_URL_LOCATION = "https://github.com/Innovar-Healthcare/BridgeLink/discussions";
     // help link
-    public static String HELP_DEFAULT_LOCATION = "https://www.innovarhealthcare.com";
+    public static String HELP_DEFAULT_LOCATION = "https://github.com/Innovar-Healthcare/BridgeLink/discussions";
     // user api
     public static String USER_API_LOCATION = "/javadocs/user-api/";
     // user api

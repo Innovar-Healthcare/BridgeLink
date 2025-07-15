@@ -644,9 +644,9 @@ public class KeyEncryptorTest {
 
         // Incorrect algorithm
         try {
-            String wrongAlgorithm = "AES/GCM/NoPadding";
+            String wrongAlgorithm = "FOO/BAR/BAZ";
             if (wrongAlgorithm.equals(encryptionSettings.getEncryptionAlgorithm())) {
-                wrongAlgorithm = "AES/CBC/PKCS5Padding";
+                wrongAlgorithm = "FOO/BAR/BAZ";
             }
             decryptMalformedInput(encryptor, "{alg=" + wrongAlgorithm + ",cs=UTF-8,iv=" + correctIV + "}", encrypted);
             fail("Should have thrown an exception");

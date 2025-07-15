@@ -61,12 +61,11 @@ public class HashUtilTest {
 
     @Test
     public void generateHashBadAlgo() throws Exception {
-
         String data = "testdata";
         thrown.expect(NoSuchAlgorithmException.class);
-        HashUtil.generate(data.getBytes(), "SHA256");
-
+        HashUtil.generate(data.getBytes(), "BAD-ALGO");
     }
+
 
     @Test
     public void generateHashForEncodeStringAndAlgo() throws Exception {
@@ -81,11 +80,10 @@ public class HashUtilTest {
 
     @Test
     public void generateHashForEncodeStringAndBadAlgo() throws Exception {
-
         String data = "testdata";
         String encoding = "UTF-8";
         thrown.expect(NoSuchAlgorithmException.class);
-        HashUtil.generate(data, encoding, "SHA256");
+        HashUtil.generate(data, encoding, "BAD-ALGO");
     }
 
     @Test

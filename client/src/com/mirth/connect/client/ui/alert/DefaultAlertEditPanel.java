@@ -41,7 +41,7 @@ public class DefaultAlertEditPanel extends AlertEditPanel {
     private AlertModel alertModel;
 
     public DefaultAlertEditPanel() {
-        this.parent = PlatformUI.MIRTH_FRAME;
+        this.parent = (Frame) PlatformUI.MIRTH_FRAME;
         initComponents();
     }
 
@@ -105,6 +105,8 @@ public class DefaultAlertEditPanel extends AlertEditPanel {
         variables.add("alertId");
         variables.add("alertName");
         variables.add("serverId");
+        variables.add("serverName");
+        variables.add("environmentName");
         variables.add("globalMapVariable");
         variables.add("date");
 
