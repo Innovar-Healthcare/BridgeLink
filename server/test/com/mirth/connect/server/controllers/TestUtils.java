@@ -552,6 +552,19 @@ public class TestUtils {
             try {
                 connection = getConnection();
                 statement = connection.createStatement();
+                // Check if D_MESSAGE_SEQUENCES table exists
+                result = statement.executeQuery(
+                        "SELECT COUNT(*) FROM SYS.SYSTABLES WHERE UPPER(TABLENAME) = 'D_MESSAGE_SEQUENCES'"
+                );
+                result.next();
+                int tableExists = result.getInt(1);
+                close(result);
+
+                // Create the table if it doesn't exist
+                if (tableExists == 0) {
+                    statement.execute("CREATE TABLE D_MESSAGE_SEQUENCES (LOCAL_CHANNEL_ID BIGINT NOT NULL PRIMARY KEY)");
+                }
+
                 result = statement.executeQuery("SELECT MAX(id) FROM d_m" + localChannelId);
                 result.next();
                 maxId = result.getLong(1) + 1;

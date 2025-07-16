@@ -22,7 +22,7 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.sql.Connection;
@@ -447,7 +447,7 @@ public class DatabaseConnectionPoolTests {
         verify(donkey, times(0)).getDaoFactory();
         verify(sqlConfig, times(0)).getSqlSessionManager();
         if (connection != null) {
-            verifyZeroInteractions(connection);
+            verifyNoInteractions(connection);
         }
 
         int count = 0;
@@ -469,7 +469,7 @@ public class DatabaseConnectionPoolTests {
         verify(donkey, times(0)).getReadOnlyDaoFactory();
         verify(sqlConfig, times(0)).getReadOnlySqlSessionManager();
         if (readOnlyConnection != null) {
-            verifyZeroInteractions(readOnlyConnection);
+            verifyNoInteractions(readOnlyConnection);
         }
 
         int count = 0;

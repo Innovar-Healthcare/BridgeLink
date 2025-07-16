@@ -25,8 +25,8 @@ public class DefaultMetaData {
     public static final MetaDataColumnType TYPE_COLUMN_TYPE = MetaDataColumnType.STRING;
     public static final MetaDataColumnType VERSION_COLUMN_TYPE = MetaDataColumnType.STRING;
 
-    public static final String SOURCE_VARIABLE_MAPPING = "mirth_source";
-    public static final String TYPE_VARIABLE_MAPPING = "mirth_type";
+    public static final String SOURCE_VARIABLE_MAPPING = "message_source";
+    public static final String TYPE_VARIABLE_MAPPING = "message_type";
     public static final String VERSION_VARIABLE_MAPPING = "mirth_version";
 
     public static final MetaDataColumn SOURCE_COLUMN = new MetaDataColumn(SOURCE_COLUMN_NAME, SOURCE_COLUMN_TYPE, SOURCE_VARIABLE_MAPPING);

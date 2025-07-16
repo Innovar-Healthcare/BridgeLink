@@ -10,7 +10,9 @@
 // ///////////////////////////////////////////////////////
 package com.mirth.connect.client.ui;
 
-import java.lang.reflect.Method;
+import java.awt.Desktop;
+import java.net.URI;
+
 
 public class BareBonesBrowserLaunch {
 
@@ -18,9 +20,11 @@ public class BareBonesBrowserLaunch {
         String osName = System.getProperty("os.name");
         try {
             if (osName.startsWith("Mac OS")) {
-                Class<?> fileMgr = Class.forName("com.apple.eio.FileManager");
-                Method openURL = fileMgr.getDeclaredMethod("openURL", new Class[] { String.class });
-                openURL.invoke(null, new Object[] { url });
+                if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                    Desktop.getDesktop().browse(new URI(url));
+                } else {
+                    System.err.println("Desktop browsing not supported on this platform.");
+                }
             } else if (osName.startsWith("Windows")) {
                 Runtime.getRuntime().exec("rundll32 url.dll,FileProtocolHandler " + url);
             } else {

@@ -14,7 +14,7 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.Collections;
@@ -94,7 +94,7 @@ public class MirthAttachmentHandlerProviderTest {
 
         String result = new String(attachmentHandlerProvider.reAttachMessage(encoded, connectorMessage, CHARSET, false, false), CHARSET);
 
-        verifyZeroInteractions(messageController);
+        verifyNoInteractions(messageController);
 
         String expected = new StringBuilder("test1${ATTACH:").append(channelId1).append(':').append(messageId1).append(':').append(attachment1.getId()).append("}test2").toString();
 
@@ -152,7 +152,7 @@ public class MirthAttachmentHandlerProviderTest {
 
         String result = new String(attachmentHandlerProvider.reAttachMessage(encoded, connectorMessage, CHARSET, false, false), CHARSET);
 
-        verifyZeroInteractions(messageController);
+        verifyNoInteractions(messageController);
 
         String expected = encoded;
 
@@ -210,7 +210,7 @@ public class MirthAttachmentHandlerProviderTest {
 
         String result = new String(attachmentHandlerProvider.reAttachMessage(encoded, connectorMessage, CHARSET, false, true), CHARSET);
 
-        verifyZeroInteractions(messageController);
+        verifyNoInteractions(messageController);
 
         String expected = encoded;
 
@@ -229,7 +229,7 @@ public class MirthAttachmentHandlerProviderTest {
 
         String result = new String(attachmentHandlerProvider.reAttachMessage(encoded, connectorMessage, CHARSET, false, true), CHARSET);
 
-        verifyZeroInteractions(messageController);
+        verifyNoInteractions(messageController);
 
         String expected = encoded;
 
