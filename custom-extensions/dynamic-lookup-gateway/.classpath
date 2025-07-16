@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+    <!-- Source folders -->
+    <classpathentry kind="src" path="shared/src/main/java"/>
+    <classpathentry kind="src" path="server/src/main/java"/>
+    <classpathentry kind="src" path="client/src/main/java"/>
+
+    <!-- Output folder -->
+    <classpathentry kind="output" path="build/classes"/>
+
+    <!-- JRE -->
+    <classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+
+    <!-- Optional: Add plugin/lib dependencies here -->
+    <!-- Example: -->
+    <!-- <classpathentry kind="lib" path="../../server/lib/some-library.jar"/> -->
+</classpath>

@@ -193,8 +193,8 @@
 		<ant antfile="${client}/ant-build.xml" dir="${client}" target="remove-classes"/>
 	</target>
 
-	<!-- build custom extensions -->
-	<target name="build-custom" depends="init">
-		<ant antfile="custom-extensions.xml" target="build" />
+	<!-- build custom extensions: dynamic-lookup-gateway, .... -->
+	<target name="build-custom-extensions" depends="init">
+		<ant antfile="${custom-extensions}/build.xml" dir="${custom-extensions}" target="build" />
 	</target>
 </project>
