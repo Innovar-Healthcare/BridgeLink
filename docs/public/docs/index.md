@@ -1,8 +1,4 @@
 
----
-
-## ✅ **3. docs/index.md** (Docs Landing Page)
-```markdown
 # BridgeLink Public Documentation
 
 Welcome to the official documentation for **BridgeLink**, the advanced interoperability platform from **Innovar Healthcare**.
