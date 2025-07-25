@@ -6,7 +6,8 @@ Welcome to the official documentation for **BridgeLink**, the advanced interoper
 BridgeLink enables:
 - HL7, FHIR, and DICOM interoperability
 - Secure deployments with MFA, RBAC, and AWS Cognito
-- Auto-scaling and high availability
+- Auto-scaling and high availability with Enterprise
+- OpenAI Integration for Faster Testing and Troubleshooting with Enterprise
 - Dynamic Lookup Gateway (DLG) for real-time code mapping
 
 ---
@@ -21,4 +22,4 @@ BridgeLink enables:
 Innovar Healthcare delivers next-generation interoperability solutions for digital health transformation.
 
 🌐 [Visit Innovar Healthcare](https://www.innovarhealthcare.com)  
-📧 support@innovarhealthcare.com
+
