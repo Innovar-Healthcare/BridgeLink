@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block repo %}
+    {% if page.url_to_pdf %}
+        <li class="nav-item">
+            <a href="{{ page.url_to_pdf }}" title="Site PDF" class="nav-link">
+                <i class="fas fa-file-pdf"></i> PDF
+            </a>
+        </li>
+    {% endif %}
+
+{{ super() }}
+{% endblock repo %}

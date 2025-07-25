@@ -1,0 +1,17 @@
+site_name: BridgeLink Public Documentation
+site_url: https://innovar-healthcare.github.io/bridgelink-docs/
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - search.highlight
+    - navigation.sections
+nav:
+  - Home: index.md
+  - Dynamic Lookup Gateway: DLG.md
+  - HL7 Spec Guide: HL7-Spec.md
+markdown_extensions:
+  - toc
+  - tables
+  - admonition
+  - codehilite
