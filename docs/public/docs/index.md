@@ -14,7 +14,7 @@ BridgeLink enables:
 
 ## Available Guides
 - [Dynamic Lookup Gateway (DLG)](DLG.md)
-- [HL7 Spec User Guide](HL7-Spec.md)
+- [HL7 Spec User Guide](HL7-spec.md)
 
 ---
 
