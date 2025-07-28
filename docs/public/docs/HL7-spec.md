@@ -1,3 +1,16 @@
+## ⚠️ Version Notice: Commercial vs Community
+
+This guide includes instructions for **both the Commercial and Community versions** of the HL7 Spec Extractor.
+
+We’re committed to supporting the healthcare interoperability community by providing a **Community Version** that allows users to generate HL7 message specifications using the command-line tool.
+
+For organizations that require a visual interface, streamlined workflows, and dedicated support, the **Commercial Edition** includes a **Web Interface** in addition to all command-line functionality.
+
+> ⚠️ **If you're using the Community Version, you will not have access to the Web Interface.**  
+> All interaction must be done via command line unless upgraded to the Commercial Edition.
+
+To learn more or inquire about upgrading, visit [innovarhealthcare.com](https://www.innovarhealthcare.com).
+
 
 
 # HL7 Specifications Extractor - User Guide
