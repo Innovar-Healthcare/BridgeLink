@@ -9,6 +9,7 @@ donkey/donkey-test
 **/junit-reports
 **/code-coverage-reports
 .DS_Store
+**/target
 
 # /client/
 /client/logs
