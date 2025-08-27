@@ -24,7 +24,3 @@ jobs:
           cache: maven
       - name: Build with Maven
         run: mvn -DskipTests -B package --file pom.xml
-
-      # Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
-      - name: Submit Dependency Snapshot
-        uses: advanced-security/maven-dependency-submission-action@v5
