@@ -18,7 +18,7 @@ import com.mirth.connect.plugins.dynamiclookup.client.dialog.LookupValueDialog;
 import com.mirth.connect.plugins.dynamiclookup.client.exception.LookupApiClientException;
 import com.mirth.connect.plugins.dynamiclookup.client.model.LookupValueTableModel;
 import com.mirth.connect.plugins.dynamiclookup.client.service.LookupServiceClient;
-import com.mirth.connect.plugins.dynamiclookup.client.util.CsvLineParser;
+import com.mirth.connect.plugins.dynamiclookup.shared.util.CsvLineParser;
 import com.mirth.connect.plugins.dynamiclookup.client.util.FileChooser;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ImportValuesResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupAllValuesResponse;

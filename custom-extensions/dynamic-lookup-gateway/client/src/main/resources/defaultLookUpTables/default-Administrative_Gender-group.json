@@ -1,0 +1,21 @@
+{
+  "group" : {
+    "id" : 33,
+    "name" : "Administrative Gender",
+    "description" : "Default Administrative Gender values",
+    "version" : "1.0.0",
+    "cacheSize" : 1000,
+    "cachePolicy" : "LRU",
+    "createdDate" : "2025-08-22T15:35:04.060+00:00",
+    "updatedDate" : "2025-08-22T15:35:25.251+00:00"
+  },
+  "values" : {
+    "A" : "Ambiguous",
+    "F" : "Female",
+    "M" : "Male",
+    "N" : "Not Applicable/ Not Specific",
+    "O" : "Other",
+    "U" : "Unknown"
+  },
+  "exportDate" : "2025-08-22T15:38:37.676+00:00"
+}

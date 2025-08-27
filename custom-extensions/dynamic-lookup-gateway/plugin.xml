@@ -17,6 +17,7 @@
     <library path="dynamic-lookup-gateway-client.jar" type="CLIENT"/>
     <library path="libs/jfreechart-1.5.6.jar" type="CLIENT"/>
     <library path="libs/opencsv-5.9.jar" type="CLIENT"/>
+    <library path="libs/opencsv-5.9.jar" type="SHARED"/>
     <apiProvider name="com.mirth.connect.plugins.dynamiclookup.shared.interfaces.LookupTableServletInterface" type="SERVLET_INTERFACE"/>
     <apiProvider name="com.mirth.connect.plugins.dynamiclookup.server.servlet.LookupTableServlet" type="SERVER_CLASS"/>
     <templateClassName>com.mirth.connect.plugins.dynamiclookup.client.plugin.LookupTableReferencePlugin</templateClassName>
