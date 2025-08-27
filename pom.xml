@@ -40,7 +40,7 @@
 
     <repositories>
         <repository>
-            <id>dcm4che/</id>
+            <id>dcm4che</id>
             <url>https://maven.dcm4che.org/</url>
         </repository>
     </repositories>
