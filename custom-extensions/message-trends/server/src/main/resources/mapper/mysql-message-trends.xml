@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="MessageTrends">
+    <resultMap id="message-statistics-timeseries" type="com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries">
+        <id     property="id"                column="id"                    javaType="Long"/>
+        <result property="channelId"         column="channel_id"            javaType="String"/>
+        <result property="connectorId"       column="connector_id"          javaType="String"/>
+        <result property="ts"                column="ts"                    javaType="java.sql.Timestamp"/>
+        <result property="bucketSizeMinutes" column="bucket_size_minutes"   javaType="Integer"/>
+        <result property="received"          column="received"              javaType="Integer"/>
+        <result property="filtered"          column="filtered"              javaType="Integer"/>
+        <result property="queued"            column="queued"                javaType="Integer"/>
+        <result property="sent"              column="sent"                  javaType="Integer"/>
+        <result property="error"             column="error"                 javaType="Integer"/>
+        <result property="serverId"          column="server_id"             javaType="String"/>
+    </resultMap>
+
+    <!-- MySQL single-statement additive upserts -->
+    <update id="upsertMinuteDelta" parameterType="com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries">
+        INSERT INTO message_statistics_timeseries (
+            server_id, channel_id, connector_id, ts, bucket_size_minutes,
+            received, filtered, queued, sent, error
+        ) VALUES (
+            #{serverId}, #{channelId}, #{connectorId}, #{ts}, #{bucketSizeMinutes},
+            #{received}, #{filtered}, #{queued}, #{sent}, #{error}
+        )
+        ON DUPLICATE KEY UPDATE
+            received = received + VALUES(received),
+            filtered = filtered + VALUES(filtered),
+            queued   = queued   + VALUES(queued),
+            sent     = sent     + VALUES(sent),
+            error    = error    + VALUES(error)
+    </update>
+
+    <update id="upsertRollupDelta" parameterType="com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries">
+        INSERT INTO message_statistics_timeseries (
+            server_id, channel_id, connector_id, ts, bucket_size_minutes,
+            received, filtered, queued, sent, error
+        ) VALUES (
+            #{serverId}, #{channelId}, #{connectorId}, #{ts}, #{bucketSizeMinutes},
+            #{received}, #{filtered}, #{queued}, #{sent}, #{error}
+        )
+        ON DUPLICATE KEY UPDATE
+            received = received + VALUES(received),
+            filtered = filtered + VALUES(filtered),
+            queued   = queued   + VALUES(queued),
+            sent     = sent     + VALUES(sent),
+            error    = error    + VALUES(error)
+    </update>
+
+    <delete id="purgeBefore" parameterType="map">
+        DELETE FROM message_statistics_timeseries
+         WHERE server_id = #{serverId}
+           AND bucket_size_minutes = #{bucketSizeMinutes}
+           AND ts <![CDATA[ < ]]> #{cutoffTs}
+    </delete>
+
+    <select id="selectSeriesServerChannel" parameterType="map" resultMap="message-statistics-timeseries">
+        SELECT id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error, server_id
+        FROM message_statistics_timeseries
+        WHERE server_id = #{serverId}
+          AND channel_id = #{channelId}
+          AND connector_id = ''
+          AND bucket_size_minutes = #{intervalMinutes}
+          <if test="startTs != null"> AND ts <![CDATA[ >= ]]> #{startTs} </if>
+          <if test="endTs != null">   AND ts <![CDATA[ < ]]>  #{endTs}   </if>
+        ORDER BY ts ASC
+    </select>
+
+    <select id="selectSeriesServerConnector" parameterType="map" resultMap="message-statistics-timeseries">
+        SELECT id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error, server_id
+        FROM message_statistics_timeseries
+        WHERE server_id = #{serverId}
+          AND channel_id = #{channelId}
+          AND connector_id = #{connectorId}
+          AND bucket_size_minutes = #{intervalMinutes}
+          <if test="startTs != null"> AND ts <![CDATA[ >= ]]> #{startTs} </if>
+          <if test="endTs != null">   AND ts <![CDATA[ < ]]>  #{endTs}   </if>
+        ORDER BY ts ASC
+    </select>
+
+    <select id="selectSeriesServerAll" parameterType="map" resultMap="message-statistics-timeseries">
+        SELECT id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error, server_id
+        FROM message_statistics_timeseries
+        WHERE server_id = #{serverId}
+          AND bucket_size_minutes = #{intervalMinutes}
+          <if test="startTs != null"> AND ts <![CDATA[ >= ]]> #{startTs} </if>
+          <if test="endTs != null">   AND ts <![CDATA[ < ]]>  #{endTs}   </if>
+        ORDER BY ts ASC
+    </select>
+</mapper>
