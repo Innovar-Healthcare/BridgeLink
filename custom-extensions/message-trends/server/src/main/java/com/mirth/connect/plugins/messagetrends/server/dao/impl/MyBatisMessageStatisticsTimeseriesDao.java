@@ -7,12 +7,16 @@ import java.util.Map;
 
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionManager;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.mirth.connect.plugins.messagetrends.server.dao.MessageStatisticsTimeseriesDao;
 import com.mirth.connect.plugins.messagetrends.server.util.DatabaseDialect.DatabaseType;
 import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries;
 
 public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsTimeseriesDao {
+	private static final Logger logger = LogManager.getLogger(MyBatisMessageStatisticsTimeseriesDao.class);
+
 	/** Mapper namespace to match our XML files. */
 	private static final String NS = "MessageTrends";
 
@@ -90,6 +94,68 @@ public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsT
 			commitSuccess = true;
 
 			return affected;
+		} finally {
+			if (!commitSuccess) {
+				try {
+					session.rollback();
+				} catch (Exception ignored) {
+				}
+			}
+			session.close();
+		}
+	}
+
+	@Override
+	public int replaceRollupWindow(Date startTs, int bucketSizeMinutes, List<MessageStatisticsTimeseries> list) {
+		SqlSession session = sqlSessionManager.openSession();
+
+		boolean commitSuccess = false;
+		try {
+			if (list == null) {
+				throw new IllegalArgumentException("List of rollup rows cannot be null");
+			}
+
+			// Defensive checks: ensure all rows are consistent
+			for (MessageStatisticsTimeseries row : list) {
+				if (row.getTs() == null || !row.getTs().equals(startTs)) {
+					throw new IllegalArgumentException("Row ts mismatch: expected " + startTs + ", got " + row.getTs());
+				}
+				if (row.getBucketSizeMinutes() == null || row.getBucketSizeMinutes() != bucketSizeMinutes) {
+					throw new IllegalArgumentException("Row bucket mismatch: expected " + bucketSizeMinutes + ", got " + row.getBucketSizeMinutes());
+				}
+				if (row.getChannelId() == null) {
+					row.setChannelId("");
+				}
+				if (row.getConnectorId() == null) {
+					row.setConnectorId("");
+				}
+			}
+
+			int deleted = 0;
+			int inserted = 0;
+
+			if (!list.isEmpty()) {
+				// Use the serverId from the first row (assume all consistent)
+				String serverId = list.get(0).getServerId();
+				Map<String, Object> params = new HashMap<>();
+				params.put("serverId", serverId);
+				params.put("ts", startTs);
+				params.put("bucketSizeMinutes", bucketSizeMinutes);
+
+				// 1) Delete existing rows for this window
+				deleted = session.delete(NS + ".deleteRollupWindow", params);
+
+				// 2) Insert new batch rows (already grouped by unique key)
+				inserted = session.insert(NS + ".insertRollupRows", list);
+			}
+
+			session.commit();
+			commitSuccess = true;
+
+			return inserted; // rows written
+		} catch (Exception e) {
+			logger.error("Failed to replace rollup window", e);
+			return 0;
 		} finally {
 			if (!commitSuccess) {
 				try {

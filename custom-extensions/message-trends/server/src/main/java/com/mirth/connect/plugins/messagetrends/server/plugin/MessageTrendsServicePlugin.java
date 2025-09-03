@@ -67,6 +67,7 @@ public class MessageTrendsServicePlugin implements ServicePlugin {
 			boolean enabled = Boolean.parseBoolean(properties.getProperty("messagetrends.enabled", "false"));
 			messageTrendsConfig = MessageTrendsConfig.defaultConfig().withEnabled(enabled);
 
+			logger.info(properties);
 			logger.info("Message Trends Management System plugin initialized successfully");
 		} catch (Exception e) {
 			logger.error("Error initializing Message Trends Management System plugin", e);
@@ -107,7 +108,7 @@ public class MessageTrendsServicePlugin implements ServicePlugin {
 
 	@Override
 	public void start() {
-		if (messageTrendsScheduler == null) {
+		if (messageTrendsConfig == null) {
 			messageTrendsConfig = MessageTrendsConfig.defaultConfig();
 		}
 

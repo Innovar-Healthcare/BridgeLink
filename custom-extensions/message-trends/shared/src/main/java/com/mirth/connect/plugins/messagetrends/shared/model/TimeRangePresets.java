@@ -32,7 +32,7 @@ public final class TimeRangePresets {
 	public static final List<String> PRESETS = Collections.unmodifiableList(Arrays.asList("last_1h", "last_3h", "last_6h", "last_12h", "last_24h", "last_3d", "last_7d", "last_14d", "last_30d", "last_90d", "last_180d", "last_365d", "last_730d", "last_1095d"));
 
 	/** Map preset -> duration. */
-	private static final Map<String, Duration> PRESET_TO_DURATION;
+	public static final Map<String, Duration> PRESET_TO_DURATION;
 	static {
 		Map<String, Duration> tmp = new HashMap<String, Duration>();
 		tmp.put("last_1h", Duration.ofHours(1));

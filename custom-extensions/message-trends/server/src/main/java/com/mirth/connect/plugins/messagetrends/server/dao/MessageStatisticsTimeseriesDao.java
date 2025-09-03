@@ -17,6 +17,11 @@ public interface MessageStatisticsTimeseriesDao {
 	int upsertRollupDelta(MessageStatisticsTimeseries delta);
 
 	/**
+	 * Additive replace Rollup Window for buckets (5, 15, 60, 1440).
+	 */
+	int replaceRollupWindow(Date startTs, int bucketSizeMinutes, List<MessageStatisticsTimeseries> list);
+
+	/**
 	 * Purge old records for a given server and bucket size before cutoff.
 	 */
 	int purgeBefore(String serverId, int bucketSizeMinutes, Date cutoffTs);

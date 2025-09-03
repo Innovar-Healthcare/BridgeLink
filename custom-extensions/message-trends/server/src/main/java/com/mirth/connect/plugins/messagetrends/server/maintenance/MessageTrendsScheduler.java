@@ -29,10 +29,11 @@ public final class MessageTrendsScheduler {
 	}
 
 	public synchronized void start() {
+		log.debug("Starting MessageTrendsScheduler...");
 		scheduleFlush();
 		scheduleRollups();
 		schedulePurge();
-		log.info("MessageTrendsScheduler started.");
+		log.info("MessageTrendsScheduler started. tasks: flush={}, rollup={}, purge={}", flushTask != null, rollupTask != null, purgeTask != null);
 	}
 
 	public synchronized void stop() {
@@ -53,6 +54,14 @@ public final class MessageTrendsScheduler {
 	}
 
 	private void scheduleRollups() {
+		long initial = rollupRunner.initialDelaySeconds();
+		long period = rollupRunner.fixedRateSeconds();
+		log.debug("Scheduling rollups: initialDelay={}s, period={}s", initial, period);
+		if (initial < 0 || period <= 0) {
+			log.error("Invalid rollup schedule: initialDelay={}, period={}", initial, period);
+			return;
+		}
+
 		rollupTask = rollupExec.scheduleAtFixedRate(rollupRunner::runOnce, rollupRunner.initialDelaySeconds(), rollupRunner.fixedRateSeconds(), TimeUnit.SECONDS);
 	}
 

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <pluginMetaData path="message-trends">
-    <name>Message Trends</name>
+    <name>Message Trends Management System</name>
     <author>Daniel Svanstedt, Thai Tran</author>
     <pluginVersion>1.0.0</pluginVersion>
     <mirthVersion>4.5.4, 4.6.0</mirthVersion>

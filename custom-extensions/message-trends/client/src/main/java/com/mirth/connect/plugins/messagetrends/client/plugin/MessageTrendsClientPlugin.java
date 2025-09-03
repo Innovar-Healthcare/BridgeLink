@@ -21,7 +21,7 @@ public class MessageTrendsClientPlugin extends SettingsPanelPlugin {
 	private MessageTrendsSettingPanel settingPanel;
 
 	public MessageTrendsClientPlugin(String name) {
-		super("Message Trends Management System");
+		super(name);
 		try {
 			this.settingPanel = new MessageTrendsSettingPanel("Message Trends", this);
 		} catch (Exception e) {

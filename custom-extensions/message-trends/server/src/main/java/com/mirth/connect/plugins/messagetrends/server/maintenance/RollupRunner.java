@@ -3,12 +3,13 @@ package com.mirth.connect.plugins.messagetrends.server.maintenance;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -34,6 +35,8 @@ final class RollupRunner {
 
 	private final MessageTrendsService service;
 	private final Clock clock; // should be UTC
+	// Map<bucketMinutes, Instant capProcessed>
+	private final Map<Integer, Instant> lastCapProcessedByBucket = new ConcurrentHashMap<>();
 
 	/** Source->Destination bucket pipeline in minutes. */
 	private final Map<Integer, Integer> pipeline = Collections.unmodifiableMap(new LinkedHashMap<Integer, Integer>() {
@@ -91,53 +94,134 @@ final class RollupRunner {
 
 	/** One execution tick. Safe to call from a ScheduledExecutor. */
 	void runOnce() {
-		if (!enabled) {
+		if (!enabled)
 			return;
-		}
 
 		try {
-			final Instant now = clock.instant();
+			final Instant now = clock.instant(); // UTC
 
-			for (Entry<Integer, Integer> step : pipeline.entrySet()) {
+			for (Map.Entry<Integer, Integer> step : pipeline.entrySet()) {
 				final int srcBucket = step.getKey();
 				final int dstBucket = step.getValue();
 
-				// Determine a conservative "safe" upper bound to avoid late data.
+				// Safety lag (fallback: one full dst window)
 				Duration lag = safetyLag.get(dstBucket);
-				if (lag == null || lag.isNegative()) {
-					lag = Duration.ofMinutes(dstBucket); // fallback: one full destination bucket
-				}
+				if (lag == null || lag.isNegative())
+					lag = Duration.ofMinutes(dstBucket);
 
-				// Align the exclusive upper bound to the previous destination bucket boundary.
-				final Instant safeTo = now.minus(lag).truncatedTo(ChronoUnit.MINUTES);
-				final Instant toTs = clampToBucketBoundary(dstBucket, safeTo); // exclusive upper bound
-				final Instant fromTs = toTs.minus(Duration.ofMinutes(dstBucket)); // single dst window
+				// Latest aligned boundary <= (now - lag)
+				final Instant cap = clampToBucketBoundary(dstBucket, now.minus(lag));
 
-				if (!toTs.isAfter(fromTs)) {
+				// In-memory gating to avoid reprocessing the same boundary
+				final Instant lastCap = lastCapProcessedByBucket.get(dstBucket);
+				if (lastCap != null && !cap.isAfter(lastCap))
+					continue;
+
+				// Single newest window: [from, to) = [cap - dst, cap)
+				final Instant fromTs = cap.minus(Duration.ofMinutes(dstBucket));
+				final Instant toTs = cap;
+
+				// Read raw rows from source bucket for this window (per-dimension rows)
+				final List<MessageStatisticsTimeseries> srcRows = service.getServerSeries(Date.from(fromTs), Date.from(toTs), srcBucket);
+
+				if (srcRows == null || srcRows.isEmpty()) {
+					// Forward-only policy: accept gaps
+					lastCapProcessedByBucket.put(dstBucket, cap);
 					continue;
 				}
 
-				// Ask DAO to return server-wide series grouped at the dst bucket size for
-				// [fromTs, toTs).
-				// If you plan to roll per-channel/per-connector, call the corresponding service
-				// methods instead.
-				final List<MessageStatisticsTimeseries> series = service.getServerSeries(java.util.Date.from(fromTs), java.util.Date.from(toTs), dstBucket);
+				// ---- Group BY UNIQUE KEY: (server_id, channel_id, connector_id, boundary,
+				// bucket) ----
+				final Map<RollKey, MessageStatisticsTimeseries> grouped = new LinkedHashMap<>();
 
-				int wrote = 0;
-				for (MessageStatisticsTimeseries row : series) {
-					// Ensure bucket size is correctly set to destination bucket (defensive).
-					row.setBucketSizeMinutes(dstBucket);
-					wrote += service.upsertRollupDelta(row);
+				for (MessageStatisticsTimeseries r : srcRows) {
+					final String serverId = r.getServerId();
+					final String channelId = r.getChannelId();
+					final String connectorId = r.getConnectorId();
+
+					final Instant boundary = clampToBucketBoundary(dstBucket, r.getTs().toInstant());
+					final RollKey key = new RollKey(serverId, channelId, connectorId, boundary, dstBucket);
+
+					MessageStatisticsTimeseries acc = grouped.get(key);
+					if (acc == null) {
+						acc = new MessageStatisticsTimeseries();
+						acc.setServerId(serverId);
+						acc.setChannelId(channelId);
+						acc.setConnectorId(connectorId);
+						acc.setTs(Date.from(boundary)); // dst boundary
+						acc.setBucketSizeMinutes(dstBucket); // dst bucket
+						acc.setReceived(0);
+						acc.setFiltered(0);
+						acc.setQueued(0);
+						acc.setSent(0);
+						acc.setError(0);
+						grouped.put(key, acc);
+					}
+					// sum metrics (null-safe)
+					acc.setReceived(nz(acc.getReceived()) + nz(r.getReceived()));
+					acc.setFiltered(nz(acc.getFiltered()) + nz(r.getFiltered()));
+					acc.setQueued(nz(acc.getQueued()) + nz(r.getQueued()));
+					acc.setSent(nz(acc.getSent()) + nz(r.getSent()));
+					acc.setError(nz(acc.getError()) + nz(r.getError()));
 				}
 
-				if (wrote > 0) {
-					log.info("Rollup {}→{}: upserted={} window=[{}, {})", srcBucket, dstBucket, wrote, fromTs, toTs);
-				} else {
-					log.debug("Rollup {}→{}: no rows to upsert for window=[{}, {})", srcBucket, dstBucket, fromTs, toTs);
+				final List<MessageStatisticsTimeseries> rowsToWrite = new ArrayList<>(grouped.values());
+				if (rowsToWrite.isEmpty()) {
+					lastCapProcessedByBucket.put(dstBucket, cap);
+					continue;
+				}
+
+				try {
+					// One transactional overwrite for the whole window:
+					// - DELETE existing rows for this (server, ANY channel/connector) at ts=fromTs
+					// & dstBucket
+					// - INSERT batch rowsToWrite (REPLACE semantics, not additive)
+					int wrote = service.replaceRollupWindow(Date.from(fromTs), dstBucket, rowsToWrite);
+					log.info("Rolled {}→{} window [{} , {}): wrote={}", srcBucket, dstBucket, fromTs, toTs, wrote);
+
+					lastCapProcessedByBucket.put(dstBucket, cap);
+
+				} catch (Throwable e) {
+					log.warn("Overwrite window failed for {}→{} [{} , {}): {}", srcBucket, dstBucket, fromTs, toTs, e.toString());
+					// do not advance gating on failure
 				}
 			}
 		} catch (Throwable t) {
-			log.warn("RollupRunner failed", t);
+			log.warn("RollupRunner runOnce failed", t);
+		}
+	}
+
+	private static int nz(Integer v) {
+		return v == null ? 0 : v;
+	}
+
+	// Composite key for grouping
+	private static final class RollKey {
+		final String serverId, channelId, connectorId;
+		final Instant boundary;
+		final int dstBucket;
+
+		RollKey(String s, String c, String k, Instant b, int d) {
+			this.serverId = s;
+			this.channelId = c;
+			this.connectorId = k;
+			this.boundary = b;
+			this.dstBucket = d;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o)
+				return true;
+			if (!(o instanceof RollKey))
+				return false;
+			RollKey x = (RollKey) o;
+			return dstBucket == x.dstBucket && java.util.Objects.equals(serverId, x.serverId) && java.util.Objects.equals(channelId, x.channelId) && java.util.Objects.equals(connectorId, x.connectorId) && java.util.Objects.equals(boundary, x.boundary);
+		}
+
+		@Override
+		public int hashCode() {
+			return java.util.Objects.hash(serverId, channelId, connectorId, boundary, dstBucket);
 		}
 	}
 

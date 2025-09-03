@@ -7,7 +7,6 @@ import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -26,6 +25,8 @@ import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.border.TitledBorder;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
@@ -55,8 +56,7 @@ import com.mirth.connect.plugins.messagetrends.shared.util.Intervals;
  * selected bucket (no SUM on read)
  */
 public class MessageTrendsDashboardPanel extends JPanel {
-
-	private static final long serialVersionUID = 1L;
+	private final Logger logger = LogManager.getLogger(this.getClass());
 
 	private final Frame parent;
 	private final MessageTrendsDashboardTabPlugin plugin;
@@ -352,50 +352,13 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	}
 
 	private static long[] computeRangeFromPreset(String presetId, long nowMs) {
-		Calendar cal = Calendar.getInstance();
-		cal.setTimeInMillis(nowMs);
-		Calendar start = (Calendar) cal.clone();
-		switch (presetId) {
-		case "last_30m":
-			start.add(Calendar.MINUTE, -30);
-			break;
-		case "last_1h":
-			start.add(Calendar.HOUR_OF_DAY, -1);
-			break;
-		case "last_6h":
-			start.add(Calendar.HOUR_OF_DAY, -6);
-			break;
-		case "last_24h":
-			start.add(Calendar.DAY_OF_MONTH, -1);
-			break;
-		case "last_3d":
-			start.add(Calendar.DAY_OF_MONTH, -3);
-			break;
-		case "last_7d":
-			start.add(Calendar.DAY_OF_MONTH, -7);
-			break;
-		case "last_30d":
-			start.add(Calendar.DAY_OF_MONTH, -30);
-			break;
-		case "last_90d":
-			start.add(Calendar.DAY_OF_MONTH, -90);
-			break;
-		case "last_180d":
-			start.add(Calendar.DAY_OF_MONTH, -180);
-			break;
-		case "last_365d":
-			start.add(Calendar.DAY_OF_MONTH, -365);
-			break;
-		case "last_730d":
-			start.add(Calendar.DAY_OF_MONTH, -730);
-			break;
-		case "last_1095d":
-			start.add(Calendar.DAY_OF_MONTH, -1095);
-			break;
-		default:
-			start.add(Calendar.DAY_OF_MONTH, -1); // fallback 24h
-		}
-		return new long[] { start.getTimeInMillis(), cal.getTimeInMillis() };
+		// fallback = 24h
+		java.time.Duration d = TimeRangePresets.PRESET_TO_DURATION.getOrDefault(presetId, java.time.Duration.ofDays(1));
+
+		long start = nowMs - d.toMillis();
+		long end = nowMs;
+
+		return new long[] { start, end };
 	}
 
 	private void rebindDataset() {
