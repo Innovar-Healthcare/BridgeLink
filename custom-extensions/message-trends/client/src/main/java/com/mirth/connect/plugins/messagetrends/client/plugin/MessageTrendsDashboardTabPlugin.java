@@ -1,20 +1,22 @@
 package com.mirth.connect.plugins.messagetrends.client.plugin;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import javax.swing.JComponent;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.model.DashboardStatus;
 import com.mirth.connect.plugins.DashboardTabPlugin;
 import com.mirth.connect.plugins.messagetrends.client.panel.MessageTrendsDashboardPanel;
+import com.mirth.connect.plugins.messagetrends.client.panel.MessageTrendsDashboardPanel.SelectionBlockReason;
 
 public class MessageTrendsDashboardTabPlugin extends DashboardTabPlugin {
+	private final Logger logger = LogManager.getLogger(this.getClass());
+
 	private MessageTrendsDashboardPanel panel;
-	private static final String NO_SERVER_SELECTED = "No Server Selected";
-	private static final String NO_CHANNEL_SELECTED = "No Channel Selected";
 
 	public MessageTrendsDashboardTabPlugin(String name) {
 		super(name);
@@ -34,34 +36,38 @@ public class MessageTrendsDashboardTabPlugin extends DashboardTabPlugin {
 	// selected
 	@Override
 	public void update(List<DashboardStatus> statuses) {
-		Map<String, List<Integer>> selectedConnectorMap = null;
 
-		if (statuses != null) {
-			selectedConnectorMap = new ConcurrentHashMap<String, List<Integer>>();
-
-			for (DashboardStatus status : statuses) {
-				String channelId = status.getChannelId();
-				Integer metaDataId = status.getMetaDataId();
-
-				List<Integer> selectedConnectors = selectedConnectorMap.get(channelId);
-
-				if (selectedConnectors == null) {
-					selectedConnectors = new ArrayList<Integer>();
-					selectedConnectorMap.put(channelId, selectedConnectors);
-				}
-
-				selectedConnectors.add(metaDataId);
-			}
+		if (statuses == null || statuses.isEmpty()) {
+			panel.blockSelection(SelectionBlockReason.NO_SELECTION);
+			return;
 		}
 
-		String selectedChannelId = (statuses != null && statuses.size() == 1) ? statuses.get(0).getChannelId() : NO_CHANNEL_SELECTED;
-		String selectedChannelName = (statuses != null && statuses.size() == 1) ? statuses.get(0).getName() : NO_CHANNEL_SELECTED;
+		if (statuses.size() != 1) {
+			panel.blockSelection(SelectionBlockReason.MULTI_SELECTED);
+			return;
+		}
 
-		panel.setChannelId(selectedChannelId, selectedChannelName);
+		DashboardStatus s = statuses.get(0);
+		String channelId = s.getChannelId();
 
-//		dcsp.setSelectedConnectors(selectedConnectorMap);
-//		dcsp.updateTable(getChannelLog(statuses));
-//		dcsp.adjustPauseResumeButton(selectedChannelId);
+		switch (s.getStatusType()) {
+		case CHANNEL:
+			panel.unblockSelection();
+			panel.setSelection(channelId, s.getName(), null, null);
+			break;
+
+		case SOURCE_CONNECTOR:
+		case DESTINATION_CONNECTOR:
+			String channelName = PlatformUI.MIRTH_FRAME.channelPanel.getCachedChannelIdsAndNames().get(channelId);
+
+			panel.unblockSelection();
+			panel.setSelection(channelId, channelName, s.getMetaDataId(), s.getName());
+			break;
+
+		default:
+			panel.blockSelection(SelectionBlockReason.NO_SELECTION);
+			break;
+		}
 	}
 
 	@Override
@@ -74,41 +80,16 @@ public class MessageTrendsDashboardTabPlugin extends DashboardTabPlugin {
 		return "Message Trends";
 	}
 
-//	@Override
-//	public ImageIcon getTabIcon() {
-//		// Return an appropriate icon or null for default
-//		return new ImageIcon(getClass().getResource("/com/bridgelink/plugins/messagetrends/client/images/chart_icon.png"));
-//	}
-//
-//	@Override
-//	public String getTabTitle() {
-//		return "Message Trends";
-//	}
-//
-//	@Override
-//	public MessageTrendsPanel getDashboardTabComponent() {
-//		return panel;
-//	}
-
 	@Override
 	public void start() {
-		// Optional: perform any startup operations
 	}
 
 	@Override
 	public void stop() {
-		// Clean up resources
-//		if (panel != null) {
-//			panel.cleanup();
-//		}
 	}
 
 	@Override
 	public void reset() {
-		// Reset the panel state
-//        if (panel != null) {
-//            panel.reset();
-//        }
 	}
 
 }

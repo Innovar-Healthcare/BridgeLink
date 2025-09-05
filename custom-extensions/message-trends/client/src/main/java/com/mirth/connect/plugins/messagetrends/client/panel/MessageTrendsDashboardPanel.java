@@ -1,19 +1,25 @@
 package com.mirth.connect.plugins.messagetrends.client.panel;
 
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.text.SimpleDateFormat;
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.ToIntFunction;
 
 import javax.swing.Box;
-import javax.swing.ComboBoxModel;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
@@ -23,7 +29,6 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
-import javax.swing.border.TitledBorder;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -60,30 +65,43 @@ public class MessageTrendsDashboardPanel extends JPanel {
 
 	private final Frame parent;
 	private final MessageTrendsDashboardTabPlugin plugin;
-	private String channelId;
-	private String channelName;
+	private SelectionInfo selection;
 
 	private ChartPanel chartPanel;
 	private JComboBox<String> intervalComboBox; // canonical codes ("1minute","5minute","15minute","60minute","daily")
-	private JComboBox<String> timeRangeComboBox; // values = "<presetId>::<label>"
+	private JComboBox<String> timeRangeComboBox;
 	private JComboBox<View> viewComboBox;
 	private JButton refreshButton;
 
-	private JPanel summaryPanel;
-	private JLabel totalReceivedLabel;
-	private JLabel totalSentLabel;
-	private JLabel totalFilteredLabel;
-	private JLabel totalErrorLabel;
-	private JLabel peakTimeLabel;
-	private JLabel avgRateLabel;
+	// NEW: Summary views
+	private SummaryAllView summaryAllView;
+	private SummaryMetricView summaryMetricView;
+	private JPanel summaryCardPanel;
+	private static final String CARD_ALL = "ALL";
+	private static final String CARD_METRIC = "METRIC";
 
 	private SwingWorker<List<MessageStatisticsTimeseries>, Void> inFlight;
 	private List<MessageStatisticsTimeseries> lastData = Collections.emptyList();
+
+	private final Map<String, Long> lastFetchByInterval = new HashMap<>();
+	private Map<String, String> lastTimeRangeByInterval = new HashMap<>();
+	private boolean updatingRange = false;
 	private Long lastStartTsMs; // preset window start
 	private Long lastEndTsMs; // preset window end
 
+	// Fixed colors for each metric series
+	private static final Color COLOR_RECEIVED = new Color(20, 110, 255);
+	private static final Color COLOR_SENT = new Color(40, 170, 40);
+	private static final Color COLOR_FILTERED = new Color(255, 140, 0);
+	private static final Color COLOR_QUEUED = new Color(153, 102, 255);
+	private static final Color COLOR_ERROR = new Color(200, 40, 40);
+
+	public enum SelectionBlockReason {
+		NO_SELECTION, MULTI_SELECTED
+	}
+
 	public enum View {
-		ALL("All Message Types"), RECEIVED("Received Only"), SENT("Sent Only"), ERRORS("Errors Only");
+		ALL("All Message Types"), RECEIVED("Received Only"), SENT("Sent Only"), FILTERED("Filtered Only"), QUEUED("Queued Only"), ERRORS("Errors Only");
 
 		public final String label;
 
@@ -105,17 +123,15 @@ public class MessageTrendsDashboardPanel extends JPanel {
 
 		initLayout();
 
+		initLastTimeRangeByInterval();
+
 		wireEvents();
 
-		// defaults
-		intervalComboBox.setSelectedItem("5minute");
-		String currentCode = (String) intervalComboBox.getSelectedItem();
-		if (Intervals.isValid(currentCode)) {
-			repopulateTimeRanges(currentCode);
-			selectBestDefaultRange();
-		}
+		updateTimeRangeSelection();
 
-		updateChartTitle("No Channel Selected");
+		updateChartTitle("No Channel/Connector Selected");
+
+		showSummaryForView(View.ALL);
 	}
 
 	private void initComponents() {
@@ -129,6 +145,9 @@ public class MessageTrendsDashboardPanel extends JPanel {
 				return super.getListCellRendererComponent(list, label, index, isSelected, cellHasFocus);
 			}
 		});
+		if (intervalComboBox.getItemCount() > 0) {
+			intervalComboBox.setSelectedIndex(0);
+		}
 
 		// time range selector (contents depend on selected interval minutes)
 		timeRangeComboBox = new JComboBox<>();
@@ -154,6 +173,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		plot.setBackgroundPaint(Color.WHITE);
 		plot.setDomainGridlinePaint(new Color(238, 238, 238));
 		plot.setRangeGridlinePaint(new Color(238, 238, 238));
+		plot.setDomainPannable(false);
 
 		DateAxis axis = (DateAxis) plot.getDomainAxis();
 		axis.setDateFormatOverride(new SimpleDateFormat("HH:mm"));
@@ -161,22 +181,29 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		XYLineAndShapeRenderer renderer = new XYLineAndShapeRenderer();
 		renderer.setDefaultShapesVisible(true);
 		renderer.setDefaultShapesFilled(true);
+		renderer.setAutoPopulateSeriesPaint(false);
+		renderer.setSeriesPaint(0, COLOR_RECEIVED);
+		renderer.setSeriesPaint(1, COLOR_SENT);
+		renderer.setSeriesPaint(2, COLOR_FILTERED);
+		renderer.setSeriesPaint(3, COLOR_QUEUED);
+		renderer.setSeriesPaint(4, COLOR_ERROR);
 		plot.setRenderer(renderer);
 
 		chartPanel = new ChartPanel(chart);
 		chartPanel.setPreferredSize(new Dimension(720, 360));
-		chartPanel.setMouseWheelEnabled(true);
+		chartPanel.setDomainZoomable(false);
+		chartPanel.setMouseWheelEnabled(false);
 
-		// summary panel
-		summaryPanel = new JPanel();
-		summaryPanel.setBorder(new TitledBorder("Summary Statistics"));
+		// Summary All + Metric views
+		summaryAllView = new SummaryAllView();
+		summaryAllView.setSeriesColors(COLOR_RECEIVED, COLOR_SENT, COLOR_FILTERED, COLOR_QUEUED, COLOR_ERROR);
 
-		totalReceivedLabel = new JLabel("Total Received: 0");
-		totalSentLabel = new JLabel("Total Sent: 0");
-		totalFilteredLabel = new JLabel("Total Filtered: 0");
-		totalErrorLabel = new JLabel("Total Errors: 0");
-		peakTimeLabel = new JLabel("Peak Time: N/A");
-		avgRateLabel = new JLabel("Avg. Processing Rate: 0 msgs/hour");
+		summaryMetricView = new SummaryMetricView();
+
+		// Card panel to hold both
+		summaryCardPanel = new JPanel(new CardLayout());
+		summaryCardPanel.add(summaryAllView, CARD_ALL);
+		summaryCardPanel.add(summaryMetricView, CARD_METRIC);
 	}
 
 	private void initLayout() {
@@ -192,17 +219,23 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		controls.add(Box.createHorizontalStrut(16));
 		controls.add(refreshButton);
 
-		summaryPanel.setLayout(new java.awt.GridLayout(2, 3, 10, 6));
-		summaryPanel.add(totalReceivedLabel);
-		summaryPanel.add(totalSentLabel);
-		summaryPanel.add(totalFilteredLabel);
-		summaryPanel.add(totalErrorLabel);
-		summaryPanel.add(peakTimeLabel);
-		summaryPanel.add(avgRateLabel);
+		// wrap panel
+		JPanel wrapPanel = new JPanel(new BorderLayout());
+		wrapPanel.add(summaryCardPanel, BorderLayout.CENTER);
+		wrapPanel.setPreferredSize(new Dimension(10, 65));
+		summaryCardPanel.setPreferredSize(new Dimension(10, 65));
 
 		add(controls, BorderLayout.NORTH);
 		add(chartPanel, BorderLayout.CENTER);
-		add(summaryPanel, BorderLayout.SOUTH);
+		add(wrapPanel, BorderLayout.SOUTH);
+	}
+
+	private void initLastTimeRangeByInterval() {
+		lastTimeRangeByInterval.put("1minute", "last_1h");
+		lastTimeRangeByInterval.put("5minute", "last_6h");
+		lastTimeRangeByInterval.put("15minute", "last_24h");
+		lastTimeRangeByInterval.put("60minute", "last_7d");
+		lastTimeRangeByInterval.put("daily", "last_90d");
 	}
 
 	private void wireEvents() {
@@ -211,52 +244,103 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			if (!Intervals.isValid(code)) {
 				return;
 			}
-			repopulateTimeRanges(code);
-			selectBestDefaultRange();
-			if (channelId != null) {
-				refreshData();
-			}
+
+			updateTimeRangeSelection();
+
+			refreshData();
 		});
+
 		timeRangeComboBox.addActionListener(e -> {
-			if (channelId != null) {
-				refreshData();
+			if (updatingRange) {
+				return;
 			}
+
+			String code = (String) intervalComboBox.getSelectedItem();
+			Object sel = timeRangeComboBox.getSelectedItem();
+			if (Intervals.isValid(code) && sel instanceof String) {
+				lastTimeRangeByInterval.put(code, (String) sel);
+			}
+
+			refreshData();
 		});
-		viewComboBox.addActionListener(e -> rebindDataset()); // no re-fetch
+
+		viewComboBox.addActionListener(e -> {
+			View v = (View) viewComboBox.getSelectedItem();
+			showSummaryForView(v);
+			rebindDataset();
+			updateSummary(lastData);
+		});
+
 		refreshButton.addActionListener(e -> refreshData());
 	}
 
-	private void repopulateTimeRanges(String intervalCode) {
-		int minutes = Intervals.minutesOf(intervalCode);
-		List<String> ranges = TimeRangePresets.allowedRangesFor(minutes);
+	private void updateTimeRangeSelection() {
+		String code = (String) intervalComboBox.getSelectedItem();
+		if (!Intervals.isValid(code)) {
+			return;
+		}
+
+		int minutes = Intervals.minutesOf(code);
+		List<String> allowed = TimeRangePresets.allowedRangesFor(minutes);
+
+		// Rebuild model
 		DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>();
-		for (String presetId : ranges) {
+		for (String presetId : allowed) {
 			model.addElement(presetId);
 		}
-		timeRangeComboBox.setModel(model);
+
+		updatingRange = true;
+		try {
+			timeRangeComboBox.setModel(model);
+
+			String saved = lastTimeRangeByInterval.get(code);
+			if (saved != null && allowed.contains(saved)) {
+				timeRangeComboBox.setSelectedItem(saved);
+			} else if (!allowed.isEmpty()) {
+				String fallback = allowed.get(0);
+				timeRangeComboBox.setSelectedItem(fallback);
+				lastTimeRangeByInterval.put(code, fallback);
+			}
+		} finally {
+			updatingRange = false;
+		}
 	}
 
-	private void selectBestDefaultRange() {
-		ComboBoxModel<String> model = timeRangeComboBox.getModel();
-		int fallback = model.getSize() - 1;
-		for (int i = 0; i < model.getSize(); i++) {
-			String val = model.getElementAt(i);
-			if ("last_24h".equals(val)) {
-				timeRangeComboBox.setSelectedIndex(i);
-				return;
+	public void setSelection(String channelId, String channelName, Integer connectorId, String connectorName) {
+		SelectionInfo newSel = new SelectionInfo(channelId, channelName, connectorId, connectorName);
+		boolean needRefresh = false;
+
+		if (this.selection == null || !Objects.equals(this.selection.getChannelId(), newSel.getChannelId()) || !Objects.equals(this.selection.getConnectorId(), newSel.getConnectorId())) {
+			needRefresh = true;
+		}
+
+		if (!needRefresh) {
+			final String intervalCode = (String) intervalComboBox.getSelectedItem();
+			if (Intervals.isValid(intervalCode)) {
+				long now = System.currentTimeMillis();
+				long last = lastFetchByInterval.getOrDefault(intervalCode, 0L);
+				long gateMs = Intervals.minutesOf(intervalCode) * 60_000L;
+
+				if (now - last >= gateMs) {
+					needRefresh = true;
+				}
 			}
 		}
-		if (fallback >= 0) {
-			timeRangeComboBox.setSelectedIndex(fallback);
+
+		if (needRefresh) {
+			this.selection = newSel;
+			refreshData();
 		}
 	}
 
-	/** Set the channel to display statistics for */
-	public void setChannelId(String channelId, String channelName) {
-		this.channelId = channelId;
-		this.channelName = channelName;
+	public void blockSelection(SelectionBlockReason reason) {
+		setControlsEnabled(false);
 
-		refreshData();
+		reset(warningMessageForReason(reason));
+	}
+
+	public void unblockSelection() {
+
 	}
 
 	private void setControlsEnabled(boolean enabled) {
@@ -264,6 +348,16 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		timeRangeComboBox.setEnabled(enabled);
 		viewComboBox.setEnabled(enabled);
 		refreshButton.setEnabled(enabled);
+	}
+
+	private String warningMessageForReason(SelectionBlockReason reason) {
+		switch (reason) {
+		case MULTI_SELECTED:
+			return "Multiple items selected. Please select exactly one channel or one connector.";
+		case NO_SELECTION:
+		default:
+			return "No valid selection. Please select a channel or a connector.";
+		}
 	}
 
 	// -------------------- Refresh (Intervals-aware) --------------------
@@ -274,19 +368,28 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			return;
 		}
 
-		if (channelId == null) {
-			updateChartTitle("No Channel Selected");
-			lastData = Collections.emptyList();
-			rebindDataset();
+		if (selection == null || selection.getChannelId() == null) {
 			return;
 		}
 
-		final String chId = this.channelId;
-		final String chName = this.channelName;
+		final String chId = selection.getChannelId();
+		final String chName = selection.getChannelName();
+		final String connId = Objects.toString(selection.getConnectorId(), null);
+		final String connName = selection.getConnectorName();
 		final String intervalCode = (String) intervalComboBox.getSelectedItem();
+
 		if (!Intervals.isValid(intervalCode)) {
 			parent.alertError(parent, "Unsupported interval: " + intervalCode);
 			return;
+		}
+
+		// Record fetch timestamp
+		lastFetchByInterval.put(intervalCode, System.currentTimeMillis());
+
+		if (connId == null) {
+			updateChartTitle("Message Volume for Channel: " + chName);
+		} else {
+			updateChartTitle("Message Volume for Connector: " + connName + " (Channel: " + chName + ")");
 		}
 
 		final String presetId = getSelectedPresetId();
@@ -314,7 +417,12 @@ public class MessageTrendsDashboardPanel extends JPanel {
 						return Collections.emptyList();
 					}
 
-					return MessageTrendsServiceClient.getInstance().getChannelStatistics(chId, startTs, endTs, intervalCode);
+					if (connId == null) {
+						return MessageTrendsServiceClient.getInstance().getChannelStatistics(chId, startTs, endTs, intervalCode);
+					}
+
+					return MessageTrendsServiceClient.getInstance().getConnectorStatistics(chId, connId, startTs, endTs, intervalCode);
+
 				} catch (ClientException e) {
 					return Collections.emptyList();
 				} catch (Throwable t) {
@@ -333,7 +441,6 @@ public class MessageTrendsDashboardPanel extends JPanel {
 					lastData = (data != null) ? data : Collections.emptyList();
 					rebindDataset();
 					updateSummary(lastData);
-					updateChartTitle("Message Volume for " + chName);
 				} catch (Exception ex) {
 					parent.alertError(parent, "Error retrieving statistics. Exception: " + ex.getMessage());
 				} finally {
@@ -353,7 +460,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 
 	private static long[] computeRangeFromPreset(String presetId, long nowMs) {
 		// fallback = 24h
-		java.time.Duration d = TimeRangePresets.PRESET_TO_DURATION.getOrDefault(presetId, java.time.Duration.ofDays(1));
+		Duration d = TimeRangePresets.PRESET_TO_DURATION.getOrDefault(presetId, Duration.ofDays(1));
 
 		long start = nowMs - d.toMillis();
 		long end = nowMs;
@@ -365,6 +472,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		TimeSeries receivedSeries = new TimeSeries("Received");
 		TimeSeries sentSeries = new TimeSeries("Sent");
 		TimeSeries filteredSeries = new TimeSeries("Filtered");
+		TimeSeries queuedSeries = new TimeSeries("Queued");
 		TimeSeries errorSeries = new TimeSeries("Error");
 
 		String intervalCode = (String) intervalComboBox.getSelectedItem();
@@ -384,23 +492,17 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			receivedSeries.addOrUpdate(p, b.getReceived());
 			sentSeries.addOrUpdate(p, b.getSent());
 			filteredSeries.addOrUpdate(p, b.getFiltered());
+			queuedSeries.addOrUpdate(p, b.getQueued());
 			errorSeries.addOrUpdate(p, b.getError());
 		}
 
 		TimeSeriesCollection dataset = new TimeSeriesCollection();
-		View v = (View) viewComboBox.getSelectedItem();
-		if (v == View.ALL || v == View.RECEIVED) {
-			dataset.addSeries(receivedSeries);
-		}
-		if (v == View.ALL || v == View.SENT) {
-			dataset.addSeries(sentSeries);
-		}
-		if (v == View.ALL) {
-			dataset.addSeries(filteredSeries);
-		}
-		if (v == View.ALL || v == View.ERRORS) {
-			dataset.addSeries(errorSeries);
-		}
+
+		dataset.addSeries(receivedSeries); // index 0
+		dataset.addSeries(sentSeries); // index 1
+		dataset.addSeries(filteredSeries); // index 2
+		dataset.addSeries(queuedSeries); // index 3
+		dataset.addSeries(errorSeries); // index 4
 
 		JFreeChart chart = chartPanel.getChart();
 		XYPlot plot = (XYPlot) chart.getPlot();
@@ -410,21 +512,76 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		renderer.setDefaultShapesVisible(true);
 		renderer.setDefaultShapesFilled(true);
 
-		DateAxis axis = (DateAxis) plot.getDomainAxis();
-		if (minutes >= 1440) {
-			axis.setDateFormatOverride(new SimpleDateFormat("MMM dd"));
-		} else if (minutes >= 60) {
-			axis.setDateFormatOverride(new SimpleDateFormat("MMM dd HH:mm"));
-		} else {
-			axis.setDateFormatOverride(new SimpleDateFormat("HH:mm"));
+		View v = (View) viewComboBox.getSelectedItem();
+
+		// Default
+		boolean[] visible = new boolean[5];
+
+		switch (v) {
+		case ALL:
+			Arrays.fill(visible, true);
+			break;
+		case RECEIVED:
+			visible[0] = true;
+			break;
+		case SENT:
+			visible[1] = true;
+			break;
+		case FILTERED:
+			visible[2] = true;
+			break;
+		case QUEUED:
+			visible[3] = true;
+			break;
+		case ERRORS:
+			visible[4] = true;
+			break;
+		default:
+			break;
 		}
+
+		// Apply flags
+		for (int i = 0; i < visible.length; i++) {
+			renderer.setSeriesVisible(i, visible[i]);
+			renderer.setSeriesVisibleInLegend(i, visible[i]);
+		}
+
+		DateAxis axis = (DateAxis) plot.getDomainAxis();
+		// Determine visible span
+		long spanMs = 0L;
+		if (lastStartTsMs != null && lastEndTsMs != null && lastEndTsMs > lastStartTsMs) {
+			spanMs = lastEndTsMs - lastStartTsMs;
+		}
+
+		String pattern;
+		final long ONE_H = 60L * 60_000L;
+		final long ONE_D = 24L * ONE_H;
+		final long ONE_Y = 365L * ONE_D;
+
+		if (spanMs <= ONE_D) {
+			pattern = "HH:mm";
+		} else if (spanMs <= 7L * ONE_D) {
+			pattern = "MMM dd HH:mm";
+		} else if (spanMs <= 90L * ONE_D) {
+			pattern = "MMM dd";
+		} else if (spanMs <= 3L * ONE_Y) {
+			pattern = "yyyy-MM";
+		} else {
+			pattern = "yyyy";
+		}
+
+		axis.setDateFormatOverride(new SimpleDateFormat(pattern));
 
 		// lock axis to preset window regardless of dataset
 		if (lastStartTsMs != null && lastEndTsMs != null && lastEndTsMs > lastStartTsMs) {
 			axis.setRange(new Date(lastStartTsMs), new Date(lastEndTsMs));
-		} else {
-			axis.setAutoRange(true); // fallback (shouldn't happen, but safe)
 		}
+
+		// Ox: lock auto-range
+		axis.setAutoRange(false);
+
+		// Oy: auto-range
+		plot.getRangeAxis().setAutoRange(true);
 	}
 
 	private void updateChartTitle(String title) {
@@ -433,46 +590,95 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	}
 
 	private void updateSummary(List<MessageStatisticsTimeseries> data) {
-		long totalReceived = 0, totalSent = 0, totalFiltered = 0, totalError = 0;
-		long maxReceived = 0;
-		Date peakTime = null;
-
-		for (MessageStatisticsTimeseries b : data) {
-			totalReceived += b.getReceived();
-			totalSent += b.getSent();
-			totalFiltered += b.getFiltered();
-			totalError += b.getError();
-			if (b.getReceived() > maxReceived) {
-				maxReceived = b.getReceived();
-				peakTime = b.getTs();
-			}
+		View v = (View) viewComboBox.getSelectedItem();
+		if (v == null) {
+			return;
 		}
 
-		double avgRate = 0.0;
-		if (data.size() > 1) {
-			Date start = data.get(0).getTs();
-			Date end = data.get(data.size() - 1).getTs();
-			if (start != null && end != null) {
-				long spanMs = end.getTime() - start.getTime();
-				double hours = spanMs / (double) (60 * 60 * 1000L);
-				if (hours > 0) {
-					avgRate = totalReceived / hours;
+		switch (v) {
+		case ALL: {
+			long totalReceived = 0, totalSent = 0, totalFiltered = 0, totalQueued = 0, totalError = 0;
+			for (MessageStatisticsTimeseries b : data) {
+				totalReceived += b.getReceived();
+				totalSent += b.getSent();
+				totalFiltered += b.getFiltered();
+				totalQueued += b.getQueued();
+				totalError += b.getError();
+			}
+			summaryAllView.setTotals(totalReceived, totalSent, totalFiltered, totalQueued, totalError);
+			break;
+		}
+		case RECEIVED:
+		case SENT:
+		case FILTERED:
+		case QUEUED:
+		case ERRORS: {
+			String metricName;
+			ToIntFunction<MessageStatisticsTimeseries> getter;
+			switch (v) {
+			case RECEIVED:
+				metricName = "Received";
+				getter = MessageStatisticsTimeseries::getReceived;
+				break;
+			case SENT:
+				metricName = "Sent";
+				getter = MessageStatisticsTimeseries::getSent;
+				break;
+			case FILTERED:
+				metricName = "Filtered";
+				getter = MessageStatisticsTimeseries::getFiltered;
+				break;
+			case QUEUED:
+				metricName = "Queued";
+				getter = MessageStatisticsTimeseries::getQueued;
+				break;
+			case ERRORS:
+			default:
+				metricName = "Errors";
+				getter = MessageStatisticsTimeseries::getError;
+				break;
+			}
+
+			long total = 0, min = Long.MAX_VALUE, max = Long.MIN_VALUE;
+			Date peakTs = null;
+			for (MessageStatisticsTimeseries b : data) {
+				int val = getter.applyAsInt(b);
+				total += val;
+				if (val < min)
+					min = val;
+				if (val > max) {
+					max = val;
+					peakTs = b.getTs();
 				}
 			}
-		}
+			if (data.isEmpty()) {
+				min = max = 0;
+			}
 
-		totalReceivedLabel.setText("Total Received: " + formatNumber(totalReceived));
-		totalSentLabel.setText("Total Sent: " + formatNumber(totalSent));
-		totalFilteredLabel.setText("Total Filtered: " + formatNumber(totalFiltered));
-		totalErrorLabel.setText("Total Errors: " + formatNumber(totalError));
+			// Avg per bucket
+			double avgBucket = data.isEmpty() ? 0.0 : (double) total / data.size();
 
-		if (peakTime != null) {
-			SimpleDateFormat sdf = new SimpleDateFormat("MM/dd HH:mm");
-			peakTimeLabel.setText("Peak Time: " + sdf.format(peakTime) + " (" + maxReceived + " msgs)");
-		} else {
-			peakTimeLabel.setText("Peak Time: N/A");
+			// Avg rate (per minute)
+			double avgRate = 0.0;
+			if (data.size() > 1) {
+				Date start = data.get(0).getTs();
+				Date end = data.get(data.size() - 1).getTs();
+				if (start != null && end != null && end.after(start)) {
+					double minutes = (end.getTime() - start.getTime()) / 60000.0;
+					if (minutes > 0) {
+						avgRate = total / minutes;
+					}
+				}
+			}
+
+			String peakStr = (peakTs != null) ? String.format("%tF %<tT", peakTs) : "—";
+
+			summaryMetricView.setBorder(new javax.swing.border.TitledBorder(metricName + " Statistics Summary"));
+			summaryMetricView.setStats(formatNumber(total), String.format(Locale.US, "%.1f", avgBucket), formatNumber(min), formatNumber(max), peakStr, String.format(Locale.US, "%.1f msg/min", avgRate));
+
+			break;
 		}
-		avgRateLabel.setText(String.format(Locale.US, "Avg. Processing Rate: %.1f msgs/hour", avgRate));
+		}
 	}
 
 	private String formatNumber(long n) {
@@ -482,17 +688,24 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	public void cleanup() {
 		/* no-op for now */ }
 
-	public void reset() {
-		channelId = null;
-		updateChartTitle("No Channel Selected");
+	public void reset(String title) {
+		selection = null;
+		updateChartTitle(title);
 		lastData = Collections.emptyList();
 		rebindDataset();
-		totalReceivedLabel.setText("Total Received: 0");
-		totalSentLabel.setText("Total Sent: 0");
-		totalFilteredLabel.setText("Total Filtered: 0");
-		totalErrorLabel.setText("Total Errors: 0");
-		peakTimeLabel.setText("Peak Time: N/A");
-		avgRateLabel.setText("Avg. Processing Rate: 0 msgs/hour");
+
+//		showSummaryForView(View.ALL);
+		summaryAllView.reset();
+		summaryMetricView.reset();
+	}
+
+	private void showSummaryForView(View v) {
+		CardLayout cl = (CardLayout) summaryCardPanel.getLayout();
+		if (v == View.ALL) {
+			cl.show(summaryCardPanel, CARD_ALL);
+		} else {
+			cl.show(summaryCardPanel, CARD_METRIC);
+		}
 	}
 
 	/** Utility to map minutes -> RegularTimePeriod for consistent alignment */
@@ -530,4 +743,44 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			return code;
 		}
 	}
+
+	private static class SelectionInfo {
+		private final String channelId;
+		private final String channelName;
+		private final Integer connectorId;
+		private final String connectorName;
+
+		public SelectionInfo(String channelId, String channelName, Integer connectorId, String connectorName) {
+			this.channelId = channelId;
+			this.channelName = channelName;
+			this.connectorId = connectorId;
+			this.connectorName = connectorName;
+		}
+
+		public boolean isChannelLevel() {
+			return connectorId == null;
+		}
+
+		public String getChannelId() {
+			return channelId;
+		}
+
+		public String getChannelName() {
+			return channelName;
+		}
+
+		public Integer getConnectorId() {
+			return connectorId;
+		}
+
+		public String getConnectorName() {
+			return connectorName;
+		}
+
+		@Override
+		public String toString() {
+			return isChannelLevel() ? "Channel[" + channelName + "]" : "Connector[" + connectorName + "] in Channel[" + channelName + "]";
+		}
+	}
+
 }
