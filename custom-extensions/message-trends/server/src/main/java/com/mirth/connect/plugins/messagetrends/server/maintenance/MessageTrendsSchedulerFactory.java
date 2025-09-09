@@ -33,7 +33,7 @@ public final class MessageTrendsSchedulerFactory {
 		Objects.requireNonNull(config, "config");
 
 		// --- Wire runners from config ---
-		MinuteFlushRunner flushRunner = new MinuteFlushRunner(service, config.getFlushClock(), config.getFlushSweepSeconds(), serverId);
+		MinuteFlushRunner flushRunner = new MinuteFlushRunner(service, config.getFlushClock(), serverId);
 		flushRunner.setEnabled(config.isFlushEnabled());
 
 		RollupRunner rollupRunner = new RollupRunner(service, config.getRollupClock(), config.getRollupFixedRateSeconds(), serverId);

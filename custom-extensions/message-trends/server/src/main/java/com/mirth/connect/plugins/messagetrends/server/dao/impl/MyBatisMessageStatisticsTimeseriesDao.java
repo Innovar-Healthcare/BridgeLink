@@ -106,11 +106,19 @@ public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsT
 	}
 
 	@Override
-	public int replaceRollupWindow(Date startTs, int bucketSizeMinutes, List<MessageStatisticsTimeseries> list) {
+	public int replaceRollupWindow(String serverId, Date startTs, int bucketSizeMinutes, List<MessageStatisticsTimeseries> list) {
 		SqlSession session = sqlSessionManager.openSession();
 
 		boolean commitSuccess = false;
 		try {
+			if (serverId == null) {
+				throw new IllegalArgumentException("serverId cannot be null");
+			}
+
+			if (startTs == null) {
+				throw new IllegalArgumentException("startTs cannot be null");
+			}
+
 			if (list == null) {
 				throw new IllegalArgumentException("List of rollup rows cannot be null");
 			}
@@ -131,21 +139,15 @@ public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsT
 				}
 			}
 
-			int deleted = 0;
+			Map<String, Object> params = new HashMap<>();
+			params.put("serverId", serverId);
+			params.put("ts", startTs);
+			params.put("bucketSizeMinutes", bucketSizeMinutes);
+
+			int deleted = session.delete(NS + ".deleteRollupWindow", params);
+
 			int inserted = 0;
-
 			if (!list.isEmpty()) {
-				// Use the serverId from the first row (assume all consistent)
-				String serverId = list.get(0).getServerId();
-				Map<String, Object> params = new HashMap<>();
-				params.put("serverId", serverId);
-				params.put("ts", startTs);
-				params.put("bucketSizeMinutes", bucketSizeMinutes);
-
-				// 1) Delete existing rows for this window
-				deleted = session.delete(NS + ".deleteRollupWindow", params);
-
-				// 2) Insert new batch rows (already grouped by unique key)
 				inserted = session.insert(NS + ".insertRollupRows", list);
 			}
 

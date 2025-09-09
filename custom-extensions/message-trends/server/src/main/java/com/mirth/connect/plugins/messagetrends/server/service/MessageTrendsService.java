@@ -67,7 +67,7 @@ public class MessageTrendsService {
 	public int replaceRollupWindow(Date startTs, int bucketSizeMinutes, List<MessageStatisticsTimeseries> list) {
 		ensureInit();
 		try {
-			return dao.replaceRollupWindow(startTs, bucketSizeMinutes, list);
+			return dao.replaceRollupWindow(serverId, startTs, bucketSizeMinutes, list);
 		} catch (Exception e) {
 			logger.warn("Failed to replace rollup window", e);
 			return 0;

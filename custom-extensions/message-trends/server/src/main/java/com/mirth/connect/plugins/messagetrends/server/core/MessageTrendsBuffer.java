@@ -1,8 +1,5 @@
 package com.mirth.connect.plugins.messagetrends.server.core;
 
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
@@ -22,6 +19,7 @@ import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTim
  * periodic flush to DB
  */
 public final class MessageTrendsBuffer {
+	private volatile boolean enabled = true;
 
 	private MessageTrendsBuffer() {
 	}
@@ -38,13 +36,25 @@ public final class MessageTrendsBuffer {
 	private final ConcurrentMap<String, ConcurrentMap<Status, AtomicInteger>> channelStats = new ConcurrentHashMap<>();
 	private final ConcurrentMap<String, ConcurrentMap<String, ConcurrentMap<Status, AtomicInteger>>> connectorStats = new ConcurrentHashMap<>();
 
+	public synchronized void setEnabled(boolean enabled) {
+		if (this.enabled != enabled) {
+			if (enabled) {
+				resetAll();
+			}
+
+			this.enabled = enabled;
+		}
+	}
+
 	/**
 	 * Bulk add from Donkey map: channelId -> connectorId(Integer or null) ->
 	 * (Status -> delta).
 	 */
 	public void addFromDonkeyMap(Map<String, Map<Integer, Map<Status, Long>>> stats) {
-		if (stats == null || stats.isEmpty())
+		if (!enabled || stats == null || stats.isEmpty()) {
 			return;
+		}
+
 		for (Map.Entry<String, Map<Integer, Map<Status, Long>>> ch : stats.entrySet()) {
 			final String channelId = ch.getKey();
 			final Map<Integer, Map<Status, Long>> perConn = ch.getValue();
@@ -67,15 +77,17 @@ public final class MessageTrendsBuffer {
 
 	/** Add deltas for one (channelId, connectorId?). */
 	public void addDeltas(String channelId, String connectorId, Map<Status, Long> deltas) {
-		if (channelId == null || deltas == null || deltas.isEmpty())
+		if (channelId == null || deltas == null || deltas.isEmpty()) {
 			return;
+		}
 
 		// Channel-level
-		channelStats.computeIfAbsent(channelId, k -> new ConcurrentHashMap<>()).computeIfAbsent(Status.RECEIVED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.RECEIVED, 0L)));
-		channelStats.get(channelId).computeIfAbsent(Status.FILTERED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.FILTERED, 0L)));
-		channelStats.get(channelId).computeIfAbsent(Status.QUEUED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.QUEUED, 0L)));
-		channelStats.get(channelId).computeIfAbsent(Status.SENT, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.SENT, 0L)));
-		channelStats.get(channelId).computeIfAbsent(Status.ERROR, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.ERROR, 0L)));
+		final ConcurrentMap<Status, AtomicInteger> ch = channelStats.computeIfAbsent(channelId, k -> new ConcurrentHashMap<>());
+		ch.computeIfAbsent(Status.RECEIVED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.RECEIVED, 0L)));
+		ch.computeIfAbsent(Status.FILTERED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.FILTERED, 0L)));
+		ch.computeIfAbsent(Status.QUEUED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.QUEUED, 0L)));
+		ch.computeIfAbsent(Status.SENT, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.SENT, 0L)));
+		ch.computeIfAbsent(Status.ERROR, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.ERROR, 0L)));
 
 		// Connector-level (optional)
 		if (connectorId != null) {
@@ -90,15 +102,8 @@ public final class MessageTrendsBuffer {
 		}
 	}
 
-	/** Snapshot current counters (floor ts to bucket) and reset to zero. */
-	public List<MessageStatisticsTimeseries> snapshotAndReset(Instant now, int bucketMinutes, String serverId, ZoneId zone) {
-		if (zone == null) {
-			zone = ZoneId.of("UTC");
-		}
-
-		final Instant bucketStart = floorToBucket(now, bucketMinutes, zone);
-		final Date ts = Date.from(bucketStart);
-
+	/** Snapshot current counters and reset to zero. */
+	public List<MessageStatisticsTimeseries> snapshotAndReset(Date ts, int bucketMinutes, String serverId) {
 		List<MessageStatisticsTimeseries> out = new ArrayList<>(256);
 
 		// Channel-level rows
@@ -165,6 +170,11 @@ public final class MessageTrendsBuffer {
 
 	// --- Helpers ---
 
+	private void resetAll() {
+		channelStats.clear();
+		connectorStats.clear();
+	}
+
 	private static int getAndZero(Map<Status, AtomicInteger> map, Status key) {
 		AtomicInteger ai = map.get(key);
 		return (ai == null) ? 0 : ai.getAndSet(0);
@@ -172,11 +182,5 @@ public final class MessageTrendsBuffer {
 
 	private static int safeToInt(long v) {
 		return (v > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (v < Integer.MIN_VALUE) ? Integer.MIN_VALUE : (int) v;
-	}
-
-	private static Instant floorToBucket(Instant instant, int bucketMinutes, ZoneId zone) {
-		ZonedDateTime zdt = instant.atZone(zone).withSecond(0).withNano(0);
-		int floored = (zdt.getMinute() / bucketMinutes) * bucketMinutes;
-		return zdt.withMinute(floored).withSecond(0).withNano(0).toInstant();
 	}
 }

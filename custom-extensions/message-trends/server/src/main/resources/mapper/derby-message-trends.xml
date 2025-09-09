@@ -35,6 +35,23 @@
 	       AND bucket_size_minutes = #{bucketSizeMinutes}
   	</update>
     
+    <!-- Derby mapper: MessageTrends -->
+
+	<delete id="deleteRollupWindow" parameterType="map">
+	  	DELETE FROM message_statistics_timeseries
+	  	WHERE server_id = #{serverId}
+	    	AND bucket_size_minutes = #{bucketSizeMinutes}
+	    	AND ts = #{ts,jdbcType=TIMESTAMP}
+	</delete>
+	
+	<insert id="insertRollupRows" parameterType="java.util.List">
+	  	INSERT INTO message_statistics_timeseries (server_id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error)
+	  	VALUES
+	  	<foreach collection="list" item="r" separator=",">
+	    	(#{r.serverId}, #{r.channelId}, #{r.connectorId}, #{r.ts,jdbcType=TIMESTAMP}, #{r.bucketSizeMinutes}, #{r.received}, #{r.filtered}, #{r.queued}, #{r.sent}, #{r.error})
+	  </foreach>
+	</insert>
+	
     <delete id="purgeBefore" parameterType="map">
     	DELETE FROM message_statistics_timeseries
      	WHERE server_id = #{serverId} AND bucket_size_minutes = #{bucketSizeMinutes} AND ts <![CDATA[ < ]]> #{cutoffTs}

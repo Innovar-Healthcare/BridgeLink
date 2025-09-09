@@ -50,7 +50,7 @@ public final class MessageTrendsScheduler {
 
 	private void scheduleFlush() {
 		long initial = flushRunner.initialDelaySecondsToNextMinuteBoundary();
-		flushTask = flushExec.scheduleAtFixedRate(flushRunner::runOnce, initial, flushRunner.getSweepIntervalSeconds(), TimeUnit.SECONDS);
+		flushTask = flushExec.scheduleAtFixedRate(flushRunner::runOnce, initial, flushRunner.getFixedRateSeconds(), TimeUnit.SECONDS);
 	}
 
 	private void scheduleRollups() {

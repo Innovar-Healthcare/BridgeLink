@@ -3,8 +3,8 @@ package com.mirth.connect.plugins.messagetrends.server.maintenance;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.Date;
 import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
@@ -16,26 +16,26 @@ import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTim
 
 final class MinuteFlushRunner {
 	private static final Logger log = LogManager.getLogger(MinuteFlushRunner.class);
+	private static final int FIXED_RATE_SECONDS = 60;
 
 	private final MessageTrendsService service;
 	private final MessageTrendsBuffer buffer = MessageTrendsBuffer.getInstance();
 
 	private final Clock clock; // UTC
-	private final int sweepIntervalSeconds; // 5–10s
 	private final String serverId;
+	private Date lastFlushedTs = null;
 
 	/** Master enable switch for this runner. */
 	private volatile boolean enabled = true;
 
-	MinuteFlushRunner(MessageTrendsService service, Clock clock, int sweepIntervalSeconds, String serverId) {
+	MinuteFlushRunner(MessageTrendsService service, Clock clock, String serverId) {
 		this.service = service;
 		this.clock = clock == null ? Clock.systemUTC() : clock;
-		this.sweepIntervalSeconds = Math.max(1, sweepIntervalSeconds);
 		this.serverId = serverId;
 	}
 
-	int getSweepIntervalSeconds() {
-		return sweepIntervalSeconds;
+	int getFixedRateSeconds() {
+		return FIXED_RATE_SECONDS;
 	}
 
 	long initialDelaySecondsToNextMinuteBoundary() {
@@ -46,7 +46,12 @@ final class MinuteFlushRunner {
 
 	/** Enable/disable the runner at runtime. */
 	void setEnabled(boolean enabled) {
-		this.enabled = enabled;
+		if (this.enabled != enabled) {
+			buffer.setEnabled(enabled);
+
+			this.enabled = enabled;
+		}
+
 	}
 
 	void runOnce() {
@@ -55,22 +60,22 @@ final class MinuteFlushRunner {
 		}
 
 		try {
-			Instant now = clock.instant();
-			Instant bucketStart = now.truncatedTo(ChronoUnit.MINUTES); // minute boundary UTC
-			List<MessageStatisticsTimeseries> rows = buffer.snapshotAndReset(bucketStart, /* bucket= */1, serverId, ZoneId.of("UTC"));
-			if (rows.isEmpty())
-				return;
+			Instant bucketStart = clock.instant().truncatedTo(ChronoUnit.MINUTES).minus(1, ChronoUnit.MINUTES);
+			Date ts = Date.from(bucketStart);
 
-			int ok = 0;
-			for (MessageStatisticsTimeseries m : rows) {
-				try {
-					service.upsertMinuteDelta(m);
-					ok++;
-				} catch (Throwable t) {
-					log.warn("MinuteFlushRunner upsert failed for channel={} connector={} ts={}", m.getChannelId(), m.getConnectorId(), m.getTs(), t);
-				}
+			if (lastFlushedTs != null && ts.equals(lastFlushedTs)) {
+				return;
 			}
-			log.debug("MinuteFlushRunner: flushed {} deltas at {}", ok, bucketStart);
+			lastFlushedTs = ts;
+
+			List<MessageStatisticsTimeseries> rows = buffer.snapshotAndReset(ts, 1, serverId);
+			if (rows.isEmpty()) {
+				return;
+			}
+
+			int inserted = service.replaceRollupWindow(ts, 1, rows);
+
+			log.debug("MinuteFlushRunner: flushed {} rows for {}", inserted, bucketStart);
 		} catch (Throwable t) {
 			log.warn("MinuteFlushRunner runOnce failed", t);
 		}

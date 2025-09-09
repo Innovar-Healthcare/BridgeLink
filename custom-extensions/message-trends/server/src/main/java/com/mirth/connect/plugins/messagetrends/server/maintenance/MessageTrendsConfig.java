@@ -24,8 +24,6 @@ public final class MessageTrendsConfig {
 	// ----- Flush (add minute deltas) -----
 	/** Whether the flush runner is active. */
 	private final boolean flushEnabled;
-	/** Sweep interval (seconds) for scanning the in-memory buffer. */
-	private final int flushSweepSeconds;
 	/** Clock to align minute boundaries (usually UTC). */
 	private final Clock flushClock;
 
@@ -56,11 +54,10 @@ public final class MessageTrendsConfig {
 	private final Clock purgeClock;
 
 	// ---- Constructor kept private to enforce defaults via factory ----
-	private MessageTrendsConfig(boolean enabled, boolean flushEnabled, int flushSweepSeconds, Clock flushClock, boolean rollupEnabled, int rollupFixedRateSeconds, Map<Integer, Duration> rollupSafetyLagByBucket, Clock rollupClock, boolean purgeEnabled, int purgeFixedRateSeconds, long purgeThrottleMs, ZoneId purgeZone, Map<Integer, Duration> retentionByBucket, Clock purgeClock) {
+	private MessageTrendsConfig(boolean enabled, boolean flushEnabled, Clock flushClock, boolean rollupEnabled, int rollupFixedRateSeconds, Map<Integer, Duration> rollupSafetyLagByBucket, Clock rollupClock, boolean purgeEnabled, int purgeFixedRateSeconds, long purgeThrottleMs, ZoneId purgeZone, Map<Integer, Duration> retentionByBucket, Clock purgeClock) {
 		this.enabled = enabled;
 
 		this.flushEnabled = flushEnabled;
-		this.flushSweepSeconds = flushSweepSeconds;
 		this.flushClock = flushClock != null ? flushClock : Clock.systemUTC();
 
 		this.rollupEnabled = rollupEnabled;
@@ -80,7 +77,7 @@ public final class MessageTrendsConfig {
 
 	// ----- Factory with centralized defaults -----
 	public static MessageTrendsConfig defaultConfig() {
-		return new MessageTrendsConfig(/* enabled */ false, /* flushEnabled */ true, /* flushSweepSeconds */ 10, /* flushClock */ Clock.systemUTC(), /* rollupEnabled */ true, /* rollupFixedRateSeconds */ 120, /* rollupSafetyLagByBucket */ defaultRollupSafetyLag(), /* rollupClock */ Clock.systemUTC(), /* purgeEnabled */ true, /* purgeFixedRateSeconds */ 24 * 3600, /* purgeThrottleMs */ 200L, /* purgeZone */ ZoneId.systemDefault(), /* retentionByBucket */ defaultRetention(), /* purgeClock */ Clock.systemUTC());
+		return new MessageTrendsConfig(/* enabled */ false, /* flushEnabled */ true, /* flushClock */ Clock.systemUTC(), /* rollupEnabled */ true, /* rollupFixedRateSeconds */ 120, /* rollupSafetyLagByBucket */ defaultRollupSafetyLag(), /* rollupClock */ Clock.systemUTC(), /* purgeEnabled */ true, /* purgeFixedRateSeconds */ 24 * 3600, /* purgeThrottleMs */ 200L, /* purgeZone */ ZoneId.systemDefault(), /* retentionByBucket */ defaultRetention(), /* purgeClock */ Clock.systemUTC());
 	}
 
 	// ----- Getters -----
@@ -90,10 +87,6 @@ public final class MessageTrendsConfig {
 
 	public boolean isFlushEnabled() {
 		return flushEnabled;
-	}
-
-	public int getFlushSweepSeconds() {
-		return flushSweepSeconds;
 	}
 
 	public Clock getFlushClock() {
@@ -143,7 +136,7 @@ public final class MessageTrendsConfig {
 	// ----- Minimal withers (V1 only needs withEnabled; others can be added later)
 	// -----
 	public MessageTrendsConfig withEnabled(boolean value) {
-		return new MessageTrendsConfig(value, this.flushEnabled, this.flushSweepSeconds, this.flushClock, this.rollupEnabled, this.rollupFixedRateSeconds, this.rollupSafetyLagByBucket, this.rollupClock, this.purgeEnabled, this.purgeFixedRateSeconds, this.purgeThrottleMs, this.purgeZone, this.retentionByBucket, this.purgeClock);
+		return new MessageTrendsConfig(value, this.flushEnabled, this.flushClock, this.rollupEnabled, this.rollupFixedRateSeconds, this.rollupSafetyLagByBucket, this.rollupClock, this.purgeEnabled, this.purgeFixedRateSeconds, this.purgeThrottleMs, this.purgeZone, this.retentionByBucket, this.purgeClock);
 	}
 
 	// ----- Defaults for complex fields -----
@@ -168,9 +161,6 @@ public final class MessageTrendsConfig {
 
 	// ----- Validation & helpers -----
 	private void validate() {
-		if (flushSweepSeconds < 1) {
-			throw new IllegalArgumentException("flushSweepSeconds must be >= 1");
-		}
 		if (rollupFixedRateSeconds < 30) {
 			throw new IllegalArgumentException("rollupFixedRateSeconds must be >= 30");
 		}
