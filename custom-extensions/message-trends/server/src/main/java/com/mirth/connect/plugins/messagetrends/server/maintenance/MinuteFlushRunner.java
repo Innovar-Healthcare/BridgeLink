@@ -4,8 +4,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -66,18 +69,59 @@ final class MinuteFlushRunner {
 			if (lastFlushedTs != null && ts.equals(lastFlushedTs)) {
 				return;
 			}
-			lastFlushedTs = ts;
 
 			List<MessageStatisticsTimeseries> rows = buffer.snapshotAndReset(ts, 1, serverId);
 			if (rows.isEmpty()) {
 				return;
 			}
 
-			int inserted = service.replaceRollupWindow(ts, 1, rows);
+			final Map<RollKey, MessageStatisticsTimeseries> grouped = new LinkedHashMap<>();
+			for (MessageStatisticsTimeseries r : rows) {
+				final String serverId = r.getServerId();
+				final String channelId = r.getChannelId();
+				final String connectorId = r.getConnectorId();
+				final RollKey key = new RollKey(serverId, channelId, connectorId, ts, 1);
 
-			log.debug("MinuteFlushRunner: flushed {} rows for {}", inserted, bucketStart);
+				MessageStatisticsTimeseries acc = grouped.get(key);
+				if (acc == null) {
+					acc = new MessageStatisticsTimeseries();
+					acc.setServerId(serverId);
+					acc.setChannelId(channelId);
+					acc.setConnectorId(connectorId);
+					acc.setTs(ts);
+					acc.setBucketSizeMinutes(1);
+					acc.setReceived(0);
+					acc.setFiltered(0);
+					acc.setQueued(0);
+					acc.setSent(0);
+					acc.setError(0);
+					grouped.put(key, acc);
+				}
+				// sum metrics (null-safe)
+				acc.setReceived(nz(acc.getReceived()) + nz(r.getReceived()));
+				acc.setFiltered(nz(acc.getFiltered()) + nz(r.getFiltered()));
+				acc.setQueued(nz(acc.getQueued()) + nz(r.getQueued()));
+				acc.setSent(nz(acc.getSent()) + nz(r.getSent()));
+				acc.setError(nz(acc.getError()) + nz(r.getError()));
+			}
+
+			final List<MessageStatisticsTimeseries> rowsToWrite = new ArrayList<>(grouped.values());
+
+			if (rowsToWrite.isEmpty()) {
+				return;
+			}
+
+			int inserted = service.replaceRollupWindow(ts, 1, rowsToWrite);
+
+			lastFlushedTs = ts;
+
+			log.debug("MinuteFlushRunner: flushed {} rows for {}", inserted, ts);
 		} catch (Throwable t) {
 			log.warn("MinuteFlushRunner runOnce failed", t);
 		}
+	}
+
+	private static int nz(Integer v) {
+		return v == null ? 0 : v;
 	}
 }

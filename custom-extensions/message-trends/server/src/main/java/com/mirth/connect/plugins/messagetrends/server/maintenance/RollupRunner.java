@@ -140,7 +140,8 @@ final class RollupRunner {
 					final String connectorId = r.getConnectorId();
 
 					final Instant boundary = clampToBucketBoundary(dstBucket, r.getTs().toInstant());
-					final RollKey key = new RollKey(serverId, channelId, connectorId, boundary, dstBucket);
+					final Date bucketTs = Date.from(boundary);
+					final RollKey key = new RollKey(serverId, channelId, connectorId, bucketTs, dstBucket);
 
 					MessageStatisticsTimeseries acc = grouped.get(key);
 					if (acc == null) {
@@ -148,8 +149,8 @@ final class RollupRunner {
 						acc.setServerId(serverId);
 						acc.setChannelId(channelId);
 						acc.setConnectorId(connectorId);
-						acc.setTs(Date.from(boundary)); // dst boundary
-						acc.setBucketSizeMinutes(dstBucket); // dst bucket
+						acc.setTs(bucketTs);
+						acc.setBucketSizeMinutes(dstBucket);
 						acc.setReceived(0);
 						acc.setFiltered(0);
 						acc.setQueued(0);
@@ -193,36 +194,6 @@ final class RollupRunner {
 
 	private static int nz(Integer v) {
 		return v == null ? 0 : v;
-	}
-
-	// Composite key for grouping
-	private static final class RollKey {
-		final String serverId, channelId, connectorId;
-		final Instant boundary;
-		final int dstBucket;
-
-		RollKey(String s, String c, String k, Instant b, int d) {
-			this.serverId = s;
-			this.channelId = c;
-			this.connectorId = k;
-			this.boundary = b;
-			this.dstBucket = d;
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (this == o)
-				return true;
-			if (!(o instanceof RollKey))
-				return false;
-			RollKey x = (RollKey) o;
-			return dstBucket == x.dstBucket && java.util.Objects.equals(serverId, x.serverId) && java.util.Objects.equals(channelId, x.channelId) && java.util.Objects.equals(connectorId, x.connectorId) && java.util.Objects.equals(boundary, x.boundary);
-		}
-
-		@Override
-		public int hashCode() {
-			return java.util.Objects.hash(serverId, channelId, connectorId, boundary, dstBucket);
-		}
 	}
 
 	/**

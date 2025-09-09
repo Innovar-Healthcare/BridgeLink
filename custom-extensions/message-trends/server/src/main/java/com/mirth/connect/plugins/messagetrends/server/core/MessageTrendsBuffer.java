@@ -2,6 +2,7 @@ package com.mirth.connect.plugins.messagetrends.server.core;
 
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.EnumMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +58,11 @@ public final class MessageTrendsBuffer {
 
 		for (Map.Entry<String, Map<Integer, Map<Status, Long>>> ch : stats.entrySet()) {
 			final String channelId = ch.getKey();
+
+			if (channelId == null || channelId.isEmpty()) {
+				continue;
+			}
+
 			final Map<Integer, Map<Status, Long>> perConn = ch.getValue();
 			if (perConn == null || perConn.isEmpty()) {
 				continue;
@@ -64,13 +70,25 @@ public final class MessageTrendsBuffer {
 
 			for (Map.Entry<Integer, Map<Status, Long>> ce : perConn.entrySet()) {
 				final Integer connInt = ce.getKey();
-				final String connectorId = (connInt == null) ? null : String.valueOf(connInt);
+				final String connectorId = (connInt == null) ? null : Integer.toString(connInt);
 				final Map<Status, Long> deltas = ce.getValue();
 				if (deltas == null || deltas.isEmpty()) {
 					continue;
 				}
 
-				addDeltas(channelId, connectorId, deltas);
+				// filter null/0
+				Map<Status, Long> safe = new EnumMap<>(Status.class);
+				for (Map.Entry<Status, Long> e : deltas.entrySet()) {
+					Status st = e.getKey();
+					Long v = e.getValue();
+					if (st != null && v != null && v.longValue() != 0L) {
+						safe.put(st, v);
+					}
+				}
+				if (safe.isEmpty())
+					continue;
+
+				addDeltas(channelId, connectorId, safe);
 			}
 		}
 	}
