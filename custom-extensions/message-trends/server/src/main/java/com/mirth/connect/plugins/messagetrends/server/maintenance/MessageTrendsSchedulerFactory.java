@@ -16,8 +16,7 @@ public final class MessageTrendsSchedulerFactory {
 
 	/**
 	 * Build a scheduler using default runtime config
-	 * (MessageTrendsConfig.defaultConfig()). NOTE: V1 usually overrides only
-	 * `enabled` externally before starting.
+	 * MessageTrendsConfig.defaultConfig() `enabled` externally before starting.
 	 */
 	public static MessageTrendsScheduler build(MessageTrendsService service, String serverId) {
 		return build(service, serverId, MessageTrendsConfig.defaultConfig());
@@ -33,14 +32,14 @@ public final class MessageTrendsSchedulerFactory {
 		Objects.requireNonNull(config, "config");
 
 		// --- Wire runners from config ---
-		MinuteFlushRunner flushRunner = new MinuteFlushRunner(service, config.getFlushClock(), serverId);
+		MinuteFlushRunner flushRunner = new MinuteFlushRunner(service, config.getClock(), serverId);
 		flushRunner.setEnabled(config.isFlushEnabled());
 
-		RollupRunner rollupRunner = new RollupRunner(service, config.getRollupClock(), config.getRollupFixedRateSeconds(), serverId);
+		RollupRunner rollupRunner = new RollupRunner(service, config.getClock(), config.getRollupFixedRateSeconds(), serverId);
 		rollupRunner.setEnabled(config.isRollupEnabled());
 		rollupRunner.setSafetyLagByBucket(config.getRollupSafetyLagByBucket());
 
-		PurgeRunner purgeRunner = new PurgeRunner(service, config.getPurgeClock(), config.getPurgeZone(), config.getRetentionByBucket(), config.getPurgeFixedRateSeconds(), config.getPurgeThrottleMs());
+		PurgeRunner purgeRunner = new PurgeRunner(service, config.getClock(), config.getRetentionByBucket(), config.getPurgeFixedRateSeconds(), config.getPurgeThrottleMs());
 		purgeRunner.setEnabled(config.isPurgeEnabled());
 
 		// --- Create orchestrator ---

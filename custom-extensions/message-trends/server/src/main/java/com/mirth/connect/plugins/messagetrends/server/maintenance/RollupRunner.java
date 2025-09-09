@@ -94,8 +94,9 @@ final class RollupRunner {
 
 	/** One execution tick. Safe to call from a ScheduledExecutor. */
 	void runOnce() {
-		if (!enabled)
+		if (!enabled) {
 			return;
+		}
 
 		try {
 			final Instant now = clock.instant(); // UTC
@@ -106,16 +107,18 @@ final class RollupRunner {
 
 				// Safety lag (fallback: one full dst window)
 				Duration lag = safetyLag.get(dstBucket);
-				if (lag == null || lag.isNegative())
+				if (lag == null || lag.isNegative()) {
 					lag = Duration.ofMinutes(dstBucket);
+				}
 
 				// Latest aligned boundary <= (now - lag)
 				final Instant cap = clampToBucketBoundary(dstBucket, now.minus(lag));
 
 				// In-memory gating to avoid reprocessing the same boundary
 				final Instant lastCap = lastCapProcessedByBucket.get(dstBucket);
-				if (lastCap != null && !cap.isAfter(lastCap))
+				if (lastCap != null && !cap.isAfter(lastCap)) {
 					continue;
+				}
 
 				// Single newest window: [from, to) = [cap - dst, cap)
 				final Instant fromTs = cap.minus(Duration.ofMinutes(dstBucket));
