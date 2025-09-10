@@ -32,8 +32,6 @@ public final class MessageTrendsConfig {
 	private final boolean rollupEnabled;
 	/** Fixed-rate interval (seconds) for rollup execution. */
 	private final int rollupFixedRateSeconds;
-	/** Safety lag by destination bucket (minutes bucket -> lag duration). */
-	private final Map<Integer, Duration> rollupSafetyLagByBucket;
 
 	// ----- Purge (retention) -----
 	/** Whether the purge runner is active. */
@@ -46,7 +44,7 @@ public final class MessageTrendsConfig {
 	private final Map<Integer, Duration> retentionByBucket;
 
 	// ---- Constructor kept private to enforce defaults via factory ----
-	private MessageTrendsConfig(boolean enabled, Clock clock, boolean flushEnabled, boolean rollupEnabled, int rollupFixedRateSeconds, Map<Integer, Duration> rollupSafetyLagByBucket, boolean purgeEnabled, int purgeFixedRateSeconds, long purgeThrottleMs, Map<Integer, Duration> retentionByBucket) {
+	private MessageTrendsConfig(boolean enabled, Clock clock, boolean flushEnabled, boolean rollupEnabled, int rollupFixedRateSeconds, boolean purgeEnabled, int purgeFixedRateSeconds, long purgeThrottleMs, Map<Integer, Duration> retentionByBucket) {
 		this.enabled = enabled;
 		this.clock = (clock != null ? clock : Clock.systemUTC());
 
@@ -54,7 +52,6 @@ public final class MessageTrendsConfig {
 
 		this.rollupEnabled = rollupEnabled;
 		this.rollupFixedRateSeconds = rollupFixedRateSeconds;
-		this.rollupSafetyLagByBucket = toUnmodifiable(rollupSafetyLagByBucket);
 
 		this.purgeEnabled = purgeEnabled;
 		this.purgeFixedRateSeconds = purgeFixedRateSeconds;
@@ -73,7 +70,6 @@ public final class MessageTrendsConfig {
 				/* flushEnabled */ true, 
 				/* rollupEnabled */ true, 
 				/* rollupFixedRateSeconds */ 120, 
-				/* rollupSafetyLagByBucket */ defaultRollupSafetyLag(), 
 				/* purgeEnabled */ true, 
 				/* purgeFixedRateSeconds */ 24 * 3600, 
 				/* purgeThrottleMs */ 1000L, 
@@ -102,10 +98,6 @@ public final class MessageTrendsConfig {
 		return rollupFixedRateSeconds;
 	}
 
-	public Map<Integer, Duration> getRollupSafetyLagByBucket() {
-		return rollupSafetyLagByBucket;
-	}
-
 	public boolean isPurgeEnabled() {
 		return purgeEnabled;
 	}
@@ -125,30 +117,7 @@ public final class MessageTrendsConfig {
 	// ----- Minimal withers (V1 only needs withEnabled; others can be added later)
 	// -----
 	public MessageTrendsConfig withEnabled(boolean value) {
-		return new MessageTrendsConfig(value, this.clock, this.flushEnabled, this.rollupEnabled, this.rollupFixedRateSeconds, this.rollupSafetyLagByBucket, this.purgeEnabled, this.purgeFixedRateSeconds, this.purgeThrottleMs, this.retentionByBucket);
-	}
-
-	// @formatter:off
-	/**
-	 * Default safety lag for each rollup destination bucket.
-	 *
-	 * Rule of thumb: each rollup waits ~1/3–1/4 of its window size before rolling,
-	 * to ensure that the source bucket has completed.
-	 *
-	 * Examples: 
-	 * 1 → 5m rollup waits 2m before finalizing a 5m window
-	 * 5 → 15m rollup waits 5m
-	 * 15 → 60m rollup waits 15m 
-	 * 60 → 1440m (daily) rollup waits 1h
-	 */
-	// @formatter:on
-	private static Map<Integer, Duration> defaultRollupSafetyLag() {
-		Map<Integer, Duration> m = new LinkedHashMap<Integer, Duration>();
-		m.put(5, Duration.ofMinutes(2)); // 1→5
-		m.put(15, Duration.ofMinutes(5)); // 5→15
-		m.put(60, Duration.ofMinutes(15)); // 15→60
-		m.put(1440, Duration.ofHours(1)); // 60→1440
-		return m;
+		return new MessageTrendsConfig(value, this.clock, this.flushEnabled, this.rollupEnabled, this.rollupFixedRateSeconds, this.purgeEnabled, this.purgeFixedRateSeconds, this.purgeThrottleMs, this.retentionByBucket);
 	}
 
 	// ----- Defaults for complex fields -----

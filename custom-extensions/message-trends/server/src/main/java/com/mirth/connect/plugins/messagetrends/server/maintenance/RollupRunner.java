@@ -35,23 +35,7 @@ final class RollupRunner {
 
 	private final MessageTrendsService service;
 	private final Clock clock; // should be UTC
-	// Map<bucketMinutes, Instant capProcessed>
 	private final Map<Integer, Instant> lastCapProcessedByBucket = new ConcurrentHashMap<>();
-
-	/** Source->Destination bucket pipeline in minutes. */
-	private final Map<Integer, Integer> pipeline = Collections.unmodifiableMap(new LinkedHashMap<Integer, Integer>() {
-		{
-			put(1, 5);
-			put(5, 15);
-			put(15, 60);
-			put(60, 1440);
-		}
-	});
-
-	/**
-	 * Safety lag per destination bucket (minutes -> Duration). Mutable via setter.
-	 */
-	private volatile Map<Integer, Duration> safetyLag = defaultSafetyLag();
 
 	/** Fixed-rate schedule in seconds (e.g., 120s). */
 	private final int fixedRateSeconds;
@@ -80,123 +64,182 @@ final class RollupRunner {
 		this.enabled = enabled;
 	}
 
-	/**
-	 * Replace the safety lag map at runtime. A defensive copy is stored. If null or
-	 * empty, a safe default will be used.
-	 */
-	void setSafetyLagByBucket(Map<Integer, Duration> safetyLagByBucket) {
-		if (safetyLagByBucket == null || safetyLagByBucket.isEmpty()) {
-			this.safetyLag = defaultSafetyLag();
-		} else {
-			this.safetyLag = unmodifiableCopy(safetyLagByBucket);
-		}
-	}
-
 	/** One execution tick. Safe to call from a ScheduledExecutor. */
 	void runOnce() {
 		if (!enabled) {
 			return;
 		}
-
 		try {
 			final Instant now = clock.instant(); // UTC
 
-			for (Map.Entry<Integer, Integer> step : pipeline.entrySet()) {
-				final int srcBucket = step.getKey();
-				final int dstBucket = step.getValue();
-
-				// Safety lag (fallback: one full dst window)
-				Duration lag = safetyLag.get(dstBucket);
-				if (lag == null || lag.isNegative()) {
-					lag = Duration.ofMinutes(dstBucket);
-				}
-
-				// Latest aligned boundary <= (now - lag)
-				final Instant cap = clampToBucketBoundary(dstBucket, now.minus(lag));
-
-				// In-memory gating to avoid reprocessing the same boundary
-				final Instant lastCap = lastCapProcessedByBucket.get(dstBucket);
-				if (lastCap != null && !cap.isAfter(lastCap)) {
-					continue;
-				}
-
-				// Single newest window: [from, to) = [cap - dst, cap)
-				final Instant fromTs = cap.minus(Duration.ofMinutes(dstBucket));
-				final Instant toTs = cap;
-
-				// Read raw rows from source bucket for this window (per-dimension rows)
-				final List<MessageStatisticsTimeseries> srcRows = service.getServerSeries(Date.from(fromTs), Date.from(toTs), srcBucket);
-
-				if (srcRows == null || srcRows.isEmpty()) {
-					// Forward-only policy: accept gaps
-					lastCapProcessedByBucket.put(dstBucket, cap);
-					continue;
-				}
-
-				// ---- Group BY UNIQUE KEY: (server_id, channel_id, connector_id, boundary,
-				// bucket) ----
-				final Map<RollKey, MessageStatisticsTimeseries> grouped = new LinkedHashMap<>();
-
-				for (MessageStatisticsTimeseries r : srcRows) {
-					final String serverId = r.getServerId();
-					final String channelId = r.getChannelId();
-					final String connectorId = r.getConnectorId();
-
-					final Instant boundary = clampToBucketBoundary(dstBucket, r.getTs().toInstant());
-					final Date bucketTs = Date.from(boundary);
-					final RollKey key = new RollKey(serverId, channelId, connectorId, bucketTs, dstBucket);
-
-					MessageStatisticsTimeseries acc = grouped.get(key);
-					if (acc == null) {
-						acc = new MessageStatisticsTimeseries();
-						acc.setServerId(serverId);
-						acc.setChannelId(channelId);
-						acc.setConnectorId(connectorId);
-						acc.setTs(bucketTs);
-						acc.setBucketSizeMinutes(dstBucket);
-						acc.setReceived(0);
-						acc.setFiltered(0);
-						acc.setQueued(0);
-						acc.setSent(0);
-						acc.setError(0);
-						grouped.put(key, acc);
-					}
-					// sum metrics (null-safe)
-					acc.setReceived(nz(acc.getReceived()) + nz(r.getReceived()));
-					acc.setFiltered(nz(acc.getFiltered()) + nz(r.getFiltered()));
-					acc.setQueued(nz(acc.getQueued()) + nz(r.getQueued()));
-					acc.setSent(nz(acc.getSent()) + nz(r.getSent()));
-					acc.setError(nz(acc.getError()) + nz(r.getError()));
-				}
-
-				final List<MessageStatisticsTimeseries> rowsToWrite = new ArrayList<>(grouped.values());
-				if (rowsToWrite.isEmpty()) {
-					lastCapProcessedByBucket.put(dstBucket, cap);
-					continue;
-				}
-
-				try {
-					// One transactional overwrite for the whole window:
-					// - DELETE existing rows for this (server, ANY channel/connector) at ts=fromTs
-					// & dstBucket
-					// - INSERT batch rowsToWrite (REPLACE semantics, not additive)
-					int wrote = service.replaceRollupWindow(Date.from(fromTs), dstBucket, rowsToWrite);
-					log.info("Rolled {}→{} window [{} , {}): wrote={}", srcBucket, dstBucket, fromTs, toTs, wrote);
-
-					lastCapProcessedByBucket.put(dstBucket, cap);
-
-				} catch (Throwable e) {
-					log.warn("Overwrite window failed for {}→{} [{} , {}): {}", srcBucket, dstBucket, fromTs, toTs, e.toString());
-					// do not advance gating on failure
-				}
+			// 1' → 5' (fixed 2-minute lag). If no progress/failure → stop chaining.
+			final Instant ts5 = roll5Min(now);
+			if (ts5 == null) {
+				log.debug("roll5Min: no progress; skip 15/60/day.");
+				return;
 			}
+
+			// 5' → 15'
+			final Instant ts15 = rollUpGeneric(ts5, 5, 15, "roll15Min");
+			if (ts15 == null) {
+				log.debug("roll15Min: no progress; skip 60/day.");
+				return;
+			}
+
+			// 15' → 60'
+			final Instant ts60 = rollUpGeneric(ts15, 15, 60, "roll60Min");
+			if (ts60 == null) {
+				log.debug("roll60Min: no progress; skip 1-day.");
+				return;
+			}
+
+			// 60' → 1440' (1 day)
+			rollUpGeneric(ts60, 60, 1440, "rollOneDay");
+
 		} catch (Throwable t) {
 			log.warn("RollupRunner runOnce failed", t);
 		}
 	}
 
-	private static int nz(Integer v) {
-		return v == null ? 0 : v;
+	/**
+	 * 1' → 5' rollup (with fixed 2-minute safety lag).
+	 *
+	 * Computes the newest aligned 5' boundary <= (now - 2 minutes), reads 1' rows
+	 * in [cap5-5', cap5), and overwrites the 5' window at ts = cap5-5'.
+	 *
+	 * Returns the 5' boundary end (cap5) if successful, or null if no progress
+	 * (already processed) or if the write failed. The returned boundary is used to
+	 * trigger the next rollup (5' → 15').
+	 */
+
+	private Instant roll5Min(Instant now) {
+		final int srcBucket = 1, dstBucket = 5;
+
+		// Safety lag
+		final Duration lag = Duration.ofMinutes(2);
+		final Instant cap = clampToBucketBoundary(dstBucket, now.minus(lag));
+
+		final Instant last = lastCapProcessedByBucket.get(dstBucket);
+		if (last != null && !cap.isAfter(last)) {
+			log.debug("roll5Min skipped: cap={} not after last={}", cap, last);
+			return null; // no progress
+		}
+
+		final Instant fromTs = cap.minus(Duration.ofMinutes(dstBucket));
+		final Date from = Date.from(fromTs);
+		final Date to = Date.from(cap);
+
+		log.debug("roll5Min start window [{} , {})", fromTs, cap);
+
+		final List<MessageStatisticsTimeseries> rowsToWrite = buildRowsForWindow(srcBucket, dstBucket, from, to);
+
+		if (rowsToWrite.isEmpty()) {
+			lastCapProcessedByBucket.put(dstBucket, cap);
+			log.info("roll5Min {}→{} [{} , {}): empty", srcBucket, dstBucket, fromTs, cap);
+			return cap;
+		}
+
+		try {
+			int wrote = service.replaceRollupWindow(from, dstBucket, rowsToWrite);
+
+			log.info("roll5Min {}→{} [{} , {}): wrote={}", srcBucket, dstBucket, fromTs, cap, wrote);
+
+			lastCapProcessedByBucket.put(dstBucket, cap);
+
+			return cap; // progressed
+		} catch (Exception e) {
+			log.warn("Overwrite window failed for {}→{} [{} , {}): {}", srcBucket, dstBucket, fromTs, cap, e.toString());
+			return null; // failure → signal caller to skip next steps
+		}
+	}
+
+	/**
+	 * Generic rollup (always overwrite; no gating). Uses tsSrc as the current
+	 * source boundary to determine which destination bucket to (re)write. Returns
+	 * toTsDst (boundary end) for chaining; never null unless tsSrc is null or on
+	 * failure.
+	 *
+	 * @param tsSrc     current boundary of the source bucket (e.g., ts5, ts15,
+	 *                  ts60)
+	 * @param srcBucket source bucket minutes (e.g., 5, 15, 60)
+	 * @param dstBucket destination bucket minutes (e.g., 15, 60, 1440)
+	 * @param opName    log prefix (e.g., "roll15Min", "roll60Min", "rollOneDay")
+	 */
+	private Instant rollUpGeneric(Instant tsSrc, int srcBucket, int dstBucket, String opName) {
+		if (tsSrc == null) {
+			return null;
+		}
+
+		// Identify the destination bucket that contains tsSrc
+		final Instant endDst = ceilToBucketBoundary(dstBucket, tsSrc);
+		final Instant startDst = endDst.minus(Duration.ofMinutes(dstBucket));
+
+		// Partial end: up to tsSrc, but not beyond endDst (final when tsSrc == endDst)
+		final Instant toTsDst = tsSrc.isBefore(endDst) ? tsSrc : endDst;
+
+		// Read src-bucket rows in [startDst, toTsDst) and overwrite the dst window at
+		// ts = startDst
+		final Date from = Date.from(startDst);
+		final Date to = Date.from(toTsDst);
+		final List<MessageStatisticsTimeseries> rowsToWrite = buildRowsForWindow(srcBucket, dstBucket, from, to);
+
+		try {
+			int wrote = service.replaceRollupWindow(from, dstBucket, rowsToWrite);
+
+			log.info("{} {}→{} [{} , {}): wrote={}", opName, srcBucket, dstBucket, startDst, toTsDst, wrote);
+
+			return toTsDst;
+		} catch (Exception e) {
+			log.warn("Overwrite window failed for {} {}→{} [{} , {}): {}", opName, srcBucket, dstBucket, startDst, toTsDst, e.toString());
+			return null; // signal failure so upper layers can skip if desired
+		}
+	}
+
+	private List<MessageStatisticsTimeseries> buildRowsForWindow(int srcBucket, int dstBucket, Date fromTs, Date toTs) {
+
+		final List<MessageStatisticsTimeseries> srcRows = service.getServerSeries(fromTs, toTs, srcBucket);
+
+		if (srcRows == null || srcRows.isEmpty()) {
+			return Collections.emptyList();
+		}
+
+		final Map<RollKey, MessageStatisticsTimeseries> grouped = new LinkedHashMap<>();
+
+		for (MessageStatisticsTimeseries r : srcRows) {
+			final String serverId = r.getServerId();
+			final String channelId = r.getChannelId();
+			final String connectorId = r.getConnectorId();
+
+			// Convert Date -> Instant for boundary math
+			final Instant boundary = clampToBucketBoundary(dstBucket, r.getTs().toInstant());
+			final Date bucketTs = Date.from(boundary);
+
+			final RollKey key = new RollKey(serverId, channelId, connectorId, bucketTs, dstBucket);
+
+			MessageStatisticsTimeseries acc = grouped.get(key);
+			if (acc == null) {
+				acc = new MessageStatisticsTimeseries();
+				acc.setServerId(serverId);
+				acc.setChannelId(channelId);
+				acc.setConnectorId(connectorId);
+				acc.setTs(bucketTs);
+				acc.setBucketSizeMinutes(dstBucket);
+				acc.setReceived(0);
+				acc.setFiltered(0);
+				acc.setQueued(0);
+				acc.setSent(0);
+				acc.setError(0);
+				grouped.put(key, acc);
+			}
+			// sum metrics (null-safe)
+			acc.setReceived(nz(acc.getReceived()) + nz(r.getReceived()));
+			acc.setFiltered(nz(acc.getFiltered()) + nz(r.getFiltered()));
+			acc.setQueued(nz(acc.getQueued()) + nz(r.getQueued()));
+			acc.setSent(nz(acc.getSent()) + nz(r.getSent()));
+			acc.setError(nz(acc.getError()) + nz(r.getError()));
+		}
+
+		return new ArrayList<>(grouped.values());
 	}
 
 	/**
@@ -209,16 +252,26 @@ final class RollupRunner {
 		return Instant.ofEpochSecond(aligned * 60L);
 	}
 
-	private static Map<Integer, Duration> defaultSafetyLag() {
-		Map<Integer, Duration> m = new LinkedHashMap<Integer, Duration>();
-		m.put(5, Duration.ofMinutes(5));
-		m.put(15, Duration.ofMinutes(15));
-		m.put(60, Duration.ofMinutes(30));
-		m.put(1440, Duration.ofHours(2));
-		return Collections.unmodifiableMap(m);
+	/**
+	 * Ceil up to the next bucket boundary (or keep t if already aligned). Example:
+	 * bucket=15' - t=10:07 → returns 10:15 - t=10:15 → returns 10:15
+	 */
+	private static Instant ceilToBucketBoundary(int bucketMinutes, Instant t) {
+		if (bucketMinutes <= 0) {
+			throw new IllegalArgumentException("bucketMinutes must be > 0");
+		}
+		Instant floor = clampToBucketBoundary(bucketMinutes, t);
+		return floor.equals(t) ? t : floor.plus(Duration.ofMinutes(bucketMinutes));
 	}
 
 	private static <K, V> Map<K, V> unmodifiableCopy(Map<K, V> m) {
-		return Collections.unmodifiableMap(new LinkedHashMap<K, V>(m));
+		if (m == null || m.isEmpty()) {
+			return Collections.emptyMap();
+		}
+		return Collections.unmodifiableMap(new LinkedHashMap<>(m));
+	}
+
+	private static int nz(Integer v) {
+		return v == null ? 0 : v;
 	}
 }

@@ -37,7 +37,6 @@ public final class MessageTrendsSchedulerFactory {
 
 		RollupRunner rollupRunner = new RollupRunner(service, config.getClock(), config.getRollupFixedRateSeconds(), serverId);
 		rollupRunner.setEnabled(config.isRollupEnabled());
-		rollupRunner.setSafetyLagByBucket(config.getRollupSafetyLagByBucket());
 
 		PurgeRunner purgeRunner = new PurgeRunner(service, config.getClock(), config.getRetentionByBucket(), config.getPurgeFixedRateSeconds(), config.getPurgeThrottleMs());
 		purgeRunner.setEnabled(config.isPurgeEnabled());
