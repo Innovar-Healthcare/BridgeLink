@@ -99,16 +99,15 @@ public final class MessageTrendsBuffer {
 			return;
 		}
 
-		// Channel-level
-		final ConcurrentMap<Status, AtomicInteger> ch = channelStats.computeIfAbsent(channelId, k -> new ConcurrentHashMap<>());
-		ch.computeIfAbsent(Status.RECEIVED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.RECEIVED, 0L)));
-		ch.computeIfAbsent(Status.FILTERED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.FILTERED, 0L)));
-		ch.computeIfAbsent(Status.QUEUED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.QUEUED, 0L)));
-		ch.computeIfAbsent(Status.SENT, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.SENT, 0L)));
-		ch.computeIfAbsent(Status.ERROR, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.ERROR, 0L)));
-
-		// Connector-level (optional)
-		if (connectorId != null) {
+		if (connectorId == null) {
+			// Channel-level
+			final ConcurrentMap<Status, AtomicInteger> ch = channelStats.computeIfAbsent(channelId, k -> new ConcurrentHashMap<>());
+			ch.computeIfAbsent(Status.RECEIVED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.RECEIVED, 0L)));
+			ch.computeIfAbsent(Status.FILTERED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.FILTERED, 0L)));
+			ch.computeIfAbsent(Status.QUEUED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.QUEUED, 0L)));
+			ch.computeIfAbsent(Status.SENT, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.SENT, 0L)));
+			ch.computeIfAbsent(Status.ERROR, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.ERROR, 0L)));
+		} else {// Connector-level
 			final ConcurrentMap<String, ConcurrentMap<Status, AtomicInteger>> perConn = connectorStats.computeIfAbsent(channelId, k -> new ConcurrentHashMap<>());
 			final ConcurrentMap<Status, AtomicInteger> m = perConn.computeIfAbsent(connectorId, k -> new ConcurrentHashMap<>());
 
@@ -117,6 +116,7 @@ public final class MessageTrendsBuffer {
 			m.computeIfAbsent(Status.QUEUED, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.QUEUED, 0L)));
 			m.computeIfAbsent(Status.SENT, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.SENT, 0L)));
 			m.computeIfAbsent(Status.ERROR, k -> new AtomicInteger()).addAndGet(safeToInt(deltas.getOrDefault(Status.ERROR, 0L)));
+
 		}
 	}
 

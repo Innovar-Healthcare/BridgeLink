@@ -15,7 +15,7 @@ import org.apache.logging.log4j.Logger;
 import com.mirth.connect.plugins.messagetrends.server.service.MessageTrendsService;
 
 final class PurgeRunner {
-	private static final Logger log = LogManager.getLogger(PurgeRunner.class);
+	private static final Logger logger = LogManager.getLogger(PurgeRunner.class);
 
 	private final MessageTrendsService service;
 	private final Clock clock;
@@ -38,11 +38,7 @@ final class PurgeRunner {
 
 	long initialDelaySeconds() {
 		ZonedDateTime now = ZonedDateTime.now(clock);
-		ZonedDateTime next = now.withHour(2).withMinute(0).withSecond(0).withNano(0);
-		if (!next.isAfter(now)) {
-			next = next.plusDays(1);
-		}
-
+		ZonedDateTime next = now.plusHours(1).withMinute(0).withSecond(0).withNano(0);
 		return Duration.between(now, next).getSeconds();
 	}
 
@@ -61,23 +57,39 @@ final class PurgeRunner {
 		}
 
 		Instant now = clock.instant();
-		retentionByBucket.forEach((bucket, keep) -> {
+		long totalPurged = 0L;
+		for (Map.Entry<Integer, Duration> e : retentionByBucket.entrySet()) {
+			final Integer bucket = e.getKey();
+			final Duration keep = e.getValue();
 			try {
-				Date cutoff = Date.from(now.minus(keep));
-				int purged = service.purgeBeforeByBucket(bucket, cutoff);
-				log.info("Purge bucket={}m cutoff={} purgedRows={}", bucket, cutoff, purged);
+				final Date cutoff = Date.from(now.minus(keep));
+				final int purged = service.purgeBeforeByBucket(bucket, cutoff);
+				totalPurged += purged;
+				logger.info("Purge bucket={}m cutoff={} purgedRows={}", bucket, cutoff, purged);
+
 				if (throttleMs > 0) {
-					Thread.sleep(throttleMs);
+					try {
+						Thread.sleep(throttleMs);
+					} catch (InterruptedException ie) {
+						Thread.currentThread().interrupt();
+						logger.warn("Purge interrupted during throttle at bucket={}m", bucket);
+						break;
+					}
+
 				}
-			} catch (Throwable t) {
-				log.warn("Purge failed for bucket={}", bucket, t);
+			} catch (Exception ex) {
+				logger.warn("Purge failed for bucket={}m", bucket, ex);
 			}
-		});
+		}
+
+		logger.info("Purge run finished: totalPurgedRows={}", totalPurged);
 	}
 
 	private static Map<Integer, Duration> sortBucketsDesc(Map<Integer, Duration> input) {
-		if (input == null || input.isEmpty())
+		if (input == null || input.isEmpty()) {
 			return Collections.emptyMap();
+		}
+
 		return input.entrySet().stream().sorted((a, b) -> Integer.compare(b.getKey(), a.getKey())) // DESC
 				.collect(LinkedHashMap::new, (m, e) -> m.put(e.getKey(), e.getValue()), LinkedHashMap::putAll);
 	}
