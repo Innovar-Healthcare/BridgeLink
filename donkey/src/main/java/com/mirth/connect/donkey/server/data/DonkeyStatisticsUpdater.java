@@ -17,6 +17,7 @@ import org.apache.logging.log4j.Logger;
 
 import com.mirth.connect.donkey.model.message.Status;
 import com.mirth.connect.donkey.server.channel.Statistics;
+import com.mirth.connect.donkey.server.controllers.MessageTrendsController;
 
 public class DonkeyStatisticsUpdater extends Thread implements StatisticsUpdater {
 
@@ -25,6 +26,7 @@ public class DonkeyStatisticsUpdater extends Thread implements StatisticsUpdater
     private DonkeyDaoFactory daoFactory;
     private int updateInterval;
     private Statistics statistics = new Statistics(false, true);
+    private MessageTrendsController messageTrendsController;
     private Logger logger = LogManager.getLogger(getClass());
 
     public DonkeyStatisticsUpdater(DonkeyDaoFactory daoFactory, int updateInterval) {
@@ -34,6 +36,18 @@ public class DonkeyStatisticsUpdater extends Thread implements StatisticsUpdater
         }
         this.updateInterval = updateInterval;
         setName("Statistics Updater Thread");
+        
+        // --- Message Trends
+        messageTrendsController = new MessageTrendsController(); // default no-op
+        try {
+            Class<?> clazz = Class.forName(
+                "com.mirth.connect.plugins.messagetrends.server.controller.TimeSeriesStatisticsController"
+            );
+            Object instance = clazz.getDeclaredConstructor().newInstance();
+            messageTrendsController = (MessageTrendsController) instance;
+        } catch (Throwable t) {
+            // Plugin not present or failed to init → keep no-op
+        }
     }
 
     public void setDaoFactory(DonkeyDaoFactory daoFactory) {
@@ -89,6 +103,14 @@ public class DonkeyStatisticsUpdater extends Thread implements StatisticsUpdater
                 dao.addChannelStatistics(tempStats);
                 dao.commit();
                 commitSuccess = true;
+
+                // --- Message Trends: write the same snapshot we just committed ---
+                try {
+                    messageTrendsController.writeTimeseries(stats);
+                } catch (Throwable t) {
+                    logger.warn("Message Trends write failed (non-fatal).", t);
+                }
+                // --- end Message Trends ---
 
                 // Invert the stats and update them on the Statistics object
                 for (Map<Integer, Map<Status, Long>> channelMap : stats.values()) {
