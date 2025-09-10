@@ -18,7 +18,7 @@ import com.mirth.connect.plugins.messagetrends.server.service.MessageTrendsServi
 import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries;
 
 final class MinuteFlushRunner {
-	private static final Logger log = LogManager.getLogger(MinuteFlushRunner.class);
+	private static final Logger logger = LogManager.getLogger(MinuteFlushRunner.class);
 	private static final int FIXED_RATE_SECONDS = 60;
 
 	private final MessageTrendsService service;
@@ -115,9 +115,9 @@ final class MinuteFlushRunner {
 
 			lastFlushedTs = ts;
 
-			log.debug("MinuteFlushRunner: flushed {} rows for {}", inserted, ts);
+			logger.debug("MinuteFlushRunner: flushed {} rows for {}", inserted, ts);
 		} catch (Throwable t) {
-			log.warn("MinuteFlushRunner runOnce failed", t);
+			logger.warn("MinuteFlushRunner runOnce failed", t);
 		}
 	}
 

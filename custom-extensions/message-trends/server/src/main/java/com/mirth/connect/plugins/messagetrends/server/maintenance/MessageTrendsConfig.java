@@ -71,7 +71,7 @@ public final class MessageTrendsConfig {
 				/* rollupEnabled */ true, 
 				/* rollupFixedRateSeconds */ 120, 
 				/* purgeEnabled */ true, 
-				/* purgeFixedRateSeconds */ 24 * 3600, 
+				/* purgeFixedRateSeconds */ 3600, 
 				/* purgeThrottleMs */ 1000L, 
 				/* retentionByBucket */ defaultRetention());
 	}

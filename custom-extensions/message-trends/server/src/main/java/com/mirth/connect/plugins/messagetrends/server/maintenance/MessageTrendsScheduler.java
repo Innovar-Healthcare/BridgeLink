@@ -10,7 +10,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public final class MessageTrendsScheduler {
-	private static final Logger log = LogManager.getLogger(MessageTrendsScheduler.class);
+	private static final Logger logger = LogManager.getLogger(MessageTrendsScheduler.class);
 
 	private final ScheduledExecutorService flushExec = Executors.newSingleThreadScheduledExecutor(r -> named("MT-Flush", r));
 	private final ScheduledExecutorService rollupExec = Executors.newSingleThreadScheduledExecutor(r -> named("MT-Rollup", r));
@@ -29,11 +29,11 @@ public final class MessageTrendsScheduler {
 	}
 
 	public synchronized void start() {
-		log.debug("Starting MessageTrendsScheduler...");
+		logger.debug("Starting MessageTrendsScheduler...");
 		scheduleFlush();
 		scheduleRollups();
 		schedulePurge();
-		log.info("MessageTrendsScheduler started. tasks: flush={}, rollup={}, purge={}", flushTask != null, rollupTask != null, purgeTask != null);
+		logger.info("MessageTrendsScheduler started. tasks: flush={}, rollup={}, purge={}", flushTask != null, rollupTask != null, purgeTask != null);
 	}
 
 	public synchronized void stop() {
@@ -43,7 +43,7 @@ public final class MessageTrendsScheduler {
 		safeShutdown(flushExec, true); // best-effort flush
 		safeShutdown(rollupExec, false);
 		safeShutdown(purgeExec, false);
-		log.info("MessageTrendsScheduler stopped.");
+		logger.info("MessageTrendsScheduler stopped.");
 	}
 
 	// — scheduling —
@@ -56,9 +56,9 @@ public final class MessageTrendsScheduler {
 	private void scheduleRollups() {
 		long initial = rollupRunner.initialDelaySeconds();
 		long period = rollupRunner.fixedRateSeconds();
-		log.debug("Scheduling rollups: initialDelay={}s, period={}s", initial, period);
+		logger.debug("Scheduling rollups: initialDelay={}s, period={}s", initial, period);
 		if (initial < 0 || period <= 0) {
-			log.error("Invalid rollup schedule: initialDelay={}, period={}", initial, period);
+			logger.error("Invalid rollup schedule: initialDelay={}, period={}", initial, period);
 			return;
 		}
 

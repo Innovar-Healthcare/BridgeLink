@@ -36,7 +36,7 @@ import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTim
  * used to observe data flow and performance.
  */
 final class RollupRunner {
-	private static final Logger log = LogManager.getLogger(RollupRunner.class);
+	private static final Logger logger = LogManager.getLogger(RollupRunner.class);
 
 	private final MessageTrendsService service;
 	private final Clock clock; // should be UTC
@@ -76,51 +76,51 @@ final class RollupRunner {
 		}
 		try {
 			final Instant now = clock.instant(); // UTC
-			log.debug("runOnce tick at {}", now);
+			logger.debug("runOnce tick at {}", now);
 
 			// 1' → 5' (fixed 2-minute lag). If no progress/failure → stop chaining.
 			long t0 = System.currentTimeMillis();
 			final Instant ts5 = roll5Min(now);
 			long ms5 = System.currentTimeMillis() - t0;
 			if (ts5 == null) {
-				log.debug("-> roll5Min: no progress; stop chain ({} ms)", ms5);
+				logger.debug("-> roll5Min: no progress; stop chain ({} ms)", ms5);
 				return;
 			}
 
-			log.debug("-> roll5Min done, boundary={}, elapsed={} ms", ts5, ms5);
+			logger.debug("-> roll5Min done, boundary={}, elapsed={} ms", ts5, ms5);
 
 			// 5' → 15'
 			t0 = System.currentTimeMillis();
 			final Instant ts15 = rollUpGeneric(ts5, 5, 15, "roll15Min");
 			long ms15 = System.currentTimeMillis() - t0;
 			if (ts15 == null) {
-				log.debug("-> roll15Min: no progress; stop chain ({} ms)", ms15);
+				logger.debug("-> roll15Min: no progress; stop chain ({} ms)", ms15);
 				return;
 			}
-			log.debug("-> roll15Min done, boundary={}, elapsed={} ms", ts15, ms15);
+			logger.debug("-> roll15Min done, boundary={}, elapsed={} ms", ts15, ms15);
 
 			// 15' → 60'
 			t0 = System.currentTimeMillis();
 			final Instant ts60 = rollUpGeneric(ts15, 15, 60, "roll60Min");
 			long ms60 = System.currentTimeMillis() - t0;
 			if (ts60 == null) {
-				log.debug("-> roll60Min: no progress; stop chain ({} ms)", ms60);
+				logger.debug("-> roll60Min: no progress; stop chain ({} ms)", ms60);
 				return;
 			}
 
-			log.debug("-> roll60Min done, boundary={}, elapsed={} ms", ts60, ms60);
+			logger.debug("-> roll60Min done, boundary={}, elapsed={} ms", ts60, ms60);
 
 			// 60' → 1440' (1 day)
 			t0 = System.currentTimeMillis();
 			final Instant tsDay = rollUpGeneric(ts60, 60, 1440, "rollOneDay");
 			long msDay = System.currentTimeMillis() - t0;
 			if (tsDay == null) {
-				log.debug("-> rollOneDay: no progress ({} ms)", msDay);
+				logger.debug("-> rollOneDay: no progress ({} ms)", msDay);
 			} else {
-				log.debug("-> rollOneDay done, boundary={}, elapsed={} ms", tsDay, msDay);
+				logger.debug("-> rollOneDay done, boundary={}, elapsed={} ms", tsDay, msDay);
 			}
 		} catch (Throwable t) {
-			log.warn("RollupRunner runOnce failed", t);
+			logger.warn("RollupRunner runOnce failed", t);
 		}
 	}
 
@@ -144,7 +144,7 @@ final class RollupRunner {
 
 		final Instant last = lastCapProcessedByBucket.get(dstBucket);
 		if (last != null && !cap.isAfter(last)) {
-			log.debug("roll5Min skipped: cap={} not after last={}", cap, last);
+			logger.debug("roll5Min skipped: cap={} not after last={}", cap, last);
 			return null; // no progress
 		}
 
@@ -156,20 +156,20 @@ final class RollupRunner {
 
 		if (rowsToWrite.isEmpty()) {
 			lastCapProcessedByBucket.put(dstBucket, cap);
-			log.info("roll5Min {} -> {} [{} , {}): empty", srcBucket, dstBucket, fromTs, cap);
+			logger.info("roll5Min {} -> {} [{} , {}): empty", srcBucket, dstBucket, fromTs, cap);
 			return cap;
 		}
 
 		try {
 			int wrote = service.replaceRollupWindow(from, dstBucket, rowsToWrite);
 
-			log.info("roll5Min {} -> {} [{} , {}): wrote={}", srcBucket, dstBucket, fromTs, cap, wrote);
+			logger.info("roll5Min {} -> {} [{} , {}): wrote={}", srcBucket, dstBucket, fromTs, cap, wrote);
 
 			lastCapProcessedByBucket.put(dstBucket, cap);
 
 			return cap; // progressed
 		} catch (Exception e) {
-			log.warn("Overwrite window failed for {} -> {} [{} , {}): {}", srcBucket, dstBucket, fromTs, cap, e.toString());
+			logger.warn("Overwrite window failed for {} -> {} [{} , {}): {}", srcBucket, dstBucket, fromTs, cap, e.toString());
 			return null; // failure → signal caller to skip next steps
 		}
 	}
@@ -207,11 +207,11 @@ final class RollupRunner {
 		try {
 			int wrote = service.replaceRollupWindow(from, dstBucket, rowsToWrite);
 
-			log.info("{} {} -> {} [{} , {}): wrote={}", opName, srcBucket, dstBucket, startDst, toTsDst, wrote);
+			logger.info("{} {} -> {} [{} , {}): wrote={}", opName, srcBucket, dstBucket, startDst, toTsDst, wrote);
 
 			return toTsDst;
 		} catch (Exception e) {
-			log.warn("Overwrite window failed for {} {} -> {} [{} , {}): {}", opName, srcBucket, dstBucket, startDst, toTsDst, e.toString());
+			logger.warn("Overwrite window failed for {} {} -> {} [{} , {}): {}", opName, srcBucket, dstBucket, startDst, toTsDst, e.toString());
 			return null; // signal failure so upper layers can skip if desired
 		}
 	}
