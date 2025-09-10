@@ -39,30 +39,6 @@ public class MessageTrendsService {
 		}
 	}
 
-	/** Upsert 1-minute delta row (raw write path). */
-	public int upsertMinuteDelta(MessageStatisticsTimeseries delta) {
-		ensureInit();
-		try {
-			delta.setServerId(serverId);
-			return dao.upsertMinuteDelta(delta);
-		} catch (Exception e) {
-			logger.warn("Failed to upsert minute delta", e);
-			return 0;
-		}
-	}
-
-	/** Upsert rollup deltas */
-	public int upsertRollupDelta(MessageStatisticsTimeseries delta) {
-		ensureInit();
-		try {
-			delta.setServerId(serverId);
-			return dao.upsertRollupDelta(delta);
-		} catch (Exception e) {
-			logger.warn("Failed to upsert rollup delta", e);
-			return 0;
-		}
-	}
-
 	/** Replace Rollup Window */
 	public int replaceRollupWindow(Date startTs, int bucketSizeMinutes, List<MessageStatisticsTimeseries> list) {
 		ensureInit();

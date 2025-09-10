@@ -17,40 +17,6 @@
     </resultMap>
 
     <!-- PostgreSQL single-statement additive upserts -->
-    <update id="upsertMinuteDelta" parameterType="com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries">
-        INSERT INTO message_statistics_timeseries (
-            server_id, channel_id, connector_id, ts, bucket_size_minutes,
-            received, filtered, queued, sent, error
-        ) VALUES (
-            #{serverId}, #{channelId}, #{connectorId}, #{ts}, #{bucketSizeMinutes},
-            #{received}, #{filtered}, #{queued}, #{sent}, #{error}
-        )
-        ON CONFLICT (server_id, channel_id, connector_id, ts, bucket_size_minutes)
-        DO UPDATE SET
-            received = message_statistics_timeseries.received + EXCLUDED.received,
-            filtered = message_statistics_timeseries.filtered + EXCLUDED.filtered,
-            queued   = message_statistics_timeseries.queued   + EXCLUDED.queued,
-            sent     = message_statistics_timeseries.sent     + EXCLUDED.sent,
-            error    = message_statistics_timeseries.error    + EXCLUDED.error
-    </update>
-
-    <update id="upsertRollupDelta" parameterType="com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries">
-        INSERT INTO message_statistics_timeseries (
-            server_id, channel_id, connector_id, ts, bucket_size_minutes,
-            received, filtered, queued, sent, error
-        ) VALUES (
-            #{serverId}, #{channelId}, #{connectorId}, #{ts}, #{bucketSizeMinutes},
-            #{received}, #{filtered}, #{queued}, #{sent}, #{error}
-        )
-        ON CONFLICT (server_id, channel_id, connector_id, ts, bucket_size_minutes)
-        DO UPDATE SET
-            received = message_statistics_timeseries.received + EXCLUDED.received,
-            filtered = message_statistics_timeseries.filtered + EXCLUDED.filtered,
-            queued   = message_statistics_timeseries.queued   + EXCLUDED.queued,
-            sent     = message_statistics_timeseries.sent     + EXCLUDED.sent,
-            error    = message_statistics_timeseries.error    + EXCLUDED.error
-    </update>
-
 	<delete id="deleteRollupWindow" parameterType="map">
 	  	DELETE FROM message_statistics_timeseries
 	  	WHERE server_id = #{serverId}

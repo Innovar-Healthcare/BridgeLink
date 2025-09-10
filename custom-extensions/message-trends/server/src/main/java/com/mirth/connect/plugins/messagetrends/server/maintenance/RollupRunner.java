@@ -21,14 +21,19 @@ import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTim
  * Periodic rollup job that aggregates lower-resolution data into
  * higher-resolution buckets.
  *
- * Implementation notes for current service API: - No checkpoint API is
- * available, so we roll a single safe window per run: for each pipeline step
- * (src -> dst), we compute [toTs - dst, toTs) where toTs is the most recent
- * aligned boundary <= (now - safetyLag(dst)). - Aggregation is delegated to DAO
- * via service.getServerSeries(from, to, dstBucket), which is expected to return
- * series already grouped at the destination bucket size. - Each returned row is
- * upserted via service.upsertRollupDelta(row). - Idempotency is expected at DAO
- * level (upsert on unique key).
+ * V1 implementation strategy: - 1-minute data is rolled into 5-minute windows
+ * using a fixed 2-minute safety lag. - As soon as a 5' window is complete, it
+ * triggers the next levels in a simple chain: 5' → 15' → 60' → 1-day (1440'). -
+ * For 15'/60'/1-day buckets, we always overwrite the target window at
+ * ts=startDst with whatever portion of the source data is available so far: -
+ * partial writes occur as the source boundary advances, - the final write
+ * occurs once the full window is covered. - Overwrite semantics are implemented
+ * by service.replaceRollupWindow(): DELETE existing rows for (serverId, bucket,
+ * ts=startDst), then INSERT batch rows. This ensures idempotency: partial →
+ * final updates are safe. - Rollup is driven only by the source boundary; no
+ * additional checkpointing or per-destination gating is used in V1. - Logging
+ * at each step reports the time window and number of rows written, which can be
+ * used to observe data flow and performance.
  */
 final class RollupRunner {
 	private static final Logger log = LogManager.getLogger(RollupRunner.class);
@@ -71,31 +76,49 @@ final class RollupRunner {
 		}
 		try {
 			final Instant now = clock.instant(); // UTC
+			log.debug("runOnce tick at {}", now);
 
 			// 1' → 5' (fixed 2-minute lag). If no progress/failure → stop chaining.
+			long t0 = System.currentTimeMillis();
 			final Instant ts5 = roll5Min(now);
+			long ms5 = System.currentTimeMillis() - t0;
 			if (ts5 == null) {
-				log.debug("roll5Min: no progress; skip 15/60/day.");
+				log.debug("→ roll5Min: no progress; stop chain ({} ms)", ms5);
 				return;
 			}
+
+			log.debug("→ roll5Min done, boundary={}, elapsed={} ms", ts5, ms5);
 
 			// 5' → 15'
+			t0 = System.currentTimeMillis();
 			final Instant ts15 = rollUpGeneric(ts5, 5, 15, "roll15Min");
+			long ms15 = System.currentTimeMillis() - t0;
 			if (ts15 == null) {
-				log.debug("roll15Min: no progress; skip 60/day.");
+				log.debug("→ roll15Min: no progress; stop chain ({} ms)", ms15);
 				return;
 			}
+			log.debug("→ roll15Min done, boundary={}, elapsed={} ms", ts15, ms15);
 
 			// 15' → 60'
+			t0 = System.currentTimeMillis();
 			final Instant ts60 = rollUpGeneric(ts15, 15, 60, "roll60Min");
+			long ms60 = System.currentTimeMillis() - t0;
 			if (ts60 == null) {
-				log.debug("roll60Min: no progress; skip 1-day.");
+				log.debug("→ roll60Min: no progress; stop chain ({} ms)", ms60);
 				return;
 			}
 
-			// 60' → 1440' (1 day)
-			rollUpGeneric(ts60, 60, 1440, "rollOneDay");
+			log.debug("→ roll60Min done, boundary={}, elapsed={} ms", ts60, ms60);
 
+			// 60' → 1440' (1 day)
+			t0 = System.currentTimeMillis();
+			final Instant tsDay = rollUpGeneric(ts60, 60, 1440, "rollOneDay");
+			long msDay = System.currentTimeMillis() - t0;
+			if (tsDay == null) {
+				log.debug("→ rollOneDay: no progress ({} ms)", msDay);
+			} else {
+				log.debug("→ rollOneDay done, boundary={}, elapsed={} ms", tsDay, msDay);
+			}
 		} catch (Throwable t) {
 			log.warn("RollupRunner runOnce failed", t);
 		}
@@ -128,8 +151,6 @@ final class RollupRunner {
 		final Instant fromTs = cap.minus(Duration.ofMinutes(dstBucket));
 		final Date from = Date.from(fromTs);
 		final Date to = Date.from(cap);
-
-		log.debug("roll5Min start window [{} , {})", fromTs, cap);
 
 		final List<MessageStatisticsTimeseries> rowsToWrite = buildRowsForWindow(srcBucket, dstBucket, from, to);
 
@@ -262,13 +283,6 @@ final class RollupRunner {
 		}
 		Instant floor = clampToBucketBoundary(bucketMinutes, t);
 		return floor.equals(t) ? t : floor.plus(Duration.ofMinutes(bucketMinutes));
-	}
-
-	private static <K, V> Map<K, V> unmodifiableCopy(Map<K, V> m) {
-		if (m == null || m.isEmpty()) {
-			return Collections.emptyMap();
-		}
-		return Collections.unmodifiableMap(new LinkedHashMap<>(m));
 	}
 
 	private static int nz(Integer v) {

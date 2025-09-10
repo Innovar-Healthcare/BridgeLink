@@ -16,27 +16,7 @@
 	    <result property="serverId"          column="server_id"				javaType="String"/>
   	</resultMap>
 
-	<insert id="insertNew" parameterType="com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries" useGeneratedKeys="true" keyProperty="id">
-	    INSERT INTO message_statistics_timeseries (server_id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error)
-	    VALUES (#{serverId}, #{channelId}, #{connectorId}, #{ts}, #{bucketSizeMinutes}, #{received}, #{filtered}, #{queued}, #{sent}, #{error})
-	  </insert>
-  
-	<update id="updateAdditive" parameterType="com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries">
-	    UPDATE message_statistics_timeseries
-	       SET received = received + #{received},
-	           filtered = filtered + #{filtered},
-	           queued   = queued   + #{queued},
-	           sent     = sent     + #{sent},
-	           error    = error    + #{error}
-	     WHERE server_id           = #{serverId}
-	       AND channel_id          = #{channelId}
-	       AND connector_id        = #{connectorId}
-	       AND ts                  = #{ts}
-	       AND bucket_size_minutes = #{bucketSizeMinutes}
-  	</update>
-    
     <!-- Derby mapper: MessageTrends -->
-
 	<delete id="deleteRollupWindow" parameterType="map">
 	  	DELETE FROM message_statistics_timeseries
 	  	WHERE server_id = #{serverId}

@@ -17,38 +17,6 @@
     </resultMap>
 
     <!-- MySQL single-statement additive upserts -->
-    <update id="upsertMinuteDelta" parameterType="com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries">
-        INSERT INTO message_statistics_timeseries (
-            server_id, channel_id, connector_id, ts, bucket_size_minutes,
-            received, filtered, queued, sent, error
-        ) VALUES (
-            #{serverId}, #{channelId}, #{connectorId}, #{ts}, #{bucketSizeMinutes},
-            #{received}, #{filtered}, #{queued}, #{sent}, #{error}
-        )
-        ON DUPLICATE KEY UPDATE
-            received = received + VALUES(received),
-            filtered = filtered + VALUES(filtered),
-            queued   = queued   + VALUES(queued),
-            sent     = sent     + VALUES(sent),
-            error    = error    + VALUES(error)
-    </update>
-
-    <update id="upsertRollupDelta" parameterType="com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries">
-        INSERT INTO message_statistics_timeseries (
-            server_id, channel_id, connector_id, ts, bucket_size_minutes,
-            received, filtered, queued, sent, error
-        ) VALUES (
-            #{serverId}, #{channelId}, #{connectorId}, #{ts}, #{bucketSizeMinutes},
-            #{received}, #{filtered}, #{queued}, #{sent}, #{error}
-        )
-        ON DUPLICATE KEY UPDATE
-            received = received + VALUES(received),
-            filtered = filtered + VALUES(filtered),
-            queued   = queued   + VALUES(queued),
-            sent     = sent     + VALUES(sent),
-            error    = error    + VALUES(error)
-    </update>
-
 	<delete id="deleteRollupWindow" parameterType="map">
   		DELETE FROM message_statistics_timeseries
 	  	WHERE server_id = #{serverId}

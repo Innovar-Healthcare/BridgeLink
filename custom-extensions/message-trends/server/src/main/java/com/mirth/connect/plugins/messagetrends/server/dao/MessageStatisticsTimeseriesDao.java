@@ -7,16 +7,6 @@ import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTim
 
 public interface MessageStatisticsTimeseriesDao {
 	/**
-	 * Additive upsert for 1-minute bucket.
-	 */
-	int upsertMinuteDelta(MessageStatisticsTimeseries delta);
-
-	/**
-	 * Additive upsert for rollup buckets (5, 15, 60, 1440).
-	 */
-	int upsertRollupDelta(MessageStatisticsTimeseries delta);
-
-	/**
 	 * Additive replace Rollup Window for buckets (5, 15, 60, 1440).
 	 */
 	int replaceRollupWindow(String serverId, Date startTs, int bucketSizeMinutes, List<MessageStatisticsTimeseries> list);
