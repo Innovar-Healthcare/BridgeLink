@@ -488,7 +488,11 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			if (ts == null) {
 				continue;
 			}
-			RegularTimePeriod p = periodFactory.of(ts);
+
+			long bucketMillis = b.getBucketSizeMinutes() * 60_000L;
+			Date endTs = new Date(ts.getTime() + bucketMillis);
+
+			RegularTimePeriod p = periodFactory.of(endTs);
 			receivedSeries.addOrUpdate(p, b.getReceived());
 			sentSeries.addOrUpdate(p, b.getSent());
 			filteredSeries.addOrUpdate(p, b.getFiltered());
