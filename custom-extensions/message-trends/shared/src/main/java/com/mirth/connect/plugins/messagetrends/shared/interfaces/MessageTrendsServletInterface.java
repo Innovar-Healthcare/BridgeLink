@@ -100,11 +100,11 @@ public interface MessageTrendsServletInterface extends BaseServletInterface {
 			@PathParam("channelId") String channelId, 
 			
 			@Param("startTime")
-			@Parameter(description = "Start timestamp (epoch millis) for the query window.", required = true)
+			@Parameter(description = "Start timestamp (epoch millis, UTC) for the query window.", required = true)
 			@QueryParam("startTime") Long startTime, 
 			
 			@Param("endTime")
-			@Parameter(description = "End timestamp (epoch millis) for the query window.", required = true)
+			@Parameter(description = "End timestamp (epoch millis, UTC) for the query window.", required = true)
 			@QueryParam("endTime") Long endTime, 
 			
 			@Param("interval")
@@ -185,11 +185,11 @@ public interface MessageTrendsServletInterface extends BaseServletInterface {
 			@PathParam("connectorId") String connectorId, 
 			
 			@Param("startTime")
-			@Parameter(description = "Start timestamp (epoch millis) for the query window.", required = true)
+			@Parameter(description = "Start timestamp (epoch millis, UTC) for the query window.", required = true)
 			@QueryParam("startTime") Long startTime, 
 			
 			@Param("endTime")
-			@Parameter(description = "End timestamp (epoch millis) for the query window.", required = true)
+			@Parameter(description = "End timestamp (epoch millis, UTC) for the query window.", required = true)
 			@QueryParam("endTime") Long endTime, 
 			
 			@Param("interval")
@@ -254,11 +254,11 @@ public interface MessageTrendsServletInterface extends BaseServletInterface {
 	)
 	public String getServerStatistics(
 			@Param("startTime")
-			@Parameter(description = "Start timestamp (epoch millis) for the query window.", required = true)
+			@Parameter(description = "Start timestamp (epoch millis, UTC) for the query window.", required = true)
 			@QueryParam("startTime") Long startTime, 
 			
 			@Param("endTime")
-			@Parameter(description = "End timestamp (epoch millis) for the query window.", required = true)
+			@Parameter(description = "End timestamp (epoch millis, UTC) for the query window.", required = true)
 			@QueryParam("endTime") Long endTime, 
 			
 			@Param("interval")
