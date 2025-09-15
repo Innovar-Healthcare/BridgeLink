@@ -12,7 +12,7 @@ public class SummaryAllView extends JPanel {
 	private final JLabel totalReceivedLabel = new JLabel("Total Received: 0");
 	private final JLabel totalSentLabel = new JLabel("Total Sent: 0");
 	private final JLabel totalFilteredLabel = new JLabel("Total Filtered: 0");
-	private final JLabel totalQueuedLabel = new JLabel("Total Queued: 0");
+	private final JLabel totalQueuedLabel = new JLabel("Last Queued: 0");
 	private final JLabel totalErrorLabel = new JLabel("Total Errors: 0");
 	private final JLabel blankLabel = new JLabel("");
 
@@ -33,7 +33,7 @@ public class SummaryAllView extends JPanel {
 		totalReceivedLabel.setText("Total Received: " + format(received));
 		totalSentLabel.setText("Total Sent: " + format(sent));
 		totalFilteredLabel.setText("Total Filtered: " + format(filtered));
-		totalQueuedLabel.setText("Total Queued: " + format(queued));
+		totalQueuedLabel.setText("Last Queued: " + format(queued));
 		totalErrorLabel.setText("Total Errors: " + format(error));
 	}
 

@@ -255,7 +255,7 @@ final class RollupRunner {
 			// sum metrics (null-safe)
 			acc.setReceived(nz(acc.getReceived()) + nz(r.getReceived()));
 			acc.setFiltered(nz(acc.getFiltered()) + nz(r.getFiltered()));
-			acc.setQueued(nz(acc.getQueued()) + nz(r.getQueued()));
+			acc.setQueued(nz(r.getQueued()));
 			acc.setSent(nz(acc.getSent()) + nz(r.getSent()));
 			acc.setError(nz(acc.getError()) + nz(r.getError()));
 		}

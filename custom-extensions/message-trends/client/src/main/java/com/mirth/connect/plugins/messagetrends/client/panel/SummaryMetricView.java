@@ -68,7 +68,14 @@ public class SummaryMetricView extends JPanel {
 	}
 
 	public void reset() {
-		setStandardStatsRow("0", "0", "0", "0", "0 @ —", "0 msg/min");
+		setStandardStatsRow("0", "0", "0", "0", "—", "—");
+	}
+
+	public void setQueuedHeader(boolean queuedMode) {
+		String h0 = queuedMode ? "Last" : "Total"; // column 0
+		table.getColumnModel().getColumn(0).setHeaderValue(h0);
+		table.getTableHeader().revalidate();
+		table.getTableHeader().repaint();
 	}
 
 	private static String safe(String s) {

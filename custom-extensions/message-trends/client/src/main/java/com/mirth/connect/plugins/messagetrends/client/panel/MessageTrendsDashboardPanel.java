@@ -29,6 +29,7 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import javax.swing.border.TitledBorder;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -601,15 +602,17 @@ public class MessageTrendsDashboardPanel extends JPanel {
 
 		switch (v) {
 		case ALL: {
-			long totalReceived = 0, totalSent = 0, totalFiltered = 0, totalQueued = 0, totalError = 0;
+			long totalReceived = 0, totalSent = 0, totalFiltered = 0, totalError = 0;
 			for (MessageStatisticsTimeseries b : data) {
 				totalReceived += b.getReceived();
 				totalSent += b.getSent();
 				totalFiltered += b.getFiltered();
-				totalQueued += b.getQueued();
 				totalError += b.getError();
 			}
-			summaryAllView.setTotals(totalReceived, totalSent, totalFiltered, totalQueued, totalError);
+
+			long lastQueued = data.isEmpty() ? 0L : data.get(data.size() - 1).getQueued();
+
+			summaryAllView.setTotals(totalReceived, totalSent, totalFiltered, lastQueued, totalError);
 			break;
 		}
 		case RECEIVED:
@@ -619,6 +622,8 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		case ERRORS: {
 			String metricName;
 			ToIntFunction<MessageStatisticsTimeseries> getter;
+			boolean isQueued = false;
+
 			switch (v) {
 			case RECEIVED:
 				metricName = "Received";
@@ -635,6 +640,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			case QUEUED:
 				metricName = "Queued";
 				getter = MessageStatisticsTimeseries::getQueued;
+				isQueued = true;
 				break;
 			case ERRORS:
 			default:
@@ -676,9 +682,21 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			}
 
 			String peakStr = (peakTs != null) ? String.format("%tF %<tT", peakTs) : "—";
+			String title = metricName + " Statistics Summary";
 
-			summaryMetricView.setBorder(new javax.swing.border.TitledBorder(metricName + " Statistics Summary"));
-			summaryMetricView.setStats(formatNumber(total), String.format(Locale.US, "%.1f", avgBucket), formatNumber(min), formatNumber(max), peakStr, String.format(Locale.US, "%.1f msg/min", avgRate));
+			String totalStr, avgRateStr;
+			if (isQueued) {
+				long lastQueued = data.isEmpty() ? 0L : data.get(data.size() - 1).getQueued();
+				totalStr = formatNumber(lastQueued);
+				avgRateStr = "—";
+			} else {
+				totalStr = formatNumber(total);
+				avgRateStr = String.format(Locale.US, "%.1f msg/min", avgRate);
+			}
+
+			summaryMetricView.setBorder(new TitledBorder(title));
+			summaryMetricView.setQueuedHeader(isQueued);
+			summaryMetricView.setStats(totalStr, String.format(Locale.US, "%.1f", avgBucket), formatNumber(min), formatNumber(max), peakStr, avgRateStr);
 
 			break;
 		}
@@ -698,7 +716,6 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		lastData = Collections.emptyList();
 		rebindDataset();
 
-//		showSummaryForView(View.ALL);
 		summaryAllView.reset();
 		summaryMetricView.reset();
 	}

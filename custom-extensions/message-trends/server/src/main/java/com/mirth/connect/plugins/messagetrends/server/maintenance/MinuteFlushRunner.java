@@ -16,6 +16,7 @@ import org.apache.logging.log4j.Logger;
 import com.mirth.connect.plugins.messagetrends.server.core.MessageTrendsBuffer;
 import com.mirth.connect.plugins.messagetrends.server.service.MessageTrendsService;
 import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries;
+import com.mirth.connect.server.userutil.ChannelUtil;
 
 final class MinuteFlushRunner {
 	private static final Logger logger = LogManager.getLogger(MinuteFlushRunner.class);
@@ -23,6 +24,7 @@ final class MinuteFlushRunner {
 
 	private final MessageTrendsService service;
 	private final MessageTrendsBuffer buffer = MessageTrendsBuffer.getInstance();
+	private final QueuedBackfillHelper queuedBackfillHelper;
 
 	private final Clock clock; // UTC
 	private final String serverId;
@@ -35,6 +37,8 @@ final class MinuteFlushRunner {
 		this.service = service;
 		this.clock = clock == null ? Clock.systemUTC() : clock;
 		this.serverId = serverId;
+
+		this.queuedBackfillHelper = new QueuedBackfillHelper((chId, connId) -> getQueuedCount(chId, connId));
 	}
 
 	int getFixedRateSeconds() {
@@ -71,10 +75,6 @@ final class MinuteFlushRunner {
 			}
 
 			List<MessageStatisticsTimeseries> rows = buffer.snapshotAndReset(ts, 1, serverId);
-			if (rows.isEmpty()) {
-				return;
-			}
-
 			final Map<RollKey, MessageStatisticsTimeseries> grouped = new LinkedHashMap<>();
 			for (MessageStatisticsTimeseries r : rows) {
 				final String serverId = r.getServerId();
@@ -100,24 +100,60 @@ final class MinuteFlushRunner {
 				// sum metrics (null-safe)
 				acc.setReceived(nz(acc.getReceived()) + nz(r.getReceived()));
 				acc.setFiltered(nz(acc.getFiltered()) + nz(r.getFiltered()));
-				acc.setQueued(nz(acc.getQueued()) + nz(r.getQueued()));
 				acc.setSent(nz(acc.getSent()) + nz(r.getSent()));
 				acc.setError(nz(acc.getError()) + nz(r.getError()));
 			}
 
-			final List<MessageStatisticsTimeseries> rowsToWrite = new ArrayList<>(grouped.values());
+			// Fill queued snapshot at end-of-minute
+			for (MessageStatisticsTimeseries acc : grouped.values()) {
+				long q = 0L;
+				try {
+					q = getQueuedCount(acc.getChannelId(), acc.getConnectorId());
+				} catch (Exception e) {
+					logger.warn("Failed to read queued snapshot for channelId={} connectorId={}", acc.getChannelId(), acc.getConnectorId(), e);
+				}
 
-			if (rowsToWrite.isEmpty()) {
-				return;
+				// clamp to int range
+				final int qi = (q < 0) ? 0 : (q > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) q);
+				acc.setQueued(qi);
 			}
 
-			int inserted = service.replaceRollupWindow(ts, 1, rowsToWrite);
+			queuedBackfillHelper.backfillMinute(ts, grouped);
+
+			final List<MessageStatisticsTimeseries> rowsToWrite = new ArrayList<>(grouped.values());
+
+			int inserted = 0;
+			if (!rowsToWrite.isEmpty()) {
+				inserted = service.replaceRollupWindow(ts, 1, rowsToWrite);
+
+			}
+
+			queuedBackfillHelper.updateAfterFlush(rowsToWrite);
 
 			lastFlushedTs = ts;
 
 			logger.debug("MinuteFlushRunner: flushed {} rows for {}", inserted, ts);
-		} catch (Throwable t) {
+		} catch (
+
+		Throwable t) {
 			logger.warn("MinuteFlushRunner runOnce failed", t);
+		}
+	}
+
+	private static long getQueuedCount(String channelId, String connectorId) {
+		return ChannelUtil.getQueuedCount(channelId, toConnectorNumber(connectorId));
+	}
+
+	// Helper: parse connectorId string to numeric index (null => channel-level
+	// queue)
+	private static Number toConnectorNumber(String connectorId) {
+		if (connectorId == null || connectorId.isEmpty())
+			return null;
+		try {
+			return Integer.valueOf(connectorId);
+		} catch (NumberFormatException e) {
+			// Non-numeric connectorId: fall back to channel-level
+			return null;
 		}
 	}
 
