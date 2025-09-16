@@ -14,9 +14,9 @@ CREATE TABLE message_statistics_timeseries (
 	sent NUMBER(10,0) DEFAULT 0 NOT NULL,
 	error NUMBER(10,0) DEFAULT 0 NOT NULL,
 	
-	server_id VARCHAR2(36) NOT NULL
+	server_id VARCHAR2(36) NOT NULL,
+	
+	CONSTRAINT uq_mstats_key UNIQUE (server_id, channel_id, connector_id, bucket_size_minutes, ts)
 );
 
-CREATE UNIQUE INDEX uq_mstats_key ON message_statistics_timeseries (server_id, channel_id, connector_id, bucket_size_minutes, ts);
-CREATE INDEX idx_mstats_server_channel_connector_bucket_ts ON message_statistics_timeseries (server_id, channel_id, connector_id, bucket_size_minutes, ts);
 CREATE INDEX idx_mstats_server_bucket_ts ON message_statistics_timeseries (server_id, bucket_size_minutes, ts);
