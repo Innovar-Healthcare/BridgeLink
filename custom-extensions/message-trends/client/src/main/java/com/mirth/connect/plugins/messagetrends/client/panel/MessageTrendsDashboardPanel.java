@@ -395,12 +395,13 @@ public class MessageTrendsDashboardPanel extends JPanel {
 
 		final String presetId = getSelectedPresetId();
 		final long now = System.currentTimeMillis();
+		long bucketMillis = Intervals.minutesOf(intervalCode) * 60_000L;
 		final long[] range = computeRangeFromPreset(presetId, now);
-		final long startTs = range[0];
+		final long startTs = range[0] - bucketMillis;
 		final long endTs = range[1];
 
 		// Remember the preset window for axis range
-		lastStartTsMs = startTs;
+		lastStartTsMs = startTs + bucketMillis;
 		lastEndTsMs = endTs;
 
 		if (inFlight != null && !inFlight.isDone()) {
