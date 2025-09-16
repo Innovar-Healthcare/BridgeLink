@@ -84,7 +84,8 @@ public enum Version {
     v4_5_2("4.5.2"),
     v4_5_3("4.5.3"),//BridgeLink
 
-    v4_5_4("4.5.4");//BridgeLink
+    v4_5_4("4.5.4"), //BridgeLink
+    v4_6_0("4.6.0");//BridgeLink
     
     // @formatter:on
 
