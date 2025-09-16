@@ -4,7 +4,7 @@ CREATE TABLE message_statistics_timeseries (
 	id BIGINT IDENTITY(1,1) PRIMARY KEY,
 	
 	channel_id VARCHAR(36) NOT NULL,
-	connector_id VARCHAR(36) NOT NULL, -- use '' for channel-level
+	connector_id VARCHAR(36) NOT NULL, -- use '__EMPTY__' for channel-level
 	ts DATETIME2(0) NOT NULL,
 	bucket_size_minutes INT NOT NULL,
 		
@@ -16,10 +16,9 @@ CREATE TABLE message_statistics_timeseries (
 	
 	server_id VARCHAR(36) NOT NULL,
 	
-	CONSTRAINT uq_mstats_key UNIQUE (server_id, channel_id, connector_id, ts, bucket_size_minutes)
+	CONSTRAINT uq_mstats_key UNIQUE (server_id, channel_id, connector_id, bucket_size_minutes, ts)
 );
 
-CREATE INDEX idx_mstats_bucket_time ON message_statistics_timeseries (bucket_size_minutes, ts, channel_id, connector_id);
-CREATE INDEX idx_mstats_server_time ON message_statistics_timeseries (server_id, ts, bucket_size_minutes);
-CREATE INDEX idx_mstats_channel_time ON message_statistics_timeseries (channel_id, ts);
-CREATE INDEX idx_mstats_connector_time ON message_statistics_timeseries (channel_id, connector_id, ts);
+CREATE NONCLUSTERED INDEX idx_mstats_server_channel_connector_bucket_ts ON message_statistics_timeseries (server_id, channel_id, connector_id, bucket_size_minutes, ts);
+CREATE NONCLUSTERED INDEX idx_mstats_server_bucket_ts ON message_statistics_timeseries (server_id, bucket_size_minutes, ts);
+

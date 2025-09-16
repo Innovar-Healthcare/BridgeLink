@@ -16,12 +16,11 @@
         <result property="serverId"          column="server_id"             javaType="String"/>
     </resultMap>
 
-    <!-- Oracle single-statement additive upserts (MERGE) -->
     <delete id="deleteRollupWindow" parameterType="map">
 		DELETE FROM message_statistics_timeseries
 		WHERE server_id = #{serverId}
 			AND bucket_size_minutes = #{bucketSizeMinutes}
-		    AND ts = #{ts,jdbcType=TIMESTAMP}
+		    AND ts = #{ts}
 	</delete>
 		
 	<insert id="insertRollupRows" parameterType="java.util.List">
@@ -31,7 +30,7 @@
 		      #{r.serverId}     AS server_id,
 		      #{r.channelId}    AS channel_id,
 		      #{r.connectorId}  AS connector_id,
-		      #{r.ts,jdbcType=TIMESTAMP} AS ts,
+		      #{r.ts} 			AS ts,
 		      #{r.bucketSizeMinutes} AS bucket_size_minutes,
 		      #{r.received}     AS received,
 		      #{r.filtered}     AS filtered,
@@ -49,25 +48,13 @@
            AND ts <![CDATA[ < ]]> #{cutoffTs}
     </delete>
 
-    <select id="selectSeriesServerChannel" parameterType="map" resultMap="message-statistics-timeseries">
-        SELECT id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error, server_id
-        FROM message_statistics_timeseries
-        WHERE server_id = #{serverId}
-          AND channel_id = #{channelId}
-          AND connector_id = ''
-          AND bucket_size_minutes = #{intervalMinutes}
-          <if test="startTs != null"> AND ts <![CDATA[ >= ]]> #{startTs} </if>
-          <if test="endTs != null">   AND ts <![CDATA[ < ]]>  #{endTs}   </if>
-        ORDER BY ts ASC
-    </select>
-
-    <select id="selectSeriesServerConnector" parameterType="map" resultMap="message-statistics-timeseries">
+    <select id="selectSeriesServerChannelConnector" parameterType="map" resultMap="message-statistics-timeseries">
         SELECT id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error, server_id
         FROM message_statistics_timeseries
         WHERE server_id = #{serverId}
           AND channel_id = #{channelId}
           AND connector_id = #{connectorId}
-          AND bucket_size_minutes = #{intervalMinutes}
+          AND bucket_size_minutes = #{bucketSizeMinutes}
           <if test="startTs != null"> AND ts <![CDATA[ >= ]]> #{startTs} </if>
           <if test="endTs != null">   AND ts <![CDATA[ < ]]>  #{endTs}   </if>
         ORDER BY ts ASC
@@ -77,7 +64,7 @@
         SELECT id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error, server_id
         FROM message_statistics_timeseries
         WHERE server_id = #{serverId}
-          AND bucket_size_minutes = #{intervalMinutes}
+          AND bucket_size_minutes = #{bucketSizeMinutes}
           <if test="startTs != null"> AND ts <![CDATA[ >= ]]> #{startTs} </if>
           <if test="endTs != null">   AND ts <![CDATA[ < ]]>  #{endTs}   </if>
         ORDER BY ts ASC

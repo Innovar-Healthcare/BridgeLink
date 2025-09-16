@@ -22,17 +22,17 @@ public interface MessageStatisticsTimeseriesDao {
 	 * View #1: Channel-level statistics (aggregate all connectors in channel on
 	 * this server).
 	 */
-	List<MessageStatisticsTimeseries> selectSeriesServerChannel(String serverId, String channelId, Date startTs, Date endTs, int intervalMinutes);
+	List<MessageStatisticsTimeseries> selectSeriesServerChannel(String serverId, String channelId, Date startTs, Date endTs, int bucketSizeMinutes);
 
 	/**
 	 * View #2: Connector-level statistics (specific connector of channel on this
 	 * server).
 	 */
-	List<MessageStatisticsTimeseries> selectSeriesServerConnector(String serverId, String channelId, String connectorId, Date startTs, Date endTs, int intervalMinutes);
+	List<MessageStatisticsTimeseries> selectSeriesServerConnector(String serverId, String channelId, String connectorId, Date startTs, Date endTs, int bucketSizeMinutes);
 
 	/**
 	 * View #3: Server-level statistics (aggregate all channels and connectors on
 	 * this server).
 	 */
-	List<MessageStatisticsTimeseries> selectSeriesServerAll(String serverId, Date startTs, Date endTs, int intervalMinutes);
+	List<MessageStatisticsTimeseries> selectSeriesServerAll(String serverId, Date startTs, Date endTs, int bucketSizeMinutes);
 }

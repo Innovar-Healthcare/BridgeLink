@@ -21,6 +21,23 @@ public class MessageStatisticsTimeseries {
 	public MessageStatisticsTimeseries() {
 	}
 
+	public MessageStatisticsTimeseries(MessageStatisticsTimeseries other) {
+		if (other == null) {
+			throw new IllegalArgumentException("Source MessageStatisticsTimeseries cannot be null");
+		}
+		this.id = other.getId();
+		this.serverId = other.getServerId();
+		this.channelId = other.getChannelId();
+		this.connectorId = other.getConnectorId();
+		this.ts = other.getTs() == null ? null : new Date(other.getTs().getTime());
+		this.bucketSizeMinutes = other.getBucketSizeMinutes();
+		this.received = other.getReceived();
+		this.filtered = other.getFiltered();
+		this.queued = other.getQueued();
+		this.sent = other.getSent();
+		this.error = other.getError();
+	}
+
 	public MessageStatisticsTimeseries(String channelId, String connectorId, Date ts, int bucketSizeMinutes, String serverId) {
 		this.channelId = channelId;
 		this.connectorId = connectorId;

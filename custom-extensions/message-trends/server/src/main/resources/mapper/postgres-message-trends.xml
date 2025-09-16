@@ -16,7 +16,6 @@
         <result property="serverId"          column="server_id"             javaType="String"/>
     </resultMap>
 
-    <!-- PostgreSQL single-statement additive upserts -->
 	<delete id="deleteRollupWindow" parameterType="map">
 	  	DELETE FROM message_statistics_timeseries
 	  	WHERE server_id = #{serverId}
@@ -39,26 +38,14 @@
            AND ts <![CDATA[ < ]]> #{cutoffTs}
     </delete>
 
-    <!-- READ: đã có rollup sẵn, chỉ select đầy đủ cột để map POJO -->
-    <select id="selectSeriesServerChannel" parameterType="map" resultMap="message-statistics-timeseries">
-        SELECT id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error, server_id
-      	FROM message_statistics_timeseries
-     	WHERE server_id = #{serverId}
-       		AND channel_id = #{channelId}
-       		AND connector_id = ''
-       		AND bucket_size_minutes = #{intervalMinutes}
-           <if test="startTs != null"> AND ts <![CDATA[ >= ]]> #{startTs} </if>
-           <if test="endTs != null">   AND ts <![CDATA[ < ]]>  #{endTs}   </if>
-     	ORDER BY ts ASC
-    </select>
 
-    <select id="selectSeriesServerConnector" parameterType="map" resultMap="message-statistics-timeseries">
+    <select id="selectSeriesServerChannelConnector" parameterType="map" resultMap="message-statistics-timeseries">
         SELECT id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error, server_id
         FROM message_statistics_timeseries
         WHERE server_id = #{serverId}
            AND channel_id = #{channelId}
            AND connector_id = #{connectorId}
-           AND bucket_size_minutes = #{intervalMinutes}
+           AND bucket_size_minutes = #{bucketSizeMinutes}
            <if test="startTs != null"> AND ts <![CDATA[ >= ]]> #{startTs} </if>
            <if test="endTs != null">   AND ts <![CDATA[ < ]]>  #{endTs}   </if>
         ORDER BY ts ASC
@@ -68,7 +55,7 @@
         SELECT id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error, server_id
         FROM message_statistics_timeseries
         WHERE server_id = #{serverId}
-           AND bucket_size_minutes = #{intervalMinutes}
+           AND bucket_size_minutes = #{bucketSizeMinutes}
            <if test="startTs != null"> AND ts <![CDATA[ >= ]]> #{startTs} </if>
            <if test="endTs != null">   AND ts <![CDATA[ < ]]>  #{endTs}   </if>
         ORDER BY ts ASC

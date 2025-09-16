@@ -1,5 +1,6 @@
 package com.mirth.connect.plugins.messagetrends.server.dao.impl;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -11,6 +12,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.mirth.connect.plugins.messagetrends.server.dao.MessageStatisticsTimeseriesDao;
+import com.mirth.connect.plugins.messagetrends.server.util.ConnectorIdNormalizer;
 import com.mirth.connect.plugins.messagetrends.server.util.DatabaseDialect.DatabaseType;
 import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries;
 
@@ -46,20 +48,23 @@ public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsT
 				throw new IllegalArgumentException("List of rollup rows cannot be null");
 			}
 
-			// Defensive checks: ensure all rows are consistent
-			for (MessageStatisticsTimeseries row : list) {
-				if (row.getTs() == null || !row.getTs().equals(startTs)) {
-					throw new IllegalArgumentException("Row ts mismatch: expected " + startTs + ", got " + row.getTs());
+			final List<MessageStatisticsTimeseries> dbRows = new ArrayList<>(list.size());
+			for (MessageStatisticsTimeseries r : list) {
+				if (r.getChannelId() == null) {
+					throw new IllegalArgumentException("channelId cannot be null for rollup rows");
 				}
-				if (row.getBucketSizeMinutes() == null || row.getBucketSizeMinutes() != bucketSizeMinutes) {
-					throw new IllegalArgumentException("Row bucket mismatch: expected " + bucketSizeMinutes + ", got " + row.getBucketSizeMinutes());
+				if (r.getTs() == null || !r.getTs().equals(startTs)) {
+					throw new IllegalArgumentException("Row ts mismatch: expected " + startTs + ", got " + r.getTs());
 				}
-				if (row.getChannelId() == null) {
-					row.setChannelId("");
+				if (r.getBucketSizeMinutes() == null || r.getBucketSizeMinutes() != bucketSizeMinutes) {
+					throw new IllegalArgumentException("Row bucket mismatch: expected " + bucketSizeMinutes + ", got " + r.getBucketSizeMinutes());
 				}
-				if (row.getConnectorId() == null) {
-					row.setConnectorId("");
-				}
+
+				// shallow copy
+				MessageStatisticsTimeseries c = new MessageStatisticsTimeseries(r);
+				c.setConnectorId(ConnectorIdNormalizer.toDb(c.getConnectorId()));
+
+				dbRows.add(c);
 			}
 
 			Map<String, Object> params = new HashMap<>();
@@ -70,8 +75,8 @@ public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsT
 			int deleted = session.delete(NS + ".deleteRollupWindow", params);
 
 			int inserted = 0;
-			if (!list.isEmpty()) {
-				inserted = session.insert(NS + ".insertRollupRows", list);
+			if (!dbRows.isEmpty()) {
+				inserted = session.insert(NS + ".insertRollupRows", dbRows);
 			}
 
 			session.commit();
@@ -80,6 +85,7 @@ public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsT
 			return inserted; // rows written
 		} catch (Exception e) {
 			logger.error("Failed to replace rollup window", e);
+			debugPrintRows(list);
 			return 0;
 		} finally {
 			if (!commitSuccess) {
@@ -122,44 +128,37 @@ public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsT
 	// ---------------------------------------------------------------------
 
 	@Override
-	public List<MessageStatisticsTimeseries> selectSeriesServerChannel(String serverId, String channelId, Date startTs, Date endTs, int intervalMinutes) {
+	public List<MessageStatisticsTimeseries> selectSeriesServerChannel(String serverId, String channelId, Date startTs, Date endTs, int bucketSizeMinutes) {
+		return selectSeriesServerConnector(serverId, channelId, null, startTs, endTs, bucketSizeMinutes);
+	}
+
+	@Override
+	public List<MessageStatisticsTimeseries> selectSeriesServerConnector(String serverId, String channelId, String connectorId, Date startTs, Date endTs, int bucketSizeMinutes) {
 
 		SqlSession session = sqlSessionManager.openSession();
 		try {
 			Map<String, Object> params = new HashMap<>();
 			params.put("serverId", serverId);
 			params.put("channelId", channelId);
+			params.put("connectorId", ConnectorIdNormalizer.toDb(connectorId));
 			params.put("startTs", startTs);
 			params.put("endTs", endTs);
-			params.put("intervalMinutes", intervalMinutes);
+			params.put("bucketSizeMinutes", bucketSizeMinutes);
 
-			return session.selectList(NS + ".selectSeriesServerChannel", params);
+			List<MessageStatisticsTimeseries> rows = session.selectList(NS + ".selectSeriesServerChannelConnector", params);
+
+			for (MessageStatisticsTimeseries r : rows) {
+				r.setConnectorId(ConnectorIdNormalizer.toApi(r.getConnectorId()));
+			}
+
+			return rows;
 		} finally {
 			session.close();
 		}
 	}
 
 	@Override
-	public List<MessageStatisticsTimeseries> selectSeriesServerConnector(String serverId, String channelId, String connectorId, Date startTs, Date endTs, int intervalMinutes) {
-
-		SqlSession session = sqlSessionManager.openSession();
-		try {
-			Map<String, Object> params = new HashMap<>();
-			params.put("serverId", serverId);
-			params.put("channelId", channelId);
-			params.put("connectorId", connectorId == null ? "" : connectorId);
-			params.put("startTs", startTs);
-			params.put("endTs", endTs);
-			params.put("intervalMinutes", intervalMinutes);
-
-			return session.selectList(NS + ".selectSeriesServerConnector", params);
-		} finally {
-			session.close();
-		}
-	}
-
-	@Override
-	public List<MessageStatisticsTimeseries> selectSeriesServerAll(String serverId, Date startTs, Date endTs, int intervalMinutes) {
+	public List<MessageStatisticsTimeseries> selectSeriesServerAll(String serverId, Date startTs, Date endTs, int bucketSizeMinutes) {
 
 		SqlSession session = sqlSessionManager.openSession();
 		try {
@@ -167,11 +166,30 @@ public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsT
 			params.put("serverId", serverId);
 			params.put("startTs", startTs);
 			params.put("endTs", endTs);
-			params.put("intervalMinutes", intervalMinutes);
+			params.put("bucketSizeMinutes", bucketSizeMinutes);
 
-			return session.selectList(NS + ".selectSeriesServerAll", params);
+			List<MessageStatisticsTimeseries> rows = session.selectList(NS + ".selectSeriesServerAll", params);
+
+			for (MessageStatisticsTimeseries r : rows) {
+				r.setConnectorId(ConnectorIdNormalizer.toApi(r.getConnectorId()));
+			}
+
+			return rows;
 		} finally {
 			session.close();
+		}
+	}
+
+	private void debugPrintRows(List<MessageStatisticsTimeseries> list) {
+		if (list == null || list.isEmpty()) {
+			logger.debug("insertRollupRows: list is empty");
+			return;
+		}
+
+		logger.debug("insertRollupRows: dumping {} rows", list.size());
+		for (int i = 0; i < list.size(); i++) {
+			MessageStatisticsTimeseries r = list.get(i);
+			logger.debug("[{}] serverId={} channelId={} connectorId={} ts={} bucket={} " + "recv={} filt={} queue={} sent={} err={}", i, r.getServerId(), r.getChannelId(), r.getConnectorId(), r.getTs(), r.getBucketSizeMinutes(), r.getReceived(), r.getFiltered(), r.getQueued(), r.getSent(), r.getError());
 		}
 	}
 }
