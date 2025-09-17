@@ -7,6 +7,7 @@ import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.Arrays;
@@ -37,6 +38,8 @@ import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
 import org.jfree.chart.axis.DateAxis;
+import org.jfree.chart.axis.NumberAxis;
+import org.jfree.chart.labels.StandardXYToolTipGenerator;
 import org.jfree.chart.plot.XYPlot;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
 import org.jfree.data.time.Day;
@@ -176,8 +179,11 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		plot.setRangeGridlinePaint(new Color(238, 238, 238));
 		plot.setDomainPannable(false);
 
-		DateAxis axis = (DateAxis) plot.getDomainAxis();
-		axis.setDateFormatOverride(new SimpleDateFormat("HH:mm"));
+		NumberAxis yAxis = (NumberAxis) plot.getRangeAxis();
+		yAxis.setStandardTickUnits(NumberAxis.createIntegerTickUnits());
+		yAxis.setNumberFormatOverride(NumberFormat.getIntegerInstance());
+		DateAxis xAxis = (DateAxis) plot.getDomainAxis();
+		xAxis.setDateFormatOverride(new SimpleDateFormat("HH:mm"));
 
 		XYLineAndShapeRenderer renderer = new XYLineAndShapeRenderer();
 		renderer.setDefaultShapesVisible(true);
@@ -517,6 +523,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		XYLineAndShapeRenderer renderer = (XYLineAndShapeRenderer) plot.getRenderer();
 		renderer.setDefaultShapesVisible(true);
 		renderer.setDefaultShapesFilled(true);
+		renderer.setDefaultToolTipGenerator(new StandardXYToolTipGenerator("{0}: {2}", new java.text.SimpleDateFormat("HH:mm:ss"), java.text.NumberFormat.getIntegerInstance()));
 
 		View v = (View) viewComboBox.getSelectedItem();
 
