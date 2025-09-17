@@ -263,4 +263,170 @@ public class DatabaseUtil {
             DbUtils.closeQuietly(resultSet);
         }
     }
+
+    /**
+     * Tell whether or not the given column exists in the specified table
+     */
+    public static boolean columnExists(Connection connection, String tableName, String columnName) {
+        if (!tableExists(connection, tableName)) {
+            return false;
+        }
+
+        ResultSet resultSet = null;
+
+        try {
+            DatabaseMetaData metaData = connection.getMetaData();
+            resultSet = metaData.getColumns(null, null, tableName.toUpperCase(), columnName.toUpperCase());
+
+            if (resultSet.next()) {
+                return true;
+            }
+
+            resultSet = metaData.getColumns(null, null, tableName.toLowerCase(), columnName.toLowerCase());
+            return resultSet.next();
+        } catch (SQLException e) {
+            throw new DonkeyDaoException(e);
+        } finally {
+            DbUtils.closeQuietly(resultSet);
+        }
+    }
+
+    /**
+     * Get the column type name for a specific column in a table
+     * Returns the database-specific type name (e.g., "VARCHAR", "NVARCHAR", "TEXT", "INTEGER", etc.)
+     * 
+     * @param connection the database connection
+     * @param tableName the name of the table
+     * @param columnName the name of the column
+     * @return the column type name, or null if the column doesn't exist
+     */
+    public static String getColumnType(Connection connection, String tableName, String columnName) {
+        if (!tableExists(connection, tableName)) {
+            return null;
+        }
+
+        ResultSet resultSet = null;
+
+        try {
+            DatabaseMetaData metaData = connection.getMetaData();
+            
+            // Try uppercase first
+            resultSet = metaData.getColumns(null, null, tableName.toUpperCase(), columnName.toUpperCase());
+            if (resultSet.next()) {
+                return resultSet.getString("TYPE_NAME");
+            }
+            
+            // Try lowercase
+            DbUtils.closeQuietly(resultSet);
+            resultSet = metaData.getColumns(null, null, tableName.toLowerCase(), columnName.toLowerCase());
+            if (resultSet.next()) {
+                return resultSet.getString("TYPE_NAME");
+            }
+            
+            return null; // Column not found
+        } catch (SQLException e) {
+            throw new DonkeyDaoException(e);
+        } finally {
+            DbUtils.closeQuietly(resultSet);
+        }
+    }
+
+    /**
+     * Check if a column in a table is of a specific type
+     * Performs case-insensitive comparison of column type names
+     * 
+     * @param connection the database connection
+     * @param tableName the name of the table
+     * @param columnName the name of the column
+     * @param expectedType the expected type name (e.g., "VARCHAR", "NVARCHAR", "TEXT")
+     * @return true if the column exists and is of the specified type, false otherwise
+     */
+    public static boolean isColumnType(Connection connection, String tableName, String columnName, String expectedType) {
+        String actualType = getColumnType(connection, tableName, columnName);
+        return actualType != null && actualType.equalsIgnoreCase(expectedType);
+    }
+
+    /**
+     * Get detailed column information including type, size, and other properties
+     * 
+     * @param connection the database connection
+     * @param tableName the name of the table
+     * @param columnName the name of the column
+     * @return ColumnInfo object containing detailed column information, or null if column doesn't exist
+     */
+    public static ColumnInfo getColumnInfo(Connection connection, String tableName, String columnName) {
+        if (!tableExists(connection, tableName)) {
+            return null;
+        }
+
+        ResultSet resultSet = null;
+
+        try {
+            DatabaseMetaData metaData = connection.getMetaData();
+            
+            // Try uppercase first
+            resultSet = metaData.getColumns(null, null, tableName.toUpperCase(), columnName.toUpperCase());
+            if (!resultSet.next()) {
+                // Try lowercase
+                DbUtils.closeQuietly(resultSet);
+                resultSet = metaData.getColumns(null, null, tableName.toLowerCase(), columnName.toLowerCase());
+                if (!resultSet.next()) {
+                    return null; // Column not found
+                }
+            }
+            
+            return new ColumnInfo(
+                resultSet.getString("COLUMN_NAME"),
+                resultSet.getString("TYPE_NAME"),
+                resultSet.getInt("DATA_TYPE"),
+                resultSet.getInt("COLUMN_SIZE"),
+                resultSet.getInt("DECIMAL_DIGITS"),
+                resultSet.getInt("NULLABLE") == DatabaseMetaData.columnNullable,
+                resultSet.getString("COLUMN_DEF")
+            );
+            
+        } catch (SQLException e) {
+            throw new DonkeyDaoException(e);
+        } finally {
+            DbUtils.closeQuietly(resultSet);
+        }
+    }
+
+    /**
+     * Inner class to hold detailed column information
+     */
+    public static class ColumnInfo {
+        private final String columnName;
+        private final String typeName;
+        private final int dataType;
+        private final int columnSize;
+        private final int decimalDigits;
+        private final boolean nullable;
+        private final String defaultValue;
+
+        public ColumnInfo(String columnName, String typeName, int dataType, int columnSize, 
+                         int decimalDigits, boolean nullable, String defaultValue) {
+            this.columnName = columnName;
+            this.typeName = typeName;
+            this.dataType = dataType;
+            this.columnSize = columnSize;
+            this.decimalDigits = decimalDigits;
+            this.nullable = nullable;
+            this.defaultValue = defaultValue;
+        }
+
+        public String getColumnName() { return columnName; }
+        public String getTypeName() { return typeName; }
+        public int getDataType() { return dataType; }
+        public int getColumnSize() { return columnSize; }
+        public int getDecimalDigits() { return decimalDigits; }
+        public boolean isNullable() { return nullable; }
+        public String getDefaultValue() { return defaultValue; }
+
+        @Override
+        public String toString() {
+            return String.format("ColumnInfo{name='%s', type='%s', size=%d, nullable=%s}", 
+                               columnName, typeName, columnSize, nullable);
+        }
+    }
 }

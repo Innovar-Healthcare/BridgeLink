@@ -24,6 +24,7 @@ import com.mirth.connect.plugins.dynamiclookup.server.dao.impl.MyBatisLookupAudi
 import com.mirth.connect.plugins.dynamiclookup.server.dao.impl.MyBatisLookupGroupDao;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.impl.MyBatisLookupStatisticsDao;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.impl.MyBatisLookupValueDao;
+import com.mirth.connect.plugins.dynamiclookup.server.migration.LookupTableMigrationManager;
 import com.mirth.connect.plugins.dynamiclookup.server.service.LookupService;
 import com.mirth.connect.plugins.dynamiclookup.server.userutil.LookupHelper;
 import com.mirth.connect.plugins.dynamiclookup.server.util.SqlSessionManagerProvider;
@@ -145,18 +146,25 @@ public class LookupTableServicePlugin implements ServicePlugin {
      */
     private void initializeDatabase() throws Exception {
         logger.info("Initializing database schema...");
+        
+        // Use the migration manager to handle both fresh installs and migrations
+        LookupTableMigrationManager migrationManager = new LookupTableMigrationManager();
+        
         SqlSessionManager sqlSessionManager = getSqlSessionManager();
-        DatabaseType dbType = determineDatabaseType(sqlSessionManager);
         SqlSession session = sqlSessionManager.openSession();
         try {
             // Check if tables already exist
             if (!DatabaseUtil.tableExists(session.getConnection(), "LOOKUP_GROUP")) {
-                // Create tables based on database type
+                // Fresh install - create tables with latest schema
+                DatabaseType dbType = determineDatabaseType(sqlSessionManager);
                 String migrationScript = getMigrationScript(dbType);
                 executeSqlScript(session, migrationScript);
                 logger.info("Database schema initialized successfully");
             } else {
-                logger.info("Database schema already exists, skipping initialization");
+                // Tables exist - run migration manager to handle any needed updates
+                logger.info("Tables exist, checking for schema migrations...");
+                migrationManager.migrate();
+                logger.info("Database schema migration check completed");
             }
         } finally {
             session.close();
