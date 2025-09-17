@@ -7,10 +7,7 @@ import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.text.NumberFormat;
-import java.text.SimpleDateFormat;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -34,24 +31,13 @@ import javax.swing.border.TitledBorder;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jfree.chart.ChartFactory;
-import org.jfree.chart.ChartPanel;
-import org.jfree.chart.JFreeChart;
-import org.jfree.chart.axis.DateAxis;
-import org.jfree.chart.axis.NumberAxis;
-import org.jfree.chart.labels.StandardXYToolTipGenerator;
-import org.jfree.chart.plot.XYPlot;
-import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
-import org.jfree.data.time.Day;
-import org.jfree.data.time.Hour;
-import org.jfree.data.time.Minute;
-import org.jfree.data.time.RegularTimePeriod;
-import org.jfree.data.time.TimeSeries;
-import org.jfree.data.time.TimeSeriesCollection;
 
 import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.ui.Frame;
 import com.mirth.connect.client.ui.PlatformUI;
+import com.mirth.connect.plugins.messagetrends.client.chart.LineTrendsChart;
+import com.mirth.connect.plugins.messagetrends.client.chart.StackedTrendsChart;
+import com.mirth.connect.plugins.messagetrends.client.chart.TrendsChart;
 import com.mirth.connect.plugins.messagetrends.client.plugin.MessageTrendsDashboardTabPlugin;
 import com.mirth.connect.plugins.messagetrends.client.service.MessageTrendsServiceClient;
 import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries;
@@ -71,13 +57,18 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	private final MessageTrendsDashboardTabPlugin plugin;
 	private SelectionInfo selection;
 
-	private ChartPanel chartPanel;
+	private JComboBox<ChartType> chartTypeCombo;
+	private JPanel chartCardPanel;
+	private final Map<ChartType, TrendsChart> charts = new HashMap<>();
+	private TrendsChart activeChart;
+	private String currentTitle = "Message Volume";
+
 	private JComboBox<String> intervalComboBox; // canonical codes ("1minute","5minute","15minute","60minute","daily")
 	private JComboBox<String> timeRangeComboBox;
 	private JComboBox<View> viewComboBox;
 	private JButton refreshButton;
 
-	// NEW: Summary views
+	// Summary views
 	private SummaryAllView summaryAllView;
 	private SummaryMetricView summaryMetricView;
 	private JPanel summaryCardPanel;
@@ -171,35 +162,23 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		refreshButton = new JButton("Refresh");
 
 		// chart
-		TimeSeriesCollection dataset = new TimeSeriesCollection();
-		JFreeChart chart = ChartFactory.createTimeSeriesChart("Message Volume", "Time", "Count", dataset, true, true, false);
-		XYPlot plot = chart.getXYPlot();
-		plot.setBackgroundPaint(Color.WHITE);
-		plot.setDomainGridlinePaint(new Color(238, 238, 238));
-		plot.setRangeGridlinePaint(new Color(238, 238, 238));
-		plot.setDomainPannable(false);
+		chartTypeCombo = new JComboBox<>(ChartType.values());
+		chartCardPanel = new JPanel(new CardLayout());
 
-		NumberAxis yAxis = (NumberAxis) plot.getRangeAxis();
-		yAxis.setStandardTickUnits(NumberAxis.createIntegerTickUnits());
-		yAxis.setNumberFormatOverride(NumberFormat.getIntegerInstance());
-		DateAxis xAxis = (DateAxis) plot.getDomainAxis();
-		xAxis.setDateFormatOverride(new SimpleDateFormat("HH:mm"));
+		// LINE chart
+		TrendsChart line = new LineTrendsChart();
+		line.setSeriesColors(COLOR_RECEIVED, COLOR_SENT, COLOR_FILTERED, COLOR_QUEUED, COLOR_ERROR);
+		charts.put(ChartType.LINE, line);
+		chartCardPanel.add(line.getComponent(), ChartType.LINE.name());
 
-		XYLineAndShapeRenderer renderer = new XYLineAndShapeRenderer();
-		renderer.setDefaultShapesVisible(true);
-		renderer.setDefaultShapesFilled(true);
-		renderer.setAutoPopulateSeriesPaint(false);
-		renderer.setSeriesPaint(0, COLOR_RECEIVED);
-		renderer.setSeriesPaint(1, COLOR_SENT);
-		renderer.setSeriesPaint(2, COLOR_FILTERED);
-		renderer.setSeriesPaint(3, COLOR_QUEUED);
-		renderer.setSeriesPaint(4, COLOR_ERROR);
-		plot.setRenderer(renderer);
+		// STACKED chart
+		TrendsChart stacked = new StackedTrendsChart();
+		stacked.setSeriesColors(COLOR_RECEIVED, COLOR_SENT, COLOR_FILTERED, COLOR_QUEUED, COLOR_ERROR);
+		charts.put(ChartType.STACKED, stacked);
+		chartCardPanel.add(stacked.getComponent(), ChartType.STACKED.name());
 
-		chartPanel = new ChartPanel(chart);
-		chartPanel.setPreferredSize(new Dimension(720, 360));
-		chartPanel.setDomainZoomable(false);
-		chartPanel.setMouseWheelEnabled(false);
+		// NEW: set active
+		activeChart = line;
 
 		// Summary All + Metric views
 		summaryAllView = new SummaryAllView();
@@ -223,6 +202,8 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		controls.add(timeRangeComboBox);
 		controls.add(new JLabel("View:"));
 		controls.add(viewComboBox);
+		controls.add(new JLabel("Chart:"));
+		controls.add(chartTypeCombo);
 		controls.add(Box.createHorizontalStrut(16));
 		controls.add(refreshButton);
 
@@ -233,7 +214,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		summaryCardPanel.setPreferredSize(new Dimension(10, 65));
 
 		add(controls, BorderLayout.NORTH);
-		add(chartPanel, BorderLayout.CENTER);
+		add(chartCardPanel, BorderLayout.CENTER);
 		add(wrapPanel, BorderLayout.SOUTH);
 	}
 
@@ -276,6 +257,11 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			showSummaryForView(v);
 			rebindDataset();
 			updateSummary(lastData);
+		});
+
+		chartTypeCombo.addActionListener(e -> {
+			ChartType type = (ChartType) chartTypeCombo.getSelectedItem();
+			switchChart(type);
 		});
 
 		refreshButton.addActionListener(e -> refreshData());
@@ -340,6 +326,37 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		}
 	}
 
+	// NEW
+	private void switchChart(ChartType type) {
+		if (type == null) {
+			return;
+		}
+
+		TrendsChart target = charts.get(type);
+		if (target == null || target == activeChart) {
+			return;
+		}
+
+		// Replay state
+		String intervalCode = (String) intervalComboBox.getSelectedItem();
+		int minutes = Intervals.isValid(intervalCode) ? Intervals.minutesOf(intervalCode) : 1;
+
+		target.setIntervalMinutes(minutes);
+
+		if (lastStartTsMs != null && lastEndTsMs != null && lastEndTsMs > lastStartTsMs) {
+			target.setWindowRange(lastStartTsMs, lastEndTsMs); // fix Ox theo preset
+		}
+
+		target.setView((View) viewComboBox.getSelectedItem());
+		target.setTitle(currentTitle);
+		target.setData(lastData);
+
+		// Show card
+		CardLayout cl = (CardLayout) chartCardPanel.getLayout();
+		cl.show(chartCardPanel, type.name());
+		activeChart = target;
+	}
+
 	public void blockSelection(SelectionBlockReason reason) {
 		setControlsEnabled(false);
 
@@ -354,6 +371,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		intervalComboBox.setEnabled(enabled);
 		timeRangeComboBox.setEnabled(enabled);
 		viewComboBox.setEnabled(enabled);
+		chartTypeCombo.setEnabled(enabled);
 		refreshButton.setEnabled(enabled);
 	}
 
@@ -409,6 +427,9 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		// Remember the preset window for axis range
 		lastStartTsMs = startTs + bucketMillis;
 		lastEndTsMs = endTs;
+
+		activeChart.setIntervalMinutes(Intervals.minutesOf(intervalCode));
+		activeChart.setWindowRange(lastStartTsMs, lastEndTsMs);
 
 		if (inFlight != null && !inFlight.isDone()) {
 			inFlight.cancel(true);
@@ -477,129 +498,18 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	}
 
 	private void rebindDataset() {
-		TimeSeries receivedSeries = new TimeSeries("Received");
-		TimeSeries sentSeries = new TimeSeries("Sent");
-		TimeSeries filteredSeries = new TimeSeries("Filtered");
-		TimeSeries queuedSeries = new TimeSeries("Queued");
-		TimeSeries errorSeries = new TimeSeries("Error");
-
 		String intervalCode = (String) intervalComboBox.getSelectedItem();
-		if (!Intervals.isValid(intervalCode)) {
-			return;
-		}
-		int minutes = Intervals.minutesOf(intervalCode);
-
-		RegularTimePeriodFactory periodFactory = new RegularTimePeriodFactory(minutes);
-
-		for (MessageStatisticsTimeseries b : lastData) {
-			Date ts = b.getTs(); // confirmed: returns Date
-			if (ts == null) {
-				continue;
-			}
-
-			long bucketMillis = b.getBucketSizeMinutes() * 60_000L;
-			Date endTs = new Date(ts.getTime() + bucketMillis);
-
-			RegularTimePeriod p = periodFactory.of(endTs);
-			receivedSeries.addOrUpdate(p, b.getReceived());
-			sentSeries.addOrUpdate(p, b.getSent());
-			filteredSeries.addOrUpdate(p, b.getFiltered());
-			queuedSeries.addOrUpdate(p, b.getQueued());
-			errorSeries.addOrUpdate(p, b.getError());
-		}
-
-		TimeSeriesCollection dataset = new TimeSeriesCollection();
-
-		dataset.addSeries(receivedSeries); // index 0
-		dataset.addSeries(sentSeries); // index 1
-		dataset.addSeries(filteredSeries); // index 2
-		dataset.addSeries(queuedSeries); // index 3
-		dataset.addSeries(errorSeries); // index 4
-
-		JFreeChart chart = chartPanel.getChart();
-		XYPlot plot = (XYPlot) chart.getPlot();
-		plot.setDataset(dataset);
-
-		XYLineAndShapeRenderer renderer = (XYLineAndShapeRenderer) plot.getRenderer();
-		renderer.setDefaultShapesVisible(true);
-		renderer.setDefaultShapesFilled(true);
-		renderer.setDefaultToolTipGenerator(new StandardXYToolTipGenerator("{0}: {2}", new java.text.SimpleDateFormat("HH:mm:ss"), java.text.NumberFormat.getIntegerInstance()));
-
-		View v = (View) viewComboBox.getSelectedItem();
-
-		// Default
-		boolean[] visible = new boolean[5];
-
-		switch (v) {
-		case ALL:
-			Arrays.fill(visible, true);
-			break;
-		case RECEIVED:
-			visible[0] = true;
-			break;
-		case SENT:
-			visible[1] = true;
-			break;
-		case FILTERED:
-			visible[2] = true;
-			break;
-		case QUEUED:
-			visible[3] = true;
-			break;
-		case ERRORS:
-			visible[4] = true;
-			break;
-		default:
-			break;
-		}
-
-		// Apply flags
-		for (int i = 0; i < visible.length; i++) {
-			renderer.setSeriesVisible(i, visible[i]);
-			renderer.setSeriesVisibleInLegend(i, visible[i]);
-		}
-
-		DateAxis axis = (DateAxis) plot.getDomainAxis();
-		// Determine visible span
-		long spanMs = 0L;
-		if (lastStartTsMs != null && lastEndTsMs != null && lastEndTsMs > lastStartTsMs) {
-			spanMs = lastEndTsMs - lastStartTsMs;
-		}
-
-		String pattern;
-		final long ONE_H = 60L * 60_000L;
-		final long ONE_D = 24L * ONE_H;
-		final long ONE_Y = 365L * ONE_D;
-
-		if (spanMs <= ONE_D) {
-			pattern = "HH:mm";
-		} else if (spanMs <= 7L * ONE_D) {
-			pattern = "MMM dd HH:mm";
-		} else if (spanMs <= 90L * ONE_D) {
-			pattern = "MMM dd";
-		} else if (spanMs <= 3L * ONE_Y) {
-			pattern = "yyyy-MM";
-		} else {
-			pattern = "yyyy";
-		}
-
-		axis.setDateFormatOverride(new SimpleDateFormat(pattern));
-
-		// lock axis to preset window regardless of dataset
-		if (lastStartTsMs != null && lastEndTsMs != null && lastEndTsMs > lastStartTsMs) {
-			axis.setRange(new Date(lastStartTsMs), new Date(lastEndTsMs));
-		}
-
-		// Ox: lock auto-range
-		axis.setAutoRange(false);
-
-		// Oy: auto-range
-		plot.getRangeAxis().setAutoRange(true);
+		activeChart.setIntervalMinutes(Intervals.minutesOf(intervalCode));
+		activeChart.setWindowRange(lastStartTsMs, lastEndTsMs);
+		activeChart.setView((View) viewComboBox.getSelectedItem());
+		activeChart.setData(lastData);
 	}
 
 	private void updateChartTitle(String title) {
-		JFreeChart chart = chartPanel.getChart();
-		chart.setTitle(title);
+		currentTitle = title;
+		if (activeChart != null) {
+			activeChart.setTitle(title);
+		}
 	}
 
 	private void updateSummary(List<MessageStatisticsTimeseries> data) {
@@ -719,10 +629,20 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		/* no-op for now */ }
 
 	public void reset(String title) {
+		// cancel any pending fetch
+		if (inFlight != null && !inFlight.isDone()) {
+			inFlight.cancel(true);
+		}
+
 		selection = null;
-		updateChartTitle(title);
 		lastData = Collections.emptyList();
-		rebindDataset();
+		lastStartTsMs = null;
+		lastEndTsMs = null;
+
+		if (activeChart != null) {
+			activeChart.reset();
+			activeChart.setTitle(title);
+		}
 
 		summaryAllView.reset();
 		summaryMetricView.reset();
@@ -734,25 +654,6 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			cl.show(summaryCardPanel, CARD_ALL);
 		} else {
 			cl.show(summaryCardPanel, CARD_METRIC);
-		}
-	}
-
-	/** Utility to map minutes -> RegularTimePeriod for consistent alignment */
-	private static class RegularTimePeriodFactory {
-		private final int minutes;
-
-		RegularTimePeriodFactory(int minutes) {
-			this.minutes = minutes;
-		}
-
-		RegularTimePeriod of(Date d) {
-			if (minutes >= 1440) {
-				return new Day(d);
-			}
-			if (minutes >= 60) {
-				return new Hour(d);
-			}
-			return new Minute(d); // 1,5,15 minute buckets
 		}
 	}
 
@@ -812,4 +713,18 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		}
 	}
 
+	private enum ChartType {
+		LINE("Line"), STACKED("Stacked Bars");
+
+		final String label;
+
+		ChartType(String l) {
+			this.label = l;
+		}
+
+		@Override
+		public String toString() {
+			return label;
+		}
+	}
 }
