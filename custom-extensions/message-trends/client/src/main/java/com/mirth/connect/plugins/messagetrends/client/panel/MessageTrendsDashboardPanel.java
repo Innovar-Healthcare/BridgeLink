@@ -3,10 +3,8 @@ package com.mirth.connect.plugins.messagetrends.client.panel;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
-import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Date;
@@ -17,13 +15,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.ToIntFunction;
 
-import javax.swing.Box;
-import javax.swing.DefaultComboBoxModel;
-import javax.swing.DefaultListCellRenderer;
-import javax.swing.JButton;
-import javax.swing.JComboBox;
-import javax.swing.JLabel;
-import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
@@ -57,16 +48,12 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	private final MessageTrendsDashboardTabPlugin plugin;
 	private SelectionInfo selection;
 
-	private JComboBox<ChartType> chartTypeCombo;
+	private TrendsControlsBar controlsBar;
+
 	private JPanel chartCardPanel;
 	private final Map<ChartType, TrendsChart> charts = new HashMap<>();
 	private TrendsChart activeChart;
 	private String currentTitle = "Message Volume";
-
-	private JComboBox<String> intervalComboBox; // canonical codes ("1minute","5minute","15minute","60minute","daily")
-	private JComboBox<String> timeRangeComboBox;
-	private JComboBox<View> viewComboBox;
-	private JButton refreshButton;
 
 	// Summary views
 	private SummaryAllView summaryAllView;
@@ -80,9 +67,13 @@ public class MessageTrendsDashboardPanel extends JPanel {
 
 	private final Map<String, Long> lastFetchByInterval = new HashMap<>();
 	private Map<String, String> lastTimeRangeByInterval = new HashMap<>();
-	private boolean updatingRange = false;
+
 	private Long lastStartTsMs; // preset window start
 	private Long lastEndTsMs; // preset window end
+
+	// --- Windowing state ----------------------------------------------------
+	private Long endTsMs; // right edge of the current window
+	private boolean isLive; // UI state only, derived in refresh
 
 	// Fixed colors for each metric series
 	private static final Color COLOR_RECEIVED = new Color(20, 110, 255);
@@ -122,47 +113,14 @@ public class MessageTrendsDashboardPanel extends JPanel {
 
 		wireEvents();
 
-		updateTimeRangeSelection();
-
 		updateChartTitle("No Channel/Connector Selected");
 
 		showSummaryForView(View.ALL);
 	}
 
 	private void initComponents() {
-		// interval (bucket) selector — canonical codes from shared Intervals
-		intervalComboBox = new JComboBox<>(Intervals.canonicalCodes().toArray(new String[0]));
-		intervalComboBox.setRenderer(new DefaultListCellRenderer() {
-			@Override
-			public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-				String code = String.valueOf(value);
-				String label = humanLabelForInterval(code);
-				return super.getListCellRendererComponent(list, label, index, isSelected, cellHasFocus);
-			}
-		});
-		if (intervalComboBox.getItemCount() > 0) {
-			intervalComboBox.setSelectedIndex(0);
-		}
+		controlsBar = new TrendsControlsBar();
 
-		// time range selector (contents depend on selected interval minutes)
-		timeRangeComboBox = new JComboBox<>();
-		timeRangeComboBox.setRenderer(new DefaultListCellRenderer() {
-			@Override
-			public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-				String presetId = (String) value;
-				String label = TimeRangePresets.PRESET_TO_LABEL.getOrDefault(presetId, presetId);
-				return super.getListCellRendererComponent(list, label, index, isSelected, cellHasFocus);
-			}
-		});
-
-		// view selector
-		viewComboBox = new JComboBox<>(View.values());
-
-		// refresh
-		refreshButton = new JButton("Refresh");
-
-		// chart
-		chartTypeCombo = new JComboBox<>(ChartType.values());
 		chartCardPanel = new JPanel(new CardLayout());
 
 		// LINE chart
@@ -195,25 +153,13 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	private void initLayout() {
 		setLayout(new BorderLayout());
 
-		JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
-		controls.add(new JLabel("Interval:"));
-		controls.add(intervalComboBox);
-		controls.add(new JLabel("Time Range:"));
-		controls.add(timeRangeComboBox);
-		controls.add(new JLabel("View:"));
-		controls.add(viewComboBox);
-		controls.add(new JLabel("Chart:"));
-		controls.add(chartTypeCombo);
-		controls.add(Box.createHorizontalStrut(16));
-		controls.add(refreshButton);
-
 		// wrap panel
 		JPanel wrapPanel = new JPanel(new BorderLayout());
 		wrapPanel.add(summaryCardPanel, BorderLayout.CENTER);
 		wrapPanel.setPreferredSize(new Dimension(10, 65));
 		summaryCardPanel.setPreferredSize(new Dimension(10, 65));
 
-		add(controls, BorderLayout.NORTH);
+		add(controlsBar, BorderLayout.NORTH);
 		add(chartCardPanel, BorderLayout.CENTER);
 		add(wrapPanel, BorderLayout.SOUTH);
 	}
@@ -227,102 +173,81 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	}
 
 	private void wireEvents() {
-		intervalComboBox.addActionListener(e -> {
-			String code = (String) intervalComboBox.getSelectedItem();
-			if (!Intervals.isValid(code)) {
-				return;
-			}
-
-			updateTimeRangeSelection();
-
-			refreshData();
-		});
-
-		timeRangeComboBox.addActionListener(e -> {
-			if (updatingRange) {
-				return;
-			}
-
-			String code = (String) intervalComboBox.getSelectedItem();
-			Object sel = timeRangeComboBox.getSelectedItem();
-			if (Intervals.isValid(code) && sel instanceof String) {
-				lastTimeRangeByInterval.put(code, (String) sel);
-			}
-
-			refreshData();
-		});
-
-		viewComboBox.addActionListener(e -> {
-			View v = (View) viewComboBox.getSelectedItem();
+		// View dropdown from controls bar
+		controlsBar.getViewCombo().addActionListener(e -> {
+			View v = (View) controlsBar.getViewCombo().getSelectedItem();
 			showSummaryForView(v);
 			rebindDataset();
 			updateSummary(lastData);
 		});
 
-		chartTypeCombo.addActionListener(e -> {
-			ChartType type = (ChartType) chartTypeCombo.getSelectedItem();
+		// Chart dropdown from controls bar ("Line" / "Stacked")
+		controlsBar.getChartCombo().addActionListener(e -> {
+			Object sel = controlsBar.getChartCombo().getSelectedItem();
+			ChartType type = ("Stacked".equals(sel)) ? ChartType.STACKED : ChartType.LINE;
 			switchChart(type);
 		});
 
-		refreshButton.addActionListener(e -> refreshData());
-	}
+		// Interval changed → Go Live (simplify as you decided)
+		controlsBar.getIntervalCombo().addActionListener(e -> refreshData(RefreshMode.FORCE_LIVE));
 
-	private void updateTimeRangeSelection() {
-		String code = (String) intervalComboBox.getSelectedItem();
-		if (!Intervals.isValid(code)) {
-			return;
-		}
+		// Refresh button passthrough (keeps old behavior for now)
+		controlsBar.getRefreshButton().addActionListener(e -> refreshData(RefreshMode.FORCE_LIVE));
 
-		int minutes = Intervals.minutesOf(code);
-		List<String> allowed = TimeRangePresets.allowedRangesFor(minutes);
+		// N spinner changed → keep position (do NOT toggle live/paused)
+		controlsBar.getNSpinner().addChangeListener(e -> refreshData(RefreshMode.KEEP_POSITION));
 
-		// Rebuild model
-		DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>();
-		for (String presetId : allowed) {
-			model.addElement(presetId);
-		}
+		// Prev / Next buttons (paused navigation)
+		controlsBar.getPrevButton().addActionListener(e -> {
+			// shift left by stride buckets (you can compute stride elsewhere)
+			final String intervalCode = (String) controlsBar.getIntervalCombo().getSelectedItem();
+			final long bucketMillis = Intervals.minutesOf(intervalCode) * 60_000L;
+			final int nPoints = (Integer) controlsBar.getNSpinner().getValue();
+			final int stride = Math.max(1, (int) Math.ceil(0.1 * nPoints)); // your policy
 
-		updatingRange = true;
-		try {
-			timeRangeComboBox.setModel(model);
-
-			String saved = lastTimeRangeByInterval.get(code);
-			if (saved != null && allowed.contains(saved)) {
-				timeRangeComboBox.setSelectedItem(saved);
-			} else if (!allowed.isEmpty()) {
-				String fallback = allowed.get(0);
-				timeRangeComboBox.setSelectedItem(fallback);
-				lastTimeRangeByInterval.put(code, fallback);
+			if (endTsMs == null) {
+				// if first time, just treat like FORCE_LIVE then shift
+				final long liveCap = snapToBucket(System.currentTimeMillis(), bucketMillis);
+				endTsMs = liveCap;
 			}
-		} finally {
-			updatingRange = false;
-		}
+			endTsMs -= stride * bucketMillis; // move window left
+			refreshData(RefreshMode.KEEP_POSITION);
+		});
+
+		controlsBar.getNextButton().addActionListener(e -> {
+			final String intervalCode = (String) controlsBar.getIntervalCombo().getSelectedItem();
+			final long bucketMillis = Intervals.minutesOf(intervalCode) * 60_000L;
+			final int nPoints = (Integer) controlsBar.getNSpinner().getValue();
+			final int stride = Math.max(1, (int) Math.ceil(0.1 * nPoints));
+
+			final long liveCap = snapToBucket(System.currentTimeMillis(), bucketMillis);
+			if (endTsMs == null)
+				endTsMs = liveCap;
+
+			endTsMs = Math.min(endTsMs + stride * bucketMillis, liveCap); // move right; cap at live
+			refreshData(RefreshMode.KEEP_POSITION);
+		});
 	}
 
 	public void setSelection(String channelId, String channelName, Integer connectorId, String connectorName) {
 		SelectionInfo newSel = new SelectionInfo(channelId, channelName, connectorId, connectorName);
-		boolean needRefresh = false;
 
 		if (this.selection == null || !Objects.equals(this.selection.getChannelId(), newSel.getChannelId()) || !Objects.equals(this.selection.getConnectorId(), newSel.getConnectorId())) {
-			needRefresh = true;
-		}
-
-		if (!needRefresh) {
-			final String intervalCode = (String) intervalComboBox.getSelectedItem();
-			if (Intervals.isValid(intervalCode)) {
-				long now = System.currentTimeMillis();
-				long last = lastFetchByInterval.getOrDefault(intervalCode, 0L);
-				long gateMs = Intervals.minutesOf(intervalCode) * 60_000L;
-
-				if (now - last >= gateMs) {
-					needRefresh = true;
-				}
-			}
-		}
-
-		if (needRefresh) {
 			this.selection = newSel;
-			refreshData();
+			refreshData(RefreshMode.FORCE_LIVE);
+
+			return;
+		}
+
+		final String intervalCode = (String) controlsBar.getIntervalCombo().getSelectedItem();
+		if (Intervals.isValid(intervalCode)) {
+			long now = System.currentTimeMillis();
+			long last = lastFetchByInterval.getOrDefault(intervalCode, 0L);
+			long gateMs = Intervals.minutesOf(intervalCode) * 60_000L;
+
+			if (now - last >= gateMs && isLive) {
+				refreshData(RefreshMode.FORCE_LIVE);
+			}
 		}
 	}
 
@@ -338,16 +263,16 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		}
 
 		// Replay state
-		String intervalCode = (String) intervalComboBox.getSelectedItem();
+		String intervalCode = (String) controlsBar.getIntervalCombo().getSelectedItem();
 		int minutes = Intervals.isValid(intervalCode) ? Intervals.minutesOf(intervalCode) : 1;
 
 		target.setIntervalMinutes(minutes);
 
 		if (lastStartTsMs != null && lastEndTsMs != null && lastEndTsMs > lastStartTsMs) {
-			target.setWindowRange(lastStartTsMs, lastEndTsMs); // fix Ox theo preset
+			target.setWindowRange(lastStartTsMs, lastEndTsMs);
 		}
 
-		target.setView((View) viewComboBox.getSelectedItem());
+		target.setView((View) controlsBar.getViewCombo().getSelectedItem());
 		target.setTitle(currentTitle);
 		target.setData(lastData);
 
@@ -368,11 +293,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	}
 
 	private void setControlsEnabled(boolean enabled) {
-		intervalComboBox.setEnabled(enabled);
-		timeRangeComboBox.setEnabled(enabled);
-		viewComboBox.setEnabled(enabled);
-		chartTypeCombo.setEnabled(enabled);
-		refreshButton.setEnabled(enabled);
+		controlsBar.setControlsEnabled(enabled);
 	}
 
 	private String warningMessageForReason(SelectionBlockReason reason) {
@@ -386,8 +307,11 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	}
 
 	// -------------------- Refresh (Intervals-aware) --------------------
-
 	public void refreshData() {
+		refreshData(RefreshMode.KEEP_POSITION); // default path if you call it directly
+	}
+
+	public void refreshData(RefreshMode mode) {
 		if (!SwingUtilities.isEventDispatchThread()) {
 			SwingUtilities.invokeLater(this::refreshData);
 			return;
@@ -401,15 +325,17 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		final String chName = selection.getChannelName();
 		final String connId = Objects.toString(selection.getConnectorId(), null);
 		final String connName = selection.getConnectorName();
-		final String intervalCode = (String) intervalComboBox.getSelectedItem();
+		final String intervalCode = (String) controlsBar.getIntervalCombo().getSelectedItem();
 
 		if (!Intervals.isValid(intervalCode)) {
 			parent.alertError(parent, "Unsupported interval: " + intervalCode);
 			return;
 		}
 
-		// Record fetch timestamp
-		lastFetchByInterval.put(intervalCode, System.currentTimeMillis());
+		if (mode == RefreshMode.FORCE_LIVE) {
+			// Record fetch timestamp
+			lastFetchByInterval.put(intervalCode, System.currentTimeMillis());
+		}
 
 		if (connId == null) {
 			updateChartTitle("Message Volume for Channel: " + chName);
@@ -417,16 +343,32 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			updateChartTitle("Message Volume for Connector: " + connName + " (Channel: " + chName + ")");
 		}
 
-		final String presetId = getSelectedPresetId();
-		final long now = System.currentTimeMillis();
-		long bucketMillis = Intervals.minutesOf(intervalCode) * 60_000L;
-		final long[] range = computeRangeFromPreset(presetId, now);
-		final long startTs = range[0] - bucketMillis;
-		final long endTs = range[1];
+		// TEMP window: keep prior behavior until N/prev/next is wired.
+		final long nowMs = System.currentTimeMillis();
+		final long bucketMillis = Intervals.minutesOf(intervalCode) * 60_000L;
+		final long liveCapMs = snapToBucket(nowMs, bucketMillis);
 
-		// Remember the preset window for axis range
-		lastStartTsMs = startTs + bucketMillis;
-		lastEndTsMs = endTs;
+		if (mode == RefreshMode.FORCE_LIVE || endTsMs == null) {
+			endTsMs = liveCapMs;
+		}
+
+		// Derive badge state for UI
+		isLive = (Objects.equals(endTsMs, liveCapMs));
+		controlsBar.setLive(isLive);
+
+		// Compute window [start,end] with N buckets
+		final int nPoints = (Integer) controlsBar.getNSpinner().getValue();
+		final long startTsMs = endTsMs - nPoints * bucketMillis;
+
+		// Fetch range includes one extra leading bucket for end-of-bucket plotting
+		final long startFetch = startTsMs - bucketMillis;
+		final long endFetch = endTsMs;
+
+		// Lock axes before data lands
+		lastStartTsMs = startTsMs;
+		lastEndTsMs = endTsMs;
+		activeChart.setIntervalMinutes(Intervals.minutesOf(intervalCode));
+		activeChart.setWindowRange(lastStartTsMs, lastEndTsMs);
 
 		activeChart.setIntervalMinutes(Intervals.minutesOf(intervalCode));
 		activeChart.setWindowRange(lastStartTsMs, lastEndTsMs);
@@ -447,10 +389,10 @@ public class MessageTrendsDashboardPanel extends JPanel {
 					}
 
 					if (connId == null) {
-						return MessageTrendsServiceClient.getInstance().getChannelStatistics(chId, startTs, endTs, intervalCode);
+						return MessageTrendsServiceClient.getInstance().getChannelStatistics(chId, startFetch, endFetch, intervalCode);
 					}
 
-					return MessageTrendsServiceClient.getInstance().getConnectorStatistics(chId, connId, startTs, endTs, intervalCode);
+					return MessageTrendsServiceClient.getInstance().getConnectorStatistics(chId, connId, startFetch, endFetch, intervalCode);
 
 				} catch (ClientException e) {
 					return Collections.emptyList();
@@ -482,11 +424,6 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		worker.execute();
 	}
 
-	private String getSelectedPresetId() {
-		Object sel = timeRangeComboBox.getSelectedItem();
-		return (sel instanceof String) ? (String) sel : "last_24h";
-	}
-
 	private static long[] computeRangeFromPreset(String presetId, long nowMs) {
 		// fallback = 24h
 		Duration d = TimeRangePresets.PRESET_TO_DURATION.getOrDefault(presetId, Duration.ofDays(1));
@@ -498,10 +435,10 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	}
 
 	private void rebindDataset() {
-		String intervalCode = (String) intervalComboBox.getSelectedItem();
+		String intervalCode = (String) controlsBar.getIntervalCombo().getSelectedItem();
 		activeChart.setIntervalMinutes(Intervals.minutesOf(intervalCode));
 		activeChart.setWindowRange(lastStartTsMs, lastEndTsMs);
-		activeChart.setView((View) viewComboBox.getSelectedItem());
+		activeChart.setView((View) controlsBar.getViewCombo().getSelectedItem());
 		activeChart.setData(lastData);
 	}
 
@@ -513,7 +450,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	}
 
 	private void updateSummary(List<MessageStatisticsTimeseries> data) {
-		View v = (View) viewComboBox.getSelectedItem();
+		View v = (View) controlsBar.getViewCombo().getSelectedItem();
 		if (v == null) {
 			return;
 		}
@@ -657,23 +594,6 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		}
 	}
 
-	private static String humanLabelForInterval(String code) {
-		switch (code) {
-		case "1minute":
-			return "1 Minute";
-		case "5minute":
-			return "5 Minutes";
-		case "15minute":
-			return "15 Minutes";
-		case "60minute":
-			return "1 Hour";
-		case "daily":
-			return "1 Day";
-		default:
-			return code;
-		}
-	}
-
 	private static class SelectionInfo {
 		private final String channelId;
 		private final String channelName;
@@ -727,4 +647,20 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			return label;
 		}
 	}
+
+	/** Floor-snap a timestamp to the given bucket size in ms (UTC). */
+	private static long snapToBucket(long epochMs, long bucketMillis) {
+		if (bucketMillis <= 0) {
+			return epochMs;
+		}
+
+		return (epochMs / bucketMillis) * bucketMillis;
+	}
+
+	/** How the caller wants refresh to behave. */
+	private enum RefreshMode {
+		KEEP_POSITION, // keep endTsMs as-is (e.g., N change, Prev/Next)
+		FORCE_LIVE, // force endTsMs to liveCap (manual Refresh, interval change)
+	}
+
 }

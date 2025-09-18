@@ -3,8 +3,11 @@ package com.mirth.connect.plugins.messagetrends.client.chart;
 import java.awt.Color;
 import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
+import java.util.TimeZone;
 
 import javax.swing.JComponent;
 
@@ -158,7 +161,9 @@ public abstract class AbstractTrendsChart implements TrendsChart {
 
 			long bucketMillis = (long) r.getBucketSizeMinutes() * 60_000L;
 			Date endTs = new Date(startTs.getTime() + bucketMillis);
-			RegularTimePeriod p = factory.of(endTs);
+
+			RegularTimePeriod p = factory.of(endTs.getTime());
+//			TimePeriod p = factory.of(endTs);
 			addPoint(p, r);
 		}
 
@@ -204,6 +209,114 @@ public abstract class AbstractTrendsChart implements TrendsChart {
 			}
 
 			return new Minute(d);
+		}
+
+		public RegularTimePeriod of(long bucketStartMs) {
+			if (minutes >= 1440) {
+				return new Day(new Date(bucketStartMs)); // 1 day
+			}
+			if (minutes == 60) {
+				return new Hour(new Date(bucketStartMs)); // 1 hour
+			}
+			if (minutes == 1) {
+				return new Minute(new Date(bucketStartMs)); // 1 minute
+			}
+
+			return new MultiMinute(bucketStartMs, minutes, TimeZone.getTimeZone("UTC"));
+		}
+	}
+
+	static final class MultiMinute extends RegularTimePeriod {
+		private final long startMs;
+		private final long endMs; // exclusive
+		private final int minutes;
+		private final TimeZone tz;
+
+		MultiMinute(long startMs, int minutes, TimeZone tz) {
+			this.minutes = minutes;
+			this.tz = tz;
+			long bucket = minutes * 60_000L;
+			this.startMs = startMs;
+			this.endMs = startMs + bucket;
+		}
+
+		@Override
+		public long getFirstMillisecond() {
+			return startMs;
+		}
+
+		@Override
+		public long getLastMillisecond() {
+			return endMs - 1;
+		}
+
+		public long getFirstMillisecond(Calendar calendar) {
+			if (calendar == null) {
+				throw new IllegalArgumentException("Calendar cannot be null");
+			}
+			Calendar c = (Calendar) calendar.clone();
+			c.setTimeZone(tz);
+			c.setTimeInMillis(startMs);
+			return c.getTimeInMillis();
+		}
+
+		public long getLastMillisecond(Calendar calendar) {
+			if (calendar == null) {
+				throw new IllegalArgumentException("Calendar cannot be null");
+			}
+			Calendar c = (Calendar) calendar.clone();
+			c.setTimeZone(tz);
+			c.setTimeInMillis(endMs - 1);
+			return c.getTimeInMillis();
+		}
+
+		@Override
+		public void peg(Calendar calendar) {
+			// no-op: startMs/endMs
+		}
+
+		@Override
+		public RegularTimePeriod previous() {
+			return new MultiMinute(startMs - minutes * 60_000L, minutes, tz);
+		}
+
+		@Override
+		public RegularTimePeriod next() {
+			return new MultiMinute(startMs + minutes * 60_000L, minutes, tz);
+		}
+
+		@Override
+		public long getSerialIndex() {
+			return startMs / (minutes * 60_000L);
+		}
+
+		@Override
+		public int compareTo(Object o) {
+			if (o == this)
+				return 0;
+
+			if (o instanceof RegularTimePeriod) {
+				long t1 = this.getFirstMillisecond();
+				long t2 = ((RegularTimePeriod) o).getFirstMillisecond();
+				return Long.compare(t1, t2);
+			}
+
+			throw new ClassCastException("Cannot compare " + (o == null ? "null" : o.getClass().getName()) + " with MultiMinute");
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o)
+				return true;
+			if (!(o instanceof MultiMinute))
+				return false;
+			MultiMinute that = (MultiMinute) o;
+			return this.startMs == that.startMs && this.minutes == that.minutes;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(startMs, minutes);
 		}
 	}
 
