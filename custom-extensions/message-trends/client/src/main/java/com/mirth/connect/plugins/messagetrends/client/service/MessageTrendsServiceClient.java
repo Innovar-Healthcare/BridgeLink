@@ -43,9 +43,20 @@ public class MessageTrendsServiceClient {
 	public MessageTrendsServiceClient() {
 	}
 
-	public List<MessageStatisticsTimeseries> getChannelStatistics(String channelId, Long startTime, Long endTime, String interval) throws ClientException {
+	public List<MessageStatisticsTimeseries> getChannelStatistics(String channelId, Long startMillis, Long endMillis, String interval) throws ClientException {
 		try {
-			String response = getServlet().getChannelStatistics(channelId, startTime, endTime, interval);
+			if (startMillis == null || endMillis == null) {
+				throw new IllegalArgumentException("startMillis and endMillis are required (epoch millis)");
+			}
+			if (!(startMillis < endMillis)) {
+				throw new IllegalArgumentException("startMillis must be < endMillis");
+			}
+
+			// Convert millis -> seconds (epoch seconds, UTC)
+			Long startSec = startMillis / 1000L;
+			Long endSec = endMillis / 1000L;
+
+			String response = getServlet().getChannelStatistics(channelId, startSec, endSec, interval);
 
 			return JsonUtils.fromJsonList(response, MessageStatisticsTimeseries.class);
 
@@ -57,13 +68,24 @@ public class MessageTrendsServiceClient {
 			}
 			throw e;
 		} catch (Exception e) {
-			throw new RuntimeException("Unexpected error while checking value existence", e);
+			throw new RuntimeException("Unexpected error while fetching channel statistics", e);
 		}
 	}
 
-	public List<MessageStatisticsTimeseries> getConnectorStatistics(String channelId, String connectorId, Long startTime, Long endTime, String interval) throws ClientException {
+	public List<MessageStatisticsTimeseries> getConnectorStatistics(String channelId, String connectorId, Long startMillis, Long endMillis, String interval) throws ClientException {
 		try {
-			String response = getServlet().getConnectorStatistics(channelId, connectorId, startTime, endTime, interval);
+			if (startMillis == null || endMillis == null) {
+				throw new IllegalArgumentException("startMillis and endMillis are required (epoch millis)");
+			}
+			if (!(startMillis < endMillis)) {
+				throw new IllegalArgumentException("startMillis must be < endMillis");
+			}
+
+			// Convert millis -> seconds (epoch seconds, UTC)
+			Long startSec = startMillis / 1000L;
+			Long endSec = endMillis / 1000L;
+
+			String response = getServlet().getConnectorStatistics(channelId, connectorId, startSec, endSec, interval);
 
 			return JsonUtils.fromJsonList(response, MessageStatisticsTimeseries.class);
 
@@ -75,13 +97,24 @@ public class MessageTrendsServiceClient {
 			}
 			throw e;
 		} catch (Exception e) {
-			throw new RuntimeException("Unexpected error while checking value existence", e);
+			throw new RuntimeException("Unexpected error while fetching connector statistics", e);
 		}
 	}
 
-	public List<MessageStatisticsTimeseries> getServerStatistics(Long startTime, Long endTime, String interval) throws ClientException {
+	public List<MessageStatisticsTimeseries> getServerStatistics(Long startMillis, Long endMillis, String interval) throws ClientException {
 		try {
-			String response = getServlet().getServerStatistics(startTime, endTime, interval);
+			if (startMillis == null || endMillis == null) {
+				throw new IllegalArgumentException("startMillis and endMillis are required (epoch millis)");
+			}
+			if (!(startMillis < endMillis)) {
+				throw new IllegalArgumentException("startMillis must be < endMillis");
+			}
+
+			// Convert millis -> seconds (epoch seconds, UTC)
+			Long startSec = startMillis / 1000L;
+			Long endSec = endMillis / 1000L;
+
+			String response = getServlet().getServerStatistics(startSec, endSec, interval);
 
 			return JsonUtils.fromJsonList(response, MessageStatisticsTimeseries.class);
 
@@ -93,7 +126,7 @@ public class MessageTrendsServiceClient {
 			}
 			throw e;
 		} catch (Exception e) {
-			throw new RuntimeException("Unexpected error while checking value existence", e);
+			throw new RuntimeException("Unexpected error while fetching server statistics", e);
 		}
 	}
 

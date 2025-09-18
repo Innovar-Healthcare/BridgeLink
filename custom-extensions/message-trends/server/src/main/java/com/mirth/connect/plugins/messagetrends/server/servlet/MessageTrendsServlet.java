@@ -27,6 +27,7 @@ import com.mirth.connect.plugins.messagetrends.shared.interfaces.MessageTrendsSe
 import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries;
 import com.mirth.connect.plugins.messagetrends.shared.util.Intervals;
 import com.mirth.connect.plugins.messagetrends.shared.util.JsonUtils;
+import com.mirth.connect.plugins.messagetrends.shared.util.TimeUtil;
 import com.mirth.connect.server.api.MirthServlet;
 
 public class MessageTrendsServlet extends MirthServlet implements MessageTrendsServletInterface {
@@ -39,10 +40,23 @@ public class MessageTrendsServlet extends MirthServlet implements MessageTrendsS
 	@Override
 	public String getChannelStatistics(String channelId, Long startTime, Long endTime, String interval) throws ClientException {
 		try {
-			// 1) Convert Long -> Date
+			// 0) Basic validation
+			if (channelId == null || channelId.isEmpty()) {
+				throw new IllegalArgumentException("channelId is required");
+			}
 
-			Date startDate = (startTime != null) ? new Date(startTime) : null;
-			Date endDate = (endTime != null) ? new Date(endTime) : null;
+			if (startTime == null || endTime == null) {
+				throw new IllegalArgumentException("startTime and endTime are required (epoch seconds, UTC)");
+			}
+
+			// 1) Convert epoch seconds -> Date (with guard against milliseconds mistakenly
+			// sent)
+			Date startDate = TimeUtil.toDateFromEpochSeconds(startTime, "startTime");
+			Date endDate = TimeUtil.toDateFromEpochSeconds(endTime, "endTime");
+
+			if (!startDate.before(endDate)) { // end exclusive by convention
+				throw new IllegalArgumentException("startTime must be < endTime");
+			}
 
 			// 2) Convert interval string -> minutes
 			int bucketSizeMinutes = Intervals.minutesOf(interval);
@@ -58,10 +72,23 @@ public class MessageTrendsServlet extends MirthServlet implements MessageTrendsS
 	@Override
 	public String getConnectorStatistics(String channelId, String connectorId, Long startTime, Long endTime, String interval) throws ClientException {
 		try {
-			// 1) Convert Long -> Date
+			// 0) Basic validation
+			if (channelId == null || channelId.isEmpty()) {
+				throw new IllegalArgumentException("channelId is required");
+			}
 
-			Date startDate = (startTime != null) ? new Date(startTime) : null;
-			Date endDate = (endTime != null) ? new Date(endTime) : null;
+			if (startTime == null || endTime == null) {
+				throw new IllegalArgumentException("startTime and endTime are required (epoch seconds, UTC)");
+			}
+
+			// 1) Convert epoch seconds -> Date (with guard against milliseconds mistakenly
+			// sent)
+			Date startDate = TimeUtil.toDateFromEpochSeconds(startTime, "startTime");
+			Date endDate = TimeUtil.toDateFromEpochSeconds(endTime, "endTime");
+
+			if (!startDate.before(endDate)) { // end exclusive by convention
+				throw new IllegalArgumentException("startTime must be < endTime");
+			}
 
 			// 2) Convert interval string -> minutes
 			int bucketSizeMinutes = Intervals.minutesOf(interval);
@@ -77,10 +104,19 @@ public class MessageTrendsServlet extends MirthServlet implements MessageTrendsS
 	@Override
 	public String getServerStatistics(Long startTime, Long endTime, String interval) throws ClientException {
 		try {
-			// 1) Convert Long -> Date
+			// 0) Basic validation
+			if (startTime == null || endTime == null) {
+				throw new IllegalArgumentException("startTime and endTime are required (epoch seconds, UTC)");
+			}
 
-			Date startDate = (startTime != null) ? new Date(startTime) : null;
-			Date endDate = (endTime != null) ? new Date(endTime) : null;
+			// 1) Convert epoch seconds -> Date (with guard against milliseconds mistakenly
+			// sent)
+			Date startDate = TimeUtil.toDateFromEpochSeconds(startTime, "startTime");
+			Date endDate = TimeUtil.toDateFromEpochSeconds(endTime, "endTime");
+
+			if (!startDate.before(endDate)) { // end exclusive by convention
+				throw new IllegalArgumentException("startTime must be < endTime");
+			}
 
 			// 2) Convert interval string -> minutes
 			int bucketSizeMinutes = Intervals.minutesOf(interval);
