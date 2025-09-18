@@ -6,18 +6,14 @@ import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.ToIntFunction;
 
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
-import javax.swing.border.TitledBorder;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,9 +24,11 @@ import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.plugins.messagetrends.client.chart.LineTrendsChart;
 import com.mirth.connect.plugins.messagetrends.client.chart.StackedTrendsChart;
 import com.mirth.connect.plugins.messagetrends.client.chart.TrendsChart;
-import com.mirth.connect.plugins.messagetrends.client.panel.MessageTrendsDashboardPanel.SelectionBlockReason;
 import com.mirth.connect.plugins.messagetrends.client.plugin.MessageTrendsDashboardTabPlugin;
 import com.mirth.connect.plugins.messagetrends.client.service.MessageTrendsServiceClient;
+import com.mirth.connect.plugins.messagetrends.client.summary.SummaryAllView;
+import com.mirth.connect.plugins.messagetrends.client.summary.SummaryMetricView;
+import com.mirth.connect.plugins.messagetrends.client.summary.SummaryView;
 import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries;
 import com.mirth.connect.plugins.messagetrends.shared.model.TimeRangePresets;
 import com.mirth.connect.plugins.messagetrends.shared.util.Intervals;
@@ -56,17 +54,14 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	private String currentTitle = "Message Volume";
 
 	// Summary views
-	private SummaryAllView summaryAllView;
-	private SummaryMetricView summaryMetricView;
 	private JPanel summaryCardPanel;
-	private static final String CARD_ALL = "ALL";
-	private static final String CARD_METRIC = "METRIC";
+	private final Map<SummaryType, SummaryView> summaryViews = new HashMap<>();
+	private SummaryView activeSummary;
 
 	private SwingWorker<List<MessageStatisticsTimeseries>, Void> inFlight;
 	private List<MessageStatisticsTimeseries> lastData = Collections.emptyList();
 
 	private final Map<String, Long> lastFetchByInterval = new HashMap<>();
-	private Map<String, String> lastTimeRangeByInterval = new HashMap<>();
 
 	private Long lastStartTsMs; // preset window start
 	private Long lastEndTsMs; // preset window end
@@ -110,13 +105,9 @@ public class MessageTrendsDashboardPanel extends JPanel {
 
 		initLayout();
 
-		initLastTimeRangeByInterval();
-
 		wireEvents();
 
 		updateChartTitle("No Channel/Connector Selected");
-
-		showSummaryForView(View.ALL);
 	}
 
 	private void initComponents() {
@@ -140,15 +131,19 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		activeChart = line;
 
 		// Summary All + Metric views
-		summaryAllView = new SummaryAllView();
-		summaryAllView.setSeriesColors(COLOR_RECEIVED, COLOR_SENT, COLOR_FILTERED, COLOR_QUEUED, COLOR_ERROR);
-
-		summaryMetricView = new SummaryMetricView();
-
-		// Card panel to hold both
 		summaryCardPanel = new JPanel(new CardLayout());
-		summaryCardPanel.add(summaryAllView, CARD_ALL);
-		summaryCardPanel.add(summaryMetricView, CARD_METRIC);
+
+		SummaryView summaryAll = new SummaryAllView();
+		summaryAll.setSeriesColors(COLOR_RECEIVED, COLOR_SENT, COLOR_FILTERED, COLOR_QUEUED, COLOR_ERROR);
+		summaryViews.put(SummaryType.ALL, summaryAll);
+		summaryCardPanel.add(summaryAll.getComponent(), SummaryType.ALL.name());
+
+		SummaryView summaryMetric = new SummaryMetricView();
+		summaryMetric.setSeriesColors(COLOR_RECEIVED, COLOR_SENT, COLOR_FILTERED, COLOR_QUEUED, COLOR_ERROR);
+		summaryViews.put(SummaryType.METRIC, summaryMetric);
+		summaryCardPanel.add(summaryMetric.getComponent(), SummaryType.METRIC.name());
+
+		activeSummary = summaryAll;
 	}
 
 	private void initLayout() {
@@ -165,21 +160,14 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		add(wrapPanel, BorderLayout.SOUTH);
 	}
 
-	private void initLastTimeRangeByInterval() {
-		lastTimeRangeByInterval.put("1minute", "last_1h");
-		lastTimeRangeByInterval.put("5minute", "last_6h");
-		lastTimeRangeByInterval.put("15minute", "last_24h");
-		lastTimeRangeByInterval.put("60minute", "last_7d");
-		lastTimeRangeByInterval.put("daily", "last_90d");
-	}
-
 	private void wireEvents() {
 		// View dropdown from controls bar
 		controlsBar.getViewCombo().addActionListener(e -> {
 			View v = (View) controlsBar.getViewCombo().getSelectedItem();
-			showSummaryForView(v);
+			SummaryType type = v == View.ALL ? SummaryType.ALL : SummaryType.METRIC;
+			switchSummaryView(type);
+
 			rebindDataset();
-			updateSummary(lastData);
 		});
 
 		// Chart dropdown from controls bar ("Line" / "Stacked")
@@ -280,6 +268,22 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		CardLayout cl = (CardLayout) chartCardPanel.getLayout();
 		cl.show(chartCardPanel, type.name());
 		activeChart = target;
+	}
+
+	private void switchSummaryView(SummaryType type) {
+		if (type == null) {
+			return;
+		}
+
+		SummaryView target = summaryViews.get(type);
+		if (target == null || target == activeSummary) {
+			return;
+		}
+
+		// Show card
+		CardLayout cl = (CardLayout) summaryCardPanel.getLayout();
+		cl.show(summaryCardPanel, type.name());
+		activeSummary = target;
 	}
 
 	public void blockSelection(SelectionBlockReason reason) {
@@ -414,7 +418,6 @@ public class MessageTrendsDashboardPanel extends JPanel {
 					List<MessageStatisticsTimeseries> data = get();
 					lastData = (data != null) ? data : Collections.emptyList();
 					rebindDataset();
-					updateSummary(lastData);
 				} catch (Exception ex) {
 					parent.alertError(parent, "Error retrieving statistics. Exception: " + ex.getMessage());
 				} finally {
@@ -433,6 +436,9 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		activeChart.setWindowRange(lastStartTsMs, lastEndTsMs);
 		activeChart.setView((View) controlsBar.getViewCombo().getSelectedItem());
 		activeChart.setData(lastData);
+
+		activeSummary.setView((View) controlsBar.getViewCombo().getSelectedItem());
+		activeSummary.setData(lastData);
 	}
 
 	private void updateChartTitle(String title) {
@@ -440,119 +446,6 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		if (activeChart != null) {
 			activeChart.setTitle(title);
 		}
-	}
-
-	private void updateSummary(List<MessageStatisticsTimeseries> data) {
-		View v = (View) controlsBar.getViewCombo().getSelectedItem();
-		if (v == null) {
-			return;
-		}
-
-		switch (v) {
-		case ALL: {
-			long totalReceived = 0, totalSent = 0, totalFiltered = 0, totalError = 0;
-			for (MessageStatisticsTimeseries b : data) {
-				totalReceived += b.getReceived();
-				totalSent += b.getSent();
-				totalFiltered += b.getFiltered();
-				totalError += b.getError();
-			}
-
-			long lastQueued = data.isEmpty() ? 0L : data.get(data.size() - 1).getQueued();
-
-			summaryAllView.setTotals(totalReceived, totalSent, totalFiltered, lastQueued, totalError);
-			break;
-		}
-		case RECEIVED:
-		case SENT:
-		case FILTERED:
-		case QUEUED:
-		case ERRORS: {
-			String metricName;
-			ToIntFunction<MessageStatisticsTimeseries> getter;
-			boolean isQueued = false;
-
-			switch (v) {
-			case RECEIVED:
-				metricName = "Received";
-				getter = MessageStatisticsTimeseries::getReceived;
-				break;
-			case SENT:
-				metricName = "Sent";
-				getter = MessageStatisticsTimeseries::getSent;
-				break;
-			case FILTERED:
-				metricName = "Filtered";
-				getter = MessageStatisticsTimeseries::getFiltered;
-				break;
-			case QUEUED:
-				metricName = "Queued";
-				getter = MessageStatisticsTimeseries::getQueued;
-				isQueued = true;
-				break;
-			case ERRORS:
-			default:
-				metricName = "Errors";
-				getter = MessageStatisticsTimeseries::getError;
-				break;
-			}
-
-			long total = 0, min = Long.MAX_VALUE, max = Long.MIN_VALUE;
-			Date peakTs = null;
-			for (MessageStatisticsTimeseries b : data) {
-				int val = getter.applyAsInt(b);
-				total += val;
-				if (val < min)
-					min = val;
-				if (val > max) {
-					max = val;
-					peakTs = b.getTs();
-				}
-			}
-			if (data.isEmpty()) {
-				min = max = 0;
-			}
-
-			// Avg per bucket
-			double avgBucket = data.isEmpty() ? 0.0 : (double) total / data.size();
-
-			// Avg rate (per minute)
-			double avgRate = 0.0;
-			if (data.size() > 1) {
-				Date start = data.get(0).getTs();
-				Date end = data.get(data.size() - 1).getTs();
-				if (start != null && end != null && end.after(start)) {
-					double minutes = (end.getTime() - start.getTime()) / 60000.0;
-					if (minutes > 0) {
-						avgRate = total / minutes;
-					}
-				}
-			}
-
-			String peakStr = (peakTs != null) ? String.format("%tF %<tT", peakTs) : "—";
-			String title = metricName + " Statistics Summary";
-
-			String totalStr, avgRateStr;
-			if (isQueued) {
-				long lastQueued = data.isEmpty() ? 0L : data.get(data.size() - 1).getQueued();
-				totalStr = formatNumber(lastQueued);
-				avgRateStr = "—";
-			} else {
-				totalStr = formatNumber(total);
-				avgRateStr = String.format(Locale.US, "%.1f msg/min", avgRate);
-			}
-
-			summaryMetricView.setBorder(new TitledBorder(title));
-			summaryMetricView.setQueuedHeader(isQueued);
-			summaryMetricView.setStats(totalStr, String.format(Locale.US, "%.1f", avgBucket), formatNumber(min), formatNumber(max), peakStr, avgRateStr);
-
-			break;
-		}
-		}
-	}
-
-	private String formatNumber(long n) {
-		return String.format(Locale.US, "%,d", n);
 	}
 
 	public void cleanup() {
@@ -574,16 +467,8 @@ public class MessageTrendsDashboardPanel extends JPanel {
 			activeChart.setTitle(title);
 		}
 
-		summaryAllView.reset();
-		summaryMetricView.reset();
-	}
-
-	private void showSummaryForView(View v) {
-		CardLayout cl = (CardLayout) summaryCardPanel.getLayout();
-		if (v == View.ALL) {
-			cl.show(summaryCardPanel, CARD_ALL);
-		} else {
-			cl.show(summaryCardPanel, CARD_METRIC);
+		if (activeSummary != null) {
+			activeSummary.reset();
 		}
 	}
 
@@ -632,6 +517,21 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		final String label;
 
 		ChartType(String l) {
+			this.label = l;
+		}
+
+		@Override
+		public String toString() {
+			return label;
+		}
+	}
+
+	private enum SummaryType {
+		ALL("All"), METRIC("Metric");
+
+		final String label;
+
+		SummaryType(String l) {
 			this.label = l;
 		}
 
