@@ -157,6 +157,10 @@ public class TrendsControlsBar extends JPanel {
 		return p;
 	}
 
+	public void setNextEnabled(boolean enabled) {
+		nextButton.setEnabled(enabled);
+	}
+
 	public void setControlsEnabled(boolean enabled) {
 		timeRangeCombo.setEnabled(enabled);
 		intervalCombo.setEnabled(enabled);

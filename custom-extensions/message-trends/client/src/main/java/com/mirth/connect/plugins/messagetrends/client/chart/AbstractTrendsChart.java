@@ -163,7 +163,6 @@ public abstract class AbstractTrendsChart implements TrendsChart {
 			Date endTs = new Date(startTs.getTime() + bucketMillis);
 
 			RegularTimePeriod p = factory.of(endTs.getTime());
-//			TimePeriod p = factory.of(endTs);
 			addPoint(p, r);
 		}
 

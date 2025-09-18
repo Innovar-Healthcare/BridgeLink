@@ -11,6 +11,7 @@ import javax.swing.JPanel;
 import javax.swing.border.TitledBorder;
 
 import com.mirth.connect.plugins.messagetrends.client.panel.MessageTrendsDashboardPanel.View;
+import com.mirth.connect.plugins.messagetrends.client.util.RangeTextFormatter;
 import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries;
 
 /**
@@ -25,11 +26,13 @@ public class SummaryAllView extends JPanel implements SummaryView {
 	private final JLabel totalQueuedLabel = new JLabel("Last Queued: 0");
 	private final JLabel totalErrorLabel = new JLabel("Total Errors: 0");
 	private final JLabel blankLabel = new JLabel("");
+	private final TitledBorder border = new TitledBorder("All Statistics Summary");
 
 	private View view;
+	protected Long winStartMs, winEndMs;
 
 	public SummaryAllView() {
-		setBorder(new TitledBorder("All Statistics Summary"));
+		setBorder(border);
 		setLayout(new GridLayout(2, 3, 10, 6));
 
 		add(totalReceivedLabel);
@@ -47,6 +50,16 @@ public class SummaryAllView extends JPanel implements SummaryView {
 		totalFilteredLabel.setText("Total Filtered: " + format(filtered));
 		totalQueuedLabel.setText("Last Queued: " + format(queued));
 		totalErrorLabel.setText("Total Errors: " + format(error));
+	}
+
+	private void updateTitle(String title) {
+		String fullTitle = title;
+		String rangeText = RangeTextFormatter.formatRange(winStartMs, winEndMs);
+		if (rangeText != null && !rangeText.isEmpty()) {
+			fullTitle += " — " + rangeText;
+		}
+		border.setTitle(fullTitle);
+		repaint();
 	}
 
 	/** Optional: set placeholder text for the extra slot. */
@@ -71,6 +84,12 @@ public class SummaryAllView extends JPanel implements SummaryView {
 	}
 
 	@Override
+	public void setWindowRange(long startMs, long endMs) {
+		this.winStartMs = startMs;
+		this.winEndMs = endMs;
+	}
+
+	@Override
 	public void setData(List<MessageStatisticsTimeseries> data) {
 		// TODO Auto-generated method stub
 		View v = this.view;
@@ -90,6 +109,7 @@ public class SummaryAllView extends JPanel implements SummaryView {
 		long lastQueued = data.isEmpty() ? 0L : data.get(data.size() - 1).getQueued();
 
 		setTotals(totalReceived, totalSent, totalFiltered, lastQueued, totalError);
+		updateTitle("All Statistics Summary");
 	}
 
 	@Override

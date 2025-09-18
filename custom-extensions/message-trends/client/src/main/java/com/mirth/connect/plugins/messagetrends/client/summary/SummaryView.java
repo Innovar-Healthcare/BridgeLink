@@ -13,6 +13,8 @@ public interface SummaryView {
 
 	void setView(MessageTrendsDashboardPanel.View v);
 
+	void setWindowRange(long startMs, long endMs);
+
 	void setData(List<MessageStatisticsTimeseries> rows); // bind dataset (EDT)
 
 	void setSeriesColors(Color received, Color sent, Color filtered, Color queued, Color error); // optional

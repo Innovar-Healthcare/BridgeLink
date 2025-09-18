@@ -298,6 +298,9 @@ public class MessageTrendsDashboardPanel extends JPanel {
 
 	private void setControlsEnabled(boolean enabled) {
 		controlsBar.setControlsEnabled(enabled);
+		if (isLive && enabled) {
+			controlsBar.setNextEnabled(false);
+		}
 	}
 
 	private String warningMessageForReason(SelectionBlockReason reason) {
@@ -437,6 +440,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		activeChart.setView((View) controlsBar.getViewCombo().getSelectedItem());
 		activeChart.setData(lastData);
 
+		activeSummary.setWindowRange(lastStartTsMs, lastEndTsMs);
 		activeSummary.setView((View) controlsBar.getViewCombo().getSelectedItem());
 		activeSummary.setData(lastData);
 	}

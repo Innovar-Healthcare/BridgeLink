@@ -18,6 +18,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 
 import com.mirth.connect.plugins.messagetrends.client.panel.MessageTrendsDashboardPanel.View;
+import com.mirth.connect.plugins.messagetrends.client.util.RangeTextFormatter;
 import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries;
 
 /**
@@ -31,9 +32,11 @@ public class SummaryMetricView extends JPanel implements SummaryView {
 	private final JTable table;
 	private final DefaultTableModel model;
 	private View view;
+	private final TitledBorder border = new TitledBorder("Statistics Summary");
+	protected Long winStartMs, winEndMs;
 
 	public SummaryMetricView() {
-		setBorder(new TitledBorder("Statistics Summary"));
+		setBorder(border);
 		setLayout(new BorderLayout(8, 8));
 
 		// Columns are the metrics (header as requested)
@@ -84,6 +87,16 @@ public class SummaryMetricView extends JPanel implements SummaryView {
 		setStandardStatsRow(total, avgPerBucket, min, max, peak, avgRate);
 	}
 
+	private void updateTitle(String title) {
+		String fullTitle = title;
+		String rangeText = RangeTextFormatter.formatRange(winStartMs, winEndMs);
+		if (rangeText != null && !rangeText.isEmpty()) {
+			fullTitle += " — " + rangeText;
+		}
+		border.setTitle(fullTitle);
+		repaint();
+	}
+
 	public void reset() {
 		setStandardStatsRow("0", "0", "0", "0", "—", "—");
 	}
@@ -108,6 +121,12 @@ public class SummaryMetricView extends JPanel implements SummaryView {
 	public void setView(View v) {
 		// TODO Auto-generated method stub
 		this.view = v;
+	}
+
+	@Override
+	public void setWindowRange(long startMs, long endMs) {
+		this.winStartMs = startMs;
+		this.winEndMs = endMs;
 	}
 
 	@Override
@@ -153,8 +172,9 @@ public class SummaryMetricView extends JPanel implements SummaryView {
 		for (MessageStatisticsTimeseries b : data) {
 			int val = getter.applyAsInt(b);
 			total += val;
-			if (val < min)
+			if (val < min) {
 				min = val;
+			}
 			if (val > max) {
 				max = val;
 				peakTs = b.getTs();
@@ -180,8 +200,7 @@ public class SummaryMetricView extends JPanel implements SummaryView {
 			}
 		}
 
-		String peakStr = (peakTs != null) ? String.format("%tF %<tT", peakTs) : "—";
-		String title = metricName + " Statistics Summary";
+		String peakStr = RangeTextFormatter.formatPoint(peakTs);
 
 		String totalStr, avgRateStr;
 		if (isQueued) {
@@ -193,9 +212,10 @@ public class SummaryMetricView extends JPanel implements SummaryView {
 			avgRateStr = String.format(Locale.US, "%.1f msg/min", avgRate);
 		}
 
-		setBorder(new TitledBorder(title));
 		setQueuedHeader(isQueued);
 		setStats(totalStr, String.format(Locale.US, "%.1f", avgBucket), formatNumber(min), formatNumber(max), peakStr, avgRateStr);
+
+		updateTitle(metricName + " Statistics Summary");
 	}
 
 	@Override
