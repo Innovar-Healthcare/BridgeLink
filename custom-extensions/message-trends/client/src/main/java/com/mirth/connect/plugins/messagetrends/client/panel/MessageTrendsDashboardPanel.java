@@ -5,7 +5,6 @@ import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
-import java.time.Duration;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -29,6 +28,7 @@ import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.plugins.messagetrends.client.chart.LineTrendsChart;
 import com.mirth.connect.plugins.messagetrends.client.chart.StackedTrendsChart;
 import com.mirth.connect.plugins.messagetrends.client.chart.TrendsChart;
+import com.mirth.connect.plugins.messagetrends.client.panel.MessageTrendsDashboardPanel.SelectionBlockReason;
 import com.mirth.connect.plugins.messagetrends.client.plugin.MessageTrendsDashboardTabPlugin;
 import com.mirth.connect.plugins.messagetrends.client.service.MessageTrendsServiceClient;
 import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries;
@@ -81,6 +81,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 	private static final Color COLOR_FILTERED = new Color(255, 140, 0);
 	private static final Color COLOR_QUEUED = new Color(153, 102, 255);
 	private static final Color COLOR_ERROR = new Color(200, 40, 40);
+	private static final double SHIFT_FRACTION = 0.5;
 
 	public enum SelectionBlockReason {
 		NO_SELECTION, MULTI_SELECTED
@@ -194,38 +195,37 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		// Refresh button passthrough (keeps old behavior for now)
 		controlsBar.getRefreshButton().addActionListener(e -> refreshData(RefreshMode.FORCE_LIVE));
 
-		// N spinner changed → keep position (do NOT toggle live/paused)
-		controlsBar.getNSpinner().addChangeListener(e -> refreshData(RefreshMode.KEEP_POSITION));
-
 		// Prev / Next buttons (paused navigation)
 		controlsBar.getPrevButton().addActionListener(e -> {
-			// shift left by stride buckets (you can compute stride elsewhere)
-			final String intervalCode = (String) controlsBar.getIntervalCombo().getSelectedItem();
-			final long bucketMillis = Intervals.minutesOf(intervalCode) * 60_000L;
-			final int nPoints = (Integer) controlsBar.getNSpinner().getValue();
-			final int stride = Math.max(1, (int) Math.ceil(0.1 * nPoints)); // your policy
-
 			if (endTsMs == null) {
-				// if first time, just treat like FORCE_LIVE then shift
-				final long liveCap = snapToBucket(System.currentTimeMillis(), bucketMillis);
-				endTsMs = liveCap;
+				refreshData(RefreshMode.FORCE_LIVE);
+			} else {
+				// shift left by stride buckets (you can compute stride elsewhere)
+				final String presetId = (String) controlsBar.getTimeRangeCombo().getSelectedItem();
+				final long rangeMs = TimeRangePresets.toDuration(presetId).toMillis();
+
+				endTsMs -= (long) (SHIFT_FRACTION * rangeMs); // move window left
+				refreshData(RefreshMode.KEEP_POSITION);
 			}
-			endTsMs -= stride * bucketMillis; // move window left
-			refreshData(RefreshMode.KEEP_POSITION);
 		});
 
 		controlsBar.getNextButton().addActionListener(e -> {
-			final String intervalCode = (String) controlsBar.getIntervalCombo().getSelectedItem();
-			final long bucketMillis = Intervals.minutesOf(intervalCode) * 60_000L;
-			final int nPoints = (Integer) controlsBar.getNSpinner().getValue();
-			final int stride = Math.max(1, (int) Math.ceil(0.1 * nPoints));
+			if (endTsMs == null) {
+				refreshData(RefreshMode.FORCE_LIVE);
+			} else {
+				final String intervalCode = (String) controlsBar.getIntervalCombo().getSelectedItem();
+				final long bucketMillis = Intervals.minutesOf(intervalCode) * 60_000L;
+				final long liveCap = snapToBucket(System.currentTimeMillis(), bucketMillis);
+				final String presetId = (String) controlsBar.getTimeRangeCombo().getSelectedItem();
+				final long rangeMs = TimeRangePresets.toDuration(presetId).toMillis();
+				endTsMs += (long) (SHIFT_FRACTION * rangeMs); // move window right
 
-			final long liveCap = snapToBucket(System.currentTimeMillis(), bucketMillis);
-			if (endTsMs == null)
-				endTsMs = liveCap;
-
-			endTsMs = Math.min(endTsMs + stride * bucketMillis, liveCap); // move right; cap at live
-			refreshData(RefreshMode.KEEP_POSITION);
+				if (endTsMs >= liveCap) {
+					refreshData(RefreshMode.FORCE_LIVE);
+				} else {
+					refreshData(RefreshMode.KEEP_POSITION);
+				}
+			}
 		});
 	}
 
@@ -350,15 +350,21 @@ public class MessageTrendsDashboardPanel extends JPanel {
 
 		if (mode == RefreshMode.FORCE_LIVE || endTsMs == null) {
 			endTsMs = liveCapMs;
+		} else {
+			endTsMs = snapToBucket(endTsMs, bucketMillis);
 		}
 
-		// Derive badge state for UI
+		// Badge state
 		isLive = (Objects.equals(endTsMs, liveCapMs));
 		controlsBar.setLive(isLive);
 
-		// Compute window [start,end] with N buckets
-		final int nPoints = (Integer) controlsBar.getNSpinner().getValue();
-		final long startTsMs = endTsMs - nPoints * bucketMillis;
+		// range
+		String presetId = (String) controlsBar.getTimeRangeCombo().getSelectedItem();
+		long rangeMs = TimeRangePresets.toDuration(presetId).toMillis();
+
+		final int points = (int) Math.max(1L, ceilDiv(rangeMs, bucketMillis));
+		final long windowMs = points * bucketMillis;
+		final long startTsMs = endTsMs - windowMs;
 
 		// Fetch range includes one extra leading bucket for end-of-bucket plotting
 		final long startFetch = startTsMs - bucketMillis;
@@ -367,9 +373,6 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		// Lock axes before data lands
 		lastStartTsMs = startTsMs;
 		lastEndTsMs = endTsMs;
-		activeChart.setIntervalMinutes(Intervals.minutesOf(intervalCode));
-		activeChart.setWindowRange(lastStartTsMs, lastEndTsMs);
-
 		activeChart.setIntervalMinutes(Intervals.minutesOf(intervalCode));
 		activeChart.setWindowRange(lastStartTsMs, lastEndTsMs);
 
@@ -422,16 +425,6 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		};
 		inFlight = worker;
 		worker.execute();
-	}
-
-	private static long[] computeRangeFromPreset(String presetId, long nowMs) {
-		// fallback = 24h
-		Duration d = TimeRangePresets.PRESET_TO_DURATION.getOrDefault(presetId, Duration.ofDays(1));
-
-		long start = nowMs - d.toMillis();
-		long end = nowMs;
-
-		return new long[] { start, end };
 	}
 
 	private void rebindDataset() {
@@ -655,6 +648,10 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		}
 
 		return (epochMs / bucketMillis) * bucketMillis;
+	}
+
+	private static long ceilDiv(long a, long b) {
+		return (a + b - 1) / b;
 	}
 
 	/** How the caller wants refresh to behave. */
