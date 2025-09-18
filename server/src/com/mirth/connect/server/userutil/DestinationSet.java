@@ -101,9 +101,9 @@ public class DestinationSet {
         if (metaDataIds != null) {
             Integer metaDataId = convertToMetaDataId(metaDataIdOrConnectorName);
 
-            if (metaDataId != null) {
-                return metaDataIds.retainAll(Collections.singleton(metaDataId));
-            }
+            Set<Integer> set = (metaDataId != null) ? Collections.singleton(metaDataId) : Collections.emptySet();
+
+            return metaDataIds.retainAll(set);
         }
 
         return false;
