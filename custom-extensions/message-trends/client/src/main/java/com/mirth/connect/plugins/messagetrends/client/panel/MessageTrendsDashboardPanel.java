@@ -24,6 +24,8 @@ import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.plugins.messagetrends.client.chart.LineTrendsChart;
 import com.mirth.connect.plugins.messagetrends.client.chart.StackedTrendsChart;
 import com.mirth.connect.plugins.messagetrends.client.chart.TrendsChart;
+import com.mirth.connect.plugins.messagetrends.client.control.JumpToTimeDialog;
+import com.mirth.connect.plugins.messagetrends.client.control.TrendsControlsBar;
 import com.mirth.connect.plugins.messagetrends.client.plugin.MessageTrendsDashboardTabPlugin;
 import com.mirth.connect.plugins.messagetrends.client.service.MessageTrendsServiceClient;
 import com.mirth.connect.plugins.messagetrends.client.summary.SummaryAllView;
@@ -183,7 +185,7 @@ public class MessageTrendsDashboardPanel extends JPanel {
 		// Refresh button passthrough (keeps old behavior for now)
 		controlsBar.getRefreshButton().addActionListener(e -> refreshData(RefreshMode.FORCE_LIVE));
 
-		// Prev / Next buttons (paused navigation)
+		// Prev / Jump / Next buttons (paused navigation)
 		controlsBar.getPrevButton().addActionListener(e -> {
 			if (endTsMs == null) {
 				refreshData(RefreshMode.FORCE_LIVE);
@@ -193,6 +195,17 @@ public class MessageTrendsDashboardPanel extends JPanel {
 				final long rangeMs = TimeRangePresets.toDuration(presetId).toMillis();
 
 				endTsMs -= (long) (SHIFT_FRACTION * rangeMs); // move window left
+				refreshData(RefreshMode.KEEP_POSITION);
+			}
+		});
+
+		controlsBar.getJumpButton().addActionListener(e -> {
+			Long pickedEnd = JumpToTimeDialog.showDialog(parent); //
+			if (pickedEnd != null) {
+				final String intervalCode = (String) controlsBar.getIntervalCombo().getSelectedItem();
+				final long bucketMillis = Intervals.minutesOf(intervalCode) * 60_000L;
+				endTsMs = snapToBucket(pickedEnd, bucketMillis);
+
 				refreshData(RefreshMode.KEEP_POSITION);
 			}
 		});

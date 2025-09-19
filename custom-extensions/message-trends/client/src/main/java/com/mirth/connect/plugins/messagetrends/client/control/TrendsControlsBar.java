@@ -1,4 +1,4 @@
-package com.mirth.connect.plugins.messagetrends.client.panel;
+package com.mirth.connect.plugins.messagetrends.client.control;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -31,13 +31,6 @@ import com.mirth.connect.plugins.messagetrends.client.panel.MessageTrendsDashboa
 import com.mirth.connect.plugins.messagetrends.shared.model.TimeRangePresets;
 import com.mirth.connect.plugins.messagetrends.shared.util.Intervals;
 
-/**
- * Single-row controls bar split into Left | Right. Left: Interval ▾ · N [10–60]
- * · ◀ · ▶ Right: View ▾ · Chart ▾ · [Refresh] · ● Live / ○ Paused (label only)
- *
- * Buttons are added but NOT wired to any handlers yet. Code style: English
- * identifiers; visuals per spec.
- */
 public class TrendsControlsBar extends JPanel {
 	// Colors for Live/Paused badge
 	private static final Color LIVE_FG = new java.awt.Color(0x1B5E20); // green 900
@@ -58,8 +51,9 @@ public class TrendsControlsBar extends JPanel {
 	// Left group (time navigation)
 	private final JComboBox<String> timeRangeCombo;
 	private final JComboBox<String> intervalCombo;
-	private final JButton prevButton; // ◀
-	private final JButton nextButton; // ▶
+	private final JButton prevButton;
+	private final JButton jumpButton;
+	private final JButton nextButton;
 
 	// Right group (display context)
 	private final JComboBox<View> viewCombo;
@@ -103,10 +97,15 @@ public class TrendsControlsBar extends JPanel {
 		}
 		left.add(labelled(intervalCombo, "Interval: "));
 
-		prevButton = new JButton();
+		prevButton = new JButton("");
 		prevButton.setIcon(new ImageIcon(Frame.class.getResource("images/book_previous.png")));
 		prevButton.setToolTipText("Previous (shift left)");
 		left.add(prevButton);
+
+		jumpButton = new JButton("");
+		jumpButton.setIcon(new ImageIcon(Frame.class.getResource("images/calendar_view_month.png")));
+		jumpButton.setToolTipText("Jump to specific time");
+		left.add(jumpButton);
 
 		nextButton = new JButton("");
 		nextButton.setIcon(new ImageIcon(Frame.class.getResource("images/book_next.png")));
@@ -165,6 +164,7 @@ public class TrendsControlsBar extends JPanel {
 		timeRangeCombo.setEnabled(enabled);
 		intervalCombo.setEnabled(enabled);
 		prevButton.setEnabled(enabled);
+		jumpButton.setEnabled(enabled);
 		nextButton.setEnabled(enabled);
 		viewCombo.setEnabled(enabled);
 		chartCombo.setEnabled(enabled);
@@ -181,6 +181,10 @@ public class TrendsControlsBar extends JPanel {
 
 	public JButton getPrevButton() {
 		return prevButton;
+	}
+
+	public JButton getJumpButton() {
+		return jumpButton;
 	}
 
 	public JButton getNextButton() {
