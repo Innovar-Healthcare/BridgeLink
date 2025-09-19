@@ -34,7 +34,7 @@ public class StackedTrendsChart extends AbstractTrendsChart {
 		barRenderer.setRenderAsPercentages(false);
 		barRenderer.setDrawBarOutline(false);
 		barRenderer.setShadowVisible(false);
-		barRenderer.setMargin(0.0);
+		barRenderer.setMargin(0.1);
 		barRenderer.setDefaultToolTipGenerator(new StandardXYToolTipGenerator("{0}: ({1},{2})", new SimpleDateFormat("yyyy-MM-dd HH:mm"), NumberFormat.getIntegerInstance()));
 		p.setRenderer(barRenderer);
 
