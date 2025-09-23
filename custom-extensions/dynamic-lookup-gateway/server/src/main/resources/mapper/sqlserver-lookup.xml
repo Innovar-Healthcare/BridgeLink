@@ -142,8 +142,8 @@
 
     <update id="createLookupValueTable" parameterType="map">
         CREATE TABLE ${tableName} (
-        KEY_VALUE VARCHAR(255) NOT NULL,
-        VALUE_DATA VARCHAR(MAX),
+        KEY_VALUE NVARCHAR(255) NOT NULL,
+        VALUE_DATA NVARCHAR(MAX),
         CREATED_DATE DATETIME DEFAULT GETDATE(),
         UPDATED_DATE DATETIME DEFAULT GETDATE(),
         PRIMARY KEY (KEY_VALUE)
