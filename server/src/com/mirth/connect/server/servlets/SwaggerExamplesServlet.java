@@ -1159,8 +1159,8 @@ public class SwaggerExamplesServlet extends HttpServlet {
 	
 	private List<MetaDataColumn> getMetaDataColumnListExample() {
 		List<MetaDataColumn> metaDataColumns = new ArrayList<>();
-		metaDataColumns.add(new MetaDataColumn("SOURCE", MetaDataColumnType.STRING, "mirth_source"));
-		metaDataColumns.add(new MetaDataColumn("TYPE", MetaDataColumnType.STRING, "mirth_type"));
+	metaDataColumns.add(new MetaDataColumn("SOURCE", MetaDataColumnType.STRING, "message_source"));
+	metaDataColumns.add(new MetaDataColumn("TYPE", MetaDataColumnType.STRING, "message_type"));
 		return metaDataColumns;
 	}
 	

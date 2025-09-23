@@ -244,7 +244,7 @@ public class ServerMigrator extends com.mirth.connect.server.migration.Migrator 
 			case v4_5_2: return new com.mirth.connect.server.migration.Migrate4_5_2();
             case v4_5_3: return new com.mirth.connect.server.migration.Migrate4_5_2();
             case v4_5_4: return null;
-            case v4_6_0: return null;
+            case v4_6_0: return new com.mirth.connect.server.migration.Migrate4_6_0();
         } // @formatter:on
 
         return null;

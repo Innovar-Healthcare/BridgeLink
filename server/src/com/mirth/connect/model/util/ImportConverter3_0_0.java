@@ -363,8 +363,8 @@ public class ImportConverter3_0_0 {
         properties.addChildElement("tags").setAttribute("class", "linked-hash-set");
 
         DonkeyElement metaDataColumns = properties.addChildElement("metaDataColumns");
-        addMetaDataColumn(metaDataColumns, "SOURCE", "STRING", "mirth_source");
-        addMetaDataColumn(metaDataColumns, "TYPE", "STRING", "mirth_type");
+    addMetaDataColumn(metaDataColumns, "SOURCE", "STRING", "message_source");
+    addMetaDataColumn(metaDataColumns, "TYPE", "STRING", "message_type");
 
         properties.addChildElement("archiveEnabled").setTextContent("true");
 

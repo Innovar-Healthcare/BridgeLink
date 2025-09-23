@@ -212,6 +212,22 @@ public class ChannelProperties implements Serializable, Migratable, Purgable {
     @Override public void migrate3_11_1(DonkeyElement element) {} 
     @Override public void migrate3_12_0(DonkeyElement element) {} // @formatter:on
 
+    @Override public void migrate4_6_0(DonkeyElement element) {
+        DonkeyElement metaDataColumnsElement = element.getChildElement("metaDataColumns");
+        if (metaDataColumnsElement != null) {
+            for (DonkeyElement metaDataColumn : metaDataColumnsElement.getChildElements()) {
+                DonkeyElement mappingNameElement = metaDataColumn.getChildElement("mappingName");
+                if (mappingNameElement != null) {
+                    String mappingName = mappingNameElement.getTextContent();
+                    if ("mirth_type".equals(mappingName)) {
+                        mappingNameElement.setTextContent("message_type");
+                    } else if ("mirth_source".equals(mappingName)) {
+                        mappingNameElement.setTextContent("message_source");
+                    }
+                }
+            }
+        }
+    }
     @Override
     public Map<String, Object> getPurgedProperties() {
         Map<String, Object> purgedProperties = new HashMap<String, Object>();
