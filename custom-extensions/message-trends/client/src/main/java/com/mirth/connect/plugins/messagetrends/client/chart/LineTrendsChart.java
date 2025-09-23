@@ -54,7 +54,7 @@ public class LineTrendsChart extends AbstractTrendsChart {
 		lineRenderer.setAutoPopulateSeriesPaint(false);
 		lineRenderer.setDefaultShapesVisible(true);
 		lineRenderer.setDefaultShapesFilled(true);
-		lineRenderer.setDefaultToolTipGenerator(new StandardXYToolTipGenerator("{0}: ({1},{2})", new SimpleDateFormat("yyyy-MM-dd HH:mm"), NumberFormat.getIntegerInstance()));
+		lineRenderer.setDefaultToolTipGenerator(new StandardXYToolTipGenerator("{0}: ({1} → {2})", new SimpleDateFormat("yyyy-MM-dd HH:mm"), NumberFormat.getIntegerInstance()));
 		p.setRenderer(lineRenderer);
 
 		// panel

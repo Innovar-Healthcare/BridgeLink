@@ -45,7 +45,7 @@ public class StackedTrendsChart extends AbstractTrendsChart {
 		barRenderer.setDrawBarOutline(false);
 		barRenderer.setShadowVisible(false);
 		barRenderer.setMargin(0.1);
-		barRenderer.setDefaultToolTipGenerator(new StandardXYToolTipGenerator("{0}: ({1},{2})", new SimpleDateFormat("yyyy-MM-dd HH:mm"), NumberFormat.getIntegerInstance()));
+		barRenderer.setDefaultToolTipGenerator(new StandardXYToolTipGenerator("{0}: ({1} → {2})", new SimpleDateFormat("yyyy-MM-dd HH:mm"), NumberFormat.getIntegerInstance()));
 		p.setRenderer(barRenderer);
 
 		// X ticks centered on bar groups
