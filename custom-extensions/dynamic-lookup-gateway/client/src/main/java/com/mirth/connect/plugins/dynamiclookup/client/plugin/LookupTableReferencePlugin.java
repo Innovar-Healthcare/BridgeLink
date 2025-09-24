@@ -10,27 +10,27 @@
 
 package com.mirth.connect.plugins.dynamiclookup.client.plugin;
 
-import com.mirth.connect.plugins.CodeTemplatePlugin;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.mirth.connect.model.codetemplates.CodeTemplate;
-import com.mirth.connect.model.codetemplates.CodeTemplateContextSet;
-import com.mirth.connect.model.codetemplates.CodeTemplateProperties.CodeTemplateType;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.mirth.connect.model.codetemplates.CodeTemplate;
+import com.mirth.connect.model.codetemplates.CodeTemplateContextSet;
+import com.mirth.connect.model.codetemplates.CodeTemplateProperties.CodeTemplateType;
+import com.mirth.connect.plugins.CodeTemplatePlugin;
+
 public class LookupTableReferencePlugin extends CodeTemplatePlugin {
-    private static final Logger logger = LogManager.getLogger(LookupTableReferencePlugin.class);
+	private static final Logger logger = LogManager.getLogger(LookupTableReferencePlugin.class);
 
-    public LookupTableReferencePlugin(String name) {
-        super(name);
-    }
+	public LookupTableReferencePlugin(String name) {
+		super(name);
+	}
 
+	//@formatter:off
     @Override
     public Map<String, List<CodeTemplate>> getReferenceItems() {
         Map<String, List<CodeTemplate>> referenceItems = new HashMap<String, List<CodeTemplate>>();
@@ -121,29 +121,98 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 "Sets a value in the specified lookup group using the given key. Returns true if successful, false otherwise."
         ));
 
+        templates.add(new CodeTemplate(
+                "Deletes a lookup value by group name and key",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var success = LookupHelper.deleteValue(group, key);",
+                "Deletes a value in the specified lookup group by key. Returns true if successful, false otherwise."
+        ));
+
+
+        templates.add(new CodeTemplate(
+                "Deletes all lookup values in the specified group",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var success = LookupHelper.deleteAllValues(group);",
+                "Deletes all values in the given lookup group. Returns true if successful, false otherwise."
+        ));
+
+        templates.add(new CodeTemplate(
+                "Imports multiple values into a lookup group",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var payload = {\n" +
+                "  \"key1\": \"value1\",\n" +
+                "  \"key2\": \"value2\"\n" +
+                "};\n" +
+                "var res = LookupHelper.importValues(group, payload, true);\n" +
+                "if (!res || String(res.ok) !== 'true') {\n" +
+                "  logger.error('Import values failed for group: ' + group + (res ? (' - ' + res.errorMessage) : ''));\n" +
+                "} else {\n" +
+                "  logger.info('Imported ' + res.importedCount + ' entries into groupId=' + res.groupId);\n" +
+                "}",
+                "Imports key-value pairs into the specified lookup group. " +
+                "If clearExisting is true, all existing values are removed before import. " +
+                "Returns { ok: 'true', groupId, importedCount } on success; otherwise { ok: 'false', errorCode, errorMessage }."
+        ));
+
+
+        templates.add(new CodeTemplate(
+        	    "Creates a lookup group",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var payload = {\n" +
+        	    "  name: 'MyGroup',\n" +
+        	    "  description: 'optional',\n" +
+        	    "  version: '1.0.0',\n" +
+        	    "  cacheSize: '1000',\n" +
+        	    "  cachePolicy: 'LRU' // or 'FIFO'\n" +
+        	    "};\n" +
+        	    "var res = LookupHelper.createGroup(payload);\n" +
+        	    "if (!res || String(res.ok) !== 'true') {\n" +
+        	    "  logger.error('Create group failed: ' + (res ? (res.errorCode + ' - ' + res.errorMessage) : 'unknown'));\n" +
+        	    "} else {\n" +
+        	    "  logger.info('Created group id=' + res.group.id + ', name=' + res.group.name);\n" +
+        	    "}\n",
+        	    "Creates a lookup group with fields: name, description, version, cacheSize, cachePolicy. " +
+        	    "Returns { ok: 'true', group: {...} } on success; otherwise { ok: 'false', errorCode, errorMessage }."
+    	));
+
+
+
+        templates.add(new CodeTemplate(
+                "Deletes a lookup group",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var success = LookupHelper.deleteGroup(group);\n",
+                "Deletes the specified lookup group by name. Returns true if successful, false otherwise."
+        ));
+
         // This defines the category
         referenceItems.put("Lookup Table Functions", templates);
 
         return referenceItems;
     }
+    //@formatter:on
 
-    @Override
-    public String getPluginPointName() {
-        return "Lookup Table Reference Plugin";
-    }
+	@Override
+	public String getPluginPointName() {
+		return "Lookup Table Reference Plugin";
+	}
 
-    @Override
-    public void start() {
+	@Override
+	public void start() {
 
-    }
+	}
 
-    @Override
-    public void stop() {
+	@Override
+	public void stop() {
 
-    }
+	}
 
-    @Override
-    public void reset() {
+	@Override
+	public void reset() {
 
-    }
+	}
 }
