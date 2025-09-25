@@ -25,6 +25,7 @@ import com.mirth.connect.plugins.dynamiclookup.server.util.LookupGroupConverter;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.CacheStatistics;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupStatistics;
+import com.mirth.connect.plugins.dynamiclookup.shared.util.TtlUtils;
 
 /**
  * Provides LookupHelper utility methods.
@@ -82,9 +83,43 @@ public class LookupHelper {
 				return null;
 			}
 
-			return lookupService.getValue(group.getId(), key, ttlHours);
+			long ttlSeconds = TtlUtils.hoursToSeconds(ttlHours);
+			return lookupService.getValue(group.getId(), key, ttlSeconds);
 		} catch (Exception e) {
 			logger.error("Failed to retrieve lookup value [group='{}', key='{}', ttl={}]: {}", groupName, key, ttlHours, e.getMessage(), e);
+			return null;
+		}
+	}
+
+	/**
+	 * Retrieves a value from a lookup group using TTL validation. Returns null if
+	 * the value is not found, stale, or if invalid TTL is provided.
+	 *
+	 * @param groupName  the name of the lookup group
+	 * @param key        the lookup key
+	 * @param ttlHours   hours part of TTL (>= 0)
+	 * @param ttlMinutes minutes part of TTL (>= 0)
+	 * @return the value if found and valid within TTL, otherwise null
+	 */
+	public static String get(String groupName, String key, long ttlHours, long ttlMinutes) {
+		try {
+			if (ttlHours < 0 || ttlMinutes < 0) {
+				logger.error("TTL hours and minutes must be non-negative");
+				return null;
+			}
+
+			LookupGroup group = lookupService.getGroupByName(groupName);
+			if (group == null) {
+				logger.error("Lookup group not found: {}", groupName);
+				return null;
+			}
+
+			// Convert to total seconds
+			long ttlSeconds = TtlUtils.hoursMinutesToSeconds(ttlHours, ttlMinutes);
+
+			return lookupService.getValue(group.getId(), key, ttlSeconds);
+		} catch (Exception e) {
+			logger.error("Failed to retrieve lookup value [group='{}', key='{}', ttlHours={}, ttlMinutes={}]: {}", groupName, key, ttlHours, ttlMinutes, e.getMessage(), e);
 			return null;
 		}
 	}
@@ -111,13 +146,32 @@ public class LookupHelper {
 	 *
 	 * @param groupName    the name of the lookup group
 	 * @param key          the lookup key
-	 * @param ttlHours     the TTL in hours; 0 or less means TTL is ignored
+	 * @param ttlHours     hours part of TTL (must be >= 0)
 	 * @param defaultValue the fallback value to return if lookup fails or is stale
 	 * @return the value if found and valid within TTL, otherwise the provided
 	 *         default
 	 */
 	public static String get(String groupName, String key, long ttlHours, String defaultValue) {
 		String value = get(groupName, key, ttlHours);
+		return value != null ? value : defaultValue;
+	}
+
+	/**
+	 * Retrieves a value from a lookup group with TTL enforcement and a fallback
+	 * default. If the cached or database value is not found or is older than the
+	 * specified TTL, the provided default value is returned.
+	 *
+	 * @param groupName    the name of the lookup group
+	 * @param key          the lookup key
+	 * @param ttlHours     hours part of TTL (must be >= 0)
+	 * @param ttlMinutes   minutes part of TTL (must be >= 0)
+	 * @param defaultValue the fallback value to return if lookup fails or the value
+	 *                     is stale
+	 * @return the value if found and valid within TTL, otherwise
+	 *         {@code defaultValue}
+	 */
+	public static String get(String groupName, String key, long ttlHours, long ttlMinutes, String defaultValue) {
+		String value = get(groupName, key, ttlHours, ttlMinutes);
 		return value != null ? value : defaultValue;
 	}
 
@@ -171,7 +225,7 @@ public class LookupHelper {
 	 *
 	 * @param groupName the name of the lookup group
 	 * @param keys      the list of keys to retrieve
-	 * @param ttlHours  TTL in hours (0 = no TTL applied)
+	 * @param ttlHours  hours part of TTL (must be >= 0)
 	 * @return a map of valid key-value pairs; excludes keys with missing or stale
 	 *         data
 	 */
@@ -183,9 +237,43 @@ public class LookupHelper {
 				return Collections.emptyMap();
 			}
 
-			return lookupService.getBatchValues(group.getId(), keys, ttlHours);
+			long ttlSeconds = TtlUtils.hoursToSeconds(ttlHours);
+			return lookupService.getBatchValues(group.getId(), keys, ttlSeconds);
 		} catch (Exception e) {
 			logger.error("Error in TTL-based lookup operation: {}", e.getMessage(), e);
+			return Collections.emptyMap();
+		}
+	}
+
+	/**
+	 * Retrieves multiple values at once from a lookup group using TTL validation.
+	 * For each key, if the value is not found, stale, or TTL is invalid, that key
+	 * is excluded from the result.
+	 *
+	 * @param groupName  the name of the lookup group
+	 * @param keys       the list of keys to retrieve
+	 * @param ttlHours   hours part of the TTL (>= 0)
+	 * @param ttlMinutes minutes part of the TTL (>= 0)
+	 * @return a map of valid key-value pairs; excludes keys with missing or stale
+	 *         data, or an empty map if the group does not exist or an error occurs
+	 */
+	public static Map<String, String> getBatch(String groupName, List<String> keys, long ttlHours, long ttlMinutes) {
+		try {
+			if (ttlHours < 0 || ttlMinutes < 0) {
+				logger.error("TTL hours and minutes must be non-negative");
+				return Collections.emptyMap();
+			}
+
+			LookupGroup group = lookupService.getGroupByName(groupName);
+			if (group == null) {
+				logger.error("Lookup group not found: {}", groupName);
+				return Collections.emptyMap();
+			}
+
+			long ttlSeconds = TtlUtils.hoursMinutesToSeconds(ttlHours, ttlMinutes);
+			return lookupService.getBatchValues(group.getId(), keys, ttlSeconds);
+		} catch (Exception e) {
+			logger.error("Failed to retrieve batch lookup values [group='{}', keys={}, ttlHours={}, ttlMinutes={}]: {}", groupName, keys, ttlHours, ttlMinutes, e.getMessage(), e);
 			return Collections.emptyMap();
 		}
 	}

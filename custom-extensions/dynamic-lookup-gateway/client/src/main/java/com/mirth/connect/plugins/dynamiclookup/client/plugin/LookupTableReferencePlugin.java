@@ -46,13 +46,16 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
         ));
 
         templates.add(new CodeTemplate(
-                "Lookup Value by Key with TTL",
-                CodeTemplateType.DRAG_AND_DROP_CODE,
-                CodeTemplateContextSet.getConnectorContextSet(),
-                "var value = LookupHelper.get(group, key, ttlHours);",
-                "Retrieves a value from the specified lookup group using the given key and a TTL (in hours). "
-                        + "If the cached or database value is older than the TTL, null is returned."
-        ));
+        	    "Lookup Value by Key with TTL",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var value = LookupHelper.get(group, key, /*ttlHours*/ 0, /*ttlMinutes*/ 30);",
+        	    "Retrieves a value from the specified lookup group using the given key and a TTL "
+        	        + "expressed in hours and minutes. "
+        	        + "If both values are 0, TTL is ignored. "
+        	        + "If the cached or database value is older than the TTL, null is returned."
+        	));
+
 
         templates.add(new CodeTemplate(
                 "Lookup Value with Default Fallback",
@@ -63,13 +66,16 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
         ));
 
         templates.add(new CodeTemplate(
-                "Lookup Value with TTL and Default Fallback",
-                CodeTemplateType.DRAG_AND_DROP_CODE,
-                CodeTemplateContextSet.getConnectorContextSet(),
-                "var value = LookupHelper.get(group, key, ttlHours, defaultValue);",
-                "Retrieves a value from a lookup group using the given key and TTL (in hours). "
-                        + "If the value is missing or stale based on TTL, the default value is returned instead."
-        ));
+        	    "Lookup Value with TTL and Default Fallback",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var value = LookupHelper.get(group, key, /*ttlHours*/ 0, /*ttlMinutes*/ 30, /*defaultValue*/ 'N/A');",
+        	    "Retrieves a value from the specified lookup group using the given key and a TTL "
+        	        + "expressed in hours and minutes. "
+        	        + "If both hours and minutes are 0, TTL is ignored. "
+        	        + "If the value is missing or stale, the provided default value is returned instead."
+        	));
+
 
         templates.add(new CodeTemplate(
                 "Lookup Values Matching Pattern",
@@ -88,14 +94,18 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
         ));
 
         templates.add(new CodeTemplate(
-                "Batch Lookup by Keys with TTL",
-                CodeTemplateType.DRAG_AND_DROP_CODE,
-                CodeTemplateContextSet.getConnectorContextSet(),
-                "var keys = [\"key1\", \"key2\", \"key3\"];\nvar values = LookupHelper.getBatch(group, keys, ttlHours);",
-                "Retrieves multiple key-value pairs from the specified lookup group using a TTL (in hours). "
-                        + "Only values updated within the TTL window will be returned. "
-                        + "Returns an empty map if the group is not found or all values are stale or missing."
-        ));
+        	    "Batch Lookup by Keys with TTL",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var keys = [\"key1\", \"key2\", \"key3\"];\n"
+        	        + "var batch = LookupHelper.getBatch(group, keys, /*ttlHours*/ 0, /*ttlMinutes*/ 30);",
+        	    "Retrieves multiple key-value pairs from the specified lookup group using a TTL "
+        	        + "expressed in hours and minutes. "
+        	        + "If both hours and minutes are 0, TTL is ignored. "
+        	        + "Only values updated within the TTL window are returned. "
+        	        + "Returns an empty map if the group is not found, or if all values are stale or missing."
+        	));
+
 
         templates.add(new CodeTemplate(
                 "Lookup Key Existence in Group",
