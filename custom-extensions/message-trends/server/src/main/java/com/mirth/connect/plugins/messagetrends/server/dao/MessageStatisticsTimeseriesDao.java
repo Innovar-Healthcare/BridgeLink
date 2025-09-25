@@ -1,0 +1,48 @@
+/*
+ *
+ * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
+ */
+
+package com.mirth.connect.plugins.messagetrends.server.dao;
+
+import java.util.Date;
+import java.util.List;
+
+import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries;
+
+public interface MessageStatisticsTimeseriesDao {
+	/**
+	 * Additive replace Rollup Window for buckets (5, 15, 60, 1440).
+	 */
+	int replaceRollupWindow(String serverId, Date startTs, int bucketSizeMinutes, List<MessageStatisticsTimeseries> list);
+
+	/**
+	 * Purge old records for a given server and bucket size before cutoff.
+	 */
+	int purgeBefore(String serverId, int bucketSizeMinutes, Date cutoffTs);
+
+	// --- Read APIs mapped to REST ---
+
+	/**
+	 * View #1: Channel-level statistics (aggregate all connectors in channel on
+	 * this server).
+	 */
+	List<MessageStatisticsTimeseries> selectSeriesServerChannel(String serverId, String channelId, Date startTs, Date endTs, int bucketSizeMinutes);
+
+	/**
+	 * View #2: Connector-level statistics (specific connector of channel on this
+	 * server).
+	 */
+	List<MessageStatisticsTimeseries> selectSeriesServerConnector(String serverId, String channelId, String connectorId, Date startTs, Date endTs, int bucketSizeMinutes);
+
+	/**
+	 * View #3: Server-level statistics (aggregate all channels and connectors on
+	 * this server).
+	 */
+	List<MessageStatisticsTimeseries> selectSeriesServerAll(String serverId, Date startTs, Date endTs, int bucketSizeMinutes);
+}

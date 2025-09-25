@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="MessageTrends">
+    <resultMap id="message-statistics-timeseries" type="com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTimeseries">
+        <id     property="id"                column="id"                    javaType="Long"/>
+        <result property="channelId"         column="channel_id"            javaType="String"/>
+        <result property="connectorId"       column="connector_id"          javaType="String"/>
+        <result property="ts"                column="ts"                    javaType="java.sql.Timestamp"/>
+        <result property="bucketSizeMinutes" column="bucket_size_minutes"   javaType="Integer"/>
+        <result property="received"          column="received"              javaType="Integer"/>
+        <result property="filtered"          column="filtered"              javaType="Integer"/>
+        <result property="queued"            column="queued"                javaType="Integer"/>
+        <result property="sent"              column="sent"                  javaType="Integer"/>
+        <result property="error"             column="error"                 javaType="Integer"/>
+        <result property="serverId"          column="server_id"             javaType="String"/>
+    </resultMap>
+
+    <delete id="deleteRollupWindow" parameterType="map">
+		DELETE FROM message_statistics_timeseries
+		WHERE server_id = #{serverId}
+			AND bucket_size_minutes = #{bucketSizeMinutes}
+		    AND ts = #{ts}
+	</delete>
+		
+	<insert id="insertRollupRows" parameterType="java.util.List">
+  		INSERT INTO message_statistics_timeseries (server_id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error)
+		<foreach collection="list" item="r" separator=" UNION ALL ">
+			SELECT
+		      #{r.serverId}     AS server_id,
+		      #{r.channelId}    AS channel_id,
+		      #{r.connectorId}  AS connector_id,
+		      #{r.ts} 			AS ts,
+		      #{r.bucketSizeMinutes} AS bucket_size_minutes,
+		      #{r.received}     AS received,
+		      #{r.filtered}     AS filtered,
+		      #{r.queued}       AS queued,
+		      #{r.sent}         AS sent,
+		      #{r.error}        AS error
+		    FROM dual
+		</foreach>
+	</insert>
+
+    <delete id="purgeBefore" parameterType="map">
+        DELETE FROM message_statistics_timeseries
+         WHERE server_id = #{serverId}
+           AND bucket_size_minutes = #{bucketSizeMinutes}
+           AND ts <![CDATA[ < ]]> #{cutoffTs}
+    </delete>
+
+    <select id="selectSeriesServerChannelConnector" parameterType="map" resultMap="message-statistics-timeseries">
+        SELECT id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error, server_id
+        FROM message_statistics_timeseries
+        WHERE server_id = #{serverId}
+          AND channel_id = #{channelId}
+          AND connector_id = #{connectorId}
+          AND bucket_size_minutes = #{bucketSizeMinutes}
+          <if test="startTs != null"> AND ts <![CDATA[ >= ]]> #{startTs} </if>
+          <if test="endTs != null">   AND ts <![CDATA[ < ]]>  #{endTs}   </if>
+        ORDER BY ts ASC
+    </select>
+
+    <select id="selectSeriesServerAll" parameterType="map" resultMap="message-statistics-timeseries">
+        SELECT id, channel_id, connector_id, ts, bucket_size_minutes, received, filtered, queued, sent, error, server_id
+        FROM message_statistics_timeseries
+        WHERE server_id = #{serverId}
+          AND bucket_size_minutes = #{bucketSizeMinutes}
+          <if test="startTs != null"> AND ts <![CDATA[ >= ]]> #{startTs} </if>
+          <if test="endTs != null">   AND ts <![CDATA[ < ]]>  #{endTs}   </if>
+        ORDER BY ts ASC
+    </select>
+</mapper>

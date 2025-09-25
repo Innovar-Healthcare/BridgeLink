@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<pluginMetaData path="message-trends">
+    <name>Message Trends Management System</name>
+    <author>Daniel Svanstedt, Thai Tran</author>
+    <pluginVersion>1.0.0</pluginVersion>
+    <mirthVersion>4.5.4, 4.6.0</mirthVersion>
+    <url>https://www.innovarhealthcare.com</url>
+    <description>This plugin provides time-series message statistics tracking and visualization</description>
+    <clientClasses>
+        <string>com.mirth.connect.plugins.messagetrends.client.plugin.MessageTrendsClientPlugin</string>
+        <string>com.mirth.connect.plugins.messagetrends.client.plugin.MessageTrendsDashboardTabPlugin</string>
+    </clientClasses>
+    <serverClasses>
+        <string>com.mirth.connect.plugins.messagetrends.server.plugin.MessageTrendsServicePlugin</string>
+    </serverClasses>
+    <library path="message-trends-server.jar" type="SERVER"/>
+    <library path="message-trends-shared.jar" type="SHARED"/>
+    <library path="message-trends-client.jar" type="CLIENT"/>
+    <library path="libs/jfreechart-1.5.6.jar" type="CLIENT"/>
+    <apiProvider name="com.mirth.connect.plugins.messagetrends.shared.interfaces.MessageTrendsServletInterface" type="SERVLET_INTERFACE"/>
+    <apiProvider name="com.mirth.connect.plugins.messagetrends.server.servlet.MessageTrendsServlet" type="SERVER_CLASS"/>
+    <sqlMapConfigs>
+        <entry>
+            <string>all</string>
+            <string>mapper/message-trends.xml</string>
+        </entry>
+        <entry>
+            <string>derby</string>
+            <string>mapper/derby-message-trends.xml</string>
+        </entry>
+        <entry>
+            <string>mysql</string>
+            <string>mapper/mysql-message-trends.xml</string>
+        </entry>
+        <entry>
+            <string>oracle</string>
+            <string>mapper/oracle-message-trends.xml</string>
+        </entry>
+        <entry>
+            <string>postgres</string>
+            <string>mapper/postgres-message-trends.xml</string>
+        </entry>
+        <entry>
+            <string>sqlserver</string>
+            <string>mapper/sqlserver-message-trends.xml</string>
+        </entry>
+    </sqlMapConfigs>
+
+</pluginMetaData>
