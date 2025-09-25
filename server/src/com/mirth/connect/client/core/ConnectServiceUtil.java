@@ -48,7 +48,7 @@ import com.mirth.connect.model.notification.Notification;
 import com.mirth.connect.util.MirthSSLUtil;
 
 public class ConnectServiceUtil {
-    private final static String URL_CONNECT_SERVER = "https://connect.mirthcorp.com";
+    private final static String URL_CONNECT_SERVER = "https://www.example.com";
     private final static String URL_REGISTRATION_SERVLET = "/RegistrationServlet";
     private final static String URL_USAGE_SERVLET = "/UsageStatisticsServlet";
     private final static String URL_NOTIFICATION_SERVLET = "/NotificationServlet";

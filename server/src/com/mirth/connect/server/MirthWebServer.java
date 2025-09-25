@@ -55,6 +55,7 @@ import org.apache.logging.log4j.core.config.Configurator;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.http.MimeTypes;
+import org.eclipse.jetty.server.ForwardedRequestCustomizer;
 import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpConnectionFactory;
@@ -151,6 +152,7 @@ public class MirthWebServer extends Server {
         if (usingHttp) {
             // add HTTP listener
             HttpConfiguration config = new HttpConfiguration();
+            config.addCustomizer(new ForwardedRequestCustomizer());
             config.setSendServerVersion(false);
             config.setSendXPoweredBy(false);
             connector = new ServerConnector(this, new HttpConnectionFactory(config));
