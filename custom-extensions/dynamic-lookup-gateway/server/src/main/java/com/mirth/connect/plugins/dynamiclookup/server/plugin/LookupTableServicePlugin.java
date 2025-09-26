@@ -141,13 +141,21 @@ public class LookupTableServicePlugin implements ServicePlugin {
 			List<LookupGroup> groups = lookupService.getAllGroups();
 			int count = 0;
 			for (LookupGroup group : groups) {
-				if (group.getCacheSize() > 0) {
-					// Load values into cache
-					int valueCount = preloadGroupValues(group);
-					if (valueCount > 0) {
-						count++;
-						logger.info("Preloaded {} values for group: {} (ID: {})", valueCount, group.getName(), group.getId());
-					}
+				// Build cache instance for this group
+				cacheManager.createOrRebuildGroupCache(group);
+
+				int size = group.getCacheSize();
+
+				if (size <= 0) {
+					// disabled – skip preload values
+					continue;
+				}
+
+				// Load values into cache
+				int valueCount = preloadGroupValues(group);
+				if (valueCount > 0) {
+					count++;
+					logger.info("Preloaded {} values for group: {} (ID: {})", valueCount, group.getName(), group.getId());
 				}
 			}
 			logger.info("Completed preloading {} lookup groups", count);
@@ -165,9 +173,10 @@ public class LookupTableServicePlugin implements ServicePlugin {
 			List<LookupValue> values = lookupService.searchLookupValues(group.getId(), 0, limit, null);
 
 			// Skip if the group is empty or too large for caching
-			if (values.isEmpty()) {
+			if (values == null || values.isEmpty()) {
 				return 0;
 			}
+
 			// Load values into cache
 			for (LookupValue value : values) {
 				cacheManager.putValue(group.getId(), value.getKeyValue(), value.getValueData(), value.getUpdatedDate());

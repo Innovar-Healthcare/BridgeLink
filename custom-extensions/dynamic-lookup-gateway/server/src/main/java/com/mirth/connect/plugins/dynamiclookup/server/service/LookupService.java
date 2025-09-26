@@ -114,16 +114,13 @@ public class LookupService {
 			throw new DuplicateGroupNameException("Group name already exists: " + group.getName());
 		}
 
-		// Set defaults if not provided
-		if (group.getCacheSize() <= 0) {
-			group.setCacheSize(1000); // Default cache size
-		}
 		if (group.getCachePolicy() == null || group.getCachePolicy().isEmpty()) {
-			group.setCachePolicy("LRU"); // Default cache policy
+			group.setCachePolicy(LookupCacheManager.POLICY_LRU); // Default cache policy
 		}
 
 		// Insert group to get ID
 		int groupId = groupDao.insertGroup(group);
+		group.setId(groupId);
 
 		try {
 			// Create value table
@@ -132,6 +129,9 @@ public class LookupService {
 
 			// Initialize statistics
 			statisticsDao.insertStatistics(groupId);
+
+			// Build cache instance for this group
+			cacheManager.createOrRebuildGroupCache(group);
 
 			logger.info("Created lookup group: {} (ID: {})", group.getName(), groupId);
 			return groupId;
@@ -170,9 +170,15 @@ public class LookupService {
 		// Update group
 		groupDao.updateGroup(group);
 
+		// Detect cache-setting changes
+		boolean sizeChanged = existingGroup.getCacheSize() != group.getCacheSize();
+		boolean policyChanged = !existingGroup.getCachePolicy().equals(group.getCachePolicy());
+
 		// Clear cache if cache settings changed
-		if (existingGroup.getCacheSize() != group.getCacheSize() || !existingGroup.getCachePolicy().equals(group.getCachePolicy())) {
-			cacheManager.clearGroupCache(group.getId());
+		if (sizeChanged || policyChanged) {
+			logger.info("Cache settings changed for group {} (ID: {}): size {} -> {}, policy {} -> {}", group.getName(), group.getId(), existingGroup.getCacheSize(), group.getCacheSize(), existingGroup.getCachePolicy(), group.getCachePolicy());
+
+			cacheManager.createOrRebuildGroupCache(group);
 		}
 
 		logger.info("Updated lookup group: {} (ID: {})", group.getName(), group.getId());
@@ -198,7 +204,7 @@ public class LookupService {
 		groupDao.deleteGroup(groupId);
 
 		// Clear cache
-		cacheManager.clearGroupCache(groupId);
+		cacheManager.removeGroupCache(groupId);
 
 		logger.info("Deleted lookup group: {} (ID: {})", groupName, groupId);
 	}
@@ -828,6 +834,11 @@ public class LookupService {
 		String policy = group.getCachePolicy();
 		if (policy != null && !policy.isEmpty() && !policy.equalsIgnoreCase("LRU") && !policy.equalsIgnoreCase("FIFO")) {
 			throw new IllegalArgumentException("Invalid cache policy: " + policy + ". Must be LRU or FIFO");
+		}
+
+		// Validate cache size
+		if (group.getCacheSize() < 0) {
+			throw new IllegalArgumentException("Cache size must be >= 0");
 		}
 	}
 

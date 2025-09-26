@@ -14,35 +14,38 @@ import java.util.Collections;
 import java.util.Map;
 
 public class FifoCacheWrapper<K, V> implements SimpleCache<K, V> {
-    private final Map<K, V> map;
+	private final Map<K, V> map;
 
-    public FifoCacheWrapper(int maxSize) {
-        this.map = Collections.synchronizedMap(new FifoCache<>(maxSize));
-    }
+	public FifoCacheWrapper(int maxSize) {
+		if (maxSize <= 0) {
+			throw new IllegalArgumentException("FifoCache maxSize must be > 0");
+		}
 
-    @Override
-    public V get(K key) {
-        return map.get(key);
-    }
+		this.map = Collections.synchronizedMap(new FifoCache<>(maxSize));
+	}
 
-    @Override
-    public void put(K key, V value) {
-        map.put(key, value);
-    }
+	@Override
+	public V get(K key) {
+		return map.get(key);
+	}
 
-    @Override
-    public void remove(K key) {
-        map.remove(key);
-    }
+	@Override
+	public void put(K key, V value) {
+		map.put(key, value);
+	}
 
-    @Override
-    public void clear() {
-        map.clear();
-    }
+	@Override
+	public void remove(K key) {
+		map.remove(key);
+	}
 
-    @Override
-    public int size() {
-        return map.size();
-    }
+	@Override
+	public void clear() {
+		map.clear();
+	}
+
+	@Override
+	public int size() {
+		return map.size();
+	}
 }
-
