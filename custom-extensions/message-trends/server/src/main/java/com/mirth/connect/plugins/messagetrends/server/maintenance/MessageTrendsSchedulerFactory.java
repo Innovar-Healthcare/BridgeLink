@@ -43,13 +43,8 @@ public final class MessageTrendsSchedulerFactory {
 
 		// --- Wire runners from config ---
 		MinuteFlushRunner flushRunner = new MinuteFlushRunner(service, config.getClock(), serverId);
-		flushRunner.setEnabled(config.isFlushEnabled());
-
 		RollupRunner rollupRunner = new RollupRunner(service, config.getClock(), config.getRollupFixedRateSeconds(), serverId);
-		rollupRunner.setEnabled(config.isRollupEnabled());
-
 		PurgeRunner purgeRunner = new PurgeRunner(service, config.getClock(), config.getRetentionByBucket(), config.getPurgeFixedRateSeconds(), config.getPurgeThrottleMs());
-		purgeRunner.setEnabled(config.isPurgeEnabled());
 
 		// --- Create orchestrator ---
 		return new MessageTrendsScheduler(flushRunner, rollupRunner, purgeRunner);

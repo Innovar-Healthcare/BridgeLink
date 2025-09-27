@@ -55,9 +55,6 @@ final class RollupRunner {
 	/** Fixed-rate schedule in seconds (e.g., 120s). */
 	private final int fixedRateSeconds;
 
-	/** Master enable switch for this runner. */
-	private volatile boolean enabled = true;
-
 	RollupRunner(MessageTrendsService service, Clock clock, int fixedRateSeconds, String serverIdIgnored) {
 		this.service = service;
 		this.clock = (clock == null) ? Clock.systemUTC() : clock;
@@ -74,16 +71,8 @@ final class RollupRunner {
 		return fixedRateSeconds;
 	}
 
-	/** Enable/disable the runner at runtime. */
-	void setEnabled(boolean enabled) {
-		this.enabled = enabled;
-	}
-
 	/** One execution tick. Safe to call from a ScheduledExecutor. */
 	void runOnce() {
-		if (!enabled) {
-			return;
-		}
 		try {
 			final Instant now = clock.instant(); // UTC
 			logger.debug("runOnce tick at {}", now);

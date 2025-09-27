@@ -19,6 +19,8 @@ import java.util.concurrent.TimeUnit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.mirth.connect.plugins.messagetrends.server.core.MessageTrendsBuffer;
+
 public final class MessageTrendsScheduler {
 	private static final Logger logger = LogManager.getLogger(MessageTrendsScheduler.class);
 
@@ -39,20 +41,29 @@ public final class MessageTrendsScheduler {
 	}
 
 	public synchronized void start() {
-		logger.debug("Starting MessageTrendsScheduler...");
+		// enable buffer
+		MessageTrendsBuffer.getInstance().setEnabled(true);
+
+		// initialize and run schedules
 		scheduleFlush();
 		scheduleRollups();
 		schedulePurge();
+
 		logger.info("MessageTrendsScheduler started. tasks: flush={}, rollup={}, purge={}", flushTask != null, rollupTask != null, purgeTask != null);
 	}
 
 	public synchronized void stop() {
+		// disable buffer
+		MessageTrendsBuffer.getInstance().setEnabled(false);
+
+		// cancel and shutdown schedules
 		cancel(flushTask);
 		cancel(rollupTask);
 		cancel(purgeTask);
-		safeShutdown(flushExec, true); // best-effort flush
-		safeShutdown(rollupExec, false);
-		safeShutdown(purgeExec, false);
+		safeShutdown(flushExec); // best-effort flush
+		safeShutdown(rollupExec);
+		safeShutdown(purgeExec);
+
 		logger.info("MessageTrendsScheduler stopped.");
 	}
 
@@ -92,7 +103,7 @@ public final class MessageTrendsScheduler {
 		}
 	}
 
-	private static void safeShutdown(ExecutorService es, boolean finalFlush) {
+	private static void safeShutdown(ExecutorService es) {
 		es.shutdown();
 		try {
 			if (!es.awaitTermination(5, TimeUnit.SECONDS)) {

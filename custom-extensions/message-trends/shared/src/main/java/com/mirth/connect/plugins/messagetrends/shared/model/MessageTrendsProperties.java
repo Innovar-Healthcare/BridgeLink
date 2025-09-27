@@ -25,6 +25,10 @@ import java.util.stream.Collectors;
  * time range
  */
 public class MessageTrendsProperties { // not final anymore
+	// ----- Keys -----
+	public static final String KEY_ENABLED = "messagetrends.enabled";
+	public static final String KEY_RESOLUTIONS = "messagetrends.dashboard.defaultResolutions";
+	public static final String KEY_RANGE = "messagetrends.dashboard.defaultTimeRange";
 
 	// ----- Allowed resolutions -----
 	/** Valid bucket sizes (minutes) supported by MessageTrends. */
@@ -73,11 +77,6 @@ public class MessageTrendsProperties { // not final anymore
 		this.defaultTimeRange = defaultTimeRange;
 	}
 
-	// ----- Keys -----
-	private static final String KEY_ENABLED = "messagetrends.enabled";
-	private static final String KEY_RESOLUTIONS = "messagetrends.dashboard.defaultResolutions";
-	private static final String KEY_RANGE = "messagetrends.dashboard.defaultTimeRange";
-
 	// ----- Converters -----
 	public Properties toProperties() {
 		Properties p = new Properties();
@@ -115,8 +114,10 @@ public class MessageTrendsProperties { // not final anymore
 
 	// ----- Helpers -----
 	private static boolean parseBoolean(String raw, boolean defaultValue) {
-		if (raw == null)
+		if (raw == null) {
 			return defaultValue;
+		}
+
 		String s = raw.trim().toLowerCase();
 		switch (s) {
 		case "true":
