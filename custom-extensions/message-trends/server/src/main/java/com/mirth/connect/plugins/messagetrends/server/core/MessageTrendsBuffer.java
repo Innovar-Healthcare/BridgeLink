@@ -30,7 +30,7 @@ import com.mirth.connect.plugins.messagetrends.shared.model.MessageStatisticsTim
  * periodic flush to DB
  */
 public final class MessageTrendsBuffer {
-	private volatile boolean enabled = true;
+	private volatile boolean enabled = false;
 
 	private MessageTrendsBuffer() {
 	}
@@ -49,9 +49,7 @@ public final class MessageTrendsBuffer {
 
 	public synchronized void setEnabled(boolean enabled) {
 		if (this.enabled != enabled) {
-			if (enabled) {
-				resetAll();
-			}
+			resetAll();
 
 			this.enabled = enabled;
 		}

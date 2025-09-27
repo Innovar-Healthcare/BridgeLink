@@ -40,9 +40,6 @@ final class MinuteFlushRunner {
 	private final String serverId;
 	private Date lastFlushedTs = null;
 
-	/** Master enable switch for this runner. */
-	private volatile boolean enabled = true;
-
 	MinuteFlushRunner(MessageTrendsService service, Clock clock, String serverId) {
 		this.service = service;
 		this.clock = clock == null ? Clock.systemUTC() : clock;
@@ -61,21 +58,7 @@ final class MinuteFlushRunner {
 		return Math.max(0, Duration.between(now, next).getSeconds());
 	}
 
-	/** Enable/disable the runner at runtime. */
-	void setEnabled(boolean enabled) {
-		if (this.enabled != enabled) {
-			buffer.setEnabled(enabled);
-
-			this.enabled = enabled;
-		}
-
-	}
-
 	void runOnce() {
-		if (!enabled) {
-			return; // Runner is disabled; skip work.
-		}
-
 		try {
 			Instant bucketStart = clock.instant().truncatedTo(ChronoUnit.MINUTES).minus(1, ChronoUnit.MINUTES);
 			Date ts = Date.from(bucketStart);
@@ -135,7 +118,6 @@ final class MinuteFlushRunner {
 			int inserted = 0;
 			if (!rowsToWrite.isEmpty()) {
 				inserted = service.replaceRollupWindow(ts, 1, rowsToWrite);
-
 			}
 
 			queuedBackfillHelper.updateAfterFlush(rowsToWrite);
@@ -143,9 +125,7 @@ final class MinuteFlushRunner {
 			lastFlushedTs = ts;
 
 			logger.debug("MinuteFlushRunner: flushed {} rows for {}", inserted, ts);
-		} catch (
-
-		Throwable t) {
+		} catch (Throwable t) {
 			logger.warn("MinuteFlushRunner runOnce failed", t);
 		}
 	}
@@ -157,8 +137,10 @@ final class MinuteFlushRunner {
 	// Helper: parse connectorId string to numeric index (null => channel-level
 	// queue)
 	private static Number toConnectorNumber(String connectorId) {
-		if (connectorId == null || connectorId.isEmpty())
+		if (connectorId == null || connectorId.isEmpty()) {
 			return null;
+		}
+
 		try {
 			return Integer.valueOf(connectorId);
 		} catch (NumberFormatException e) {

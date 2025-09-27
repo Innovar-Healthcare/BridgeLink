@@ -33,9 +33,6 @@ final class PurgeRunner {
 	private final int fixedRateSeconds;
 	private final long throttleMs;
 
-	/** Master enable switch for this runner. */
-	private volatile boolean enabled = true;
-
 	PurgeRunner(MessageTrendsService service, Clock clock, Map<Integer, Duration> retentionByBucket, int fixedRateSeconds, long throttleMs) {
 		this.service = service;
 		this.clock = clock == null ? Clock.systemUTC() : clock;
@@ -56,16 +53,7 @@ final class PurgeRunner {
 		return fixedRateSeconds;
 	}
 
-	/** Enable/disable the runner at runtime. */
-	void setEnabled(boolean enabled) {
-		this.enabled = enabled;
-	}
-
 	void runOnce() {
-		if (!enabled) {
-			return; // Runner is disabled; skip work.
-		}
-
 		Instant now = clock.instant();
 		long totalPurged = 0L;
 		for (Map.Entry<Integer, Duration> e : retentionByBucket.entrySet()) {
