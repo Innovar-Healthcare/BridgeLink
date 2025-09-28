@@ -438,6 +438,31 @@ public class LookupHelper {
 	}
 
 	/**
+	 * Attempts to put a lookup value in the specified group if the key does not
+	 * already exist.
+	 *
+	 * @param groupName the name of the lookup group
+	 * @param key       the key to insert
+	 * @param value     the value to insert
+	 * @return true if the value was inserted, false if the key already exists or if
+	 *         an error occurred
+	 */
+	public static boolean putIfAbsent(String groupName, String key, String value) {
+		try {
+			LookupGroup group = lookupService.getGroupByName(groupName);
+			if (group == null) {
+				logger.error("Lookup group not found: {}", groupName);
+				return false;
+			}
+
+			return lookupService.putIfAbsent(group.getId(), key, value, SYSTEM_USER_ID);
+		} catch (Exception e) {
+			logger.error("Failed to putIfAbsent lookup value [group='{}', key='{}']: {}", groupName, key, e.getMessage(), e);
+			return false;
+		}
+	}
+
+	/**
 	 * Creates a new lookup group from a JS transformer payload.
 	 * <p>
 	 * Expects a flat map with keys: name, description, version, cacheSize,

@@ -167,7 +167,18 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 "Returns { ok: 'true', groupId, importedCount } on success; otherwise { ok: 'false', errorCode, errorMessage }."
         ));
 
-
+        templates.add(new CodeTemplate(
+                "Put Lookup Value If Absent",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var success = LookupHelper.putIfAbsent(group, key, value);\n" +
+                "if (!success) {\n" +
+                "  logger.warn('Key already exists or insert failed in group: ' + group);\n" +
+                "}",
+                "Inserts a value into the specified lookup group only if the key does not already exist. " +
+                "Returns true if the value was inserted, false otherwise."
+        ));
+        
         templates.add(new CodeTemplate(
         	    "Creates a lookup group",
         	    CodeTemplateType.DRAG_AND_DROP_CODE,

@@ -689,6 +689,43 @@ public class LookupService {
 		}
 	}
 
+	public boolean putIfAbsent(int groupId, String key, String value, String userId) {
+		// Validate inputs
+		validateKey(key);
+		if (value == null) {
+			throw new IllegalArgumentException("Value cannot be null");
+		}
+
+		// Verify group exists
+		LookupGroup group = groupDao.getGroupById(groupId);
+		if (group == null) {
+			throw new GroupNotFoundException("Group not found with ID: " + groupId);
+		}
+
+		String tableName = getTableNameForGroup(groupId);
+
+		try {
+
+			boolean inserted = valueDao.putIfAbsent(tableName, key, value);
+
+			if (inserted) {
+				// Audit
+				recordAudit(groupId, tableName, key, "CREATE", null, value, userId);
+
+				logger.debug("Created lookup value - Group: {}, Key: {}", group.getName(), key);
+
+				// Update cache
+				LookupValue lookupValue = valueDao.getLookupValue(tableName, key);
+				if (lookupValue != null) {
+					cacheManager.putValue(groupId, key, value, lookupValue.getUpdatedDate());
+				}
+			}
+
+			return inserted;
+		} catch (Exception e) {
+			throw new ValueOperationException("Failed to putIfAbsent value: " + e.getMessage(), e);
+		}
+	}
 	// Statistics and Monitoring
 
 	/**

@@ -123,6 +123,12 @@
         UPDATED_DATE = CURRENT_TIMESTAMP
         WHERE KEY_VALUE = #{keyValue}
     </update>
+    
+	<insert id="putIfAbsent" parameterType="map">
+    	INSERT INTO ${tableName} (KEY_VALUE, VALUE_DATA)
+    	VALUES (#{keyValue}, #{valueData})
+    	ON CONFLICT (KEY_VALUE) DO NOTHING
+  	</insert>
 
     <delete id="deleteValue" parameterType="map">
         DELETE FROM ${tableName}
@@ -172,7 +178,7 @@
             LIMIT ${limit}
         </if>
     </select>
-
+  
     <!-- Statistics Operations -->
     <insert id="insertStatistics" parameterType="map">
         INSERT INTO LOOKUP_STATISTICS (

@@ -124,6 +124,11 @@
         WHERE KEY_VALUE = #{keyValue}
     </update>
 
+	<insert id="putIfAbsent" parameterType="map">
+	  INSERT IGNORE INTO ${tableName} (KEY_VALUE, VALUE_DATA)
+	  VALUES (#{keyValue}, #{valueData})
+	</insert>	
+
     <delete id="deleteValue" parameterType="map">
         DELETE FROM ${tableName}
         WHERE KEY_VALUE = #{keyValue}
