@@ -127,6 +127,7 @@ public class ValuePanel extends JPanel {
 		valueTable.getColumnModel().getColumn(LookupValueTableModel.ACTION_COLUMN).setCellRenderer(new ButtonRenderer());
 		valueTable.getColumnModel().getColumn(LookupValueTableModel.ACTION_COLUMN).setCellEditor(new ButtonEditor(valueTable, valueTableModel, e -> handleEditValue((Integer) e.getSource()), e -> handleRemoveValue((Integer) e.getSource())));
 		valueTable.getColumnModel().getColumn(LookupValueTableModel.ACTION_COLUMN).setPreferredWidth(120); // Adjust for button width
+		valueTable.getColumnModel().getColumn(LookupValueTableModel.ACTION_COLUMN).setMinWidth(120); // Adjust for button width
 
 		// Search/Filter button
 		searchButton = new JButton("Search", UIManager.getIcon("FileView.fileIcon"));
