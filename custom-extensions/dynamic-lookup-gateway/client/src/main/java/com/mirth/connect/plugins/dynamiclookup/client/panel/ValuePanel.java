@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -82,6 +83,7 @@ public class ValuePanel extends JPanel {
 	private JTextField valueFilterField;
 	private JButton searchButton;
 	private JButton addValueButton;
+	private JButton removeSelectedButton;
 	private JButton importCsvButton;
 	private JButton exportButton;
 	private JButton prevPageButton;
@@ -128,6 +130,12 @@ public class ValuePanel extends JPanel {
 		valueTable.getColumnModel().getColumn(LookupValueTableModel.ACTION_COLUMN).setCellEditor(new ButtonEditor(valueTable, valueTableModel, e -> handleEditValue((Integer) e.getSource()), e -> handleRemoveValue((Integer) e.getSource())));
 		valueTable.getColumnModel().getColumn(LookupValueTableModel.ACTION_COLUMN).setPreferredWidth(120); // Adjust for button width
 		valueTable.getColumnModel().getColumn(LookupValueTableModel.ACTION_COLUMN).setMinWidth(120); // Adjust for button width
+		valueTable.getSelectionModel().addListSelectionListener(e -> {
+			if (!e.getValueIsAdjusting()) {
+				boolean hasSelection = valueTable.getSelectedRowCount() > 0;
+				removeSelectedButton.setEnabled(hasSelection);
+			}
+		});
 
 		// Search/Filter button
 		searchButton = new JButton("Search", UIManager.getIcon("FileView.fileIcon"));
@@ -144,6 +152,13 @@ public class ValuePanel extends JPanel {
 		addValueButton.addActionListener(e -> {
 			handleAddValue();
 		});
+
+		// Value Buttons
+		removeSelectedButton = new JButton("Remove Selected");
+		removeSelectedButton.addActionListener(e -> {
+			handleRemoveSeleted();
+		});
+		removeSelectedButton.setEnabled(false);
 
 		importCsvButton = new JButton("Import Csv");
 		importCsvButton.addActionListener(e -> {
@@ -190,7 +205,8 @@ public class ValuePanel extends JPanel {
 		topButtonPanel.setBackground(UIConstants.BACKGROUND_COLOR);
 		topButtonPanel.add(valueFilterField, "w 150!, growx, split 2");
 		topButtonPanel.add(searchButton);
-		topButtonPanel.add(addValueButton, "gapleft push, split 3");
+		topButtonPanel.add(addValueButton, "gapleft push, split 4");
+		topButtonPanel.add(removeSelectedButton);
 		topButtonPanel.add(importCsvButton);
 		topButtonPanel.add(exportButton);
 
@@ -343,6 +359,145 @@ public class ValuePanel extends JPanel {
 		} else {
 			showError("Please select a Group");
 		}
+	}
+
+	private void handleRemoveSeleted() {
+		if (selectedGroup == null) {
+			return;
+		}
+
+		int[] selectedRows = valueTable.getSelectedRows();
+		if (selectedRows.length == 0) {
+			JOptionPane.showMessageDialog(this, "No rows selected.", "Delete", JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+
+		int confirm = JOptionPane.showConfirmDialog(this, "Delete " + selectedRows.length + " selected values?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+
+		if (confirm != JOptionPane.YES_OPTION) {
+			return;
+		}
+
+		List<String> keysToDelete = new ArrayList<>();
+		for (int row : selectedRows) {
+			int rowIndex = valueTable.convertRowIndexToModel(row);
+			LookupValue value = valueTableModel.getValue(rowIndex);
+			keysToDelete.add(value.getKeyValue());
+		}
+
+		// --- Progress dialog (modal) ---
+		final JDialog progressDialog = new JDialog(this.parent, "Deleting Values", true);
+		final JProgressBar progressBar = new JProgressBar(0, 100);
+		progressBar.setStringPainted(true);
+		final JLabel statusLabel = new JLabel("Deleted 0 of " + keysToDelete.size());
+		final JButton cancelButton = new JButton("Cancel");
+
+		JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+		buttonPanel.add(cancelButton);
+
+		progressDialog.setLayout(new BorderLayout(10, 10));
+		progressDialog.add(statusLabel, BorderLayout.NORTH);
+		progressDialog.add(progressBar, BorderLayout.CENTER);
+		progressDialog.add(buttonPanel, BorderLayout.SOUTH);
+		progressDialog.setSize(350, 120);
+		progressDialog.setLocationRelativeTo(this.parent);
+		progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+
+		SwingWorker<Void, int[]> worker = new SwingWorker<Void, int[]>() {
+
+			private final List<String> failedKeys = new ArrayList<>();
+			private int processed = 0;
+
+			@Override
+			protected Void doInBackground() {
+				for (String key : keysToDelete) {
+					if (isCancelled()) {
+						break;
+					}
+
+					try {
+						LookupServiceClient.getInstance().deleteValue(selectedGroup.getId(), key);
+					} catch (Exception ex) {
+						logger.warn("Failed to delete key '{}' in group {}: {}", key, selectedGroup.getId(), ex.getMessage());
+						failedKeys.add(key);
+					}
+
+					processed++;
+					publishProgress(processed, keysToDelete.size());
+				}
+
+				return null;
+			}
+
+			private void publishProgress(int processed, int total) {
+				int progress = total > 0 ? (int) ((processed / (double) total) * 100) : 0;
+				progress = Math.min(progress, 100);
+
+				publish(new int[] { progress, processed, total });
+			}
+
+			@Override
+			protected void process(List<int[]> chunks) {
+				if (!chunks.isEmpty()) {
+					int[] latest = chunks.get(chunks.size() - 1);
+					int pct = latest[0];
+					int done = latest[1];
+					int total = latest[2];
+					progressBar.setValue(pct);
+					statusLabel.setText("Deleted " + done + " of " + total);
+				}
+			}
+
+			@Override
+			protected void done() {
+				try {
+					progressDialog.dispose();
+					get(); // propagate exceptions if any
+
+					// Reload table once at the end
+					updateValues(selectedGroup);
+
+					if (isCancelled()) {
+						JOptionPane.showMessageDialog(parent, "Delete was cancelled. Completed " + processed + "/" + keysToDelete.size() + ".", "Delete Cancelled", JOptionPane.WARNING_MESSAGE);
+					} else {
+						if (failedKeys.isEmpty()) {
+							JOptionPane.showMessageDialog(parent, "Deleted " + processed + " values.", "Delete Complete", JOptionPane.INFORMATION_MESSAGE);
+						} else {
+							// Trim failed list for readability if large
+							String failedPreview = String.join(", ", failedKeys);
+							if (failedPreview.length() > 200) {
+								failedPreview = failedPreview.substring(0, 200) + "...";
+							}
+							JOptionPane.showMessageDialog(parent, "Deleted " + (processed - failedKeys.size()) + "/" + keysToDelete.size() + ". Failed: " + failedKeys.size() + " (" + failedPreview + ")", "Delete Completed with Errors", JOptionPane.WARNING_MESSAGE);
+						}
+					}
+				} catch (ExecutionException ex) {
+					Throwable cause = ex.getCause();
+					showError("Delete failed: " + (cause != null && cause.getMessage() != null ? cause.getMessage() : ex.getClass().getSimpleName()));
+				} catch (InterruptedException ex) {
+					Thread.currentThread().interrupt();
+					showError("Delete was interrupted.");
+				} finally {
+				}
+			}
+		};
+
+		// Cancel button
+		cancelButton.addActionListener(e -> worker.cancel(true));
+
+		// Window close confirmation
+		progressDialog.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent e) {
+				int confirm = JOptionPane.showConfirmDialog(progressDialog, "Delete is in progress. Do you want to cancel?", "Confirm Cancel", JOptionPane.YES_NO_OPTION);
+				if (confirm == JOptionPane.YES_OPTION) {
+					worker.cancel(true);
+				}
+			}
+		});
+
+		worker.execute();
+		progressDialog.setVisible(true);
 	}
 
 	private void handleEditValue(int row) {
