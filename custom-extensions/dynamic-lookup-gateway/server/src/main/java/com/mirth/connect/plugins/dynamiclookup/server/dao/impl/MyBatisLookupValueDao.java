@@ -10,9 +10,14 @@
 
 package com.mirth.connect.plugins.dynamiclookup.server.dao.impl;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionManager;
@@ -200,7 +205,13 @@ public class MyBatisLookupValueDao implements LookupValueDao {
 	public int importValues(String tableName, Map<String, String> values) {
 		int affectedRows = 0;
 		SqlSession session = sqlSessionManager.openSession();
-		boolean commitSuccess = false;
+
+		Set<String> existingKeys = findExistingKeys(tableName, values.keySet());
+		if (!existingKeys.isEmpty()) {
+			for (String key : existingKeys) {
+				values.remove(key);
+			}
+		}
 
 		try {
 			for (Map.Entry<String, String> entry : values.entrySet()) {
@@ -209,24 +220,24 @@ public class MyBatisLookupValueDao implements LookupValueDao {
 				params.put("keyValue", entry.getKey());
 				params.put("valueData", entry.getValue());
 				try {
-					session.insert("Lookup.insertValue", params);
-					affectedRows++;
+					int cnt = session.insert("Lookup.insertValue", params);
+					affectedRows += cnt;
 				} catch (Exception ignored) {
 				}
 			}
 
 			session.commit();
-		} finally {
-			if (!commitSuccess) {
-				try {
-					session.rollback();
-				} catch (Exception ignored) {
-				}
+
+			return affectedRows;
+		} catch (Exception e) {
+			try {
+				session.rollback();
+			} catch (Exception ignored) {
 			}
+			throw new RuntimeException("Import failed unexpectedly: " + e.getMessage(), e);
+		} finally {
 			session.close();
 		}
-
-		return affectedRows;
 	}
 
 	@Override
@@ -282,4 +293,50 @@ public class MyBatisLookupValueDao implements LookupValueDao {
 
 		return affectedRows > 0;
 	}
+
+	private Set<String> findExistingKeys(String tableName, Collection<String> keyValues) {
+		if (keyValues == null || keyValues.isEmpty()) {
+			return Collections.emptySet();
+		}
+
+		final int BATCH_SIZE = 1000;
+		Set<String> existing = new HashSet<>();
+		List<String> batch = new ArrayList<>(BATCH_SIZE);
+
+		SqlSession session = null;
+		try {
+			session = sqlSessionManager.openSession();
+
+			for (String k : keyValues) {
+				batch.add(k);
+				if (batch.size() == BATCH_SIZE) {
+					existing.addAll(selectExistingBatch(session, tableName, batch));
+					batch.clear();
+				}
+			}
+			if (!batch.isEmpty()) {
+				existing.addAll(selectExistingBatch(session, tableName, batch));
+			}
+
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to query existing keys: " + e.getMessage(), e);
+		} finally {
+			if (session != null) {
+				try {
+					session.close();
+				} catch (Exception ignored) {
+				}
+			}
+		}
+
+		return existing;
+	}
+
+	private List<String> selectExistingBatch(SqlSession session, String tableName, List<String> batch) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("tableName", tableName);
+		params.put("keyValues", batch);
+		return session.selectList("Lookup.selectExistingKeys", params);
+	}
+
 }

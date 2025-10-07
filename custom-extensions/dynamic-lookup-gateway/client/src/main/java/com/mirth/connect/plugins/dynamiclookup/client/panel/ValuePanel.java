@@ -26,10 +26,12 @@ import java.nio.file.Path;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
 import javax.swing.JButton;
@@ -597,6 +599,7 @@ public class ValuePanel extends JPanel {
 								int processedLines = 0;
 								int batchSize = 100;
 								Map<String, String> batchMap = new LinkedHashMap<>();
+								Set<String> seenKeys = new HashSet<>();
 
 								while ((line = reader2.readLine()) != null && !isCancelled()) {
 									lineNumber++;
@@ -605,12 +608,23 @@ public class ValuePanel extends JPanel {
 										continue;
 									}
 
-									if (line.trim().isEmpty())
+									if (line.trim().isEmpty()) {
 										continue;
+									}
 
 									Map.Entry<String, String> entry = CsvLineParser.parseLine(line, lineNumber);
 									if (entry == null) {
-										logger.warn("Skipping malformed or empty entry at line " + lineNumber + ": " + line);
+										logger.error("Skipping malformed or empty entry at line " + lineNumber + ": " + line);
+										continue;
+									}
+
+									String key = entry.getKey();
+
+									if (!seenKeys.add(key)) {
+										continue;
+									}
+
+									if (batchMap.containsKey(key)) {
 										continue;
 									}
 

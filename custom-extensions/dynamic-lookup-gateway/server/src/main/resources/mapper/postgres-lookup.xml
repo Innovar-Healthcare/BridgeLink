@@ -179,6 +179,15 @@
         </if>
     </select>
   
+   	<select id="selectExistingKeys" parameterType="map" resultType="string">
+	    SELECT KEY_VALUE
+	    FROM ${tableName}
+	    WHERE KEY_VALUE IN
+	    <foreach item="key" collection="keyValues" open="(" separator="," close=")">
+	      #{key}
+	    </foreach>
+  	</select>
+  	
     <!-- Statistics Operations -->
     <insert id="insertStatistics" parameterType="map">
         INSERT INTO LOOKUP_STATISTICS (
