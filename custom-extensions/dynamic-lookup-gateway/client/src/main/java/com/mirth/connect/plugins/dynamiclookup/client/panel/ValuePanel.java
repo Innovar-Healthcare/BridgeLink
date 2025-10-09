@@ -18,9 +18,11 @@ import java.awt.event.WindowEvent;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.SimpleDateFormat;
@@ -809,7 +811,9 @@ public class ValuePanel extends JPanel {
 				int total = -1;
 				boolean wroteHeader = false;
 
-				try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+				try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
+					// write content here
+
 					while (!isCancelled()) {
 						LookupAllValuesResponse page = LookupServiceClient.getInstance().getAllValues(selectedGroup.getId(), offset, limit, "");
 
