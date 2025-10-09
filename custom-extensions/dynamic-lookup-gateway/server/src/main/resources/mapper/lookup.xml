@@ -131,6 +131,14 @@
 	  	WHERE NOT EXISTS ( SELECT 1 FROM ${tableName} WHERE KEY_VALUE = #{keyValue})
 	</insert>
 
+	<update id="compareAndSwap" parameterType="map">
+	    UPDATE ${tableName}
+	    SET VALUE_DATA = #{newValue},
+	    UPDATED_DATE = CURRENT_TIMESTAMP
+	    WHERE KEY_VALUE = #{keyValue} 
+	    	AND CAST(VALUE_DATA AS VARCHAR(32672)) = CAST(#{expectedValue} AS VARCHAR(32672))
+	</update>
+	
     <delete id="deleteValue" parameterType="map">
         DELETE FROM ${tableName}
         WHERE KEY_VALUE = #{keyValue}

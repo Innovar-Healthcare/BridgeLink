@@ -44,4 +44,6 @@ public interface LookupValueDao {
 	long searchLookupValuesCount(String tableName, String pattern);
 
 	boolean putIfAbsent(String tableName, String keyValue, String valueData);
+
+	boolean compareAndSwap(String tableName, String keyValue, String expectedValue, String newValue);
 }

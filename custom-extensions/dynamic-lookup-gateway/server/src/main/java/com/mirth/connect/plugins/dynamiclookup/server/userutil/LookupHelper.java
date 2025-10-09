@@ -463,6 +463,35 @@ public class LookupHelper {
 	}
 
 	/**
+	 * Atomically updates the value of a lookup key if and only if its current value
+	 * matches the expected value.
+	 *
+	 * @param groupName     the name of the lookup group
+	 * @param key           the key whose value to conditionally update
+	 * @param expectedValue the value that must currently be stored for the update
+	 *                      to occur
+	 * @param newValue      the new value to set if the current value matches
+	 *                      {@code expectedValue}
+	 * @return {true} if the value was successfully updated; {false} if the key does
+	 *         not exist, the current value does not match {expectedValue}, or if an
+	 *         error occurred
+	 */
+	public static boolean compareAndSwap(String groupName, String key, String expectedValue, String newValue) {
+		try {
+			LookupGroup group = lookupService.getGroupByName(groupName);
+			if (group == null) {
+				logger.error("Lookup group not found: {}", groupName);
+				return false;
+			}
+
+			return lookupService.compareAndSwap(group.getId(), key, expectedValue, newValue, SYSTEM_USER_ID);
+		} catch (Exception e) {
+			logger.error("Failed to compareAndSwap lookup value [group='{}', key='{}', expectedValue='{}', newValue='{}']: {}", groupName, key, expectedValue, newValue, e.getMessage(), e);
+			return false;
+		}
+	}
+
+	/**
 	 * Creates a new lookup group from a JS transformer payload.
 	 * <p>
 	 * Expects a flat map with keys: name, description, version, cacheSize,

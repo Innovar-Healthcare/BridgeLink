@@ -152,6 +152,14 @@
 	    	VALUES (#{keyValue}, #{valueData})
 	</insert>
 
+	<update id="compareAndSwap" parameterType="map">
+	    UPDATE ${tableName}
+	    SET VALUE_DATA = #{newValue},
+	    UPDATED_DATE = SYSDATE
+	    WHERE KEY_VALUE = #{keyValue} 
+	    	AND DBMS_LOB.COMPARE(VALUE_DATA, TO_CLOB(#{expectedValue})) = 0
+	</update>	
+
     <delete id="deleteValue" parameterType="map">
         DELETE FROM ${tableName}
         WHERE KEY_VALUE = #{keyValue}

@@ -726,6 +726,55 @@ public class LookupService {
 			throw new ValueOperationException("Failed to putIfAbsent value: " + e.getMessage(), e);
 		}
 	}
+
+	/**
+	 * 
+	 * Performs an atomic compare-and-swap (CAS) operation on a lookup value within
+	 * the specified group.
+	 * 
+	 */
+	public boolean compareAndSwap(int groupId, String key, String expectedValue, String newValue, String userId) {
+		// Validate inputs
+		validateKey(key);
+		if (expectedValue == null) {
+			throw new IllegalArgumentException("expectedValue cannot be null");
+		}
+
+		if (newValue == null) {
+			throw new IllegalArgumentException("newValue cannot be null");
+		}
+
+		// Verify group exists
+		LookupGroup group = groupDao.getGroupById(groupId);
+		if (group == null) {
+			throw new GroupNotFoundException("Group not found with ID: " + groupId);
+		}
+
+		String tableName = getTableNameForGroup(groupId);
+
+		try {
+
+			boolean inserted = valueDao.compareAndSwap(tableName, key, expectedValue, newValue);
+
+			if (inserted) {
+				// Audit
+				recordAudit(groupId, tableName, key, "UPDATE", expectedValue, newValue, userId);
+
+				logger.debug("Created lookup value - Group: {}, Key: {}", group.getName(), key);
+
+				// Update cache
+				LookupValue lookupValue = valueDao.getLookupValue(tableName, key);
+				if (lookupValue != null) {
+					cacheManager.putValue(groupId, key, newValue, lookupValue.getUpdatedDate());
+				}
+			}
+
+			return inserted;
+		} catch (Exception e) {
+			throw new ValueOperationException("Failed to compareAndSwap value: " + e.getMessage(), e);
+		}
+	}
+
 	// Statistics and Monitoring
 
 	/**

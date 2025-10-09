@@ -294,6 +294,35 @@ public class MyBatisLookupValueDao implements LookupValueDao {
 		return affectedRows > 0;
 	}
 
+	@Override
+	public boolean compareAndSwap(String tableName, String keyValue, String expectedValue, String newValue) {
+		int affectedRows = 0;
+		SqlSession session = sqlSessionManager.openSession();
+		boolean commitSuccess = false;
+
+		try {
+			Map<String, Object> params = new HashMap<>();
+			params.put("tableName", tableName);
+			params.put("keyValue", keyValue);
+			params.put("expectedValue", expectedValue);
+			params.put("newValue", newValue);
+			affectedRows = session.insert("Lookup.compareAndSwap", params);
+
+			session.commit();
+			commitSuccess = true;
+		} finally {
+			if (!commitSuccess) {
+				try {
+					session.rollback();
+				} catch (Exception ignored) {
+				}
+			}
+			session.close();
+		}
+
+		return affectedRows > 0;
+	}
+
 	private Set<String> findExistingKeys(String tableName, Collection<String> keyValues) {
 		if (keyValues == null || keyValues.isEmpty()) {
 			return Collections.emptySet();

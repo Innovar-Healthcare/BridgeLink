@@ -180,6 +180,19 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
         ));
         
         templates.add(new CodeTemplate(
+        	    "Compare and Swap Lookup Value",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var success = LookupHelper.compareAndSwap(group, key, expectedValue, newValue);\n" +
+	    		"if (!success) {\n" +
+	    		"  logger.warn('Compare-and-swap failed for group: ' + group + ', key: ' + key + ', expectedValue: ' + expectedValue + ', newValue: ' + newValue);\n" +
+	    		"}",
+        	    "Atomically updates a lookup value only if its current value matches the expected value. " +
+        	    "Returns true if the value was successfully updated; false if the key does not exist, the value does not match, or an error occurred."
+       	));
+
+        
+        templates.add(new CodeTemplate(
         	    "Creates a lookup group",
         	    CodeTemplateType.DRAG_AND_DROP_CODE,
         	    CodeTemplateContextSet.getConnectorContextSet(),

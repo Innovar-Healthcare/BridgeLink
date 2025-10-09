@@ -125,9 +125,16 @@
     </update>
 
 	<insert id="putIfAbsent" parameterType="map">
-	  INSERT IGNORE INTO ${tableName} (KEY_VALUE, VALUE_DATA)
-	  VALUES (#{keyValue}, #{valueData})
+	  	INSERT IGNORE INTO ${tableName} (KEY_VALUE, VALUE_DATA)
+	  	VALUES (#{keyValue}, #{valueData})
 	</insert>	
+
+	<update id="compareAndSwap" parameterType="map">
+	    UPDATE ${tableName}
+	    SET VALUE_DATA = #{newValue},
+	    UPDATED_DATE = CURRENT_TIMESTAMP
+	    WHERE KEY_VALUE = #{keyValue} AND VALUE_DATA = #{expectedValue}
+	</update>
 
     <delete id="deleteValue" parameterType="map">
         DELETE FROM ${tableName}
