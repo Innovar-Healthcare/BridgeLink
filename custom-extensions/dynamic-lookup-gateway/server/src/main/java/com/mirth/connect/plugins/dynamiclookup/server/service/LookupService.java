@@ -851,6 +851,15 @@ public class LookupService {
 	}
 
 	/**
+	 * Deletes all audit entries older than the specified cutoff date.
+	 */
+	public int deleteAuditEntriesBefore(Date cutoff) {
+		long count = auditDao.deleteAuditEntriesBefore(cutoff);
+
+		return Math.toIntExact(count);
+	}
+
+	/**
 	 * Clears the in-memory cache for a specific lookup group.
 	 */
 	public void clearGroupCache(int groupId) {
