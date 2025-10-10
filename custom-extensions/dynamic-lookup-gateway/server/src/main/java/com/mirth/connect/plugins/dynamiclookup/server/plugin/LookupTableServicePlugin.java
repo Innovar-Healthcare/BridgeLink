@@ -12,66 +12,34 @@ package com.mirth.connect.plugins.dynamiclookup.server.plugin;
 
 import static com.mirth.connect.plugins.dynamiclookup.shared.interfaces.LookupTableServletInterface.PERMISSION_ACCESS;
 
-import java.util.List;
 import java.util.Properties;
 
-import org.apache.ibatis.session.SqlSessionManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.api.util.OperationUtil;
 import com.mirth.connect.model.ExtensionPermission;
+import com.mirth.connect.plugins.MergePropertiesInterface;
 import com.mirth.connect.plugins.ServicePlugin;
-import com.mirth.connect.plugins.dynamiclookup.server.cache.LookupCacheManager;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupAuditDao;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupGroupDao;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupStatisticsDao;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupValueDao;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.impl.MyBatisLookupAuditDao;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.impl.MyBatisLookupGroupDao;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.impl.MyBatisLookupStatisticsDao;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.impl.MyBatisLookupValueDao;
-import com.mirth.connect.plugins.dynamiclookup.server.migration.LookupDatabaseMigrator;
-import com.mirth.connect.plugins.dynamiclookup.server.service.LookupService;
-import com.mirth.connect.plugins.dynamiclookup.server.userutil.LookupHelper;
-import com.mirth.connect.plugins.dynamiclookup.server.util.SqlSessionManagerProvider;
+import com.mirth.connect.plugins.dynamiclookup.server.controller.LookupTableController;
+import com.mirth.connect.plugins.dynamiclookup.server.exception.LookupTableException;
 import com.mirth.connect.plugins.dynamiclookup.shared.interfaces.LookupTableServletInterface;
-import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
-import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 
 /**
  * @author Thai Tran (thaitran@innovarhealthcare.com)
  * @create 2025-05-13 10:25 AM
  */
 
-public class LookupTableServicePlugin implements ServicePlugin {
+public class LookupTableServicePlugin implements ServicePlugin, MergePropertiesInterface {
 	private final Logger logger = LogManager.getLogger(this.getClass());
-	private final LookupService lookupService = LookupService.getInstance();
-	private LookupCacheManager cacheManager;
+	private final LookupTableController lookupTableController = LookupTableController.getInstance();
 
 	@Override
 	public void init(Properties properties) {
-		logger.info("Initializing Lookup Table Management System plugin...");
 		try {
-			SqlSessionManager sqlSessionManager = getSqlSessionManager();
-
-			// Initialize database if needed
-			new LookupDatabaseMigrator(sqlSessionManager).initializeDatabase();
-
-			// Create DAO instances
-			LookupGroupDao groupDao = new MyBatisLookupGroupDao(sqlSessionManager);
-			LookupValueDao valueDao = new MyBatisLookupValueDao(sqlSessionManager);
-			LookupAuditDao auditDao = new MyBatisLookupAuditDao(sqlSessionManager);
-			LookupStatisticsDao statisticsDao = new MyBatisLookupStatisticsDao(sqlSessionManager);
-
-			// Create cache manager
-			cacheManager = new LookupCacheManager(groupDao);
-			// Init lookup service
-			lookupService.init(groupDao, valueDao, auditDao, statisticsDao, cacheManager);
-			// Initialize helper methods for transformers
-			LookupHelper.initialize(lookupService);
-			logger.info("Lookup Table Management System plugin initialized successfully");
-		} catch (Exception e) {
+			lookupTableController.init(properties);
+		} catch (LookupTableException e) {
 			logger.error("Error initializing Lookup Table Management System plugin", e);
 			throw new RuntimeException("Failed to initialize plugin: " + e.getMessage(), e);
 		}
@@ -79,7 +47,11 @@ public class LookupTableServicePlugin implements ServicePlugin {
 
 	@Override
 	public void update(Properties properties) {
-
+		try {
+			lookupTableController.update(properties);
+		} catch (LookupTableException e) {
+			logger.error("Failed to update Lookup Table Management System plugin", e);
+		}
 	}
 
 	@Override
@@ -101,90 +73,24 @@ public class LookupTableServicePlugin implements ServicePlugin {
 
 	@Override
 	public void start() {
-		logger.info("Starting Lookup Table Management System plugin...");
 		try {
-			// Preload lookup tables for better performance
-			preloadLookupTables();
-			logger.info("Lookup Table Management System plugin started successfully");
-		} catch (Exception e) {
-			logger.error("Error starting Lookup Table Management System plugin", e);
+			lookupTableController.start();
+		} catch (LookupTableException e) {
+			logger.error("Failed to start Lookup Table Management System plugin", e);
 		}
 	}
 
 	@Override
 	public void stop() {
-		logger.info("Stopping Lookup Table Management System plugin...");
 		try {
-			// Clear all caches
-			if (cacheManager != null) {
-				cacheManager.clearAllCaches();
-			}
-			logger.info("Lookup Table Management System plugin stopped successfully");
-		} catch (Exception e) {
-			logger.error("Error stopping Lookup Table Management System plugin", e);
+			lookupTableController.stop();
+		} catch (LookupTableException e) {
+			logger.error("Failed to stop Lookup Table Management System plugin", e);
 		}
 	}
 
-	/**
-	 * Get SqlSessionManager from Mirth's context
-	 */
-	private SqlSessionManager getSqlSessionManager() {
-		return SqlSessionManagerProvider.get();
-	}
-
-	/**
-	 * Preload frequently used lookup tables
-	 */
-	private void preloadLookupTables() {
-		logger.info("Preloading lookup tables...");
-		try {
-			List<LookupGroup> groups = lookupService.getAllGroups();
-			int count = 0;
-			for (LookupGroup group : groups) {
-				// Build cache instance for this group
-				cacheManager.createOrRebuildGroupCache(group);
-
-				int size = group.getCacheSize();
-
-				if (size <= 0) {
-					// disabled – skip preload values
-					continue;
-				}
-
-				// Load values into cache
-				int valueCount = preloadGroupValues(group);
-				if (valueCount > 0) {
-					count++;
-					logger.info("Preloaded {} values for group: {} (ID: {})", valueCount, group.getName(), group.getId());
-				}
-			}
-			logger.info("Completed preloading {} lookup groups", count);
-		} catch (Exception e) {
-			logger.error("Error preloading lookup tables", e);
-		}
-	}
-
-	/**
-	 * Preload values for a specific group
-	 */
-	private int preloadGroupValues(LookupGroup group) {
-		try {
-			int limit = group.getCacheSize() * 2;
-			List<LookupValue> values = lookupService.searchLookupValues(group.getId(), 0, limit, null);
-
-			// Skip if the group is empty or too large for caching
-			if (values == null || values.isEmpty()) {
-				return 0;
-			}
-
-			// Load values into cache
-			for (LookupValue value : values) {
-				cacheManager.putValue(group.getId(), value.getKeyValue(), value.getValueData(), value.getUpdatedDate());
-			}
-			return values.size();
-		} catch (Exception e) {
-			logger.warn("Failed to preload values for group: {} (ID: {}): {}", group.getName(), group.getId(), e.getMessage());
-			return 0;
-		}
+	@Override
+	public void modifyPropertiesOnRestore(Properties properties) throws ControllerException {
+		lookupTableController.onRestoreTriggered();
 	}
 }

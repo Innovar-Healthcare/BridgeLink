@@ -304,4 +304,9 @@
         FROM LOOKUP_AUDIT
         <include refid="searchAuditEntriesBody"/>
     </select>
+    
+    <delete id="deleteAuditEntriesBefore" parameterType="map">
+        DELETE FROM LOOKUP_AUDIT
+        WHERE AUDIT_TIMESTAMP &lt; #{cutoff}
+    </delete>
 </mapper>
