@@ -106,7 +106,7 @@
     <select id="getMatchingLookupValues" parameterType="map" resultMap="lookup-value">
         SELECT KEY_VALUE, VALUE_DATA
         FROM ${tableName}
-        WHERE LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyPattern} || '%')
+        WHERE LOWER(KEY_VALUE) LIKE LOWER('%' + #{keyPattern} + '%')
     </select>
 
     <select id="getValue" parameterType="map" resultType="String">
