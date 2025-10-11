@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <pluginMetaData path="dynamic-lookup-gateway">
-    <name>Dynamic Lookup Gateway</name>
+    <name>Lookup Table Management System</name>
     <author>Daniel Svanstedt, Thai Tran</author>
-    <pluginVersion>1.0.1</pluginVersion>
+    <pluginVersion>2.0.0</pluginVersion>
     <mirthVersion>4.5.3, 4.5.4, 4.6.0</mirthVersion>
     <url>https://www.innovarhealthcare.com</url>
     <description>This plugin provides a centralized repository for key-value pairs used across channel</description>
