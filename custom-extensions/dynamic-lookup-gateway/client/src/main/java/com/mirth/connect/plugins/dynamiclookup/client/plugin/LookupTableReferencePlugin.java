@@ -191,7 +191,18 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
         	    "Returns true if the value was successfully updated; false if the key does not exist, the value does not match, or an error occurred."
        	));
 
-        
+        templates.add(new CodeTemplate(
+        	    "Update Lookup Value by Delta",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var success = LookupHelper.updateValueByDelta(group, key, delta);\n" +
+        	    "if (!success) {\n" +
+        	    "  logger.warn('Failed to update lookup value by delta for group: ' + group + ', key: ' + key + ', delta: ' + delta);\n" +
+        	    "}",
+        	    "Atomically increments or decrements the numeric value of a lookup key by the specified delta. " +
+        	    "Returns true if the value was successfully updated; false if the group or key was not found, or if an error occurred."
+    	));
+
         templates.add(new CodeTemplate(
         	    "Creates a lookup group",
         	    CodeTemplateType.DRAG_AND_DROP_CODE,

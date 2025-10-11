@@ -760,7 +760,7 @@ public class LookupService {
 				// Audit
 				recordAudit(groupId, tableName, key, "UPDATE", expectedValue, newValue, userId);
 
-				logger.debug("Created lookup value - Group: {}, Key: {}", group.getName(), key);
+				logger.debug("Compare and swap lookup value - Group: {}, Key: {}", group.getName(), key);
 
 				// Update cache
 				LookupValue lookupValue = valueDao.getLookupValue(tableName, key);
@@ -775,6 +775,62 @@ public class LookupService {
 		}
 	}
 
+	public boolean updateValueByDelta(int groupId, String key, long delta, String userId) {
+		// Validate inputs
+		validateKey(key);
+
+		// Verify group exists
+		LookupGroup group = groupDao.getGroupById(groupId);
+		if (group == null) {
+			throw new GroupNotFoundException("Group not found with ID: " + groupId);
+		}
+
+		String tableName = getTableNameForGroup(groupId);
+		String existingValue = valueDao.getValue(tableName, key);
+		if (existingValue == null) {
+			logger.error("Value not found with key: {}", key);
+			return false;
+		}
+
+		// validate value is number
+		long current;
+		try {
+			current = Long.parseLong(existingValue.trim());
+		} catch (NumberFormatException nfe) {
+			logger.error("Current value is not a valid number for key: {} (value='{}')", key, existingValue);
+			return false;
+		}
+
+		long newValue;
+		try {
+			newValue = Math.addExact(current, delta);
+		} catch (ArithmeticException overflow) {
+			logger.error("Overflow when applying delta {} to current value {}", delta, current);
+			return false;
+		}
+
+		try {
+
+			boolean updated = valueDao.updateValueByDelta(tableName, key, delta);
+
+			if (updated) {
+				// Audit
+				recordAudit(groupId, tableName, key, "UPDATE", existingValue, "delta: " + delta, userId);
+
+				logger.debug("Update lookup value by delta - Group: {}, Key: {}, Delta: {}", group.getName(), key, delta);
+
+				// Update cache
+				LookupValue lookupValue = valueDao.getLookupValue(tableName, key);
+				if (lookupValue != null) {
+					cacheManager.putValue(groupId, key, lookupValue.getValueData(), lookupValue.getUpdatedDate());
+				}
+			}
+
+			return updated;
+		} catch (Exception e) {
+			throw new ValueOperationException("Failed to updateValueByDelta. Error: " + e.getMessage(), e);
+		}
+	}
 	// Statistics and Monitoring
 
 	/**

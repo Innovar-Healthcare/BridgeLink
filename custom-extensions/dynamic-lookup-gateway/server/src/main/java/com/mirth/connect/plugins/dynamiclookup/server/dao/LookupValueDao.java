@@ -46,4 +46,6 @@ public interface LookupValueDao {
 	boolean putIfAbsent(String tableName, String keyValue, String valueData);
 
 	boolean compareAndSwap(String tableName, String keyValue, String expectedValue, String newValue);
+
+	boolean updateValueByDelta(String tableName, String keyValue, Long delta);
 }

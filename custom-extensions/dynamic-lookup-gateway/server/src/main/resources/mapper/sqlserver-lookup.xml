@@ -143,6 +143,13 @@
 	    WHERE KEY_VALUE = #{keyValue} AND VALUE_DATA = #{expectedValue}
 	</update>
 
+	<update id="updateValueByDelta" parameterType="map">
+	    UPDATE ${tableName}
+	    SET VALUE_DATA = CAST(CAST(VALUE_DATA AS BIGINT) + #{delta} AS NVARCHAR(MAX)),
+	    UPDATED_DATE = CURRENT_TIMESTAMP
+	    WHERE KEY_VALUE = #{keyValue}
+	</update>
+
     <delete id="deleteValue" parameterType="map">
         DELETE FROM ${tableName}
         WHERE KEY_VALUE = #{keyValue}

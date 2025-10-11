@@ -36,6 +36,8 @@ import com.mirth.connect.plugins.dynamiclookup.server.maintenance.AuditPurgeTask
 import com.mirth.connect.plugins.dynamiclookup.server.migration.LookupDatabaseMigrator;
 import com.mirth.connect.plugins.dynamiclookup.server.service.LookupService;
 import com.mirth.connect.plugins.dynamiclookup.server.userutil.LookupHelper;
+import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect;
+import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect.DatabaseType;
 import com.mirth.connect.plugins.dynamiclookup.server.util.SqlSessionManagerProvider;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupProperties;
@@ -83,8 +85,9 @@ public class LookupTableController implements LookupPropertiesProvider {
 			new LookupDatabaseMigrator(sqlSessionManager).initializeDatabase();
 
 			// Create DAO instances
+			DatabaseType dbType = DatabaseDialect.determineDatabaseType(sqlSessionManager);
 			LookupGroupDao groupDao = new MyBatisLookupGroupDao(sqlSessionManager);
-			LookupValueDao valueDao = new MyBatisLookupValueDao(sqlSessionManager);
+			LookupValueDao valueDao = new MyBatisLookupValueDao(sqlSessionManager, dbType);
 			LookupAuditDao auditDao = new MyBatisLookupAuditDao(sqlSessionManager);
 			LookupStatisticsDao statisticsDao = new MyBatisLookupStatisticsDao(sqlSessionManager);
 

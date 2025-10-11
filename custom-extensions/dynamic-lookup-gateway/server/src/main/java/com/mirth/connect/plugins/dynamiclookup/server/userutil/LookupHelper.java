@@ -492,6 +492,31 @@ public class LookupHelper {
 	}
 
 	/**
+	 * Atomically increments or decrements the numeric value of a lookup key by the
+	 * specified delta.
+	 *
+	 * @param groupName the name of the lookup group containing the key
+	 * @param key       the key whose numeric value should be adjusted
+	 * @param delta     the amount to add (positive) or subtract (negative)
+	 * @return {@code true} if the value was successfully updated; {@code false} if
+	 *         the group or key was not found, or if an error occurred
+	 */
+	public static boolean updateValueByDelta(String groupName, String key, long delta) {
+		try {
+			LookupGroup group = lookupService.getGroupByName(groupName);
+			if (group == null) {
+				logger.error("Lookup group not found: {}", groupName);
+				return false;
+			}
+
+			return lookupService.updateValueByDelta(group.getId(), key, delta, SYSTEM_USER_ID);
+		} catch (Exception e) {
+			logger.error("Failed to updateValueByDelta lookup value [group='{}', key='{}', delta='{}']: {}", groupName, key, delta, e.getMessage(), e);
+			return false;
+		}
+	}
+
+	/**
 	 * Creates a new lookup group from a JS transformer payload.
 	 * <p>
 	 * Expects a flat map with keys: name, description, version, cacheSize,

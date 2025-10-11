@@ -23,13 +23,17 @@ import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionManager;
 
 import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupValueDao;
+import com.mirth.connect.plugins.dynamiclookup.server.exception.ValueOperationException;
+import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect.DatabaseType;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 
 public class MyBatisLookupValueDao implements LookupValueDao {
 	private SqlSessionManager sqlSessionManager;
+	DatabaseType dbType;
 
-	public MyBatisLookupValueDao(SqlSessionManager sqlSessionManager) {
+	public MyBatisLookupValueDao(SqlSessionManager sqlSessionManager, DatabaseType dbType) {
 		this.sqlSessionManager = sqlSessionManager;
+		this.dbType = dbType;
 	}
 
 	@Override
@@ -321,6 +325,38 @@ public class MyBatisLookupValueDao implements LookupValueDao {
 		}
 
 		return affectedRows > 0;
+	}
+
+	@Override
+	public boolean updateValueByDelta(String tableName, String keyValue, Long delta) {
+		if (dbType == DatabaseType.DERBY) {
+			throw new ValueOperationException("Atomic delta update is not supported on Derby (CLOB field).");
+		}
+
+		SqlSession session = sqlSessionManager.openSession();
+		boolean commitSuccess = false;
+
+		try {
+			Map<String, Object> params = new HashMap<>();
+			params.put("tableName", tableName);
+			params.put("keyValue", keyValue);
+			params.put("delta", delta);
+
+			int update = session.update("Lookup.updateValueByDelta", params);
+
+			session.commit();
+			commitSuccess = true;
+
+			return update > 0;
+		} finally {
+			if (!commitSuccess) {
+				try {
+					session.rollback();
+				} catch (Exception ignored) {
+				}
+			}
+			session.close();
+		}
 	}
 
 	private Set<String> findExistingKeys(String tableName, Collection<String> keyValues) {

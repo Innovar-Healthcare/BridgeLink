@@ -139,7 +139,7 @@
 	    	AND CAST(VALUE_DATA AS VARCHAR(32672)) = CAST(#{expectedValue} AS VARCHAR(32672))
 	</update>
 
-    <delete id="deleteValue" parameterType="map">
+	<delete id="deleteValue" parameterType="map">
         DELETE FROM ${tableName}
         WHERE KEY_VALUE = #{keyValue}
     </delete>
