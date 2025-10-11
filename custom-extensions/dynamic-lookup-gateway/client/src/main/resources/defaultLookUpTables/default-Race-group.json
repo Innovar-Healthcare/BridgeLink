@@ -1,0 +1,24 @@
+{
+  "group" : {
+    "id" : 30,
+    "name" : "Race",
+    "description" : "Default Race values",
+    "version" : "1.0.0",
+    "cacheSize" : 1000,
+    "cachePolicy" : "LRU",
+    "createdDate" : "2025-08-22T15:23:21.015+00:00",
+    "updatedDate" : "2025-08-22T15:35:19.756+00:00"
+  },
+  "values" : {
+    "1002-5" : "American Indian or Alaska Native",
+    "2028-9" : "Asian",
+    "2054-5" : "Black or African American",
+    "2076-8" : "Native Hawaiian or Other Pacific Islander",
+    "2106-3" : "White",
+    "2131-1" : "Other Race",
+    "ASK" : "Asked but no answer",
+    "NI" : "No Information",
+    "UNK" : "Unknown"
+  },
+  "exportDate" : "2025-08-22T15:38:11.861+00:00"
+}

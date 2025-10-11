@@ -10,42 +10,26 @@
 
 package com.mirth.connect.plugins.dynamiclookup.server.cache;
 
-import java.util.Collections;
-import java.util.Map;
-
-public class FifoCacheWrapper<K, V> implements SimpleCache<K, V> {
-	private final Map<K, V> map;
-
-	public FifoCacheWrapper(int maxSize) {
-		if (maxSize <= 0) {
-			throw new IllegalArgumentException("FifoCache maxSize must be > 0");
-		}
-
-		this.map = Collections.synchronizedMap(new FifoCache<>(maxSize));
-	}
-
+public class NoCacheWrapper<K, V> implements SimpleCache<K, V> {
 	@Override
 	public V get(K key) {
-		return map.get(key);
+		return null;
 	}
 
 	@Override
 	public void put(K key, V value) {
-		map.put(key, value);
-	}
+		/* no-op */ }
 
 	@Override
 	public void remove(K key) {
-		map.remove(key);
-	}
+		/* no-op */ }
 
 	@Override
 	public void clear() {
-		map.clear();
-	}
+		/* no-op */ }
 
 	@Override
 	public int size() {
-		return map.size();
+		return 0;
 	}
 }

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <pluginMetaData path="dynamic-lookup-gateway">
-    <name>Dynamic Lookup Gateway</name>
+    <name>Lookup Table Management System</name>
     <author>Daniel Svanstedt, Thai Tran</author>
-    <pluginVersion>1.0.0</pluginVersion>
-    <mirthVersion>4.5.3, 4.5.4</mirthVersion>
+    <pluginVersion>2.0.0</pluginVersion>
+    <mirthVersion>4.5.3, 4.5.4, 4.6.0</mirthVersion>
     <url>https://www.innovarhealthcare.com</url>
     <description>This plugin provides a centralized repository for key-value pairs used across channel</description>
     <clientClasses>
@@ -17,6 +17,7 @@
     <library path="dynamic-lookup-gateway-client.jar" type="CLIENT"/>
     <library path="libs/jfreechart-1.5.6.jar" type="CLIENT"/>
     <library path="libs/opencsv-5.9.jar" type="CLIENT"/>
+    <library path="libs/opencsv-5.9.jar" type="SHARED"/>
     <apiProvider name="com.mirth.connect.plugins.dynamiclookup.shared.interfaces.LookupTableServletInterface" type="SERVLET_INTERFACE"/>
     <apiProvider name="com.mirth.connect.plugins.dynamiclookup.server.servlet.LookupTableServlet" type="SERVER_CLASS"/>
     <templateClassName>com.mirth.connect.plugins.dynamiclookup.client.plugin.LookupTableReferencePlugin</templateClassName>

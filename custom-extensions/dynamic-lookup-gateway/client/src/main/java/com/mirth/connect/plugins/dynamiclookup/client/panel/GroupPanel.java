@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mirth.connect.client.ui.Frame;
 import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.client.ui.UIConstants;
+import com.mirth.connect.plugins.dynamiclookup.client.dialog.ImportLookupGroupDialog;
 import com.mirth.connect.plugins.dynamiclookup.client.dialog.LookupGroupDialog;
 import com.mirth.connect.plugins.dynamiclookup.client.exception.LookupApiClientException;
 import com.mirth.connect.plugins.dynamiclookup.client.model.LookupGroupTableModel;
@@ -61,8 +62,11 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -72,6 +76,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Collections;
+import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -204,197 +209,221 @@ public class GroupPanel extends JPanel {
         }
     }
 
-    private void handleImportJson() {
-        JFileChooser importFileChooser = new JFileChooser();
-        importFileChooser.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
+    private void importFromJSON(File file) {
+        if (file == null || !checkJsonFile(file)) return;
 
-        File currentDir = new File(Frame.userPreferences.get("currentDirectory", ""));
-        if (currentDir.exists()) {
-            importFileChooser.setCurrentDirectory(currentDir);
-        }
+        int result = JOptionPane.showConfirmDialog(
+                parent,
+                "<html>If the group you're importing already exists,<br>"
+                        + "<b>its information will be updated</b> and <b>all existing values will be permanently deleted</b> and replaced.<br><br>"
+                        + "Do you want to proceed with updating the group?</html>",
+                "Confirm Import Overwrite",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
 
-        if (importFileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File file = importFileChooser.getSelectedFile();
-            if (file == null || !checkJsonFile(file)) return;
+        if (result != JOptionPane.YES_OPTION) return;
 
-            int result = JOptionPane.showConfirmDialog(
-                    parent,
-                    "<html>If the group you're importing already exists,<br>"
-                            + "<b>its information will be updated</b> and <b>all existing values will be permanently deleted</b> and replaced.<br><br>"
-                            + "Do you want to proceed with updating the group?</html>",
-                    "Confirm Import Overwrite",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE
-            );
+        JDialog progressDialog = new JDialog(parent, "Importing JSON", true);
+        JProgressBar progressBar = new JProgressBar(0, 100);
+        progressBar.setStringPainted(true);
+        JLabel statusLabel = new JLabel("Imported 0 entries");
+        JButton cancelButton = new JButton("Cancel");
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttonPanel.add(cancelButton);
 
-            if (result != JOptionPane.YES_OPTION) return;
+        progressDialog.setLayout(new BorderLayout(10, 10));
+        progressDialog.add(statusLabel, BorderLayout.NORTH);
+        progressDialog.add(progressBar, BorderLayout.CENTER);
+        progressDialog.add(buttonPanel, BorderLayout.SOUTH);
+        progressDialog.setSize(350, 120);
+        progressDialog.setLocationRelativeTo(parent);
+        progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
 
-            JDialog progressDialog = new JDialog(parent, "Importing JSON", true);
-            JProgressBar progressBar = new JProgressBar(0, 100);
-            progressBar.setStringPainted(true);
-            JLabel statusLabel = new JLabel("Imported 0 entries");
-            JButton cancelButton = new JButton("Cancel");
-            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-            buttonPanel.add(cancelButton);
+        SwingWorker<Void, int[]> importWorker = new SwingWorker<Void, int[]>() {
+            int finalGroupId = -1;
 
-            progressDialog.setLayout(new BorderLayout(10, 10));
-            progressDialog.add(statusLabel, BorderLayout.NORTH);
-            progressDialog.add(progressBar, BorderLayout.CENTER);
-            progressDialog.add(buttonPanel, BorderLayout.SOUTH);
-            progressDialog.setSize(350, 120);
-            progressDialog.setLocationRelativeTo(parent);
-            progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+            @Override
+            protected Void doInBackground() throws Exception {
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode root = mapper.readTree(file);
+                int totalCount = 0;
+                JsonNode valuesNode = root.get("values");
+                if (valuesNode != null && valuesNode.isObject()) {
+                    totalCount = valuesNode.size();
+                }
 
-            SwingWorker<Void, int[]> importWorker = new SwingWorker<Void, int[]>() {
-                int finalGroupId = -1;
+                try (JsonParser parser = mapper.getFactory().createParser(file)) {
+                    int groupId = -1;
+                    boolean groupImported = false;
+                    int batchSize = 1000;
+                    int processed = 0;
+                    Map<String, String> batch = new LinkedHashMap<>();
 
-                @Override
-                protected Void doInBackground() throws Exception {
-                    ObjectMapper mapper = new ObjectMapper();
-                    JsonNode root = mapper.readTree(file);
-                    int totalCount = 0;
-                    JsonNode valuesNode = root.get("values");
-                    if (valuesNode != null && valuesNode.isObject()) {
-                        totalCount = valuesNode.size();
+                    JsonToken token = parser.nextToken(); // Advance to first token
+                    if (token != JsonToken.START_OBJECT) {
+                        throw new IllegalStateException("Expected START_OBJECT at beginning of JSON file.");
                     }
 
-                    try (JsonParser parser = mapper.getFactory().createParser(file)) {
-                        int groupId = -1;
-                        boolean groupImported = false;
-                        int batchSize = 1000;
-                        int processed = 0;
-                        Map<String, String> batch = new LinkedHashMap<>();
+                    while (parser.nextToken() != JsonToken.END_OBJECT) {
+                        String fieldName = parser.getCurrentName();
+                        if ("group".equals(fieldName)) {
+                            parser.nextToken();
+                            JsonNode groupNode = parser.readValueAsTree();
 
-                        JsonToken token = parser.nextToken(); // Advance to first token
-                        if (token != JsonToken.START_OBJECT) {
-                            throw new IllegalStateException("Expected START_OBJECT at beginning of JSON file.");
-                        }
+                            ImportLookupGroupRequest request = new ImportLookupGroupRequest();
+                            request.setGroup(JsonUtils.fromJson(groupNode.toString(), LookupGroup.class));
+                            request.setValues(Collections.emptyMap());
+                            request.validate();
 
-                        while (parser.nextToken() != JsonToken.END_OBJECT) {
-                            String fieldName = parser.getCurrentName();
-                            if ("group".equals(fieldName)) {
+                            ImportLookupGroupResponse response = LookupServiceClient.getInstance().importGroup(true, JsonUtils.toJson(request));
+                            groupId = response.getGroupId();
+                            groupImported = true;
+                            finalGroupId = groupId;
+                        } else if ("values".equals(fieldName)) {
+                            if (!groupImported) {
+                                throw new IllegalStateException("JSON file does not contain a valid 'group' object.");
+                            }
+                            parser.nextToken();
+                            while (parser.nextToken() != JsonToken.END_OBJECT && !isCancelled()) {
+                                String key = parser.getCurrentName();
                                 parser.nextToken();
-                                JsonNode groupNode = parser.readValueAsTree();
+                                String value = parser.getValueAsString();
+                                batch.put(key, value);
+                                processed++;
 
-                                ImportLookupGroupRequest request = new ImportLookupGroupRequest();
-                                request.setGroup(JsonUtils.fromJson(groupNode.toString(), LookupGroup.class));
-                                request.setValues(Collections.emptyMap());
-                                request.validate();
-
-                                ImportLookupGroupResponse response = LookupServiceClient.getInstance().importGroup(true, JsonUtils.toJson(request));
-                                groupId = response.getGroupId();
-                                groupImported = true;
-                                finalGroupId = groupId;
-                            } else if ("values".equals(fieldName)) {
-                                if (!groupImported) {
-                                    throw new IllegalStateException("JSON file does not contain a valid 'group' object.");
-                                }
-                                parser.nextToken();
-                                while (parser.nextToken() != JsonToken.END_OBJECT && !isCancelled()) {
-                                    String key = parser.getCurrentName();
-                                    parser.nextToken();
-                                    String value = parser.getValueAsString();
-                                    batch.put(key, value);
-                                    processed++;
-
-                                    if (batch.size() >= batchSize) {
-                                        LookupServiceClient.getInstance().importValues(groupId, false, batch);
-                                        batch.clear();
-                                        publishProgress(processed, totalCount);
-                                    }
-                                }
-
-                                if (!batch.isEmpty() && !isCancelled()) {
+                                if (batch.size() >= batchSize) {
                                     LookupServiceClient.getInstance().importValues(groupId, false, batch);
+                                    batch.clear();
                                     publishProgress(processed, totalCount);
                                 }
-                            } else {
-                                parser.skipChildren();
                             }
+
+                            if (!batch.isEmpty() && !isCancelled()) {
+                                LookupServiceClient.getInstance().importValues(groupId, false, batch);
+                                publishProgress(processed, totalCount);
+                            }
+                        } else {
+                            parser.skipChildren();
                         }
-
-                        Frame.userPreferences.put("currentDirectory", file.getParent());
-                    } catch (Exception e) {
-                        logger.error("Failed to import lookup group from JSON file", e);
-                        throw e;
                     }
 
-                    return null;
+                    Frame.userPreferences.put("currentDirectory", file.getParent());
+                } catch (Exception e) {
+                    logger.error("Failed to import lookup group from JSON file", e);
+                    throw e;
                 }
 
-                private void publishProgress(int processed, int total) {
-                    int progress = total > 0 ? (int) ((processed / (double) total) * 100) : 0;
-                    progress = Math.min(progress, 100);
+                return null;
+            }
 
-                    publish(new int[]{progress, processed, total});
+            private void publishProgress(int processed, int total) {
+                int progress = total > 0 ? (int) ((processed / (double) total) * 100) : 0;
+                progress = Math.min(progress, 100);
+
+                publish(new int[]{progress, processed, total});
+            }
+
+            @Override
+            protected void process(List<int[]> chunks) {
+                if (!chunks.isEmpty()) {
+                    int[] latest = chunks.get(chunks.size() - 1);
+                    progressBar.setIndeterminate(false);
+                    progressBar.setValue(latest[0]);
+                    statusLabel.setText("Imported " + latest[1] + " of " + latest[2] + " entries");
+                }
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+
+                if (isCancelled()) {
+                    JOptionPane.showMessageDialog(parent, "Import cancelled by user.", "Import Cancelled", JOptionPane.WARNING_MESSAGE);
+                    return;
                 }
 
-                @Override
-                protected void process(List<int[]> chunks) {
-                    if (!chunks.isEmpty()) {
-                        int[] latest = chunks.get(chunks.size() - 1);
-                        progressBar.setIndeterminate(false);
-                        progressBar.setValue(latest[0]);
-                        statusLabel.setText("Imported " + latest[1] + " of " + latest[2] + " entries");
-                    }
-                }
+                try {
+                    get(); // triggers exception handling if doInBackground failed
 
-                @Override
-                protected void done() {
-                    progressDialog.dispose();
+                    JOptionPane.showMessageDialog(parent, "Import completed successfully.", "Import Complete", JOptionPane.INFORMATION_MESSAGE);
 
-                    if (isCancelled()) {
-                        JOptionPane.showMessageDialog(parent, "Import cancelled by user.", "Import Cancelled", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
+                    // Update table
+                    if (finalGroupId != -1) {
+                        LookupGroup selectedGroup = groupTable.getSelectedRow() >= 0
+                                ? groupTableModel.getGroup(groupTable.getSelectedRow())
+                                : null;
+                        try {
+                            LookupGroup importedGroup = LookupServiceClient.getInstance().getGroupById(finalGroupId);
+                            groupTableModel.addOrUpdateGroup(importedGroup);
 
-                    try {
-                        get(); // triggers exception handling if doInBackground failed
-
-                        JOptionPane.showMessageDialog(parent, "Import completed successfully.", "Import Complete", JOptionPane.INFORMATION_MESSAGE);
-
-                        // Update table
-                        if (finalGroupId != -1) {
-                            LookupGroup selectedGroup = groupTable.getSelectedRow() >= 0
-                                    ? groupTableModel.getGroup(groupTable.getSelectedRow())
-                                    : null;
-                            try {
-                                LookupGroup importedGroup = LookupServiceClient.getInstance().getGroupById(finalGroupId);
-                                groupTableModel.addOrUpdateGroup(importedGroup);
-
-                                if (selectedGroup != null) {
-                                    int visibleIndex = groupTableModel.getFilteredIndexByGroupId(selectedGroup.getId());
-                                    if (visibleIndex >= 0) {
-                                        groupTable.setRowSelectionInterval(visibleIndex, visibleIndex);
-                                        groupTable.scrollRectToVisible(groupTable.getCellRect(visibleIndex, 0, true));
-                                    }
+                            if (selectedGroup != null) {
+                                int visibleIndex = groupTableModel.getFilteredIndexByGroupId(selectedGroup.getId());
+                                if (visibleIndex >= 0) {
+                                    groupTable.setRowSelectionInterval(visibleIndex, visibleIndex);
+                                    groupTable.scrollRectToVisible(groupTable.getCellRect(visibleIndex, 0, true));
                                 }
-                            } catch (Exception ex) {
-                                logger.warn("Imported group added, but failed to update table", ex);
                             }
+                        } catch (Exception ex) {
+                            logger.warn("Imported group added, but failed to update table", ex);
                         }
-
-                    } catch (ExecutionException e) {
-                        Throwable cause = e.getCause();
-                        showError("Import failed: " + (cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt(); // restore interrupt status
-                        showError("Import was interrupted.");
                     }
-                }
-            };
 
-            cancelButton.addActionListener(e -> importWorker.cancel(true));
-            progressDialog.addWindowListener(new WindowAdapter() {
-                public void windowClosing(WindowEvent e) {
-                    if (JOptionPane.showConfirmDialog(progressDialog, "Cancel import?", "Confirm", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
-                        importWorker.cancel(true);
-                    }
+                } catch (ExecutionException e) {
+                    Throwable cause = e.getCause();
+                    showError("Import failed: " + (cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt(); // restore interrupt status
+                    showError("Import was interrupted.");
                 }
-            });
+            }
+        };
 
-            importWorker.execute();
-            progressDialog.setVisible(true);
+        cancelButton.addActionListener(e -> importWorker.cancel(true));
+        progressDialog.addWindowListener(new WindowAdapter() {
+            public void windowClosing(WindowEvent e) {
+                if (JOptionPane.showConfirmDialog(progressDialog, "Cancel import?", "Confirm", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+                    importWorker.cancel(true);
+                }
+            }
+        });
+
+        importWorker.execute();
+        progressDialog.setVisible(true);
+    }
+
+    private void handleImportJson() {
+        ImportLookupGroupDialog dialog = new ImportLookupGroupDialog(parent);
+        if (!dialog.isSaved()) {
+            return; // User cancelled the import
+        }
+        Properties importProperties = dialog.getImportProperties();
+        String groupName = importProperties.getProperty("defaultGroup");
+        if ("system".equals(importProperties.getProperty("importMethod"))) {
+            String resourcePath = "/defaultLookUpTables/default-"
+                    + groupName.replace(" ", "_")
+                    + "-group.json";
+
+            try (InputStream is = getClass().getResourceAsStream(resourcePath)) {
+                if (is == null) {
+                    throw new Exception("Resource not found: " + resourcePath);
+                }
+
+                File tempFile = File.createTempFile("default-", ".json");
+                tempFile.deleteOnExit();
+
+                try (OutputStream os = new FileOutputStream(tempFile)) {
+                    is.transferTo(os);
+                }
+
+                importFromJSON(tempFile);
+            } catch (Exception e) {
+                logger.error("Failed to load resource: " + resourcePath, e);
+            }
+        } else if ("file".equals(importProperties.getProperty("importMethod"))) {
+            importFromJSON(importProperties.getProperty("filePath") != null ? new File(importProperties.getProperty("filePath")) : null);
+        } else {
+            showError("Invalid import method selected.");
         }
     }
 

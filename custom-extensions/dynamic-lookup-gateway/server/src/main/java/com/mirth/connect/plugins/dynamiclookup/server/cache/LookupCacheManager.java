@@ -10,144 +10,189 @@
 
 package com.mirth.connect.plugins.dynamiclookup.server.cache;
 
-import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupGroupDao;
-import com.mirth.connect.plugins.dynamiclookup.server.exception.GroupNotFoundException;
-import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
-
-import com.google.common.cache.CacheStats;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-import com.mirth.connect.plugins.dynamiclookup.shared.util.TtlUtils;
-
+import java.util.Date;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.Date;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheStats;
+import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupGroupDao;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
+import com.mirth.connect.plugins.dynamiclookup.shared.util.TtlUtils;
 
 public class LookupCacheManager {
-    private final Map<Integer, SimpleCache<String, CachedValue>> groupCaches = new ConcurrentHashMap<>();
-    private final LookupGroupDao groupDao;
+	public static final String POLICY_LRU = "LRU";
+	public static final String POLICY_FIFO = "FIFO";
 
-    public LookupCacheManager(LookupGroupDao groupDao) {
-        this.groupDao = groupDao;
-    }
+	private final Logger logger = LogManager.getLogger(this.getClass());
 
-    /**
-     * Gets a value from cache if present.
-     * If ttlHours > 0, the value must be within the TTL based on updatedAt.
-     * If ttlHours == 0, TTL is ignored and any cached value is returned.
-     */
-    public String getValue(int groupId, String key, long ttlHours) {
-        SimpleCache<String, CachedValue> cache = getOrCreateCache(groupId);
-        CachedValue cached = cache.get(key);
+	private final Map<Integer, SimpleCache<String, CachedValue>> groupCaches = new ConcurrentHashMap<>();
+	private final LookupGroupDao groupDao;
 
-        if (cached == null) {
-            return null;
-        }
+	public LookupCacheManager(LookupGroupDao groupDao) {
+		this.groupDao = groupDao;
+	}
 
-        // Use shared TTL logic
-        if (TtlUtils.isWithinTtl(cached.getUpdatedAt(), ttlHours)) {
-            return cached.getValue();
-        }
+	/**
+	 * Create or rebuild the cache instance for the given group (policy/size
+	 * applied).
+	 */
+	public void createOrRebuildGroupCache(LookupGroup group) {
+		if (group == null) {
+			logger.error("group must not be null");
+			return;
+		}
 
-        return null;
-    }
+		groupCaches.put(group.getId(), buildCacheForGroup(group));
 
+		if (group.getCacheSize() <= 0) {
+			logger.info("Cache disabled for group {} (ID: {}, size={})", group.getName(), group.getId(), group.getCacheSize());
+		} else {
+			logger.info("Cache (policy={}, size={}) initialized for group {} (ID: {})", group.getCachePolicy(), group.getCacheSize(), group.getName(), group.getId());
+		}
+	}
 
-    /**
-     * Adds or updates a value in cache using updatedAt from the database.
-     */
-    public void putValue(int groupId, String key, String value, Date updatedAt) {
-        SimpleCache<String, CachedValue> cache = getOrCreateCache(groupId);
-        cache.put(key, new CachedValue(value, updatedAt));
-    }
+	/** Remove cache instance for the given group (on group deletion). */
+	public void removeGroupCache(int groupId) {
+		groupCaches.remove(groupId);
+		logger.info("Cache removed for groupId={}", groupId);
+	}
 
-    /**
-     * Removes a specific value from cache
-     */
-    public void removeValue(int groupId, String key) {
-        SimpleCache<String, CachedValue> cache = getOrCreateCache(groupId);
-        cache.remove(key);
-    }
+	/**
+	 * Build a cache instance (helper used by create/rebuild). Public if you need to
+	 * unit test separately.
+	 */
+	public SimpleCache<String, CachedValue> buildCacheForGroup(LookupGroup group) {
+		final int size = group.getCacheSize();
+		final String policy = group.getCachePolicy();
 
-    /**
-     * Clears all values for a specific group
-     */
-    public void clearGroupCache(int groupId) {
-        SimpleCache<String, CachedValue> cache = groupCaches.get(groupId);
-        if (cache != null) {
-            cache.clear();
-        }
-    }
+		if (size <= 0) {
+			return new NoCacheWrapper<>();
+		}
 
-    /**
-     * Clears all caches
-     */
-    public void clearAllCaches() {
-        groupCaches.values().forEach(SimpleCache::clear);
-    }
+		if (POLICY_FIFO.equalsIgnoreCase(policy)) {
+			return new FifoCacheWrapper<>(size);
+		}
 
-    /**
-     * Gets the current number of entries in the group's cache.
-     */
-    public int getCacheSize(int groupId) {
-        SimpleCache<String, CachedValue> cache = groupCaches.get(groupId);
-        return (cache != null) ? cache.size() : 0;
-    }
+		// default LRU
+		Cache<String, CachedValue> guava = CacheBuilder.newBuilder().maximumSize(size)
+//              .expireAfterWrite(10, TimeUnit.MINUTES) // TTL (optional)
+				.recordStats().build();
+		return new GuavaCacheWrapper<>(guava);
+	}
 
-    /**
-     * Gets the configured maximum size of the group's cache.
-     */
-    public int getCacheMaxSize(int groupId) {
-        LookupGroup group = groupDao.getGroupById(groupId);
-        return (group != null) ? group.getCacheSize() : -1;
-    }
+	/**
+	 * Gets a value from cache if present. If ttlSeconds > 0, the value must be
+	 * within the TTL based on updatedAt. If ttlSeconds == 0, TTL is ignored and any
+	 * cached value is returned.
+	 */
+	public String getValue(int groupId, String key, long ttlSeconds) {
+		SimpleCache<String, CachedValue> cache = getCache(groupId);
 
-    /**
-     * Gets cache statistics for a group (only available for LRU caches).
-     */
-    public CacheStats getCacheStats(int groupId) {
-        SimpleCache<String, CachedValue> cache = groupCaches.get(groupId);
+		if (cache == null) {
+			// Not initialized (or removed). Not an error by itself.
+			return null;
+		}
 
-        if (cache instanceof GuavaCacheWrapper) {
-            GuavaCacheWrapper<String, CachedValue> guava = (GuavaCacheWrapper<String, CachedValue>) cache;
-            return guava.getGuavaCache().stats();
-        }
+		CachedValue cached = cache.get(key);
 
-        // FIFO or unknown cache types do not support stats
-        return null;
-    }
+		if (cached == null) {
+			return null;
+		}
 
-    /**
-     * Creates or retrieves the cache for a group
-     */
-    private SimpleCache<String, CachedValue> getOrCreateCache(int groupId) {
-        return groupCaches.computeIfAbsent(groupId, k -> {
-            LookupGroup group = groupDao.getGroupById(groupId);
-            if (group == null) {
-                throw new GroupNotFoundException("Group not found with ID: " + groupId);
-            }
-            return createCacheForGroup(group);
-        });
-    }
+		// Use shared TTL logic
+		if (TtlUtils.isWithinTtlSeconds(cached.getUpdatedAt(), ttlSeconds)) {
+			return cached.getValue();
+		}
 
-    /**
-     * Creates a cache with the appropriate eviction policy
-     */
-    private SimpleCache<String, CachedValue> createCacheForGroup(LookupGroup group) {
-        int cacheSize = group.getCacheSize();
-        String cachePolicy = group.getCachePolicy();
+		return null;
+	}
 
-        if ("FIFO".equalsIgnoreCase(cachePolicy)) {
-            return new FifoCacheWrapper<>(cacheSize);
-        } else { // Default to LRU
-            Cache<String, CachedValue> guavaCache = CacheBuilder.newBuilder()
-                    .maximumSize(cacheSize)
-//                    .expireAfterWrite(10, TimeUnit.MINUTES) // TTL (optional)
-                    .recordStats()
-                    .build();
-            return new GuavaCacheWrapper<>(guavaCache);
-        }
-    }
+	/**
+	 * Adds or updates a value in cache using updatedAt from the database.
+	 */
+	public void putValue(int groupId, String key, String value, Date updatedAt) {
+		SimpleCache<String, CachedValue> cache = getCache(groupId);
+		if (cache == null) {
+			// Keep it quiet or warn, up to you:
+			logger.debug("Skip cache put: cache not initialized for groupId={}", groupId);
+			return;
+		}
+
+		cache.put(key, new CachedValue(value, updatedAt));
+	}
+
+	/**
+	 * Removes a specific value from cache
+	 */
+	public void removeValue(int groupId, String key) {
+		SimpleCache<String, CachedValue> cache = getCache(groupId);
+		if (cache != null) {
+			cache.remove(key);
+		}
+	}
+
+	/**
+	 * Clears all values for a specific group
+	 */
+	public void clearGroupCache(int groupId) {
+		SimpleCache<String, CachedValue> cache = getCache(groupId);
+		if (cache != null) {
+			cache.clear();
+		}
+	}
+
+	/**
+	 * Clears all caches
+	 */
+	public void clearAllCaches() {
+		groupCaches.values().forEach(SimpleCache::clear);
+	}
+
+	/**
+	 * Gets the current number of entries in the group's cache.
+	 */
+	public int getCacheSize(int groupId) {
+		SimpleCache<String, CachedValue> cache = getCache(groupId);
+		return (cache != null) ? cache.size() : 0;
+	}
+
+	/**
+	 * Gets the configured maximum size of the group's cache.
+	 */
+	public int getCacheMaxSize(int groupId) {
+		if (groupDao == null) {
+			return -1;
+		}
+
+		LookupGroup group = groupDao.getGroupById(groupId);
+		return (group != null) ? group.getCacheSize() : -1;
+	}
+
+	/**
+	 * Gets cache statistics for a group (only available for LRU caches).
+	 */
+	public CacheStats getCacheStats(int groupId) {
+		SimpleCache<String, CachedValue> cache = getCache(groupId);
+
+		if (cache instanceof GuavaCacheWrapper) {
+			GuavaCacheWrapper<String, CachedValue> guava = (GuavaCacheWrapper<String, CachedValue>) cache;
+			return guava.getGuavaCache().stats();
+		}
+
+		// FIFO or unknown cache types do not support stats
+		return null;
+	}
+
+	// ------------------------------------------------------------------------------------
+	// Private helpers
+	// ------------------------------------------------------------------------------------
+
+	private SimpleCache<String, CachedValue> getCache(int groupId) {
+		return groupCaches.get(groupId);
+	}
 }
-
-

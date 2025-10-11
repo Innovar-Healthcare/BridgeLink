@@ -1,0 +1,18 @@
+{
+  "group" : {
+    "id" : 34,
+    "name" : "Ethnicity",
+    "description" : "Default Ethnicity values",
+    "version" : "1.0.0",
+    "cacheSize" : 1000,
+    "cachePolicy" : "LRU",
+    "createdDate" : "2025-08-22T15:36:00.067+00:00",
+    "updatedDate" : "2025-08-22T15:36:00.067+00:00"
+  },
+  "values" : {
+    "H" : "Hispanic or Latino",
+    "N" : "Not Hispanic or Latino",
+    "U" : "Unknown"
+  },
+  "exportDate" : "2025-08-22T15:39:00.563+00:00"
+}

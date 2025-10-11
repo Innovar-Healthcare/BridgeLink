@@ -1,0 +1,27 @@
+{
+  "group" : {
+    "id" : 35,
+    "name" : "Marital Status",
+    "description" : "Default Marital Status values",
+    "version" : "1.0.0",
+    "cacheSize" : 1000,
+    "cachePolicy" : "LRU",
+    "createdDate" : "2025-08-22T15:36:33.236+00:00",
+    "updatedDate" : "2025-08-22T15:36:33.236+00:00"
+  },
+  "values" : {
+    "A" : "Separated",
+    "C" : "Common Law",
+    "D" : "Divorced",
+    "E" : "Legally Separated",
+    "I" : "Interlocutory",
+    "M" : "Married",
+    "N" : "Annulled",
+    "O" : "Other",
+    "P" : "Domestic Partner",
+    "S" : "Never Married/Sigle",
+    "U" : "Unmarried(unspecific)",
+    "W" : "Widowed"
+  },
+  "exportDate" : "2025-08-22T15:39:34.410+00:00"
+}

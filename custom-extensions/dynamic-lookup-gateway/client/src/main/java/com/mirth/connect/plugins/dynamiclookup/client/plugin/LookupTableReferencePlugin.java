@@ -10,27 +10,27 @@
 
 package com.mirth.connect.plugins.dynamiclookup.client.plugin;
 
-import com.mirth.connect.plugins.CodeTemplatePlugin;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.mirth.connect.model.codetemplates.CodeTemplate;
-import com.mirth.connect.model.codetemplates.CodeTemplateContextSet;
-import com.mirth.connect.model.codetemplates.CodeTemplateProperties.CodeTemplateType;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.mirth.connect.model.codetemplates.CodeTemplate;
+import com.mirth.connect.model.codetemplates.CodeTemplateContextSet;
+import com.mirth.connect.model.codetemplates.CodeTemplateProperties.CodeTemplateType;
+import com.mirth.connect.plugins.CodeTemplatePlugin;
+
 public class LookupTableReferencePlugin extends CodeTemplatePlugin {
-    private static final Logger logger = LogManager.getLogger(LookupTableReferencePlugin.class);
+	private static final Logger logger = LogManager.getLogger(LookupTableReferencePlugin.class);
 
-    public LookupTableReferencePlugin(String name) {
-        super(name);
-    }
+	public LookupTableReferencePlugin(String name) {
+		super(name);
+	}
 
+	//@formatter:off
     @Override
     public Map<String, List<CodeTemplate>> getReferenceItems() {
         Map<String, List<CodeTemplate>> referenceItems = new HashMap<String, List<CodeTemplate>>();
@@ -46,13 +46,16 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
         ));
 
         templates.add(new CodeTemplate(
-                "Lookup Value by Key with TTL",
-                CodeTemplateType.DRAG_AND_DROP_CODE,
-                CodeTemplateContextSet.getConnectorContextSet(),
-                "var value = LookupHelper.get(group, key, ttlHours);",
-                "Retrieves a value from the specified lookup group using the given key and a TTL (in hours). "
-                        + "If the cached or database value is older than the TTL, null is returned."
-        ));
+        	    "Lookup Value by Key with TTL",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var value = LookupHelper.get(group, key, /*ttlHours*/ 0, /*ttlMinutes*/ 30);",
+        	    "Retrieves a value from the specified lookup group using the given key and a TTL "
+        	        + "expressed in hours and minutes. "
+        	        + "If both values are 0, TTL is ignored. "
+        	        + "If the cached or database value is older than the TTL, null is returned."
+        	));
+
 
         templates.add(new CodeTemplate(
                 "Lookup Value with Default Fallback",
@@ -63,13 +66,16 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
         ));
 
         templates.add(new CodeTemplate(
-                "Lookup Value with TTL and Default Fallback",
-                CodeTemplateType.DRAG_AND_DROP_CODE,
-                CodeTemplateContextSet.getConnectorContextSet(),
-                "var value = LookupHelper.get(group, key, ttlHours, defaultValue);",
-                "Retrieves a value from a lookup group using the given key and TTL (in hours). "
-                        + "If the value is missing or stale based on TTL, the default value is returned instead."
-        ));
+        	    "Lookup Value with TTL and Default Fallback",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var value = LookupHelper.get(group, key, /*ttlHours*/ 0, /*ttlMinutes*/ 30, /*defaultValue*/ 'N/A');",
+        	    "Retrieves a value from the specified lookup group using the given key and a TTL "
+        	        + "expressed in hours and minutes. "
+        	        + "If both hours and minutes are 0, TTL is ignored. "
+        	        + "If the value is missing or stale, the provided default value is returned instead."
+        	));
+
 
         templates.add(new CodeTemplate(
                 "Lookup Values Matching Pattern",
@@ -88,14 +94,18 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
         ));
 
         templates.add(new CodeTemplate(
-                "Batch Lookup by Keys with TTL",
-                CodeTemplateType.DRAG_AND_DROP_CODE,
-                CodeTemplateContextSet.getConnectorContextSet(),
-                "var keys = [\"key1\", \"key2\", \"key3\"];\nvar values = LookupHelper.getBatch(group, keys, ttlHours);",
-                "Retrieves multiple key-value pairs from the specified lookup group using a TTL (in hours). "
-                        + "Only values updated within the TTL window will be returned. "
-                        + "Returns an empty map if the group is not found or all values are stale or missing."
-        ));
+        	    "Batch Lookup by Keys with TTL",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var keys = [\"key1\", \"key2\", \"key3\"];\n"
+        	        + "var batch = LookupHelper.getBatch(group, keys, /*ttlHours*/ 0, /*ttlMinutes*/ 30);",
+        	    "Retrieves multiple key-value pairs from the specified lookup group using a TTL "
+        	        + "expressed in hours and minutes. "
+        	        + "If both hours and minutes are 0, TTL is ignored. "
+        	        + "Only values updated within the TTL window are returned. "
+        	        + "Returns an empty map if the group is not found, or if all values are stale or missing."
+        	));
+
 
         templates.add(new CodeTemplate(
                 "Lookup Key Existence in Group",
@@ -121,29 +131,133 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 "Sets a value in the specified lookup group using the given key. Returns true if successful, false otherwise."
         ));
 
+        templates.add(new CodeTemplate(
+                "Deletes a lookup value by group name and key",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var success = LookupHelper.deleteValue(group, key);",
+                "Deletes a value in the specified lookup group by key. Returns true if successful, false otherwise."
+        ));
+
+
+        templates.add(new CodeTemplate(
+                "Deletes all lookup values in the specified group",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var success = LookupHelper.deleteAllValues(group);",
+                "Deletes all values in the given lookup group. Returns true if successful, false otherwise."
+        ));
+
+        templates.add(new CodeTemplate(
+                "Imports multiple values into a lookup group",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var payload = {\n" +
+                "  \"key1\": \"value1\",\n" +
+                "  \"key2\": \"value2\"\n" +
+                "};\n" +
+                "var res = LookupHelper.importValues(group, payload, true);\n" +
+                "if (!res || String(res.ok) !== 'true') {\n" +
+                "  logger.error('Import values failed for group: ' + group + (res ? (' - ' + res.errorMessage) : ''));\n" +
+                "} else {\n" +
+                "  logger.info('Imported ' + res.importedCount + ' entries into groupId=' + res.groupId);\n" +
+                "}",
+                "Imports key-value pairs into the specified lookup group. " +
+                "If clearExisting is true, all existing values are removed before import. " +
+                "Returns { ok: 'true', groupId, importedCount } on success; otherwise { ok: 'false', errorCode, errorMessage }."
+        ));
+
+        templates.add(new CodeTemplate(
+                "Put Lookup Value If Absent",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var success = LookupHelper.putIfAbsent(group, key, value);\n" +
+                "if (!success) {\n" +
+                "  logger.warn('Key already exists or insert failed in group: ' + group);\n" +
+                "}",
+                "Inserts a value into the specified lookup group only if the key does not already exist. " +
+                "Returns true if the value was inserted, false otherwise."
+        ));
+        
+        templates.add(new CodeTemplate(
+        	    "Compare and Swap Lookup Value",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var success = LookupHelper.compareAndSwap(group, key, expectedValue, newValue);\n" +
+	    		"if (!success) {\n" +
+	    		"  logger.warn('Compare-and-swap failed for group: ' + group + ', key: ' + key + ', expectedValue: ' + expectedValue + ', newValue: ' + newValue);\n" +
+	    		"}",
+        	    "Atomically updates a lookup value only if its current value matches the expected value. " +
+        	    "Returns true if the value was successfully updated; false if the key does not exist, the value does not match, or an error occurred."
+       	));
+
+        templates.add(new CodeTemplate(
+        	    "Update Lookup Value by Delta",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var success = LookupHelper.updateValueByDelta(group, key, delta);\n" +
+        	    "if (!success) {\n" +
+        	    "  logger.warn('Failed to update lookup value by delta for group: ' + group + ', key: ' + key + ', delta: ' + delta);\n" +
+        	    "}",
+        	    "Atomically increments or decrements the numeric value of a lookup key by the specified delta. " +
+        	    "Returns true if the value was successfully updated; false if the group or key was not found, or if an error occurred."
+    	));
+
+        templates.add(new CodeTemplate(
+        	    "Creates a lookup group",
+        	    CodeTemplateType.DRAG_AND_DROP_CODE,
+        	    CodeTemplateContextSet.getConnectorContextSet(),
+        	    "var payload = {\n" +
+        	    "  name: 'MyGroup',\n" +
+        	    "  description: 'optional',\n" +
+        	    "  version: '1.0.0',\n" +
+        	    "  cacheSize: '1000',\n" +
+        	    "  cachePolicy: 'LRU' // or 'FIFO'\n" +
+        	    "};\n" +
+        	    "var res = LookupHelper.createGroup(payload);\n" +
+        	    "if (!res || String(res.ok) !== 'true') {\n" +
+        	    "  logger.error('Create group failed: ' + (res ? (res.errorCode + ' - ' + res.errorMessage) : 'unknown'));\n" +
+        	    "} else {\n" +
+        	    "  logger.info('Created group id=' + res.group.id + ', name=' + res.group.name);\n" +
+        	    "}\n",
+        	    "Creates a lookup group with fields: name, description, version, cacheSize, cachePolicy. " +
+        	    "Returns { ok: 'true', group: {...} } on success; otherwise { ok: 'false', errorCode, errorMessage }."
+    	));
+
+
+
+        templates.add(new CodeTemplate(
+                "Deletes a lookup group",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var success = LookupHelper.deleteGroup(group);\n",
+                "Deletes the specified lookup group by name. Returns true if successful, false otherwise."
+        ));
+
         // This defines the category
         referenceItems.put("Lookup Table Functions", templates);
 
         return referenceItems;
     }
+    //@formatter:on
 
-    @Override
-    public String getPluginPointName() {
-        return "Lookup Table Reference Plugin";
-    }
+	@Override
+	public String getPluginPointName() {
+		return "Lookup Table Reference Plugin";
+	}
 
-    @Override
-    public void start() {
+	@Override
+	public void start() {
 
-    }
+	}
 
-    @Override
-    public void stop() {
+	@Override
+	public void stop() {
 
-    }
+	}
 
-    @Override
-    public void reset() {
+	@Override
+	public void reset() {
 
-    }
+	}
 }

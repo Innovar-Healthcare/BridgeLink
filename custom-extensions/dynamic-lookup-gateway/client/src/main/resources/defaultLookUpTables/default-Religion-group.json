@@ -1,0 +1,38 @@
+{
+  "group" : {
+    "id" : 36,
+    "name" : "Religion",
+    "description" : "Default Religion values",
+    "version" : "1.0.0",
+    "cacheSize" : 1000,
+    "cachePolicy" : "LRU",
+    "createdDate" : "2025-08-22T15:37:14.692+00:00",
+    "updatedDate" : "2025-08-22T15:37:14.692+00:00"
+  },
+  "values" : {
+    "AGN" : "Agnostic",
+    "ATH" : "Atheist",
+    "BAH" : "Baha’i",
+    "BUD" : "Buddhist",
+    "CATH" : "Roman Catholic",
+    "CHR" : "Christian (unspecified)",
+    "CHU" : "Christian: Unspecified",
+    "EPI" : "Episcopalian",
+    "EV" : "Evangelical",
+    "HIN" : "Hindu",
+    "JEW" : "Jewish",
+    "MORM" : "Mormon (Latter-day Saints)",
+    "MOS" : "Muslim (Islamic)",
+    "ORT" : "Orthodox (Eastern Orthodox)",
+    "OTH" : "Other",
+    "PRES" : "Presbyterian",
+    "PROT" : "Protestant (unspecified)",
+    "QUA" : "Quaker",
+    "SHA" : "Shinto",
+    "SIKH" : "Sikh",
+    "TAO" : "Taoist",
+    "UNI" : "Unitarian-Universalist",
+    "UNK" : "Unknown"
+  },
+  "exportDate" : "2025-08-22T15:40:03.160+00:00"
+}

@@ -123,7 +123,27 @@
         UPDATED_DATE = CURRENT_TIMESTAMP
         WHERE KEY_VALUE = #{keyValue}
     </update>
+    
+	<insert id="putIfAbsent" parameterType="map">
+    	INSERT INTO ${tableName} (KEY_VALUE, VALUE_DATA)
+    	VALUES (#{keyValue}, #{valueData})
+    	ON CONFLICT (KEY_VALUE) DO NOTHING
+  	</insert>
 
+	<update id="compareAndSwap" parameterType="map">
+	    UPDATE ${tableName}
+	    SET VALUE_DATA = #{newValue},
+	    UPDATED_DATE = CURRENT_TIMESTAMP
+	    WHERE KEY_VALUE = #{keyValue} AND VALUE_DATA = #{expectedValue}
+	</update>
+
+	<update id="updateValueByDelta" parameterType="map">
+	    UPDATE ${tableName}
+	    SET VALUE_DATA = ((VALUE_DATA)::bigint + #{delta})::text,
+	    UPDATED_DATE = CURRENT_TIMESTAMP
+	    WHERE KEY_VALUE = #{keyValue}
+	</update>
+	
     <delete id="deleteValue" parameterType="map">
         DELETE FROM ${tableName}
         WHERE KEY_VALUE = #{keyValue}
@@ -172,7 +192,16 @@
             LIMIT ${limit}
         </if>
     </select>
-
+  
+   	<select id="selectExistingKeys" parameterType="map" resultType="string">
+	    SELECT KEY_VALUE
+	    FROM ${tableName}
+	    WHERE KEY_VALUE IN
+	    <foreach item="key" collection="keyValues" open="(" separator="," close=")">
+	      #{key}
+	    </foreach>
+  	</select>
+  	
     <!-- Statistics Operations -->
     <insert id="insertStatistics" parameterType="map">
         INSERT INTO LOOKUP_STATISTICS (
@@ -281,4 +310,8 @@
         <include refid="searchAuditEntriesBody"/>
     </select>
 
+	<delete id="deleteAuditEntriesBefore" parameterType="map">
+        DELETE FROM LOOKUP_AUDIT
+        WHERE AUDIT_TIMESTAMP <![CDATA[ < ]]> #{cutoff}
+    </delete>
 </mapper>

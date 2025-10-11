@@ -24,6 +24,7 @@
             <classpath>
                 <fileset dir="${server.lib}" includes="**/*.jar"/>
                 <fileset dir="${client.lib}" includes="**/*.jar"/>
+                <fileset dir="${plugin.lib}" includes="**/*.jar"/>
             </classpath>
         </javac>
 
@@ -56,6 +57,9 @@
     <target name="copy-resources" if="server.resources.present">
         <copy todir="${classes.dir}/server">
             <fileset dir="${server.resources.dir}" includes="**/*"/>
+        </copy>
+        <copy todir="${classes.dir}/client">
+            <fileset dir="${client.resources.dir}" includes="**/*"/>
         </copy>
     </target>
 

@@ -8,7 +8,7 @@
  * been included with this distribution in the LICENSE.txt file.
  */
 
-package com.mirth.connect.plugins.dynamiclookup.client.util;
+package com.mirth.connect.plugins.dynamiclookup.shared.util;
 
 import com.opencsv.CSVReader;
 import org.apache.logging.log4j.LogManager;
