@@ -321,7 +321,7 @@ public class MirthWebServer extends Server {
 
                 logger.debug("webApp Context Path: " + webapp.getContextPath());
 
-                webapp.setWar(file.getPath());
+                webapp.setWar(file.getAbsolutePath());
                 handlers.addHandler(webapp);
                 webapps.add(webapp);
             }
