@@ -552,7 +552,7 @@ public class Frame extends JXFrame {
      */
     public void setupFrame(Client mirthClient) throws ClientException {
 
-        com.mirth.connect.client.ui.LoginPanel login = com.mirth.connect.client.ui.LoginPanel.getInstance();
+        com.mirth.connect.client.ui.AbstractLoginPanel login = com.mirth.connect.client.ui.LoginPanelProvider.getInstance();
 
         // Initialize the send message dialog
         editMessageDialog = new com.mirth.connect.client.ui.EditMessageDialog();
@@ -1530,7 +1530,7 @@ public class Frame extends JXFrame {
                     }
                     mirthClient.close();
                     this.dispose();
-                    com.mirth.connect.client.ui.LoginPanel.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
+                    com.mirth.connect.client.ui.LoginPanelProvider.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
                     return;
                 } else if (t.getCause() != null && t.getCause() instanceof HttpHostConnectException && (StringUtils.contains(t.getCause().getMessage(), "Connection refused") || StringUtils.contains(t.getCause().getMessage(), "Host is down"))) {
                     connectionError = true;
@@ -1548,7 +1548,7 @@ public class Frame extends JXFrame {
                     }
                     mirthClient.close();
                     this.dispose();
-                    com.mirth.connect.client.ui.LoginPanel.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
+                    com.mirth.connect.client.ui.LoginPanelProvider.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
                     return;
                 }
             }
@@ -2290,7 +2290,7 @@ public class Frame extends JXFrame {
         this.dispose();
 
         if (!quit) {
-            com.mirth.connect.client.ui.LoginPanel.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
+            com.mirth.connect.client.ui.LoginPanelProvider.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
         }
 
         return true;
