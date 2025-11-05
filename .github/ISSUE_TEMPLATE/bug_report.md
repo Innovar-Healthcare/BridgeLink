@@ -32,8 +32,8 @@ If applicable, add screenshots to help explain your problem.
 
 **Environment (please complete the following information):**
  - OS: [e.g. Linux (CentOS), Windows 10, MacOS]
- - Java Distribution/Version [e.g. OpenJDK 11, Java 8 (201)]
- - Connect Version [e.g. 3.8.0]
+ - Java Distribution/Version [e.g. OpenJDK 17, Java 8 (201)]
+ - BridgeLink Version [e.g. 4.6.0]
 
 **Workaround(s)**
 Are there one or more workarounds for this issue currently?
