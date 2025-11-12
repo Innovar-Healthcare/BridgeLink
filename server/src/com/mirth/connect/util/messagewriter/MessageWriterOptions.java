@@ -113,10 +113,18 @@ public class MessageWriterOptions implements Serializable {
     /**
      * @param filePattern
      *            A string defining the folder/filename(s) for writing messages. It may contain
-     *            variables to be replaced.
+     *            variables to be replaced only if allowed by internal logic. User-supplied input is sanitized.
      */
     public void setFilePattern(String filePattern) {
-        this.filePattern = filePattern;
+        // Only allow safe patterns: alphanumerics, underscore, dash, dot, forward slash
+        // Disallow Velocity special chars: $, #, {, }
+        if (filePattern != null && filePattern.matches("^[a-zA-Z0-9_\\-/\\.]+$")) {
+            this.filePattern = filePattern;
+        } else {
+            throw new IllegalArgumentException(
+                "Invalid filePattern: Only alphanumerics, underscore, dash, dot, and slash are permitted. Velocity expressions are not allowed."
+            );
+        }
     }
 
     public String getArchiveFileName() {
