@@ -255,6 +255,12 @@ public class Mirth {
     /**
      * Application entry point. Sets up the login panel and its layout as well.
      * 
+     * Command line arguments:
+     * <server> [version] [username] [password] [-ssl [protocols] [ciphersuites]] [-bridgelink.icon.path <iconPath>]
+     * 
+     * System properties:
+     * -Dbridgelink.icon.path=<iconPath>
+     * 
      * @param args
      *            String[]
      */
@@ -265,6 +271,20 @@ public class Mirth {
         String password = "";
         String protocols = "";
         String cipherSuites = "";
+        String iconPath = "";
+
+        // Parse arguments, looking for -bridgelink.icon.path or -icon flag
+        for (int i = 0; i < args.length; i++) {
+            if (("-bridgelink.icon.path".equals(args[i]) || "-icon".equals(args[i])) && i + 1 < args.length) {
+                iconPath = args[i + 1];
+                // Remove the flag and its value from args for normal processing
+                String[] newArgs = new String[args.length - 2];
+                System.arraycopy(args, 0, newArgs, 0, i);
+                System.arraycopy(args, i + 2, newArgs, i, args.length - i - 2);
+                args = newArgs;
+                break;
+            }
+        }
 
         if (args.length > 0) {
             server = args[0];
@@ -310,6 +330,11 @@ public class Mirth {
         if (StringUtils.isNotBlank(cipherSuites)) {
             PlatformUI.HTTPS_CIPHER_SUITES = StringUtils.split(cipherSuites, ',');
         }
+        
+        // Set custom icon path if provided
+        if (StringUtils.isNotBlank(iconPath)) {
+            UIConstants.setCustomIconPath(iconPath);
+        }
 
         start(server, version, username, password);
     }
@@ -323,6 +348,9 @@ public class Mirth {
 
         SwingUtilities.invokeLater(new Runnable() {
             public void run() {
+                // Debug icon loading
+                UIConstants.debugIconProperties();
+                
                 initUIManager();
                 PlatformUI.BACKGROUND_IMAGE = new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/header_nologo.png"));
                 LoginPanelProvider.registerCustomLoginPanelFactory("com.mirth.connect.client.ui.CustomLoginPanelProviderImpl");

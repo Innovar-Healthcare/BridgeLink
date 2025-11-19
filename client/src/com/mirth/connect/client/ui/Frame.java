@@ -290,7 +290,7 @@ public class Frame extends JXFrame {
 
         setTitle(titleText.toString());
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
-        setIconImage(com.mirth.connect.client.ui.UIConstants.MIRTH_FAVICON.getImage());
+        setIconImage(com.mirth.connect.client.ui.UIConstants.getApplicationIcon().getImage());
         makePaneContainer();
 
         connectionError = false;
