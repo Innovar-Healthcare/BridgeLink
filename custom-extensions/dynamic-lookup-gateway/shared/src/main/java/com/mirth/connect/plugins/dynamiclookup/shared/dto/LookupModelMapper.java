@@ -10,20 +10,23 @@
 
 package com.mirth.connect.plugins.dynamiclookup.shared.dto;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.BatchGetValuesRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.ImportValuesRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupGroupRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupValueRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupValueResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
-
-import java.util.Date;
-import java.util.Map;
-import java.util.Collections;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 
 public class LookupModelMapper {
     // --- Group Mapping ---
@@ -36,7 +39,23 @@ public class LookupModelMapper {
         group.setCachePolicy(dto.getCachePolicy());
         group.setCreatedDate(new Date());
         group.setUpdatedDate(new Date());
+        group.setExtra(cloneExtra(dto.getExtra()));
+
         return group;
+    }
+
+    public static LookupGroupExtra cloneExtra(LookupGroupExtra src) {
+        if (src == null) {
+            return null;
+        }
+
+        try {
+            ObjectMapper m = JsonUtils.getMapper();
+            String json = m.writeValueAsString(src);
+            return m.readValue(json, LookupGroupExtra.class);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to clone LookupGroupExtra", e);
+        }
     }
 
     public static LookupValue fromValueDto(LookupValueRequest dto) {

@@ -11,11 +11,16 @@
 package com.mirth.connect.plugins.dynamiclookup.client.dialog;
 
 import java.awt.Dimension;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
@@ -27,6 +32,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.mirth.connect.client.ui.Frame;
 import com.mirth.connect.client.ui.MirthDialog;
 import com.mirth.connect.client.ui.PlatformUI;
@@ -34,219 +40,389 @@ import com.mirth.connect.client.ui.UIConstants;
 import com.mirth.connect.client.ui.components.MirthFieldConstraints;
 import com.mirth.connect.plugins.dynamiclookup.client.exception.LookupApiClientException;
 import com.mirth.connect.plugins.dynamiclookup.client.service.LookupServiceClient;
+import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
+import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 
 import net.miginfocom.swing.MigLayout;
 
 public class LookupGroupDialog extends MirthDialog {
-	private final Logger logger = LogManager.getLogger(this.getClass());
+    private final Logger logger = LogManager.getLogger(this.getClass());
 
-	private JLabel nameLabel;
-	private JTextField nameField;
+    private JLabel nameLabel;
+    private JTextField nameField;
 
-	private JLabel descriptionLabel;
-	private JTextArea descriptionField;
-	private JScrollPane descriptionScrollPane;
+    private JLabel descriptionLabel;
+    private JTextArea descriptionField;
+    private JScrollPane descriptionScrollPane;
 
-	private JLabel versionLabel;
-	private JTextField versionField;
+    private JLabel versionLabel;
+    private JTextField versionField;
 
-	private JLabel cacheSizeLabel;
-	private JTextField cacheSizeField;
+    private JLabel cacheSizeLabel;
+    private JTextField cacheSizeField;
 
-	private JLabel cachePolicyLabel;
-	private JComboBox<String> cachePolicyComboBox;
+    private JLabel cachePolicyLabel;
+    private JComboBox<String> cachePolicyComboBox;
 
-	private JButton saveButton;
-	private JButton cancelButton;
+    private JLabel valueTypeLabel;
+    private JComboBox<String> valueTypeComboBox;
 
-	private Frame parent;
-	private LookupGroup lookupGroup;
-	private boolean saved = false;
+    private JLabel jsonIndexTypeLabel;
+    private JComboBox<String> jsonIndexTypeComboBox;
 
-	public LookupGroupDialog(Frame parent, LookupGroup lookupGroup, boolean isEdit) {
-		super(parent, true);
+    private JLabel jsonIndexFieldsLabel;
+    private DefaultListModel<String> jsonIndexFieldsModel;
+    private JList<String> jsonIndexFieldsList;
+    private JScrollPane jsonIndexFieldsScroll;
 
-		this.parent = parent;
-		this.lookupGroup = lookupGroup;
+    private JButton addJsonFieldButton;
+    private JButton removeJsonFieldButton;
 
-		initComponents();
-		initLayout();
+    private JButton saveButton;
+    private JButton cancelButton;
 
-		resetComponents(lookupGroup);
+    private Frame parent;
+    private LookupGroup lookupGroup;
+    private boolean isEdit = false;
+    private boolean saved = false;
 
-		setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-		setTitle(String.format("%s", isEdit ? "Edit Group" : "Add Group"));
-		pack();
-		setLocationRelativeTo(parent);
-		setVisible(true);
-	}
+    public LookupGroupDialog(Frame parent, LookupGroup lookupGroup, boolean isEdit) {
+        super(parent, true);
 
-	private void initComponents() {
-		setBackground(UIConstants.BACKGROUND_COLOR);
-		getContentPane().setBackground(getBackground());
+        this.parent = parent;
+        this.lookupGroup = lookupGroup;
+        this.isEdit = isEdit;
 
-		nameLabel = new JLabel("Name:");
-		nameField = new JTextField();
+        initComponents();
+        initLayout();
 
-		descriptionLabel = new JLabel("Description:");
-		descriptionField = new JTextArea();
-		descriptionField.setWrapStyleWord(true);
-		descriptionField.setLineWrap(true);
-		descriptionScrollPane = new JScrollPane(descriptionField, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-		descriptionScrollPane.setPreferredSize(new Dimension(200, 50));
+        resetComponents(lookupGroup);
 
-		versionLabel = new JLabel("Version:");
-		versionField = new JTextField();
+        setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        setTitle(String.format("%s", isEdit ? "Edit Group" : "Add Group"));
+        pack();
+        setLocationRelativeTo(parent);
+        setVisible(true);
+    }
 
-		cacheSizeLabel = new JLabel("Cache Size:");
-		cacheSizeField = new JTextField();
-		cacheSizeField.setDocument(new MirthFieldConstraints(8, false, false, true));
+    private void initComponents() {
+        setBackground(UIConstants.BACKGROUND_COLOR);
+        getContentPane().setBackground(getBackground());
 
-		cachePolicyLabel = new JLabel("Cache Policy:");
-		cachePolicyComboBox = new JComboBox<String>();
-		cachePolicyComboBox.addItem("LRU");
-		cachePolicyComboBox.addItem("FIFO");
-		cachePolicyComboBox.getModel().setSelectedItem("LRU");
+        nameLabel = new JLabel("Name:");
+        nameField = new JTextField();
 
-		saveButton = new JButton("Save");
-		saveButton.addActionListener(evt -> save());
+        descriptionLabel = new JLabel("Description:");
+        descriptionField = new JTextArea();
+        descriptionField.setWrapStyleWord(true);
+        descriptionField.setLineWrap(true);
+        descriptionScrollPane = new JScrollPane(descriptionField, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        descriptionScrollPane.setPreferredSize(new Dimension(200, 50));
 
-		cancelButton = new JButton("Cancel");
-		cancelButton.addActionListener(evt -> close());
-	}
+        versionLabel = new JLabel("Version:");
+        versionField = new JTextField();
 
-	private void initLayout() {
-		setLayout(new MigLayout("insets 12, novisualpadding, hidemode 3, fill"));
+        cacheSizeLabel = new JLabel("Cache Size:");
+        cacheSizeField = new JTextField();
+        cacheSizeField.setDocument(new MirthFieldConstraints(8, false, false, true));
 
-		JPanel addPanel = new JPanel(new MigLayout("novisualpadding, hidemode 0, align center, insets 0 0 0 0, fill", "25[right][fill]"));
+        cachePolicyLabel = new JLabel("Cache Policy:");
+        cachePolicyComboBox = new JComboBox<String>();
+        cachePolicyComboBox.addItem("LRU");
+        cachePolicyComboBox.addItem("FIFO");
+        cachePolicyComboBox.getModel().setSelectedItem("LRU");
 
-		addPanel.setBackground(UIConstants.BACKGROUND_COLOR);
-		addPanel.setBorder(BorderFactory.createEmptyBorder());
-		addPanel.setMinimumSize(getMinimumSize());
-		addPanel.setMaximumSize(getMaximumSize());
+        // --- VALUE TYPE ---
+        valueTypeLabel = new JLabel("Value Type:");
+        valueTypeComboBox = new JComboBox<>();
+        valueTypeComboBox.addItem(LookupConstants.VALUE_TYPE_TEXT);
+        valueTypeComboBox.addItem(LookupConstants.VALUE_TYPE_JSON);
+        valueTypeComboBox.setSelectedItem(LookupConstants.VALUE_TYPE_TEXT);
+        valueTypeComboBox.addActionListener(e -> updateJsonIndexControls());
 
-		addPanel.add(nameLabel, "right");
-		addPanel.add(nameField, "w 200!");
+        // --- JSON INDEX TYPE ---
+        jsonIndexTypeLabel = new JLabel("JSON Index:");
+        jsonIndexTypeComboBox = new JComboBox<>();
+        jsonIndexTypeComboBox.addItem(LookupConstants.JSON_INDEX_NONE);
+        jsonIndexTypeComboBox.addItem(LookupConstants.JSON_INDEX_GIN);
+        jsonIndexTypeComboBox.addItem(LookupConstants.JSON_INDEX_FIELD);
+        jsonIndexTypeComboBox.setSelectedItem(LookupConstants.JSON_INDEX_NONE);
+        jsonIndexTypeComboBox.addActionListener(e -> updateJsonIndexControls());
 
-		addPanel.add(descriptionLabel, "newline, right");
-		addPanel.add(descriptionScrollPane);
+        // --- JSON INDEX FIELDS ---
+        jsonIndexFieldsLabel = new JLabel("Indexed JSON Fields:");
+        jsonIndexFieldsModel = new DefaultListModel<>();
+        jsonIndexFieldsList = new JList<>(jsonIndexFieldsModel);
+        jsonIndexFieldsList.setVisibleRowCount(5);
 
-		addPanel.add(versionLabel, "newline, right");
-		addPanel.add(versionField, "w 100!");
+        jsonIndexFieldsScroll = new JScrollPane(jsonIndexFieldsList, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 
-		addPanel.add(cacheSizeLabel, "newline, right");
-		addPanel.add(cacheSizeField, "w 100!, split 2");
-		JLabel infoIcon = new JLabel("<html><span style='color:#666;'>0 = disabled</span></html>");
-		addPanel.add(infoIcon, "gapleft 6");
+        // Buttons add/remove
+        addJsonFieldButton = new JButton("Add");
+        removeJsonFieldButton = new JButton("Remove");
 
-		addPanel.add(cachePolicyLabel, "newline, right");
-		addPanel.add(cachePolicyComboBox, "w 100!");
+        addJsonFieldButton.addActionListener(e -> addJsonField());
+        removeJsonFieldButton.addActionListener(e -> removeJsonField());
 
-		add(addPanel, "growx");
-		add(new JSeparator(), "newline, sx, growx");
+        saveButton = new JButton("Save");
+        saveButton.addActionListener(evt -> save());
 
-		add(saveButton, "newline, sx, right, split 2");
-		add(cancelButton);
-	}
+        cancelButton = new JButton("Cancel");
+        cancelButton.addActionListener(evt -> close());
+    }
 
-	private void resetComponents(LookupGroup lookupGroup) {
-		nameField.setText(lookupGroup.getName());
-		descriptionField.setText(lookupGroup.getDescription());
-		versionField.setText(lookupGroup.getVersion());
-		cacheSizeField.setText(String.valueOf(lookupGroup.getCacheSize()));
-		cachePolicyComboBox.getModel().setSelectedItem(lookupGroup.getCachePolicy());
-	}
+    private void initLayout() {
+        setLayout(new MigLayout("insets 12, novisualpadding, hidemode 3, fill"));
 
-	private void save() {
-		if (!validateProperties()) {
-			return;
-		}
+        JPanel addPanel = new JPanel(new MigLayout("novisualpadding, hidemode 0, align center, insets 0 0 0 0, fill", "25[right][fill]"));
 
-		this.lookupGroup.setName(nameField.getText().trim());
-		this.lookupGroup.setDescription(descriptionField.getText().trim());
-		this.lookupGroup.setVersion(versionField.getText().trim());
-		this.lookupGroup.setCacheSize(Integer.parseInt(cacheSizeField.getText().trim()));
-		this.lookupGroup.setCachePolicy((String) cachePolicyComboBox.getSelectedItem());
+        addPanel.setBackground(UIConstants.BACKGROUND_COLOR);
+        addPanel.setBorder(BorderFactory.createEmptyBorder());
+        addPanel.setMinimumSize(getMinimumSize());
+        addPanel.setMaximumSize(getMaximumSize());
 
-		try {
-			LookupGroup response;
-			if (this.lookupGroup.getId() > 0) {
-				response = LookupServiceClient.getInstance().updateGroup(this.lookupGroup);
-			} else {
-				response = LookupServiceClient.getInstance().createGroup(this.lookupGroup);
-			}
+        addPanel.add(nameLabel, "right");
+        addPanel.add(nameField, "w 200!");
 
-			this.lookupGroup.setId(response.getId());
-			this.lookupGroup.setCreatedDate(response.getCreatedDate());
-			this.lookupGroup.setUpdatedDate(response.getUpdatedDate());
+        addPanel.add(descriptionLabel, "newline, right");
+        addPanel.add(descriptionScrollPane);
 
-			this.saved = true;
+        addPanel.add(versionLabel, "newline, right");
+        addPanel.add(versionField, "w 100!");
 
-			close();
+        addPanel.add(cacheSizeLabel, "newline, right");
+        addPanel.add(cacheSizeField, "w 100!, split 2");
+        JLabel infoIcon = new JLabel("<html><span style='color:#666;'>0 = disabled</span></html>");
+        addPanel.add(infoIcon, "gapleft 6");
 
-		} catch (LookupApiClientException e) {
-			showError(e.getError().getMessage());
-		} catch (Exception e) {
-			logger.error("Unexpected error while saving group", e);
-			showError("Unexpected error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
-		}
-	}
+        addPanel.add(cachePolicyLabel, "newline, right");
+        addPanel.add(cachePolicyComboBox, "w 100!");
 
-	private void close() {
-		dispose();
-	}
+        // --- VALUE TYPE ---
+        addPanel.add(valueTypeLabel, "newline, right");
+        addPanel.add(valueTypeComboBox, "w 120!");
 
-	public boolean isSaved() {
-		return saved;
-	}
+        // --- JSON INDEX TYPE ---
+        addPanel.add(jsonIndexTypeLabel, "newline, right");
+        addPanel.add(jsonIndexTypeComboBox, "w 120!");
 
-	private boolean validateProperties() {
-		boolean valid = true;
-		StringBuilder errorMessage = new StringBuilder();
+        // --- JSON INDEX FIELDS (list + buttons) ---
+        addPanel.add(jsonIndexFieldsLabel, "newline, right, top");
 
-		// Reset backgrounds
-		resetInvalidComponents();
+        JPanel jsonButtons = new JPanel(new MigLayout("insets 0, gap 4, fillx", "[grow]", "[]4[]"));
+        jsonButtons.add(addJsonFieldButton, "growx, wrap");
+        jsonButtons.add(removeJsonFieldButton, "growx");
 
-		String name = nameField.getText().trim();
-		if (StringUtils.isEmpty(name)) {
-			valid = false;
-			nameField.setBackground(UIConstants.INVALID_COLOR);
-			errorMessage.append("Please provide a name.").append(System.lineSeparator());
-		}
+        addPanel.add(jsonIndexFieldsScroll, "w 200!, h 80!, split 2");
+        addPanel.add(jsonButtons, "top");
 
-		String version = versionField.getText().trim();
-		if (StringUtils.isEmpty(version)) {
-			valid = false;
-			versionField.setBackground(UIConstants.INVALID_COLOR);
-			errorMessage.append("Please provide a version.").append(System.lineSeparator());
-		}
+        add(addPanel, "growx");
+        add(new JSeparator(), "newline, sx, growx");
 
-		String cacheSize = cacheSizeField.getText().trim();
-		if (StringUtils.isEmpty(cacheSize)) {
-			valid = false;
-			cacheSizeField.setBackground(UIConstants.INVALID_COLOR);
-			errorMessage.append("Please provide a cache size.").append(System.lineSeparator());
-		}
+        add(saveButton, "newline, sx, right, split 2");
+        add(cancelButton);
+    }
 
-		if (!valid) {
-			showError(errorMessage.toString());
-		}
+    private void resetComponents(LookupGroup lookupGroup) {
+        nameField.setText(lookupGroup.getName());
+        descriptionField.setText(lookupGroup.getDescription());
+        versionField.setText(lookupGroup.getVersion());
+        cacheSizeField.setText(String.valueOf(lookupGroup.getCacheSize()));
+        cachePolicyComboBox.getModel().setSelectedItem(lookupGroup.getCachePolicy());
 
-		return valid;
-	}
+        // ----- extra -----
+        LookupGroupExtra extra = lookupGroup.getExtra();
+        if (extra != null) {
+            // Value Type
+            String valueType = extra.getValueType() != null ? extra.getValueType() : LookupConstants.VALUE_TYPE_TEXT;
 
-	public void resetInvalidComponents() {
-		nameField.setBackground(null);
-		versionField.setBackground(null);
-		cacheSizeField.setBackground(null);
-	}
+            valueTypeComboBox.setSelectedItem(valueType);
 
-	protected void showInformation(String msg) {
-		PlatformUI.MIRTH_FRAME.alertInformation(this, msg);
-	}
+            // JSON Index mode
+            String jsonIndexMode = extra.getJsonIndexMode() != null ? extra.getJsonIndexMode() : LookupConstants.JSON_INDEX_NONE;
+            jsonIndexTypeComboBox.setSelectedItem(jsonIndexMode);
 
-	protected void showError(String err) {
-		PlatformUI.MIRTH_FRAME.alertError(this, err);
-	}
+            // JSON indexed fields
+            jsonIndexFieldsModel.clear();
+
+            if (LookupConstants.isJsonValueType(valueType) && LookupConstants.isFieldMode(jsonIndexMode) && extra.getIndexedJsonFields() != null) {
+                try {
+                    List<String> fields = JsonUtils.getMapper().readValue(extra.getIndexedJsonFields(), new TypeReference<List<String>>() {
+                    });
+                    for (String f : fields) {
+                        if (f != null && !f.isEmpty()) {
+                            jsonIndexFieldsModel.addElement(f);
+                        }
+                    }
+                } catch (Exception e) {
+                }
+            }
+        }
+        updateJsonIndexControls();
+    }
+
+    private void addJsonField() {
+        String field = JOptionPane.showInputDialog(this, "JSON field path (e.g. email, address.city):", "Add JSON Field", JOptionPane.PLAIN_MESSAGE);
+
+        if (field != null) {
+            field = field.trim();
+            if (!field.isEmpty() && !jsonIndexFieldsModel.contains(field)) {
+                jsonIndexFieldsModel.addElement(field);
+            }
+        }
+    }
+
+    private void removeJsonField() {
+        List<String> selected = jsonIndexFieldsList.getSelectedValuesList();
+        for (String s : selected) {
+            jsonIndexFieldsModel.removeElement(s);
+        }
+    }
+
+    private void updateJsonIndexControls() {
+        if (isEdit) {
+            valueTypeComboBox.setEnabled(false);
+        }
+
+        String valueType = (String) valueTypeComboBox.getSelectedItem();
+        boolean isJson = LookupConstants.isJsonValueType(valueType);
+
+        jsonIndexTypeLabel.setEnabled(isJson);
+        jsonIndexTypeComboBox.setEnabled(isJson);
+
+        if (!isJson) {
+            jsonIndexTypeComboBox.setSelectedItem("NONE");
+        }
+
+        String indexType = (String) jsonIndexTypeComboBox.getSelectedItem();
+        boolean fieldMode = isJson && "FIELD".equals(indexType);
+
+        jsonIndexFieldsLabel.setEnabled(fieldMode);
+        jsonIndexFieldsList.setEnabled(fieldMode);
+        jsonIndexFieldsScroll.setEnabled(fieldMode);
+
+        addJsonFieldButton.setEnabled(fieldMode);
+        removeJsonFieldButton.setEnabled(fieldMode);
+    }
+
+    private void save() {
+        if (!validateProperties()) {
+            return;
+        }
+
+        this.lookupGroup.setName(nameField.getText().trim());
+        this.lookupGroup.setDescription(descriptionField.getText().trim());
+        this.lookupGroup.setVersion(versionField.getText().trim());
+        this.lookupGroup.setCacheSize(Integer.parseInt(cacheSizeField.getText().trim()));
+        this.lookupGroup.setCachePolicy((String) cachePolicyComboBox.getSelectedItem());
+
+        // lookup group extra
+        LookupGroupExtra extra = new LookupGroupExtra();
+
+        String valueType = (String) valueTypeComboBox.getSelectedItem();
+        extra.setValueType(valueType);
+
+        if (LookupConstants.isJsonValueType(valueType)) {
+            String jsonIndexMode = (String) jsonIndexTypeComboBox.getSelectedItem();
+            extra.setJsonIndexMode(jsonIndexMode);
+
+            if ("FIELD".equals(jsonIndexMode)) {
+                List<String> fields = new ArrayList<>();
+                for (int i = 0; i < jsonIndexFieldsModel.size(); i++) {
+                    fields.add(jsonIndexFieldsModel.get(i));
+                }
+                if (!fields.isEmpty()) {
+                    try {
+                        String json = JsonUtils.toJson(fields);
+                        extra.setIndexedJsonFields(json);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Failed to serialize indexed JSON fields", e);
+                    }
+                }
+            }
+        }
+
+        this.lookupGroup.setExtra(extra);
+        try {
+            LookupGroup response;
+            if (this.lookupGroup.getId() > 0) {
+                response = LookupServiceClient.getInstance().updateGroup(this.lookupGroup);
+            } else {
+                response = LookupServiceClient.getInstance().createGroup(this.lookupGroup);
+            }
+
+            this.lookupGroup.setId(response.getId());
+            this.lookupGroup.setCreatedDate(response.getCreatedDate());
+            this.lookupGroup.setUpdatedDate(response.getUpdatedDate());
+
+            this.saved = true;
+
+            close();
+
+        } catch (LookupApiClientException e) {
+            showError(e.getError().getMessage());
+        } catch (Exception e) {
+            logger.error("Unexpected error while saving group", e);
+            showError("Unexpected error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+        }
+    }
+
+    private void close() {
+        dispose();
+    }
+
+    public boolean isSaved() {
+        return saved;
+    }
+
+    private boolean validateProperties() {
+        boolean valid = true;
+        StringBuilder errorMessage = new StringBuilder();
+
+        // Reset backgrounds
+        resetInvalidComponents();
+
+        String name = nameField.getText().trim();
+        if (StringUtils.isEmpty(name)) {
+            valid = false;
+            nameField.setBackground(UIConstants.INVALID_COLOR);
+            errorMessage.append("Please provide a name.").append(System.lineSeparator());
+        }
+
+        String version = versionField.getText().trim();
+        if (StringUtils.isEmpty(version)) {
+            valid = false;
+            versionField.setBackground(UIConstants.INVALID_COLOR);
+            errorMessage.append("Please provide a version.").append(System.lineSeparator());
+        }
+
+        String cacheSize = cacheSizeField.getText().trim();
+        if (StringUtils.isEmpty(cacheSize)) {
+            valid = false;
+            cacheSizeField.setBackground(UIConstants.INVALID_COLOR);
+            errorMessage.append("Please provide a cache size.").append(System.lineSeparator());
+        }
+
+        if (!valid) {
+            showError(errorMessage.toString());
+        }
+
+        return valid;
+    }
+
+    public void resetInvalidComponents() {
+        nameField.setBackground(null);
+        versionField.setBackground(null);
+        cacheSizeField.setBackground(null);
+    }
+
+    protected void showInformation(String msg) {
+        PlatformUI.MIRTH_FRAME.alertInformation(this, msg);
+    }
+
+    protected void showError(String err) {
+        PlatformUI.MIRTH_FRAME.alertError(this, err);
+    }
 }

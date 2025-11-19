@@ -24,13 +24,13 @@ import com.mirth.connect.model.codetemplates.CodeTemplateProperties.CodeTemplate
 import com.mirth.connect.plugins.CodeTemplatePlugin;
 
 public class LookupTableReferencePlugin extends CodeTemplatePlugin {
-	private static final Logger logger = LogManager.getLogger(LookupTableReferencePlugin.class);
+    private static final Logger logger = LogManager.getLogger(LookupTableReferencePlugin.class);
 
-	public LookupTableReferencePlugin(String name) {
-		super(name);
-	}
+    public LookupTableReferencePlugin(String name) {
+        super(name);
+    }
 
-	//@formatter:off
+    //@formatter:off
     @Override
     public Map<String, List<CodeTemplate>> getReferenceItems() {
         Map<String, List<CodeTemplate>> referenceItems = new HashMap<String, List<CodeTemplate>>();
@@ -204,6 +204,27 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
     	));
 
         templates.add(new CodeTemplate(
+                "Search lookup values by JSON fields",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var filters = {\n" +
+                "  \"email\": \"user_1@example.com\",\n" +
+                "  \"status\": \"active\"\n" +
+                "};\n\n" +
+                "var results = LookupHelper.findValuesByJsonFields(groupName, filters);\n" +
+                "if (!results) {\n" +
+                "  logger.error('Search by JSON fields failed for group: ' + groupName);\n" +
+                "} else {\n" +
+                "  var count = Object.keys(results).length;\n" +
+                "  logger.info('Found ' + count + ' matching entries (elapsed=' + elapsed + ' ms) in group=' + groupName);\n" +
+                "}\n",
+                "Retrieves key-value pairs from the specified lookup group by matching JSON field filters. " +
+                "Filters use dotted JSON paths (e.g., 'address.city'). " +
+                "Returns an empty map if the group does not exist or no matches are found."
+            ));
+
+
+        templates.add(new CodeTemplate(
         	    "Creates a lookup group",
         	    CodeTemplateType.DRAG_AND_DROP_CODE,
         	    CodeTemplateContextSet.getConnectorContextSet(),
@@ -224,8 +245,6 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
         	    "Returns { ok: 'true', group: {...} } on success; otherwise { ok: 'false', errorCode, errorMessage }."
     	));
 
-
-
         templates.add(new CodeTemplate(
                 "Deletes a lookup group",
                 CodeTemplateType.DRAG_AND_DROP_CODE,
@@ -241,23 +260,23 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
     }
     //@formatter:on
 
-	@Override
-	public String getPluginPointName() {
-		return "Lookup Table Reference Plugin";
-	}
+    @Override
+    public String getPluginPointName() {
+        return "Lookup Table Reference Plugin";
+    }
 
-	@Override
-	public void start() {
+    @Override
+    public void start() {
 
-	}
+    }
 
-	@Override
-	public void stop() {
+    @Override
+    public void stop() {
 
-	}
+    }
 
-	@Override
-	public void reset() {
+    @Override
+    public void reset() {
 
-	}
+    }
 }

@@ -10,9 +10,9 @@
 
 package com.mirth.connect.plugins.dynamiclookup.server.dao;
 
-import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
-
 import java.util.List;
+
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 
 public interface LookupGroupDao {
     // Group CRUD operations
@@ -30,6 +30,8 @@ public interface LookupGroupDao {
 
     // Dynamic table management
     void createValueTable(String tableName);
+
+    void createValueJsonTable(String tableName);
 
     void dropValueTable(String tableName);
 

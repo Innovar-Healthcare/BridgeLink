@@ -10,14 +10,13 @@
 
 package com.mirth.connect.plugins.dynamiclookup.shared.util;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.List;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.util.StdDateFormat;
-
-import java.util.List;
 
 public class JsonUtils {
 
@@ -65,5 +64,17 @@ public class JsonUtils {
             throw new RuntimeException("Failed to deserialize JSON list", e);
         }
     }
-}
 
+    public static boolean isValidJson(String value) {
+        if (value == null) {
+            return false;
+        }
+
+        try {
+            mapper.readTree(value);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+}

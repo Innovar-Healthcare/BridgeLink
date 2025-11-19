@@ -10,17 +10,17 @@
 
 package com.mirth.connect.plugins.dynamiclookup.server.dao.impl;
 
-import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupGroupDao;
-import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
-import org.apache.ibatis.session.SqlSession;
-import org.apache.ibatis.session.SqlSessionFactory;
-import org.apache.ibatis.session.SqlSessionManager;
-
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionManager;
+
+import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupGroupDao;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 
 public class MyBatisLookupGroupDao implements LookupGroupDao {
     private SqlSessionManager sqlSessionManager;
@@ -144,7 +144,6 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
         }
     }
 
-
     @Override
     public void createValueTable(String tableName) {
         SqlSession session = sqlSessionManager.openSession();
@@ -153,7 +152,29 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
-            session.update("Lookup.createLookupValueTable", params);
+            session.update("LookupValue.createLookupValueTable", params);
+            session.commit();
+            commitSuccess = true;
+        } finally {
+            if (!commitSuccess) {
+                try {
+                    session.rollback();
+                } catch (Exception ignored) {
+                }
+            }
+            session.close();
+        }
+    }
+
+    @Override
+    public void createValueJsonTable(String tableName) {
+        SqlSession session = sqlSessionManager.openSession();
+        boolean commitSuccess = false;
+
+        try {
+            Map<String, Object> params = new HashMap<>();
+            params.put("tableName", tableName);
+            session.update("LookupValue.createLookupValueJsonTable", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -175,7 +196,7 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
-            session.update("Lookup.dropLookupValueTable", params);
+            session.update("LookupValue.dropLookupValueTable", params);
             session.commit();
             commitSuccess = true;
         } finally {

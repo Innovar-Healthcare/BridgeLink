@@ -13,13 +13,6 @@
         <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
     </resultMap>
 
-    <resultMap id="lookup-value" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue">
-        <id property="keyValue" column="KEY_VALUE" javaType="String"/>
-        <result property="valueData" column="VALUE_DATA" javaType="String"/>
-        <result property="createdDate" column="CREATED_DATE" javaType="java.sql.Timestamp"/>
-        <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
-    </resultMap>
-
     <resultMap id="lookup-statistics" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupStatistics">
         <id property="groupId" column="GROUP_ID" javaType="Integer"/>
         <result property="totalLookups" column="TOTAL_LOOKUPS" javaType="Long"/>
@@ -39,14 +32,6 @@
         <result property="userId" column="USER_ID" javaType="String"/>
         <result property="timestamp" column="AUDIT_TIMESTAMP" javaType="java.sql.Timestamp"/>
     </resultMap>
-
-    <sql id="searchLookupValuesBody">
-        <where>
-            <if test='pattern != null'>KEY_VALUE ILIKE '%' || #{pattern} || '%'
-                OR VALUE_DATA ILIKE '%' || #{pattern} || '%'
-            </if>
-        </where>
-    </sql>
 
     <!-- Group Operations -->
     <select id="getGroupById" parameterType="Integer" resultMap="lookup-group">
@@ -87,121 +72,6 @@
         WHERE ID = #{value}
     </delete>
 
-    <!-- Value Operations -->
-    <select id="getLookupValues" parameterType="map" resultMap="lookup-value">
-        SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
-        FROM ${tableName}
-        ORDER BY KEY_VALUE ASC
-    </select>
-
-    <select id="getLookupValue" parameterType="map" resultMap="lookup-value">
-        SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
-        FROM ${tableName}
-        WHERE KEY_VALUE = #{keyValue}
-    </select>
-
-    <select id="getMatchingLookupValues" parameterType="map" resultMap="lookup-value">
-        SELECT KEY_VALUE, VALUE_DATA
-        FROM ${tableName}
-        WHERE LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyPattern} || '%')
-    </select>
-
-    <select id="getValue" parameterType="map" resultType="String">
-        SELECT VALUE_DATA
-        FROM ${tableName}
-        WHERE KEY_VALUE = #{keyValue}
-    </select>
-
-    <insert id="insertValue" parameterType="map">
-        INSERT INTO ${tableName} (KEY_VALUE, VALUE_DATA)
-        VALUES (#{keyValue}, #{valueData})
-    </insert>
-
-    <update id="updateValue" parameterType="map">
-        UPDATE ${tableName}
-        SET VALUE_DATA = #{valueData},
-        UPDATED_DATE = CURRENT_TIMESTAMP
-        WHERE KEY_VALUE = #{keyValue}
-    </update>
-    
-	<insert id="putIfAbsent" parameterType="map">
-    	INSERT INTO ${tableName} (KEY_VALUE, VALUE_DATA)
-    	VALUES (#{keyValue}, #{valueData})
-    	ON CONFLICT (KEY_VALUE) DO NOTHING
-  	</insert>
-
-	<update id="compareAndSwap" parameterType="map">
-	    UPDATE ${tableName}
-	    SET VALUE_DATA = #{newValue},
-	    UPDATED_DATE = CURRENT_TIMESTAMP
-	    WHERE KEY_VALUE = #{keyValue} AND VALUE_DATA = #{expectedValue}
-	</update>
-
-	<update id="updateValueByDelta" parameterType="map">
-	    UPDATE ${tableName}
-	    SET VALUE_DATA = ((VALUE_DATA)::bigint + #{delta})::text,
-	    UPDATED_DATE = CURRENT_TIMESTAMP
-	    WHERE KEY_VALUE = #{keyValue}
-	</update>
-	
-    <delete id="deleteValue" parameterType="map">
-        DELETE FROM ${tableName}
-        WHERE KEY_VALUE = #{keyValue}
-    </delete>
-
-    <delete id="deleteAllValues" parameterType="map">
-        DELETE FROM ${tableName}
-    </delete>
-
-    <select id="getValueCount" parameterType="map" resultType="long">
-        SELECT COUNT(*) FROM ${tableName}
-    </select>
-
-    <update id="createLookupValueTable" parameterType="map">
-        CREATE TABLE ${tableName} (
-        KEY_VALUE VARCHAR(255) NOT NULL,
-        VALUE_DATA TEXT,
-        CREATED_DATE TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UPDATED_DATE TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (KEY_VALUE)
-        )
-    </update>
-
-    <update id="dropLookupValueTable" parameterType="map">
-        DROP TABLE IF EXISTS ${tableName};
-    </update>
-
-    <select id="searchLookupValuesCount" parameterType="map" resultType="long">
-        SELECT COUNT(*) FROM ${tableName}
-
-        <include refid="searchLookupValuesBody"/>
-    </select>
-
-    <select id="searchLookupValues" parameterType="map" resultMap="lookup-value">
-        SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
-        FROM ${tableName}
-
-        <include refid="searchLookupValuesBody"/>
-
-        ORDER BY KEY_VALUE ASC
-
-        <if test="offset != null">
-            OFFSET ${offset}
-        </if>
-        <if test="limit != null">
-            LIMIT ${limit}
-        </if>
-    </select>
-  
-   	<select id="selectExistingKeys" parameterType="map" resultType="string">
-	    SELECT KEY_VALUE
-	    FROM ${tableName}
-	    WHERE KEY_VALUE IN
-	    <foreach item="key" collection="keyValues" open="(" separator="," close=")">
-	      #{key}
-	    </foreach>
-  	</select>
-  	
     <!-- Statistics Operations -->
     <insert id="insertStatistics" parameterType="map">
         INSERT INTO LOOKUP_STATISTICS (

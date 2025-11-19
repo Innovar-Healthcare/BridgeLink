@@ -12,12 +12,15 @@ package com.mirth.connect.plugins.dynamiclookup.shared.dto.request;
 
 import org.apache.commons.lang3.StringUtils;
 
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
+
 public class LookupGroupRequest {
-    private String name;           // Required
-    private String description;    // Optional
-    private String version;        // Required
-    private Integer cacheSize;     // Required
-    private String cachePolicy;    // Required
+    private String name; // Required
+    private String description; // Optional
+    private String version; // Required
+    private Integer cacheSize; // Required
+    private String cachePolicy; // Required
+    private LookupGroupExtra extra; // Option
 
     public String getName() {
         return name;
@@ -57,6 +60,14 @@ public class LookupGroupRequest {
 
     public void setCachePolicy(String cachePolicy) {
         this.cachePolicy = cachePolicy;
+    }
+
+    public LookupGroupExtra getExtra() {
+        return extra;
+    }
+
+    public void setExtra(LookupGroupExtra extra) {
+        this.extra = extra;
     }
 
     public void validate() throws IllegalArgumentException {

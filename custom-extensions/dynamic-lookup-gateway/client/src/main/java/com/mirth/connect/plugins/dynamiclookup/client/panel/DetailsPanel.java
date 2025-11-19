@@ -10,26 +10,29 @@
 
 package com.mirth.connect.plugins.dynamiclookup.client.panel;
 
-import com.mirth.connect.client.ui.Frame;
-import com.mirth.connect.client.ui.PlatformUI;
-import com.mirth.connect.client.ui.UIConstants;
-import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
+import java.awt.CardLayout;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.text.SimpleDateFormat;
+import java.util.List;
 
-import net.miginfocom.swing.MigLayout;
+import javax.swing.BorderFactory;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import javax.swing.JPanel;
-import javax.swing.JTextArea;
-import javax.swing.BorderFactory;
-import javax.swing.JScrollPane;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.mirth.connect.client.ui.Frame;
+import com.mirth.connect.client.ui.PlatformUI;
+import com.mirth.connect.client.ui.UIConstants;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
+import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 
-import java.awt.Font;
-import java.awt.CardLayout;
-import java.awt.Dimension;
-
-import java.text.SimpleDateFormat;
+import net.miginfocom.swing.MigLayout;
 
 public class DetailsPanel extends JPanel {
     private final Logger logger = LogManager.getLogger(this.getClass());
@@ -70,7 +73,7 @@ public class DetailsPanel extends JPanel {
 
         JScrollPane scrollPane = new JScrollPane(detailsTextArea);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        scrollPane.setPreferredSize(new Dimension(500, 200));
+        scrollPane.setPreferredSize(new Dimension(600, 300));
 
         // Place at top, do not stretch vertically
         contentPanel.add(scrollPane, "aligny top, growx, wrap");
@@ -78,7 +81,6 @@ public class DetailsPanel extends JPanel {
         add(contentPanel, "content");
         add(noGroupSelectedPanel, "noGroup");
     }
-
 
     public void updateDetails(LookupGroup selectedGroup) {
         boolean showContent = selectedGroup != null;
@@ -93,31 +95,88 @@ public class DetailsPanel extends JPanel {
         }
     }
 
+    //@formatter:off
     private void refreshUI() {
         if (selectedGroup == null) {
             detailsTextArea.setText("");
             return;
         }
 
-        String details = String.format(
-                "%-15s: %d%n" +
-                        "%-15s: %s%n" +
-                        "%-15s: %s%n" +
-                        "%-15s: %s%n" +
-                        "%-15s: %d%n" +
-                        "%-15s: %s%n" +
-                        "%-15s: %s%n" +
-                        "%-15s: %s%n",
+        LookupGroupExtra extra = selectedGroup.getExtra();
+
+        String headerAndCache = String.format(
+                "%-20s: %d%n" +
+                "%-20s: %s%n" +
+                "%-20s: %s%n" +
+                "%-20s: %s%n" +
+                "%-20s: %d%n" +
+                "%-20s: %s%n",
                 "ID", selectedGroup.getId(),
                 "Name", selectedGroup.getName(),
                 "Description", selectedGroup.getDescription() != null ? selectedGroup.getDescription() : "",
                 "Version", selectedGroup.getVersion() != null ? selectedGroup.getVersion() : "",
                 "Cache Size", selectedGroup.getCacheSize(),
-                "Cache Policy", selectedGroup.getCachePolicy() != null ? selectedGroup.getCachePolicy() : "",
+                "Cache Policy", selectedGroup.getCachePolicy() != null ? selectedGroup.getCachePolicy() : ""
+        );
+
+        // build extra block
+        String extraBlock = buildExtraDetails(extra);
+
+        String createdUpdated = String.format(
+                "%-20s: %s%n" +
+                "%-20s: %s%n",
                 "Created Date", formatter.format(selectedGroup.getCreatedDate()),
                 "Updated Date", formatter.format(selectedGroup.getUpdatedDate())
         );
 
+        // final
+        String details = headerAndCache + extraBlock + createdUpdated;
+
         detailsTextArea.setText(details);
     }
+    //@formatter:on
+
+    private String buildExtraDetails(LookupGroupExtra extra) {
+        StringBuilder sb = new StringBuilder();
+
+        // ----- Value Type -----
+        String valueType = (extra != null && extra.getValueType() != null) ? extra.getValueType() : "TEXT";
+
+        sb.append(String.format("%-20s: %s%n", "Value Type", valueType));
+
+        // ----- Only JSON has index info -----
+        if (!"JSON".equals(valueType)) {
+            sb.append(System.lineSeparator());
+            return sb.toString();
+        }
+
+        // ----- JSON Index Mode -----
+        String jsonIndexMode = (extra != null && extra.getJsonIndexMode() != null) ? extra.getJsonIndexMode() : "NONE";
+
+        sb.append(String.format("%-20s: %s%n", "JSON Index", jsonIndexMode));
+
+        // ----- JSON Fields (FIELD only) -----
+        if ("FIELD".equals(jsonIndexMode) && extra != null && extra.getIndexedJsonFields() != null) {
+
+            String jsonFields = "";
+            try {
+                List<String> fields = JsonUtils.getMapper().readValue(extra.getIndexedJsonFields(), new TypeReference<List<String>>() {
+                });
+
+                if (!fields.isEmpty()) {
+                    jsonFields = String.join(", ", fields);
+                }
+
+            } catch (Exception e) {
+                jsonFields = "(invalid JSON)";
+            }
+
+            if (!jsonFields.isEmpty()) {
+                sb.append(String.format("%-20s: %s%n", "Index JSON Fields", jsonFields));
+            }
+        }
+
+        return sb.toString();
+    }
+
 }

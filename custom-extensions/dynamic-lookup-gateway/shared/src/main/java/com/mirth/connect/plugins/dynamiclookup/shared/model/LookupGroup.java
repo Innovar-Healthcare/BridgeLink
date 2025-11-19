@@ -21,10 +21,11 @@ public class LookupGroup {
     private String name;
     private String description;
     private String version;
-    private int cacheSize;  // Default: 1000
-    private String cachePolicy;  // "LRU" or "FIFO"
+    private int cacheSize; // Default: 1000
+    private String cachePolicy; // "LRU" or "FIFO"
     private Date createdDate;
     private Date updatedDate;
+    private LookupGroupExtra extra;
 
     public LookupGroup() {
         id = 0;
@@ -44,6 +45,7 @@ public class LookupGroup {
         this.cachePolicy = other.cachePolicy;
         this.createdDate = other.createdDate != null ? new Date(other.createdDate.getTime()) : null;
         this.updatedDate = other.updatedDate != null ? new Date(other.updatedDate.getTime()) : null;
+        this.extra = other.extra;
     }
 
     public int getId() {
@@ -108,5 +110,13 @@ public class LookupGroup {
 
     public void setUpdatedDate(Date updatedDate) {
         this.updatedDate = updatedDate;
+    }
+
+    public LookupGroupExtra getExtra() {
+        return extra;
+    }
+
+    public void setExtra(LookupGroupExtra extra) {
+        this.extra = extra;
     }
 }

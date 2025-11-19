@@ -23,61 +23,106 @@ import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect;
 import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect.DatabaseType;
 
 public class LookupSchemaMigrator {
-	private final Logger logger = LogManager.getLogger(this.getClass());
+    private final Logger logger = LogManager.getLogger(this.getClass());
 
-	private final SqlSessionManager sqlSessionManager;
+    private final SqlSessionManager sqlSessionManager;
 
-	public LookupSchemaMigrator(SqlSessionManager sqlSessionManager) {
-		this.sqlSessionManager = sqlSessionManager;
-	}
+    public LookupSchemaMigrator(SqlSessionManager sqlSessionManager) {
+        this.sqlSessionManager = sqlSessionManager;
+    }
 
-	public void migrate() {
-		if (needUpdateV101()) {
-			String path = "/sql/sqlserver/fixes/V101_convert_varchar_to_nvarchar.sql";
-			String sqlScript = SqlScriptRunner.loadScript(path);
+    public void migrate() {
+        if (needUpdateV101()) {
+            String path = "/sql/sqlserver/fixes/V101_convert_varchar_to_nvarchar.sql";
+            String sqlScript = SqlScriptRunner.loadScript(path);
 
-			SqlScriptRunner.runWithGo(sqlSessionManager, sqlScript);
-		}
-	}
+            SqlScriptRunner.runWithGo(sqlSessionManager, sqlScript);
+        }
 
-	private boolean needUpdateV101() {
-		try {
-			DatabaseType dbType = DatabaseDialect.determineDatabaseType(sqlSessionManager);
-			if (dbType != DatabaseType.SQLSERVER) {
-				return false;
-			}
+        if (needUpdateV210_AddGroupExtra()) {
+            String path = "/sql/postgres/fixes/V210_add_group_extra_table.sql";
+            String sqlScript = SqlScriptRunner.loadScript(path);
 
-			SqlSession session = sqlSessionManager.openSession();
-			ResultSet rs = null;
-			try {
-				DatabaseMetaData metaData = session.getConnection().getMetaData();
+            SqlScriptRunner.runWithSemicolon(sqlSessionManager, sqlScript);
+        }
+    }
 
-				rs = metaData.getColumns(null, null, "LOOKUP_GROUP", "NAME");
-				if (!rs.next()) {
-					DbUtils.closeQuietly(rs);
-					rs = metaData.getColumns(null, null, "lookup_group", "name");
-					if (!rs.next()) {
-						return false;
-					}
-				}
+    private boolean needUpdateV101() {
+        try {
+            DatabaseType dbType = DatabaseDialect.determineDatabaseType(sqlSessionManager);
+            if (dbType != DatabaseType.SQLSERVER) {
+                return false;
+            }
 
-				String typeName = rs.getString("TYPE_NAME");
-				return typeName == null || !"NVARCHAR".equalsIgnoreCase(typeName);
-			} catch (Exception e) {
-				logger.warn("needUpdateV101() check failed: {}", e.getMessage());
-				return false;
-			} finally {
-				DbUtils.closeQuietly(rs);
-				try {
-					session.close();
-				} catch (Exception ignore) {
-				}
-			}
+            SqlSession session = sqlSessionManager.openSession();
+            ResultSet rs = null;
+            try {
+                DatabaseMetaData metaData = session.getConnection().getMetaData();
 
-		} catch (Exception e) {
-			// TODO: handle exception
-		}
+                rs = metaData.getColumns(null, null, "LOOKUP_GROUP", "NAME");
+                if (!rs.next()) {
+                    DbUtils.closeQuietly(rs);
+                    rs = metaData.getColumns(null, null, "lookup_group", "name");
+                    if (!rs.next()) {
+                        return false;
+                    }
+                }
 
-		return false;
-	}
+                String typeName = rs.getString("TYPE_NAME");
+                return typeName == null || !"NVARCHAR".equalsIgnoreCase(typeName);
+            } catch (Exception e) {
+                logger.warn("needUpdateV101() check failed: {}", e.getMessage());
+                return false;
+            } finally {
+                DbUtils.closeQuietly(rs);
+                try {
+                    session.close();
+                } catch (Exception ignore) {
+                }
+            }
+
+        } catch (Exception e) {
+            // TODO: handle exception
+        }
+
+        return false;
+    }
+
+    private boolean needUpdateV210_AddGroupExtra() {
+        SqlSession session = null;
+        ResultSet rs = null;
+
+        try {
+            DatabaseType dbType = DatabaseDialect.determineDatabaseType(sqlSessionManager);
+            if (dbType != DatabaseType.POSTGRESQL) {
+                return false;
+            }
+
+            session = sqlSessionManager.openSession();
+            DatabaseMetaData metaData = session.getConnection().getMetaData();
+
+            rs = metaData.getTables(null, null, "LOOKUP_GROUP_EXTRA", null);
+            boolean exists = rs.next();
+
+            if (!exists) {
+                DbUtils.closeQuietly(rs);
+                rs = metaData.getTables(null, null, "lookup_group_extra", null);
+                exists = rs.next();
+            }
+
+            return !exists;
+        } catch (Exception e) {
+            logger.warn("needUpdateV210_AddGroupExtra() check failed: {}", e.getMessage());
+            return false;
+        } finally {
+            DbUtils.closeQuietly(rs);
+            try {
+                if (session != null) {
+                    session.close();
+                }
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
 }
