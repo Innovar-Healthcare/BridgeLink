@@ -503,7 +503,7 @@ public class LookupHelper {
      *
      * @return Map of key -> valueData, or {@code null} if group not found or an error occurs.
      */
-    public static Map<String, String> findValuesByJsonFields(String groupName, Map<String, String> filters) {
+    public static Map<String, String> findValuesByJsonFields(String groupName, String filterJson) {
         try {
             LookupGroup group = lookupService.getGroupByName(groupName);
             if (group == null) {
@@ -511,10 +511,10 @@ public class LookupHelper {
                 return null;
             }
 
-            return lookupService.findValuesByJsonFields(group.getId(), filters);
+            return lookupService.findValuesByJsonFields(group.getId(), filterJson);
 
         } catch (Exception e) {
-            logger.error("Failed to search lookup values [group='{}', filters={}]: {}", groupName, filters, e.getMessage(), e);
+            logger.error("Failed to search lookup values [group='{}', filterJson={}]: {}", groupName, filterJson, e.getMessage(), e);
             return null;
         }
     }

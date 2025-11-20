@@ -204,25 +204,29 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
     	));
 
         templates.add(new CodeTemplate(
-                "Search lookup values by JSON fields",
+                "Search lookup values by JSON filter",
                 CodeTemplateType.DRAG_AND_DROP_CODE,
                 CodeTemplateContextSet.getConnectorContextSet(),
-                "var filters = {\n" +
-                "  \"email\": \"user_1@example.com\",\n" +
-                "  \"status\": \"active\"\n" +
+                "var filter = {\n" +
+                "  email: 'user_1@example.com',\n" +
+                "  address: {\n" +
+                "    city: 'New York'\n" +
+                "  }\n" +
                 "};\n\n" +
-                "var results = LookupHelper.findValuesByJsonFields(groupName, filters);\n" +
+                "// Convert JS object to JSON string\n" +
+                "var filterJson = JSON.stringify(filter);\n\n" +
+                "var results = LookupHelper.findValuesByJsonFields(groupName, filterJson);\n\n" +
                 "if (!results) {\n" +
-                "  logger.error('Search by JSON fields failed for group: ' + groupName);\n" +
+                "  logger.error('Search by JSON filter failed for group: ' + groupName);\n" +
                 "} else {\n" +
                 "  var count = Object.keys(results).length;\n" +
-                "  logger.info('Found ' + count + ' matching entries (elapsed=' + elapsed + ' ms) in group=' + groupName);\n" +
+                "  logger.info('Found ' + count + ' matching entries in group=' + groupName);\n" +
                 "}\n",
-                "Retrieves key-value pairs from the specified lookup group by matching JSON field filters. " +
-                "Filters use dotted JSON paths (e.g., 'address.city'). " +
+                "Retrieves key-value pairs from the specified lookup group by matching JSON filter string. " +
+                "The filter is built as a standard JSON object (supports nested JSON). " +
+                "Use JSON.stringify() to convert the filter object before calling the helper. " +
                 "Returns an empty map if the group does not exist or no matches are found."
             ));
-
 
         templates.add(new CodeTemplate(
         	    "Creates a lookup group",
@@ -244,7 +248,7 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
         	    "Creates a lookup group with fields: name, description, version, cacheSize, cachePolicy. " +
         	    "Returns { ok: 'true', group: {...} } on success; otherwise { ok: 'false', errorCode, errorMessage }."
     	));
-
+        
         templates.add(new CodeTemplate(
                 "Deletes a lookup group",
                 CodeTemplateType.DRAG_AND_DROP_CODE,

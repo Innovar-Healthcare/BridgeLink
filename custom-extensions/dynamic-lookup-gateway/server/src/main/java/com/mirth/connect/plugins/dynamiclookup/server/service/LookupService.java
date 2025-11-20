@@ -30,7 +30,6 @@ import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupStatisticsDao;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupValueDao;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldCriteriaBuilder;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldCriterion;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonGinFilterBuilder;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.DuplicateGroupNameException;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.GroupNotFoundException;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.ValueOperationException;
@@ -508,8 +507,8 @@ public class LookupService {
         return valueDao.searchLookupValues(tableName, offset, limit, pattern);
     }
 
-    public Map<String, String> findValuesByJsonFields(Integer groupId, Map<String, String> filters) {
-        List<LookupValue> values = searchLookupValuesByJsonFields(groupId, null, null, filters);
+    public Map<String, String> findValuesByJsonFields(Integer groupId, String filterJson) {
+        List<LookupValue> values = searchLookupValuesByJsonFields(groupId, null, null, filterJson);
 
         Map<String, String> map = new LinkedHashMap<>();
         for (LookupValue value : values) {
@@ -519,7 +518,10 @@ public class LookupService {
         return map;
     }
 
-    public List<LookupValue> searchLookupValuesByJsonFields(Integer groupId, Integer offset, Integer limit, Map<String, String> filters) {
+    public List<LookupValue> searchLookupValuesByJsonFields(Integer groupId, Integer offset, Integer limit, String filterJson) {
+        if (!JsonUtils.isValidJson(filterJson)) {
+            throw new IllegalStateException("Invalid JSON filter: " + filterJson);
+        }
 
         // Load group + extra
         LookupGroup group = groupDao.getGroupById(groupId);
@@ -542,11 +544,10 @@ public class LookupService {
         String tableName = getTableNameForGroup(groupId);
 
         if (LookupConstants.isGinMode(mode)) {
-            String filterJson = JsonGinFilterBuilder.buildFilter(filters);
             return valueDao.searchByJsonFieldsGin(tableName, offset, limit, filterJson);
         }
 
-        List<JsonFieldCriterion> criteria = JsonFieldCriteriaBuilder.buildCriteria(filters);
+        List<JsonFieldCriterion> criteria = JsonFieldCriteriaBuilder.buildCriteria(filterJson);
         return valueDao.searchByJsonFieldsField(tableName, offset, limit, criteria);
     }
 
