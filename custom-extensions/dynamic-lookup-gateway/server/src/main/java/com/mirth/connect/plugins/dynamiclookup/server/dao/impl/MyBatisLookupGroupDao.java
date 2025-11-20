@@ -71,6 +71,7 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
             params.put("version", group.getVersion());
             params.put("cacheSize", group.getCacheSize());
             params.put("cachePolicy", group.getCachePolicy());
+            params.put("valueType", group.getValueType());
             session.insert("Lookup.insertGroup", params);
             session.commit();
             commitSuccess = true;
@@ -109,7 +110,7 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
             params.put("version", group.getVersion());
             params.put("cacheSize", group.getCacheSize());
             params.put("cachePolicy", group.getCachePolicy());
-
+            params.put("valueType", group.getValueType());
             session.update("Lookup.updateGroup", params);
             session.commit();
             commitSuccess = true;

@@ -20,6 +20,7 @@ public class LookupGroupRequest {
     private String version; // Required
     private Integer cacheSize; // Required
     private String cachePolicy; // Required
+    private String valueType; // Option
     private LookupGroupExtra extra; // Option
 
     public String getName() {
@@ -64,6 +65,14 @@ public class LookupGroupRequest {
 
     public LookupGroupExtra getExtra() {
         return extra;
+    }
+
+    public String getValueType() {
+        return valueType;
+    }
+
+    public void setValueType(String valueType) {
+        this.valueType = valueType;
     }
 
     public void setExtra(LookupGroupExtra extra) {

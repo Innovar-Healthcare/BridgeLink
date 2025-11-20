@@ -55,7 +55,6 @@ public class MyBatisLookupGroupExtraDao implements LookupGroupExtraDao {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("groupId", extra.getGroupId());
-            params.put("valueType", extra.getValueType());
             params.put("jsonIndexMode", extra.getJsonIndexMode());
             params.put("indexedJsonFields", extra.getIndexedJsonFields());
 
@@ -85,7 +84,6 @@ public class MyBatisLookupGroupExtraDao implements LookupGroupExtraDao {
             Map<String, Object> params = new HashMap<>();
 
             params.put("groupId", extra.getGroupId());
-            params.put("valueType", extra.getValueType());
             params.put("jsonIndexMode", extra.getJsonIndexMode());
             params.put("indexedJsonFields", extra.getIndexedJsonFields());
 

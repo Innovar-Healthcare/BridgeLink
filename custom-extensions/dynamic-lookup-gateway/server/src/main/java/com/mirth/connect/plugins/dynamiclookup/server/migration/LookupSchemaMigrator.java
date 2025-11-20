@@ -21,6 +21,7 @@ import org.apache.logging.log4j.Logger;
 
 import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect;
 import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect.DatabaseType;
+import com.mirth.connect.plugins.dynamiclookup.server.util.LookupDbUtil;
 
 public class LookupSchemaMigrator {
     private final Logger logger = LogManager.getLogger(this.getClass());
@@ -37,6 +38,13 @@ public class LookupSchemaMigrator {
             String sqlScript = SqlScriptRunner.loadScript(path);
 
             SqlScriptRunner.runWithGo(sqlSessionManager, sqlScript);
+        }
+
+        if (needUpdateV210_AddGroupValueType()) {
+            String path = "/sql/postgres/fixes/V210_add_value_type_to_group_table.sql";
+            String sqlScript = SqlScriptRunner.loadScript(path);
+
+            SqlScriptRunner.runWithSemicolon(sqlSessionManager, sqlScript);
         }
 
         if (needUpdateV210_AddGroupExtra()) {
@@ -88,34 +96,19 @@ public class LookupSchemaMigrator {
         return false;
     }
 
-    private boolean needUpdateV210_AddGroupExtra() {
+    private boolean needUpdateV210_AddGroupValueType() {
         SqlSession session = null;
-        ResultSet rs = null;
 
         try {
-            DatabaseType dbType = DatabaseDialect.determineDatabaseType(sqlSessionManager);
-            if (dbType != DatabaseType.POSTGRESQL) {
-                return false;
-            }
-
             session = sqlSessionManager.openSession();
-            DatabaseMetaData metaData = session.getConnection().getMetaData();
 
-            rs = metaData.getTables(null, null, "LOOKUP_GROUP_EXTRA", null);
-            boolean exists = rs.next();
-
-            if (!exists) {
-                DbUtils.closeQuietly(rs);
-                rs = metaData.getTables(null, null, "lookup_group_extra", null);
-                exists = rs.next();
-            }
-
-            return !exists;
+            return !LookupDbUtil.columnExists(session.getConnection(), "LOOKUP_GROUP", "VALUE_TYPE");
         } catch (Exception e) {
-            logger.warn("needUpdateV210_AddGroupExtra() check failed: {}", e.getMessage());
+            // TODO: handle exception
+            logger.warn("needUpdateV210_AddGroupValueType() check failed: {}", e.getMessage());
             return false;
         } finally {
-            DbUtils.closeQuietly(rs);
+
             try {
                 if (session != null) {
                     session.close();
@@ -125,4 +118,27 @@ public class LookupSchemaMigrator {
         }
     }
 
+    private boolean needUpdateV210_AddGroupExtra() {
+        SqlSession session = null;
+
+        try {
+            DatabaseType dbType = DatabaseDialect.determineDatabaseType(sqlSessionManager);
+            if (dbType != DatabaseType.POSTGRESQL) {
+                return false;
+            }
+
+            session = sqlSessionManager.openSession();
+            return !LookupDbUtil.tableExists(session.getConnection(), "LOOKUP_GROUP_EXTRA");
+        } catch (Exception e) {
+            logger.warn("needUpdateV210_AddGroupExtra() check failed: {}", e.getMessage());
+            return false;
+        } finally {
+            try {
+                if (session != null) {
+                    session.close();
+                }
+            } catch (Exception ignore) {
+            }
+        }
+    }
 }

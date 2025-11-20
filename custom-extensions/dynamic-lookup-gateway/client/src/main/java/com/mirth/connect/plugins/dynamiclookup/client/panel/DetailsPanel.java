@@ -28,6 +28,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.mirth.connect.client.ui.Frame;
 import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.client.ui.UIConstants;
+import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
@@ -95,60 +96,49 @@ public class DetailsPanel extends JPanel {
         }
     }
 
-    //@formatter:off
     private void refreshUI() {
         if (selectedGroup == null) {
             detailsTextArea.setText("");
             return;
         }
-
-        LookupGroupExtra extra = selectedGroup.getExtra();
-
+        //@formatter:off
         String headerAndCache = String.format(
                 "%-20s: %d%n" +
                 "%-20s: %s%n" +
                 "%-20s: %s%n" +
                 "%-20s: %s%n" +
                 "%-20s: %d%n" +
+                "%-20s: %s%n" +
                 "%-20s: %s%n",
                 "ID", selectedGroup.getId(),
                 "Name", selectedGroup.getName(),
                 "Description", selectedGroup.getDescription() != null ? selectedGroup.getDescription() : "",
                 "Version", selectedGroup.getVersion() != null ? selectedGroup.getVersion() : "",
                 "Cache Size", selectedGroup.getCacheSize(),
-                "Cache Policy", selectedGroup.getCachePolicy() != null ? selectedGroup.getCachePolicy() : ""
+                "Cache Policy", selectedGroup.getCachePolicy() != null ? selectedGroup.getCachePolicy() : "",
+                "Value Type", selectedGroup.getValueType() != null ? selectedGroup.getValueType() : "TEXT"
         );
+        //@formatter:on
+        String details = headerAndCache;
 
-        // build extra block
-        String extraBlock = buildExtraDetails(extra);
+        if (LookupConstants.isJsonValueType(selectedGroup.getValueType())) {
+            // build extra block
+            LookupGroupExtra extra = selectedGroup.getExtra();
+            String extraBlock = buildExtraDetails(extra);
 
-        String createdUpdated = String.format(
-                "%-20s: %s%n" +
-                "%-20s: %s%n",
-                "Created Date", formatter.format(selectedGroup.getCreatedDate()),
-                "Updated Date", formatter.format(selectedGroup.getUpdatedDate())
-        );
+            details += extraBlock;
+        }
+
+        String createdUpdated = String.format("%-20s: %s%n" + "%-20s: %s%n", "Created Date", formatter.format(selectedGroup.getCreatedDate()), "Updated Date", formatter.format(selectedGroup.getUpdatedDate()));
 
         // final
-        String details = headerAndCache + extraBlock + createdUpdated;
+        details += createdUpdated;
 
         detailsTextArea.setText(details);
     }
-    //@formatter:on
 
     private String buildExtraDetails(LookupGroupExtra extra) {
         StringBuilder sb = new StringBuilder();
-
-        // ----- Value Type -----
-        String valueType = (extra != null && extra.getValueType() != null) ? extra.getValueType() : "TEXT";
-
-        sb.append(String.format("%-20s: %s%n", "Value Type", valueType));
-
-        // ----- Only JSON has index info -----
-        if (!"JSON".equals(valueType)) {
-            sb.append(System.lineSeparator());
-            return sb.toString();
-        }
 
         // ----- JSON Index Mode -----
         String jsonIndexMode = (extra != null && extra.getJsonIndexMode() != null) ? extra.getJsonIndexMode() : "NONE";
@@ -156,7 +146,7 @@ public class DetailsPanel extends JPanel {
         sb.append(String.format("%-20s: %s%n", "JSON Index", jsonIndexMode));
 
         // ----- JSON Fields (FIELD only) -----
-        if ("FIELD".equals(jsonIndexMode) && extra != null && extra.getIndexedJsonFields() != null) {
+        if (LookupConstants.isFieldMode(jsonIndexMode) && extra != null && extra.getIndexedJsonFields() != null) {
 
             String jsonFields = "";
             try {

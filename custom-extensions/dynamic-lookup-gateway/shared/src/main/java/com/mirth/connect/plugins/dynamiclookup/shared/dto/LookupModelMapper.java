@@ -39,6 +39,7 @@ public class LookupModelMapper {
         group.setCachePolicy(dto.getCachePolicy());
         group.setCreatedDate(new Date());
         group.setUpdatedDate(new Date());
+        group.setValueType(dto.getValueType());
         group.setExtra(cloneExtra(dto.getExtra()));
 
         return group;

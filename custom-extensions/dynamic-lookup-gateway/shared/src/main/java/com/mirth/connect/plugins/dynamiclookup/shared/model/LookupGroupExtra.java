@@ -2,16 +2,14 @@ package com.mirth.connect.plugins.dynamiclookup.shared.model;
 
 public class LookupGroupExtra {
     private int groupId; // PK = LOOKUP_GROUP.ID
-    private String valueType; // TEXT | JSON
     private String jsonIndexMode; // NONE | GIN | FIELD
     private String indexedJsonFields; // JSON string (mapping to JSONB/TEXT)
 
     public LookupGroupExtra() {
     }
 
-    public LookupGroupExtra(int groupId, String valueType, String jsonIndexMode, String indexedJsonFields) {
+    public LookupGroupExtra(int groupId, String jsonIndexMode, String indexedJsonFields) {
         this.groupId = groupId;
-        this.valueType = valueType;
         this.jsonIndexMode = jsonIndexMode;
         this.indexedJsonFields = indexedJsonFields;
     }
@@ -22,14 +20,6 @@ public class LookupGroupExtra {
 
     public void setGroupId(int groupId) {
         this.groupId = groupId;
-    }
-
-    public String getValueType() {
-        return valueType;
-    }
-
-    public void setValueType(String valueType) {
-        this.valueType = valueType;
     }
 
     public String getJsonIndexMode() {
@@ -53,7 +43,6 @@ public class LookupGroupExtra {
     public String toString() {
         return "LookupGroupExtra{" +
                 "groupId=" + groupId +
-                ", valueType='" + valueType + '\'' +
                 ", jsonIndexMode='" + jsonIndexMode + '\'' +
                 ", indexedJsonFields='" + indexedJsonFields + '\'' +
                 '}';

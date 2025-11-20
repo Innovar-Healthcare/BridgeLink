@@ -159,15 +159,19 @@ public class LookupService {
         int groupId = groupDao.insertGroup(group);
         group.setId(groupId);
 
-        // insert group extra
-        LookupGroupExtra extra = group.getExtra();
+        boolean isValueJson = LookupConstants.isJsonValueType(group.getValueType());
 
-        // If extra missing -> ignore
-        boolean isValueJson = false;
-        if (extra != null) {
+        // insert group extra
+        LookupGroupExtra extra = null;
+        if (isValueJson) {
+            extra = group.getExtra();
+
+            if (extra == null) {
+                throw new IllegalArgumentException("LookupGroupExtra is required for JSON valueType.");
+            }
+
             extra.setGroupId(groupId);
             groupExtraDao.insert(extra);
-            isValueJson = LookupConstants.isJsonValueType(extra.getValueType());
         }
 
         try {
@@ -222,44 +226,33 @@ public class LookupService {
             }
         }
 
-        // Load existing extra for type and index comparison
-        LookupGroupExtra oldExtra = groupExtraDao.getByGroupId(group.getId());
-        LookupGroupExtra newExtra = group.getExtra();
-
         // Disallow changing value type (TEXT <-> JSON)
-        if (oldExtra != null && newExtra != null) {
-            String oldType = LookupConstants.normalizeValueType(oldExtra.getValueType());
-            String newType = LookupConstants.normalizeValueType(newExtra.getValueType());
+        String oldType = LookupConstants.normalizeValueType(existingGroup.getValueType());
+        String newType = LookupConstants.normalizeValueType(group.getValueType());
 
-            if (!oldType.equals(newType)) {
-                throw new IllegalArgumentException("Changing value type for group " + group.getId() + " is not allowed: " + oldType + " -> " + newType);
-            }
+        if (!oldType.equals(newType)) {
+            throw new IllegalArgumentException("Changing value type for group " + group.getId() + " is not allowed: " + oldType + " -> " + newType);
         }
 
         // Update group
         groupDao.updateGroup(group);
 
-        // update group extra
-        LookupGroupExtra extra = group.getExtra();
+        if (LookupConstants.isJsonValueType(newType)) {
+            LookupGroupExtra oldExtra = groupExtraDao.getByGroupId(group.getId());
+            LookupGroupExtra newExtra = group.getExtra();
+            // If extra missing -> ignore
+            if (newExtra != null) {
+                newExtra.setGroupId(group.getId());
+                groupExtraDao.update(newExtra);
+            }
 
-        // If extra missing -> ignore
-        if (extra != null) {
-            extra.setGroupId(group.getId());
-            groupExtraDao.update(extra);
-        }
-
-        // Detect and apply JSON index changes (JSON-only groups)
-        // We consider the group JSON if the old extra says so (type is immutable by design).
-        boolean isJsonGroup = oldExtra != null && LookupConstants.isJsonValueType(oldExtra.getValueType());
-
-        if (isJsonGroup) {
-            // If newExtra is null, treat it as "no change" -> use oldExtra
-            LookupGroupExtra effectiveNewExtra = (newExtra != null) ? newExtra : oldExtra;
-
-            String tableName = getTableNameForGroup(group.getId());
             if (jsonIndexConfigurator != null) {
+                LookupGroupExtra effectiveNewExtra = (newExtra != null) ? newExtra : oldExtra;
+                String tableName = getTableNameForGroup(group.getId());
                 jsonIndexConfigurator.apply(oldExtra, effectiveNewExtra, tableName);
             }
+        } else {
+            // no-op
         }
 
         // Detect cache-setting changes
@@ -535,7 +528,7 @@ public class LookupService {
         }
 
         // Must be JSON group
-        if (!LookupConstants.isJsonValueType(extra.getValueType())) {
+        if (!LookupConstants.isJsonValueType(group.getValueType())) {
             throw new IllegalStateException("Search by JSON fields is only supported for JSON groups (groupId=" + groupId + ")");
         }
 
@@ -681,8 +674,7 @@ public class LookupService {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
         }
 
-        LookupGroupExtra extra = groupExtraDao.getByGroupId(groupId);
-        boolean isValueJson = extra != null && LookupConstants.isJsonValueType(extra.getValueType());
+        boolean isValueJson = LookupConstants.isJsonValueType(group.getValueType());
 
         if (isValueJson) {
             // validate value
@@ -805,8 +797,7 @@ public class LookupService {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
         }
 
-        LookupGroupExtra extra = groupExtraDao.getByGroupId(groupId);
-        boolean isValueJson = extra != null && LookupConstants.isJsonValueType(extra.getValueType());
+        boolean isValueJson = LookupConstants.isJsonValueType(group.getValueType());
 
         Map<String, String> importValues = (values == null) ? Collections.emptyMap() : values;
 
@@ -869,6 +860,15 @@ public class LookupService {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
         }
 
+        boolean isValueJson = LookupConstants.isJsonValueType(group.getValueType());
+
+        if (isValueJson) {
+            // validate value
+            if (!JsonUtils.isValidJson(value)) {
+                throw new IllegalArgumentException("Value must be a valid JSON string.");
+            }
+        }
+
         String tableName = getTableNameForGroup(groupId);
 
         try {
@@ -914,6 +914,15 @@ public class LookupService {
         LookupGroup group = groupDao.getGroupById(groupId);
         if (group == null) {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
+        }
+
+        boolean isValueJson = LookupConstants.isJsonValueType(group.getValueType());
+
+        if (isValueJson) {
+            // validate value
+            if (!JsonUtils.isValidJson(newValue)) {
+                throw new IllegalArgumentException("newValue must be a valid JSON string.");
+            }
         }
 
         String tableName = getTableNameForGroup(groupId);

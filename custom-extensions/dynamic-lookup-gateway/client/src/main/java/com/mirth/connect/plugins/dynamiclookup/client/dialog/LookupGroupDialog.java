@@ -232,13 +232,12 @@ public class LookupGroupDialog extends MirthDialog {
         cacheSizeField.setText(String.valueOf(lookupGroup.getCacheSize()));
         cachePolicyComboBox.getModel().setSelectedItem(lookupGroup.getCachePolicy());
 
+        String valueType = LookupConstants.normalizeValueType(lookupGroup.getValueType());
+        valueTypeComboBox.setSelectedItem(lookupGroup.getValueType());
+
         // ----- extra -----
         LookupGroupExtra extra = lookupGroup.getExtra();
         if (extra != null) {
-            // Value Type
-            String valueType = extra.getValueType() != null ? extra.getValueType() : LookupConstants.VALUE_TYPE_TEXT;
-
-            valueTypeComboBox.setSelectedItem(valueType);
 
             // JSON Index mode
             String jsonIndexMode = extra.getJsonIndexMode() != null ? extra.getJsonIndexMode() : LookupConstants.JSON_INDEX_NONE;
@@ -317,18 +316,17 @@ public class LookupGroupDialog extends MirthDialog {
         this.lookupGroup.setVersion(versionField.getText().trim());
         this.lookupGroup.setCacheSize(Integer.parseInt(cacheSizeField.getText().trim()));
         this.lookupGroup.setCachePolicy((String) cachePolicyComboBox.getSelectedItem());
+        this.lookupGroup.setValueType((String) valueTypeComboBox.getSelectedItem());
+
+        String valueType = (String) valueTypeComboBox.getSelectedItem();
 
         // lookup group extra
         LookupGroupExtra extra = new LookupGroupExtra();
-
-        String valueType = (String) valueTypeComboBox.getSelectedItem();
-        extra.setValueType(valueType);
-
         if (LookupConstants.isJsonValueType(valueType)) {
             String jsonIndexMode = (String) jsonIndexTypeComboBox.getSelectedItem();
             extra.setJsonIndexMode(jsonIndexMode);
 
-            if ("FIELD".equals(jsonIndexMode)) {
+            if (LookupConstants.isFieldMode(jsonIndexMode)) {
                 List<String> fields = new ArrayList<>();
                 for (int i = 0; i < jsonIndexFieldsModel.size(); i++) {
                     fields.add(jsonIndexFieldsModel.get(i));
