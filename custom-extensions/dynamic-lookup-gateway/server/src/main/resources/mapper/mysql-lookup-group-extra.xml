@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "conf/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="LookupGroupExtra">
+    <resultMap id="lookup-group-extra" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra">
+        <id     property="groupId"           column="GROUP_ID"            javaType="Integer"/>
+        <result property="jsonIndexMode"     column="JSON_INDEX_MODE"     javaType="String"/>
+        <result property="indexedJsonFields" column="INDEXED_JSON_FIELDS" javaType="String"/>
+    </resultMap>
+
+    <select id="getByGroupId" parameterType="Integer" resultMap="lookup-group-extra">
+        SELECT GROUP_ID, JSON_INDEX_MODE, INDEXED_JSON_FIELDS
+        FROM LOOKUP_GROUP_EXTRA
+        WHERE GROUP_ID = #{value}
+    </select>
+
+	<select id="getAllGroupExtras" resultMap="lookup-group-extra">
+        SELECT GROUP_ID, JSON_INDEX_MODE, INDEXED_JSON_FIELDS
+        FROM LOOKUP_GROUP_EXTRA
+    </select>
+    
+    <insert id="insert" parameterType="map">
+        INSERT INTO LOOKUP_GROUP_EXTRA 
+            (GROUP_ID, JSON_INDEX_MODE, INDEXED_JSON_FIELDS)
+        VALUES
+            (#{groupId}, #{jsonIndexMode}, #{indexedJsonFields})
+    </insert>
+
+    <update id="update" parameterType="map">
+        UPDATE LOOKUP_GROUP_EXTRA
+        SET 
+            JSON_INDEX_MODE = #{jsonIndexMode},
+            INDEXED_JSON_FIELDS = #{indexedJsonFields}
+        WHERE GROUP_ID = #{groupId}
+    </update>
+
+    <select id="extraExists" parameterType="Integer" resultType="Integer">
+        SELECT 1
+        FROM LOOKUP_GROUP_EXTRA
+        WHERE GROUP_ID = #{value}
+    </select>
+</mapper>

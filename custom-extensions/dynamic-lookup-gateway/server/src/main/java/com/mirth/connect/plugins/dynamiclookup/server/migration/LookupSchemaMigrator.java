@@ -19,9 +19,9 @@ import org.apache.ibatis.session.SqlSessionManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect;
-import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect.DatabaseType;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupDbUtil;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 
 public class LookupSchemaMigrator {
     private final Logger logger = LogManager.getLogger(this.getClass());
@@ -40,15 +40,16 @@ public class LookupSchemaMigrator {
             SqlScriptRunner.runWithGo(sqlSessionManager, sqlScript);
         }
 
+        String folder = dbFolder(LookupJsonCapability.getInstance().getDatabaseInfo().getType());
         if (needUpdateV210_AddGroupValueType()) {
-            String path = "/sql/postgres/fixes/V210_add_value_type_to_group_table.sql";
+            String path = "/sql/" + folder + "/fixes/V210_add_value_type_to_group_table.sql";
             String sqlScript = SqlScriptRunner.loadScript(path);
 
             SqlScriptRunner.runWithSemicolon(sqlSessionManager, sqlScript);
         }
 
         if (needUpdateV210_AddGroupExtra()) {
-            String path = "/sql/postgres/fixes/V210_add_group_extra_table.sql";
+            String path = "/sql/" + folder + "/fixes/V210_add_group_extra_table.sql";
             String sqlScript = SqlScriptRunner.loadScript(path);
 
             SqlScriptRunner.runWithSemicolon(sqlSessionManager, sqlScript);
@@ -57,7 +58,7 @@ public class LookupSchemaMigrator {
 
     private boolean needUpdateV101() {
         try {
-            DatabaseType dbType = DatabaseDialect.determineDatabaseType(sqlSessionManager);
+            DatabaseType dbType = LookupJsonCapability.getInstance().getDatabaseInfo().getType();
             if (dbType != DatabaseType.SQLSERVER) {
                 return false;
             }
@@ -122,8 +123,7 @@ public class LookupSchemaMigrator {
         SqlSession session = null;
 
         try {
-            DatabaseType dbType = DatabaseDialect.determineDatabaseType(sqlSessionManager);
-            if (dbType != DatabaseType.POSTGRESQL) {
+            if (!LookupJsonCapability.getInstance().isJsonSupported()) {
                 return false;
             }
 
@@ -139,6 +139,23 @@ public class LookupSchemaMigrator {
                 }
             } catch (Exception ignore) {
             }
+        }
+    }
+
+    private static String dbFolder(DatabaseType type) {
+        switch (type) {
+        case POSTGRESQL:
+            return "postgres";
+        case MYSQL:
+            return "mysql";
+        case SQLSERVER:
+            return "sqlserver";
+        case ORACLE:
+            return "oracle";
+        case DERBY:
+            return "derby";
+        default:
+            return "derby";
         }
     }
 }

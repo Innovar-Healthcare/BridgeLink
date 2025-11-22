@@ -14,13 +14,23 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
+import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
+
 public class JsonFieldIndexDefinitionBuilder {
 
-    public static List<JsonFieldIndexDefinition> build(String tableName, Set<String> fields) {
+    public static List<JsonFieldIndexDefinition> build(LookupJsonCapability capacity, String tableName, Set<String> fields) {
         List<JsonFieldIndexDefinition> list = new ArrayList<>();
         if (fields == null || fields.isEmpty()) {
             return list;
         }
+
+        if (!capacity.isJsonIndexModeSupported(LookupConstants.JSON_INDEX_FIELD)) {
+            return list;
+        }
+
+        DatabaseType type = capacity.getDatabaseInfo().getType();
 
         for (String fieldPath : fields) {
             if (fieldPath == null || fieldPath.isEmpty()) {
@@ -31,11 +41,17 @@ public class JsonFieldIndexDefinitionBuilder {
             String indexName = "idx_" + tableName + "_json_" + sanitized;
             String expression;
 
-            if (!fieldPath.contains(".")) {
-                expression = "VALUE_DATA->>'" + fieldPath + "'";
-            } else {
-                String path = "{" + fieldPath.replace(".", ",") + "}";
-                expression = "VALUE_DATA #>> '" + path + "'";
+            switch (type) {
+            case POSTGRESQL:
+                expression = buildPostgresExpression(fieldPath);
+                break;
+            case MYSQL:
+                expression = buildMysqlExpression(fieldPath);
+                break;
+            case SQLSERVER:
+            case ORACLE:
+            default:
+                continue;
             }
 
             JsonFieldIndexDefinition def = new JsonFieldIndexDefinition();
@@ -45,6 +61,27 @@ public class JsonFieldIndexDefinitionBuilder {
         }
 
         return list;
+    }
+
+    /**
+     * PostgreSQL expression: - top-level: VALUE_DATA->>'email' - nested: VALUE_DATA #>> '{address,city}'
+     */
+    private static String buildPostgresExpression(String fieldPath) {
+        if (!fieldPath.contains(".")) {
+            return "VALUE_DATA->>'" + fieldPath + "'";
+        }
+
+        String path = "{" + fieldPath.replace(".", ",") + "}";
+        return "VALUE_DATA #>> '" + path + "'";
+    }
+
+    /**
+     * MySQL 8+ expression: - top-level: JSON_UNQUOTE(JSON_EXTRACT(VALUE_DATA, '$.email')) - nested:
+     * JSON_UNQUOTE(JSON_EXTRACT(VALUE_DATA, '$.address.city'))
+     */
+    private static String buildMysqlExpression(String fieldPath) {
+        String jsonPath = "$." + fieldPath; // "address.city"
+        return "CAST(JSON_UNQUOTE(JSON_EXTRACT(VALUE_DATA, '" + jsonPath + "')) AS CHAR(255))";
     }
 
     private static String sanitizeForIdentifier(String fieldPath) {

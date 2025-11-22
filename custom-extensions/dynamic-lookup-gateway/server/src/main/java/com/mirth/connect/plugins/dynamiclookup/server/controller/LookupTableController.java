@@ -39,8 +39,9 @@ import com.mirth.connect.plugins.dynamiclookup.server.migration.LookupDatabaseMi
 import com.mirth.connect.plugins.dynamiclookup.server.service.LookupService;
 import com.mirth.connect.plugins.dynamiclookup.server.userutil.LookupHelper;
 import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect;
-import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect.DatabaseType;
 import com.mirth.connect.plugins.dynamiclookup.server.util.SqlSessionManagerProvider;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupProperties;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
@@ -83,14 +84,19 @@ public class LookupTableController implements LookupPropertiesProvider {
         try {
             SqlSessionManager sqlSessionManager = getSqlSessionManager();
 
+            DatabaseInfo dbInfo = DatabaseDialect.determineDatabase(sqlSessionManager);
+
+            // Initialize LookupJsonContext
+            LookupJsonCapability.initialize(dbInfo);
+
             // Initialize database if needed
             new LookupDatabaseMigrator(sqlSessionManager).initializeDatabase();
 
             // Create DAO instances
-            DatabaseType dbType = DatabaseDialect.determineDatabaseType(sqlSessionManager);
+
             LookupGroupDao groupDao = new MyBatisLookupGroupDao(sqlSessionManager);
             LookupGroupExtraDao groupExtraDao = new MyBatisLookupGroupExtraDao(sqlSessionManager);
-            LookupValueDao valueDao = new MyBatisLookupValueDao(sqlSessionManager, dbType);
+            LookupValueDao valueDao = new MyBatisLookupValueDao(sqlSessionManager, dbInfo.getType());
             LookupAuditDao auditDao = new MyBatisLookupAuditDao(sqlSessionManager);
             LookupStatisticsDao statisticsDao = new MyBatisLookupStatisticsDao(sqlSessionManager);
 

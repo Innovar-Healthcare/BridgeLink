@@ -40,6 +40,7 @@ import com.mirth.connect.client.ui.UIConstants;
 import com.mirth.connect.client.ui.components.MirthFieldConstraints;
 import com.mirth.connect.plugins.dynamiclookup.client.exception.LookupApiClientException;
 import com.mirth.connect.plugins.dynamiclookup.client.service.LookupServiceClient;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
@@ -98,6 +99,8 @@ public class LookupGroupDialog extends MirthDialog {
         initComponents();
         initLayout();
 
+        configureJsonControls();
+
         resetComponents(lookupGroup);
 
         setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
@@ -108,6 +111,17 @@ public class LookupGroupDialog extends MirthDialog {
     }
 
     private void initComponents() {
+        boolean jsonSupported = false;
+        boolean ginSupported = false;
+
+        try {
+            LookupJsonCapability capability = LookupJsonCapability.getInstance();
+            jsonSupported = capability.isJsonSupported();
+            ginSupported = capability.isJsonIndexModeSupported(LookupConstants.JSON_INDEX_GIN);
+        } catch (Exception e) {
+            // no-op
+        }
+
         setBackground(UIConstants.BACKGROUND_COLOR);
         getContentPane().setBackground(getBackground());
 
@@ -138,7 +152,9 @@ public class LookupGroupDialog extends MirthDialog {
         valueTypeLabel = new JLabel("Value Type:");
         valueTypeComboBox = new JComboBox<>();
         valueTypeComboBox.addItem(LookupConstants.VALUE_TYPE_TEXT);
-        valueTypeComboBox.addItem(LookupConstants.VALUE_TYPE_JSON);
+        if (jsonSupported) {
+            valueTypeComboBox.addItem(LookupConstants.VALUE_TYPE_JSON);
+        }
         valueTypeComboBox.setSelectedItem(LookupConstants.VALUE_TYPE_TEXT);
         valueTypeComboBox.addActionListener(e -> updateJsonIndexControls());
 
@@ -146,7 +162,9 @@ public class LookupGroupDialog extends MirthDialog {
         jsonIndexTypeLabel = new JLabel("JSON Index:");
         jsonIndexTypeComboBox = new JComboBox<>();
         jsonIndexTypeComboBox.addItem(LookupConstants.JSON_INDEX_NONE);
-        jsonIndexTypeComboBox.addItem(LookupConstants.JSON_INDEX_GIN);
+        if (ginSupported) {
+            jsonIndexTypeComboBox.addItem(LookupConstants.JSON_INDEX_GIN);
+        }
         jsonIndexTypeComboBox.addItem(LookupConstants.JSON_INDEX_FIELD);
         jsonIndexTypeComboBox.setSelectedItem(LookupConstants.JSON_INDEX_NONE);
         jsonIndexTypeComboBox.addActionListener(e -> updateJsonIndexControls());
@@ -223,6 +241,10 @@ public class LookupGroupDialog extends MirthDialog {
 
         add(saveButton, "newline, sx, right, split 2");
         add(cancelButton);
+    }
+
+    private void configureJsonControls() {
+
     }
 
     private void resetComponents(LookupGroup lookupGroup) {

@@ -10,26 +10,35 @@
 
 package com.mirth.connect.plugins.dynamiclookup.client.service;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.mirth.connect.client.core.Client;
 import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.core.EntityException;
 import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.plugins.dynamiclookup.client.exception.LookupApiClientException;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupValueRequest;
-import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.*;
-
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ErrorResponse;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ExportGroupPagedResponse;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ExportLookupGroupResponse;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.GroupAuditEntriesResponse;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.GroupStatisticsResponse;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ImportLookupGroupResponse;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ImportValuesResponse;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupAllValuesResponse;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupValueResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.interfaces.LookupTableServletInterface;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.HistoryFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.LookupErrorCode;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 public class LookupServiceClient {
     private static LookupServiceClient instance = null;
@@ -215,7 +224,7 @@ public class LookupServiceClient {
 
         } catch (ClientException e) {
             try {
-                rethrowParsedClientError(e, false);  // Silent mode: no logging
+                rethrowParsedClientError(e, false); // Silent mode: no logging
             } catch (LookupApiClientException ex) {
                 if (LookupErrorCode.VALUE_NOT_FOUND.equalsIgnoreCase(ex.getError().getCode())) {
                     return false;
@@ -395,6 +404,23 @@ public class LookupServiceClient {
         } catch (Exception e) {
             // 3. JSON serialization or unexpected errors
             throw new RuntimeException("Failed to clear group cache", e);
+        }
+    }
+
+    public DatabaseInfo getDatabaseInfo() throws ClientException {
+        try {
+            // 1. Make the call
+            String response = getServlet().getDatabaseInfo();
+
+            return JsonUtils.fromJson(response, DatabaseInfo.class);
+        } catch (ClientException e) {
+            // 3. Rethrow ClientException with parsed ErrorResponse if available
+            rethrowParsedClientError(e);
+
+            return null; // unreachable — rethrowParsedClientError always throws
+        } catch (Exception e) {
+            // 4. JSON serialization or unexpected errors
+            throw new RuntimeException("Failed to get database info", e);
         }
     }
 

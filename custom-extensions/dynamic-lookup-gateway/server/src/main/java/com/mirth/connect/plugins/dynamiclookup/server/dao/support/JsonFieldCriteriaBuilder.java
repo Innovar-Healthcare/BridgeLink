@@ -18,16 +18,22 @@ import java.util.Map;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 
 public class JsonFieldCriteriaBuilder {
     private JsonFieldCriteriaBuilder() {
     }
 
-    public static List<JsonFieldCriterion> buildCriteria(String filterJson) {
+    public static List<JsonFieldCriterion> buildCriteria(LookupJsonCapability capability, String filterJson) {
         List<JsonFieldCriterion> list = new ArrayList<>();
 
         if (filterJson == null || filterJson.trim().isEmpty()) {
             return list;
+        }
+
+        if (!capability.isJsonSupported()) {
+            throw new IllegalStateException("JSON FIELD search is not supported for this database.");
         }
 
         try {
@@ -37,20 +43,24 @@ public class JsonFieldCriteriaBuilder {
             List<PathValue> paths = new ArrayList<>();
             collectLeafPaths(root, Collections.<String>emptyList(), paths);
 
+            DatabaseType type = capability.getDatabaseInfo().getType();
+
             for (PathValue pv : paths) {
                 if (pv.path.isEmpty()) {
                     continue;
                 }
 
                 String expr;
-                if (pv.path.size() == 1) {
-                    // Top-level: VALUE_DATA->>'email'
-                    String field = pv.path.get(0);
-                    expr = "VALUE_DATA->>'" + field + "'";
-                } else {
-                    // Nested: VALUE_DATA #>> '{address,city,zip}'
-                    String joined = String.join(",", pv.path);
-                    expr = "VALUE_DATA #>> '{" + joined + "}'";
+
+                switch (type) {
+                case POSTGRESQL:
+                    expr = buildPostgresExpression(pv.path);
+                    break;
+                case MYSQL:
+                    expr = buildMysqlExpression(pv.path);
+                    break;
+                default:
+                    throw new IllegalStateException("JSON FIELD search is not implemented for DB type: " + type);
                 }
 
                 JsonFieldCriterion c = new JsonFieldCriterion();
@@ -64,6 +74,28 @@ public class JsonFieldCriteriaBuilder {
         }
 
         return list;
+    }
+
+    /**
+     * PostgreSQL: - top-level: VALUE_DATA->>'email' - nested: VALUE_DATA #>> '{address,city,zip}'
+     */
+    private static String buildPostgresExpression(List<String> path) {
+        if (path.size() == 1) {
+            String field = path.get(0);
+            return "VALUE_DATA->>'" + field + "'";
+        } else {
+            String joined = String.join(",", path);
+            return "VALUE_DATA #>> '{" + joined + "}'";
+        }
+    }
+
+    /**
+     * MySQL 8+: - top-level: JSON_UNQUOTE(JSON_EXTRACT(VALUE_DATA, '$.email')) - nested:
+     * JSON_UNQUOTE(JSON_EXTRACT(VALUE_DATA, '$.address.city'))
+     */
+    private static String buildMysqlExpression(List<String> path) {
+        String jsonPath = "$." + String.join(".", path);
+        return "CAST(JSON_UNQUOTE(JSON_EXTRACT(VALUE_DATA, '" + jsonPath + "')) AS CHAR(255))";
     }
 
     private static void collectLeafPaths(JsonNode node, List<String> currentPath, List<PathValue> out) {

@@ -10,37 +10,36 @@
 
 package com.mirth.connect.plugins.dynamiclookup.shared.interfaces;
 
-import com.mirth.connect.client.core.ClientException;
-import com.mirth.connect.client.core.api.BaseServletInterface;
-
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-
-import com.mirth.connect.client.core.api.MirthOperation;
-import com.mirth.connect.client.core.api.Param;
-
 import javax.ws.rs.Consumes;
+import javax.ws.rs.DELETE;
+import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
-import javax.ws.rs.DELETE;
-import javax.ws.rs.DefaultValue;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 
+import com.mirth.connect.client.core.ClientException;
+import com.mirth.connect.client.core.api.BaseServletInterface;
+import com.mirth.connect.client.core.api.MirthOperation;
+import com.mirth.connect.client.core.api.Param;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 /**
  * @author Thai Tran (thaitran@innovarhealthcare.com)
  * @create 2025-05-13 10:25 AM
  */
-
+//@formatter:off
 @Path("/v1/lookups")
 @Tag(name = "Lookup Table")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -881,4 +880,33 @@ public interface LookupTableServletInterface extends BaseServletInterface {
     )
     @MirthOperation(name = "clearAllCaches", display = "Clear All Caches", permission = PERMISSION_ACCESS)
     public String clearAllCaches() throws ClientException;
+    
+    @GET
+    @Path("/databaseInfo")
+    @Operation(
+            summary = "Get database metadata",
+            description = "Returns detailed information about the connected database, including type, version, and raw JDBC metadata."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "Database information retrieved successfully",
+            content = @Content(
+                    mediaType = MediaType.APPLICATION_JSON,
+                    examples = @ExampleObject(
+                            name = "DatabaseInfoExample",
+                            summary = "Example response for database metadata",
+                            value = "{\n" +
+                                    "  \"type\": \"POSTGRESQL\",\n" +
+                                    "  \"majorVersion\": 16,\n" +
+                                    "  \"minorVersion\": 2,\n" +
+                                    "  \"productName\": \"PostgreSQL\",\n" +
+                                    "  \"productVersion\": \"PostgreSQL 16.2 on x86_64-pc-linux-gnu\"\n" +
+                                    "}"
+                    )
+            )
+    )
+    @MirthOperation(name = "getDatabaseInfo", display = "Get Database Info", permission = PERMISSION_ACCESS, auditable = false)
+    public String getDatabaseInfo() throws ClientException;
+
 }
+//@formatter:on

@@ -35,6 +35,7 @@ import com.mirth.connect.plugins.dynamiclookup.server.exception.GroupNotFoundExc
 import com.mirth.connect.plugins.dynamiclookup.server.exception.ValueOperationException;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.ValueTableCreationException;
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonIndexConfigurator;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.CacheStatistics;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.HistoryFilterState;
@@ -540,7 +541,7 @@ public class LookupService {
             return valueDao.searchByJsonFieldsGin(tableName, offset, limit, filterJson);
         }
 
-        List<JsonFieldCriterion> criteria = JsonFieldCriteriaBuilder.buildCriteria(filterJson);
+        List<JsonFieldCriterion> criteria = JsonFieldCriteriaBuilder.buildCriteria(LookupJsonCapability.getInstance(), filterJson);
         return valueDao.searchByJsonFieldsField(tableName, offset, limit, criteria);
     }
 

@@ -10,11 +10,14 @@
 
 package com.mirth.connect.plugins.dynamiclookup.client.plugin;
 
-import com.mirth.connect.plugins.ClientPlugin;
-import com.mirth.connect.plugins.dynamiclookup.client.panel.DataStorePanel;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import com.mirth.connect.plugins.ClientPlugin;
+import com.mirth.connect.plugins.dynamiclookup.client.panel.DataStorePanel;
+import com.mirth.connect.plugins.dynamiclookup.client.service.LookupServiceClient;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 
 public class LookupTableClientPlugin extends ClientPlugin {
     private DataStorePanel dataStorePane;
@@ -33,7 +36,7 @@ public class LookupTableClientPlugin extends ClientPlugin {
 
     @Override
     public void start() {
-
+        initLookupCapability();
     }
 
     @Override
@@ -44,5 +47,14 @@ public class LookupTableClientPlugin extends ClientPlugin {
     @Override
     public void reset() {
 
+    }
+
+    private void initLookupCapability() {
+        try {
+            DatabaseInfo dbInfo = LookupServiceClient.getInstance().getDatabaseInfo();
+            LookupJsonCapability.initialize(dbInfo);
+        } catch (Exception e) {
+            logger.error("Failed to initialize LookupJsonCapability. Falling back to TEXT-only mode.", e);
+        }
     }
 }

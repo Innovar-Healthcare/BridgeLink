@@ -2,21 +2,21 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "conf/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="LookupValue">
-     <resultMap id="lookup-value" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue">
+    <resultMap id="lookup-value" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue">
         <id property="keyValue" column="KEY_VALUE" javaType="String"/>
         <result property="valueData" column="VALUE_DATA" javaType="String"/>
         <result property="createdDate" column="CREATED_DATE" javaType="java.sql.Timestamp"/>
         <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
     </resultMap>
-     
-	<sql id="searchLookupValuesBody">
+
+    <sql id="searchLookupValuesBody">
         <where>
-            <if test='pattern != null'>KEY_VALUE ILIKE '%' || #{pattern} || '%'
-                OR VALUE_DATA::text ILIKE '%' || #{pattern} || '%'
+            <if test='pattern != null'>LOWER(KEY_VALUE) LIKE LOWER(CONCAT('%', #{pattern}, '%'))
+                OR LOWER(VALUE_DATA) LIKE LOWER(CONCAT('%', #{pattern}, '%'))
             </if>
         </where>
     </sql>
-    
+
     <!-- Value Operations -->
     <select id="getLookupValues" parameterType="map" resultMap="lookup-value">
         SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
@@ -53,12 +53,11 @@
         UPDATED_DATE = CURRENT_TIMESTAMP
         WHERE KEY_VALUE = #{keyValue}
     </update>
-    
+
 	<insert id="putIfAbsent" parameterType="map">
-    	INSERT INTO ${tableName} (KEY_VALUE, VALUE_DATA)
-    	VALUES (#{keyValue}, #{valueData})
-    	ON CONFLICT (KEY_VALUE) DO NOTHING
-  	</insert>
+	  	INSERT IGNORE INTO ${tableName} (KEY_VALUE, VALUE_DATA)
+	  	VALUES (#{keyValue}, #{valueData})
+	</insert>	
 
 	<update id="compareAndSwap" parameterType="map">
 	    UPDATE ${tableName}
@@ -68,12 +67,12 @@
 	</update>
 
 	<update id="updateValueByDelta" parameterType="map">
-	    UPDATE ${tableName}
-	    SET VALUE_DATA = ((VALUE_DATA)::bigint + #{delta})::text,
-	    UPDATED_DATE = CURRENT_TIMESTAMP
-	    WHERE KEY_VALUE = #{keyValue}
+		UPDATE ${tableName}
+		SET VALUE_DATA = CAST(CAST(VALUE_DATA AS SIGNED) + #{delta} AS CHAR),
+		UPDATED_DATE = CURRENT_TIMESTAMP
+		WHERE KEY_VALUE = #{keyValue}
 	</update>
-	
+
     <delete id="deleteValue" parameterType="map">
         DELETE FROM ${tableName}
         WHERE KEY_VALUE = #{keyValue}
@@ -115,15 +114,15 @@
 
         ORDER BY KEY_VALUE ASC
 
-        <if test="offset != null">
-            OFFSET ${offset}
-        </if>
         <if test="limit != null">
             LIMIT ${limit}
         </if>
+        <if test="offset != null">
+            OFFSET ${offset}
+        </if>
     </select>
-  
-   	<select id="selectExistingKeys" parameterType="map" resultType="string">
+
+	<select id="selectExistingKeys" parameterType="map" resultType="string">
 	    SELECT KEY_VALUE
 	    FROM ${tableName}
 	    WHERE KEY_VALUE IN
@@ -132,83 +131,54 @@
 	    </foreach>
   	</select>
   	
-  	<!-- JSON Value Operations -->
+    <!-- JSON Value Operations -->
   	<update id="createLookupValueJsonTable" parameterType="map">
         CREATE TABLE ${tableName} (
         KEY_VALUE VARCHAR(255) NOT NULL,
-        VALUE_DATA JSONB,
+        VALUE_DATA JSON,
         CREATED_DATE TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UPDATED_DATE TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (KEY_VALUE)
         )
     </update>
     
-  	<insert id="insertValueJson" parameterType="map">
+    <insert id="insertValueJson" parameterType="map">
 	    INSERT INTO ${tableName} (KEY_VALUE, VALUE_DATA)
-    	VALUES (#{keyValue}, #{valueData}::jsonb)
+    	VALUES (#{keyValue}, #{valueData})
 	</insert>
 	
 	<update id="updateValueJson" parameterType="map">
-	    UPDATE ${tableName}
-	    SET VALUE_DATA = #{valueData}::jsonb,
-	        UPDATED_DATE = CURRENT_TIMESTAMP
-	    WHERE KEY_VALUE = #{keyValue}
+	   	UPDATE ${tableName}
+        SET VALUE_DATA = #{valueData},
+        UPDATED_DATE = CURRENT_TIMESTAMP
+        WHERE KEY_VALUE = #{keyValue}
 	</update>
 
 	<insert id="putIfAbsentJson" parameterType="map">
-	    INSERT INTO ${tableName} (KEY_VALUE, VALUE_DATA)
-	    VALUES (#{keyValue}, #{valueData}::jsonb)
-	    ON CONFLICT (KEY_VALUE) DO NOTHING
+	    INSERT IGNORE INTO ${tableName} (KEY_VALUE, VALUE_DATA)
+	  	VALUES (#{keyValue}, #{valueData})
 	</insert>
 	
 	<update id="compareAndSwapJson" parameterType="map">
 	    UPDATE ${tableName}
-	    SET VALUE_DATA = #{newValue}::jsonb,
-	        UPDATED_DATE = CURRENT_TIMESTAMP
-	    WHERE KEY_VALUE = #{keyValue}
-	      AND VALUE_DATA = #{expectedValue}::jsonb
+	    SET VALUE_DATA = #{newValue},
+	    UPDATED_DATE = CURRENT_TIMESTAMP
+	    WHERE KEY_VALUE = #{keyValue} AND VALUE_DATA = #{expectedValue}
 	</update>
-
-	<update id="createJsonGinIndex" parameterType="map">
-	    CREATE INDEX IF NOT EXISTS ${indexName}
-	    ON ${tableName}
-	    USING gin (VALUE_DATA);
-	</update>
-
-    <update id="dropJsonGinIndex" parameterType="map">
-    	DROP INDEX IF EXISTS ${indexName};
-	</update>
-
+	
 	<update id="createJsonFieldIndexes" parameterType="map">
 	    <foreach collection="fieldIndexes" item="idx" separator=";">
-            CREATE INDEX IF NOT EXISTS ${idx.indexName}
+            CREATE INDEX ${idx.indexName}
             ON ${tableName} (( ${idx.expression} ))
         </foreach>
 	</update>
 
 	<update id="dropJsonFieldIndexes" parameterType="map">
         <foreach collection="fieldIndexes" item="idx" separator=";">
-            DROP INDEX IF EXISTS ${idx.indexName}
+            DROP INDEX ${idx.indexName} ON ${tableName}
         </foreach>
     </update>
     	
-	<select id="searchByJsonFieldsGin" parameterType="map" resultMap="lookup-value">
-	    SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
-        FROM ${tableName}
-	    <where>
-	        <!-- Only apply the filter if provided -->
-	        <if test="filterJson != null and filterJson != ''">
-	            VALUE_DATA @> #{filterJson}::jsonb
-	        </if>
-	    </where>
-	    <if test="offset != null">
-            OFFSET ${offset}
-        </if>
-        <if test="limit != null">
-            LIMIT ${limit}
-        </if>
-	</select>
-
 	<select id="searchByJsonFieldsField" parameterType="map" resultMap="lookup-value">
 	    SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
         FROM ${tableName}

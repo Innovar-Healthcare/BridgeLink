@@ -27,7 +27,8 @@ import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldCrite
 import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldIndexDefinitionBuilder;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.ValueOperationException;
-import com.mirth.connect.plugins.dynamiclookup.server.util.DatabaseDialect.DatabaseType;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 
 public class MyBatisLookupValueDao implements LookupValueDao {
@@ -560,7 +561,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
 
     @Override
     public void createJsonFieldIndexes(String tableName, Set<String> fields) {
-        List<JsonFieldIndexDefinition> fieldIndexes = JsonFieldIndexDefinitionBuilder.build(tableName, fields);
+        List<JsonFieldIndexDefinition> fieldIndexes = JsonFieldIndexDefinitionBuilder.build(LookupJsonCapability.getInstance(), tableName, fields);
 
         if (fieldIndexes.isEmpty()) {
             return;
@@ -590,7 +591,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
 
     @Override
     public void dropJsonFieldIndexes(String tableName, Set<String> fields) {
-        List<JsonFieldIndexDefinition> fieldIndexes = JsonFieldIndexDefinitionBuilder.build(tableName, fields);
+        List<JsonFieldIndexDefinition> fieldIndexes = JsonFieldIndexDefinitionBuilder.build(LookupJsonCapability.getInstance(), tableName, fields);
 
         if (fieldIndexes.isEmpty()) {
             return;
