@@ -10,6 +10,7 @@
 
 package com.mirth.connect.plugins.dynamiclookup.server.dao.impl;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionManager;
 
 import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupGroupExtraDao;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 
 public class MyBatisLookupGroupExtraDao implements LookupGroupExtraDao {
@@ -29,9 +31,13 @@ public class MyBatisLookupGroupExtraDao implements LookupGroupExtraDao {
 
     @Override
     public LookupGroupExtra getByGroupId(int groupId) {
+        if (!LookupJsonCapability.getInstance().isJsonSupported()) {
+            return null;
+        }
+
         SqlSession session = sqlSessionManager.openSession();
         try {
-            return session.selectOne("LookupGroupExtra.getByGroupId", groupId);
+            return session.selectOne("Lookup.getByGroupId", groupId);
         } finally {
             session.close();
         }
@@ -39,9 +45,13 @@ public class MyBatisLookupGroupExtraDao implements LookupGroupExtraDao {
 
     @Override
     public List<LookupGroupExtra> getAllGroupExtras() {
+        if (!LookupJsonCapability.getInstance().isJsonSupported()) {
+            return Collections.emptyList();
+        }
+
         SqlSession session = sqlSessionManager.openSession();
         try {
-            return session.selectList("LookupGroupExtra.getAllGroupExtras");
+            return session.selectList("Lookup.getAllGroupExtras");
         } finally {
             session.close();
         }
@@ -49,6 +59,10 @@ public class MyBatisLookupGroupExtraDao implements LookupGroupExtraDao {
 
     @Override
     public int insert(LookupGroupExtra extra) {
+        if (!LookupJsonCapability.getInstance().isJsonSupported()) {
+            return 0;
+        }
+
         SqlSession session = sqlSessionManager.openSession();
         boolean commitSuccess = false;
 
@@ -58,7 +72,7 @@ public class MyBatisLookupGroupExtraDao implements LookupGroupExtraDao {
             params.put("jsonIndexMode", extra.getJsonIndexMode());
             params.put("indexedJsonFields", extra.getIndexedJsonFields());
 
-            int rows = session.insert("LookupGroupExtra.insert", params);
+            int rows = session.insert("Lookup.insertGroupExtra", params);
 
             session.commit();
             commitSuccess = true;
@@ -77,6 +91,10 @@ public class MyBatisLookupGroupExtraDao implements LookupGroupExtraDao {
 
     @Override
     public void update(LookupGroupExtra extra) {
+        if (!LookupJsonCapability.getInstance().isJsonSupported()) {
+            return;
+        }
+
         SqlSession session = sqlSessionManager.openSession();
         boolean commitSuccess = false;
 
@@ -87,7 +105,7 @@ public class MyBatisLookupGroupExtraDao implements LookupGroupExtraDao {
             params.put("jsonIndexMode", extra.getJsonIndexMode());
             params.put("indexedJsonFields", extra.getIndexedJsonFields());
 
-            session.update("LookupGroupExtra.update", params);
+            session.update("Lookup.updateGroupExtra", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -103,10 +121,14 @@ public class MyBatisLookupGroupExtraDao implements LookupGroupExtraDao {
 
     @Override
     public boolean extraExists(int groupId) {
+        if (!LookupJsonCapability.getInstance().isJsonSupported()) {
+            return false;
+        }
+
         SqlSession session = sqlSessionManager.openSession();
 
         try {
-            Integer result = session.selectOne("LookupGroupExtra.extraExists", groupId);
+            Integer result = session.selectOne("Lookup.groupExtraExists", groupId);
             return result != null && result == 1;
         } finally {
             try {

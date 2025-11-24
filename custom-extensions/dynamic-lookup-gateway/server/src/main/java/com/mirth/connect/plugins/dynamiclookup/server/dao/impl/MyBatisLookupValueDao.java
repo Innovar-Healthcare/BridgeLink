@@ -48,7 +48,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
             params.put("keyValue", keyValue);
-            return session.selectOne("LookupValue.getLookupValue", params);
+            return session.selectOne("Lookup.getLookupValue", params);
         } finally {
             session.close();
         }
@@ -62,7 +62,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
             params.put("keyValue", keyValue);
-            return session.selectOne("LookupValue.getValue", params);
+            return session.selectOne("Lookup.getValue", params);
         } finally {
             session.close();
         }
@@ -75,7 +75,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
-            return session.selectList("LookupValue.getLookupValues", params);
+            return session.selectList("Lookup.getLookupValues", params);
         } finally {
             session.close();
         }
@@ -91,7 +91,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("offset", offset);
             params.put("limit", limit);
             params.put("pattern", pattern);
-            return session.selectList("LookupValue.searchLookupValues", params);
+            return session.selectList("Lookup.searchLookupValues", params);
         } finally {
             session.close();
         }
@@ -105,7 +105,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
             params.put("keyPattern", keyPattern);
-            return session.selectList("LookupValue.getMatchingLookupValues", params);
+            return session.selectList("Lookup.getMatchingLookupValues", params);
         } finally {
             session.close();
         }
@@ -126,7 +126,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("tableName", tableName);
             params.put("keyValue", keyValue);
             params.put("valueData", valueData);
-            session.insert("LookupValue.insertValue", params);
+            session.insert("Lookup.insertValue", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -151,7 +151,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("keyValue", keyValue);
             params.put("valueData", valueData);
 
-            session.insert("LookupValue.insertValueJson", params); // ← mapper JSONB
+            session.insert("Lookup.insertValueJson", params); // ← mapper JSONB
             session.commit();
             commitSuccess = true;
         } finally {
@@ -175,7 +175,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("tableName", tableName);
             params.put("keyValue", keyValue);
             params.put("valueData", valueData);
-            session.insert("LookupValue.updateValue", params);
+            session.insert("Lookup.updateValue", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -199,7 +199,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("tableName", tableName);
             params.put("keyValue", keyValue);
             params.put("valueData", valueData);
-            session.insert("LookupValue.updateValueJson", params);
+            session.insert("Lookup.updateValueJson", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -222,7 +222,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
             params.put("keyValue", keyValue);
-            session.delete("LookupValue.deleteValue", params);
+            session.delete("Lookup.deleteValue", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -244,7 +244,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
-            session.delete("LookupValue.deleteAllValues", params);
+            session.delete("Lookup.deleteAllValues", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -277,7 +277,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
                 params.put("keyValue", entry.getKey());
                 params.put("valueData", entry.getValue());
                 try {
-                    int cnt = session.insert("LookupValue.insertValue", params);
+                    int cnt = session.insert("Lookup.insertValue", params);
                     affectedRows += cnt;
                 } catch (Exception ignored) {
                 }
@@ -316,7 +316,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
                 params.put("keyValue", entry.getKey());
                 params.put("valueData", entry.getValue());
                 try {
-                    int cnt = session.insert("LookupValue.insertValueJson", params);
+                    int cnt = session.insert("Lookup.insertValueJson", params);
                     affectedRows += cnt;
                 } catch (Exception ignored) {
                 }
@@ -342,7 +342,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
-            return session.selectOne("LookupValue.getValueCount", params);
+            return session.selectOne("Lookup.getValueCount", params);
         } finally {
             session.close(); // Ensure session is always closed
         }
@@ -355,7 +355,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
             params.put("pattern", pattern);
-            return session.selectOne("LookupValue.searchLookupValuesCount", params);
+            return session.selectOne("Lookup.searchLookupValuesCount", params);
         } finally {
             session.close(); // Ensure session is always closed
         }
@@ -373,7 +373,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("keyValue", keyValue);
             params.put("valueData", valueData);
 
-            affectedRows = session.insert("LookupValue.putIfAbsent", params);
+            affectedRows = session.insert("Lookup.putIfAbsent", params);
 
             session.commit();
             commitSuccess = true;
@@ -402,7 +402,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("keyValue", keyValue);
             params.put("valueData", valueData);
 
-            affectedRows = session.insert("LookupValue.putIfAbsentJson", params);
+            affectedRows = session.insert("Lookup.putIfAbsentJson", params);
 
             session.commit();
             commitSuccess = true;
@@ -431,7 +431,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("keyValue", keyValue);
             params.put("expectedValue", expectedValue);
             params.put("newValue", newValue);
-            affectedRows = session.insert("LookupValue.compareAndSwap", params);
+            affectedRows = session.insert("Lookup.compareAndSwap", params);
 
             session.commit();
             commitSuccess = true;
@@ -460,7 +460,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("keyValue", keyValue);
             params.put("expectedValue", expectedValue);
             params.put("newValue", newValue);
-            affectedRows = session.insert("LookupValue.compareAndSwapJson", params);
+            affectedRows = session.insert("Lookup.compareAndSwapJson", params);
 
             session.commit();
             commitSuccess = true;
@@ -492,7 +492,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("keyValue", keyValue);
             params.put("delta", delta);
 
-            int update = session.update("LookupValue.updateValueByDelta", params);
+            int update = session.update("Lookup.updateValueByDelta", params);
 
             session.commit();
             commitSuccess = true;
@@ -520,7 +520,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("tableName", tableName);
             params.put("indexName", indexName);
 
-            session.update("LookupValue.createJsonGinIndex", params);
+            session.update("Lookup.createJsonGinIndex", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -545,7 +545,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("tableName", tableName);
             params.put("indexName", indexName);
 
-            session.update("LookupValue.dropJsonGinIndex", params);
+            session.update("Lookup.dropJsonGinIndex", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -575,7 +575,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("tableName", tableName);
             params.put("fieldIndexes", fieldIndexes);
 
-            session.update("LookupValue.createJsonFieldIndexes", params);
+            session.update("Lookup.createJsonFieldIndexes", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -605,7 +605,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("tableName", tableName);
             params.put("fieldIndexes", fieldIndexes);
 
-            session.update("LookupValue.dropJsonFieldIndexes", params);
+            session.update("Lookup.dropJsonFieldIndexes", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -629,7 +629,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("offset", offset);
             params.put("limit", limit);
             params.put("filterJson", filterJson);
-            return session.selectList("LookupValue.searchByJsonFieldsGin", params);
+            return session.selectList("Lookup.searchByJsonFieldsGin", params);
         } finally {
             session.close();
         }
@@ -645,7 +645,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("offset", offset);
             params.put("limit", limit);
             params.put("criteria", criteria);
-            return session.selectList("LookupValue.searchByJsonFieldsField", params);
+            return session.selectList("Lookup.searchByJsonFieldsField", params);
         } finally {
             session.close();
         }
@@ -693,7 +693,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
         Map<String, Object> params = new HashMap<>();
         params.put("tableName", tableName);
         params.put("keyValues", batch);
-        return session.selectList("LookupValue.selectExistingKeys", params);
+        return session.selectList("Lookup.selectExistingKeys", params);
     }
 
     private String buildGinIndexName(String tableName) {

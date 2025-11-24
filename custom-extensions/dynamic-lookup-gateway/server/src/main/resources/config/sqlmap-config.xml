@@ -22,7 +22,5 @@
 
     <mappers>
         <mapper resource="mapper/${database}-lookup.xml"/>
-        <mapper resource="mapper/${database}-lookup-group-extra.xml"/>
-        <mapper resource="mapper/${database}-lookup-value.xml"/>
     </mappers>
 </configuration>

@@ -11,15 +11,16 @@
         <result property="cachePolicy" column="CACHE_POLICY" javaType="String"/>
         <result property="createdDate" column="CREATED_DATE" javaType="java.sql.Timestamp"/>
         <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
+        <result property="valueType" column="VALUE_TYPE" javaType="String"/>
     </resultMap>
 
-    <resultMap id="lookup-value" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue">
+	<resultMap id="lookup-value" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue">
         <id property="keyValue" column="KEY_VALUE" javaType="String"/>
         <result property="valueData" column="VALUE_DATA" javaType="String"/>
         <result property="createdDate" column="CREATED_DATE" javaType="java.sql.Timestamp"/>
         <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
     </resultMap>
-
+    
     <resultMap id="lookup-statistics" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupStatistics">
         <id property="groupId" column="GROUP_ID" javaType="Integer"/>
         <result property="totalLookups" column="TOTAL_LOOKUPS" javaType="Long"/>
@@ -40,35 +41,27 @@
         <result property="timestamp" column="AUDIT_TIMESTAMP" javaType="java.sql.Timestamp"/>
     </resultMap>
 
-    <sql id="searchLookupValuesBody">
-        <where>
-            <if test='pattern != null'>LOWER(KEY_VALUE) LIKE LOWER('%' || #{pattern} || '%')
-                OR LOWER(VALUE_DATA) LIKE LOWER('%' || #{pattern} || '%')
-            </if>
-        </where>
-    </sql>
-
     <!-- Group Operations -->
     <select id="getGroupById" parameterType="Integer" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE
         FROM LOOKUP_GROUP
         WHERE ID = #{value}
     </select>
 
     <select id="getGroupByName" parameterType="String" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE
         FROM LOOKUP_GROUP
         WHERE NAME = #{value}
     </select>
 
     <select id="getAllGroups" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE
         FROM LOOKUP_GROUP
     </select>
 
     <insert id="insertGroup" parameterType="map" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO LOOKUP_GROUP (NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE)
-        VALUES (#{name}, #{description}, #{version}, #{cacheSize}, #{cachePolicy}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO LOOKUP_GROUP (NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE)
+        VALUES (#{name}, #{description}, #{version}, #{cacheSize}, #{cachePolicy}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, #{valueType})
     </insert>
 
     <update id="updateGroup" parameterType="map">
@@ -78,6 +71,7 @@
         VERSION = #{version},
         CACHE_SIZE = #{cacheSize},
         CACHE_POLICY = #{cachePolicy},
+        VALUE_TYPE = #{valueType},
         UPDATED_DATE = CURRENT_TIMESTAMP
         WHERE ID = #{id}
     </update>
@@ -86,8 +80,16 @@
         DELETE FROM LOOKUP_GROUP
         WHERE ID = #{value}
     </delete>
+	
+	<!-- Value Operations -->
+	<sql id="searchLookupValuesBody">
+        <where>
+            <if test='pattern != null'>LOWER(KEY_VALUE) LIKE LOWER('%' || #{pattern} || '%')
+                OR LOWER(VALUE_DATA) LIKE LOWER('%' || #{pattern} || '%')
+            </if>
+        </where>
+    </sql>
 
-    <!-- Value Operations -->
     <select id="getLookupValues" parameterType="map" resultMap="lookup-value">
         SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
         FROM ${tableName}
@@ -196,7 +198,8 @@
 	      #{key}
 	    </foreach>
   	</select>
-  	
+	<!-- End Value Operations -->
+    
     <!-- Statistics Operations -->
     <insert id="insertStatistics" parameterType="map">
         INSERT INTO LOOKUP_STATISTICS (

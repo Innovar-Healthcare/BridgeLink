@@ -153,7 +153,7 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
-            session.update("LookupValue.createLookupValueTable", params);
+            session.update("Lookup.createLookupValueTable", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -175,7 +175,7 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
-            session.update("LookupValue.createLookupValueJsonTable", params);
+            session.update("Lookup.createLookupValueJsonTable", params);
             session.commit();
             commitSuccess = true;
         } finally {
@@ -197,7 +197,7 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
-            session.update("LookupValue.dropLookupValueTable", params);
+            session.update("Lookup.dropLookupValueTable", params);
             session.commit();
             commitSuccess = true;
         } finally {

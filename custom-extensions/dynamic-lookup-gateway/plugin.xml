@@ -36,8 +36,6 @@
         <entry>
             <string>mysql</string>
             <string>mapper/mysql-lookup.xml</string>
-            <string>mapper/mysql-lookup-group-extra.xml</string>
-            <string>mapper/mysql-lookup-value.xml</string>
         </entry>
         <entry>
             <string>oracle</string>
@@ -46,8 +44,6 @@
         <entry>
             <string>postgres</string>
             <string>mapper/postgres-lookup.xml</string>
-            <string>mapper/postgres-lookup-group-extra.xml</string>
-            <string>mapper/postgres-lookup-value.xml</string>
         </entry>
         <entry>
             <string>sqlserver</string>
