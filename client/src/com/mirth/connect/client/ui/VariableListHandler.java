@@ -93,6 +93,11 @@ public class VariableListHandler extends TransferHandler {
         staticJsReferences.put("Timestamp", "var dateString = DateUtil.getCurrentDate('yyyyMMddHHmmss');");
         staticJsReferences.put("Unique ID", "var uuid = UUIDGenerator.getUUID();");
         staticJsReferences.put("Date", "var date = DateUtil.getDate('pattern','date');");
+        
+        // Channel-related references for JavaScript
+        staticJsReferences.put("Channel ID", "channelId");
+        staticJsReferences.put("Channel Name", "channelName");
+        staticJsReferences.put("Server ID", "connectorMessage.getServerId()");
         staticJsReferences.put("Original File Name", "$('originalFilename')");
         staticJsReferences.put("DICOM Message Raw Data", "var rawData = DICOMUtil.getDICOMRawData(connectorMessage);");
         staticJsReferences.put("Message with Attachments", "var rawData = AttachmentUtil.reAttachMessage(connectorMessage)");
