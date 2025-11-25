@@ -26,6 +26,7 @@
 	<classpathentry kind="lib" path="../../server/lib/javax/javax.ws.rs-api-2.0.1.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/commons/httpclient-4.5.13.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/commons/httpcore-4.4.13.jar"/>
+	<classpathentry kind="lib" path="../../server/lib/donkey/guava/guava-32.0.1-jre.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/swagger/swagger-annotations-2.0.10.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/mybatis-3.1.1.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/mirth-client.jar"/>

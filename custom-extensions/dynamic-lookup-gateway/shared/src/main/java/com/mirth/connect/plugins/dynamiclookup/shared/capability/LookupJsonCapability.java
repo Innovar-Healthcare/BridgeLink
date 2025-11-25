@@ -60,6 +60,9 @@ public final class LookupJsonCapability {
             }
             return noJson(dbInfo);
 
+        case SQLSERVER:
+            return sqlserver(dbInfo);
+
         default:
             return noJson(dbInfo);
         }
@@ -81,6 +84,9 @@ public final class LookupJsonCapability {
         return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD));
     }
 
+    private static LookupJsonCapability sqlserver(DatabaseInfo dbInfo) {
+        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD));
+    }
     // ----------------------------------------------------------------------
     // Optional server-side singleton
     // ----------------------------------------------------------------------

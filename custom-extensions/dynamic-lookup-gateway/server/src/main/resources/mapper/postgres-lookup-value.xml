@@ -9,7 +9,8 @@
         <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
     </resultMap>
      
-	<sql id="searchLookupValuesBody">
+    <!-- Value Operations -->
+    <sql id="searchLookupValuesBody">
         <where>
             <if test='pattern != null'>KEY_VALUE ILIKE '%' || #{pattern} || '%'
                 OR VALUE_DATA::text ILIKE '%' || #{pattern} || '%'
@@ -17,7 +18,6 @@
         </where>
     </sql>
     
-    <!-- Value Operations -->
     <select id="getLookupValues" parameterType="map" resultMap="lookup-value">
         SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
         FROM ${tableName}

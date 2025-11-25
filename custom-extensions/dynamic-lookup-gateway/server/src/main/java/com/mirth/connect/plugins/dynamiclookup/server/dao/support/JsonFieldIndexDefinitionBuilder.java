@@ -40,6 +40,7 @@ public class JsonFieldIndexDefinitionBuilder {
             String sanitized = sanitizeForIdentifier(fieldPath);
             String indexName = "idx_" + tableName + "_json_" + sanitized;
             String expression;
+            String computedColumnName = "";
 
             switch (type) {
             case POSTGRESQL:
@@ -49,6 +50,9 @@ public class JsonFieldIndexDefinitionBuilder {
                 expression = buildMysqlExpression(fieldPath);
                 break;
             case SQLSERVER:
+                expression = buildSqlServerExpression(fieldPath);
+                computedColumnName = buildSqlServerComputedColumnName(fieldPath);
+                break;
             case ORACLE:
             default:
                 continue;
@@ -57,15 +61,13 @@ public class JsonFieldIndexDefinitionBuilder {
             JsonFieldIndexDefinition def = new JsonFieldIndexDefinition();
             def.setIndexName(indexName);
             def.setExpression(expression);
+            def.setComputedColumnName(computedColumnName);
             list.add(def);
         }
 
         return list;
     }
 
-    /**
-     * PostgreSQL expression: - top-level: VALUE_DATA->>'email' - nested: VALUE_DATA #>> '{address,city}'
-     */
     private static String buildPostgresExpression(String fieldPath) {
         if (!fieldPath.contains(".")) {
             return "VALUE_DATA->>'" + fieldPath + "'";
@@ -82,6 +84,46 @@ public class JsonFieldIndexDefinitionBuilder {
     private static String buildMysqlExpression(String fieldPath) {
         String jsonPath = "$." + fieldPath; // "address.city"
         return "CAST(JSON_UNQUOTE(JSON_EXTRACT(VALUE_DATA, '" + jsonPath + "')) AS CHAR(255))";
+    }
+
+    /**
+     * SQL Server JSON expression: - top-level: JSON_VALUE(VALUE_DATA, '$.email') - nested: JSON_VALUE(VALUE_DATA,
+     * '$.address.city')
+     */
+    private static String buildSqlServerExpression(String fieldPath) {
+        // SQL Server
+        String jsonPath = "$." + fieldPath; // VD: address.city
+        return "JSON_VALUE(VALUE_DATA, '" + jsonPath + "')";
+    }
+
+    /**
+     * Builds a safe SQL Server computed column name from a JSON field path.
+     *
+     * Rules: - Split field path by "." - Normalize each segment: uppercase and replace non-alphanumeric chars with "_" -
+     * Join with "_" - Prefix with "JSON_" to avoid collisions with real table columns
+     *
+     * Examples: "email" -> JSON_EMAIL "address.city" -> JSON_ADDRESS_CITY "user-name" -> JSON_USER_NAME
+     */
+    private static String buildSqlServerComputedColumnName(String fieldPath) {
+        if (fieldPath == null || fieldPath.isEmpty()) {
+            throw new IllegalArgumentException("fieldPath must not be null or empty");
+        }
+
+        // Split by dot for nested JSON keys
+        String[] parts = fieldPath.split("\\.");
+
+        // Normalize each segment
+        StringBuilder sb = new StringBuilder("JSON_");
+        for (int i = 0; i < parts.length; i++) {
+            String segment = parts[i].toUpperCase().replaceAll("[^A-Z0-9]", "_"); // replace invalid chars
+
+            sb.append(segment);
+            if (i < parts.length - 1) {
+                sb.append("_");
+            }
+        }
+
+        return sb.toString();
     }
 
     private static String sanitizeForIdentifier(String fieldPath) {

@@ -28,14 +28,14 @@ import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupGroupDao;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupGroupExtraDao;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupStatisticsDao;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupValueDao;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldCriteriaBuilder;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldCriterion;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.DuplicateGroupNameException;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.GroupNotFoundException;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.ValueOperationException;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.ValueTableCreationException;
+import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldDialectRegistry;
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonIndexConfigurator;
-import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
+import com.mirth.connect.plugins.dynamiclookup.server.util.JsonFilterUtils;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.CacheStatistics;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.HistoryFilterState;
@@ -181,7 +181,7 @@ public class LookupService {
             if (isValueJson) {
                 groupDao.createValueJsonTable(tableName);
                 if (jsonIndexConfigurator != null) {
-                    jsonIndexConfigurator.applyInitialIndexConfig(extra, tableName);
+                    jsonIndexConfigurator.applyInitialIndexConfig(group);
                 }
             } else {
                 groupDao.createValueTable(tableName);
@@ -239,18 +239,19 @@ public class LookupService {
         groupDao.updateGroup(group);
 
         if (LookupConstants.isJsonValueType(newType)) {
-            LookupGroupExtra oldExtra = groupExtraDao.getByGroupId(group.getId());
+            // get old extra group
+            existingGroup.setExtra(groupExtraDao.getByGroupId(group.getId()));
+
             LookupGroupExtra newExtra = group.getExtra();
-            // If extra missing -> ignore
+            // Persist newExtra. If missing -> ignore
             if (newExtra != null) {
                 newExtra.setGroupId(group.getId());
                 groupExtraDao.update(newExtra);
             }
 
+            // apply jsonIndexConfigurator
             if (jsonIndexConfigurator != null) {
-                LookupGroupExtra effectiveNewExtra = (newExtra != null) ? newExtra : oldExtra;
-                String tableName = getTableNameForGroup(group.getId());
-                jsonIndexConfigurator.apply(oldExtra, effectiveNewExtra, tableName);
+                jsonIndexConfigurator.apply(existingGroup, group);
             }
         } else {
             // no-op
@@ -541,7 +542,8 @@ public class LookupService {
             return valueDao.searchByJsonFieldsGin(tableName, offset, limit, filterJson);
         }
 
-        List<JsonFieldCriterion> criteria = JsonFieldCriteriaBuilder.buildCriteria(LookupJsonCapability.getInstance(), filterJson);
+        Map<String, String> filters = JsonFilterUtils.parseFilterJson(filterJson);
+        List<JsonFieldCriterion> criteria = JsonFieldDialectRegistry.getDialect().buildCriteria(group, filters);
         return valueDao.searchByJsonFieldsField(tableName, offset, limit, criteria);
     }
 

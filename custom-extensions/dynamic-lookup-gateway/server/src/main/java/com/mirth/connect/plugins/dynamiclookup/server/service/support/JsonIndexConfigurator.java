@@ -11,13 +11,16 @@
 package com.mirth.connect.plugins.dynamiclookup.server.service.support;
 
 import java.util.HashSet;
-import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupValueDao;
+import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldIndexDefinition;
+import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
-import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 
 public class JsonIndexConfigurator {
 
@@ -30,15 +33,23 @@ public class JsonIndexConfigurator {
     /**
      * Apply initial index configuration for a newly created group/table. Treats the old mode as NONE.
      */
-    public void applyInitialIndexConfig(LookupGroupExtra newExtra, String tableName) {
-        apply(null, newExtra, tableName);
+    public void applyInitialIndexConfig(LookupGroup newGroup) {
+        apply(null, newGroup);
     }
 
     /**
      * Apply index configuration changes when group extra is updated. Handles transitions between NONE, GIN, FIELD modes and
      * FIELD->FIELD field list diffs.
      */
-    public void apply(LookupGroupExtra oldExtra, LookupGroupExtra newExtra, String tableName) {
+    public void apply(LookupGroup oldGroup, LookupGroup newGroup) {
+        if (newGroup == null) {
+            return;
+        }
+
+        String tableName = LookupTableNaming.valueTableName(newGroup);
+
+        LookupGroupExtra oldExtra = (oldGroup != null) ? oldGroup.getExtra() : null;
+        LookupGroupExtra newExtra = (newGroup != null) ? newGroup.getExtra() : null;
 
         // ---- Normalize modes ----
         String oldMode = (oldExtra != null) ? LookupConstants.normalizeJsonIndexMode(oldExtra.getJsonIndexMode()) : LookupConstants.JSON_INDEX_NONE;
@@ -46,29 +57,35 @@ public class JsonIndexConfigurator {
         String newMode = (newExtra != null) ? LookupConstants.normalizeJsonIndexMode(newExtra.getJsonIndexMode()) : LookupConstants.JSON_INDEX_NONE;
 
         // ---- Normalize field lists ----
-        Set<String> oldFields = parseFieldSet(oldExtra != null ? oldExtra.getIndexedJsonFields() : null);
-        Set<String> newFields = parseFieldSet(newExtra != null ? newExtra.getIndexedJsonFields() : null);
+        JsonFieldDialect dialect = JsonFieldDialectRegistry.getDialect();
+        List<JsonFieldIndexDefinition> oldIndexDefs = dialect.buildIndexDefinitions(oldGroup);
+        List<JsonFieldIndexDefinition> newIndexDefs = dialect.buildIndexDefinitions(newGroup);
 
         // ---- Early return: mode same + field same ----
         if (oldMode.equals(newMode)) {
-            if (LookupConstants.isFieldMode(oldMode) && !oldFields.equals(newFields)) {
-                applyFieldDiff(tableName, oldFields, newFields);
+            if (LookupConstants.isFieldMode(oldMode)) {
+                Set<String> oldPaths = oldIndexDefs.stream().map(JsonFieldIndexDefinition::getFieldPath).collect(Collectors.toSet());
+                Set<String> newPaths = newIndexDefs.stream().map(JsonFieldIndexDefinition::getFieldPath).collect(Collectors.toSet());
+                if (!oldPaths.equals(newPaths)) {
+                    applyFieldDiff(tableName, oldIndexDefs, newIndexDefs);
+                }
             }
+
             return;
         }
 
         // ---- Mode transition ----
         switch (oldMode) {
         case LookupConstants.JSON_INDEX_NONE:
-            handleNoneTo(newMode, tableName, newFields);
+            handleNoneTo(newMode, tableName, newIndexDefs);
             break;
 
         case LookupConstants.JSON_INDEX_GIN:
-            handleGinTo(newMode, tableName, newFields);
+            handleGinTo(newMode, tableName, newIndexDefs);
             break;
 
         case LookupConstants.JSON_INDEX_FIELD:
-            handleFieldTo(newMode, tableName, oldFields);
+            handleFieldTo(newMode, tableName, oldIndexDefs);
             break;
         }
     }
@@ -77,35 +94,38 @@ public class JsonIndexConfigurator {
     // MODE TRANSITIONS
     // ========================================================================
 
-    private void handleNoneTo(String newMode, String tableName, Set<String> newFields) {
+    private void handleNoneTo(String newMode, String tableName, List<JsonFieldIndexDefinition> newIndexDefs) {
 
         if (LookupConstants.isGinMode(newMode)) {
             valueDao.createJsonGinIndex(tableName);
-        } else if (LookupConstants.isFieldMode(newMode)) {
-            if (!newFields.isEmpty()) {
-                valueDao.createJsonFieldIndexes(tableName, newFields);
+            return;
+        }
+
+        if (LookupConstants.isFieldMode(newMode)) {
+            if (!newIndexDefs.isEmpty()) {
+                valueDao.createJsonFieldIndexes(tableName, newIndexDefs);
             }
         }
     }
 
-    private void handleGinTo(String newMode, String tableName, Set<String> newFields) {
+    private void handleGinTo(String newMode, String tableName, List<JsonFieldIndexDefinition> newIndexDefs) {
 
         // Step 1: drop old mode
         valueDao.dropJsonGinIndex(tableName);
 
         // Step 2: create new mode
         if (LookupConstants.isFieldMode(newMode)) {
-            if (!newFields.isEmpty()) {
-                valueDao.createJsonFieldIndexes(tableName, newFields);
+            if (!newIndexDefs.isEmpty()) {
+                valueDao.createJsonFieldIndexes(tableName, newIndexDefs);
             }
         }
         // GIN → NONE = done
     }
 
-    private void handleFieldTo(String newMode, String tableName, Set<String> oldFields) {
+    private void handleFieldTo(String newMode, String tableName, List<JsonFieldIndexDefinition> oldIndexDefs) {
         // Step 1: drop old field indexes
-        if (!oldFields.isEmpty()) {
-            valueDao.dropJsonFieldIndexes(tableName, oldFields);
+        if (!oldIndexDefs.isEmpty()) {
+            valueDao.dropJsonFieldIndexes(tableName, oldIndexDefs);
         }
 
         // Step 2: create new mode
@@ -121,31 +141,32 @@ public class JsonIndexConfigurator {
     // FIELD → FIELD
     // ========================================================================
 
-    private void applyFieldDiff(String tableName, Set<String> oldFields, Set<String> newFields) {
+    private void applyFieldDiff(String tableName, List<JsonFieldIndexDefinition> oldIndexDefs, List<JsonFieldIndexDefinition> newIndexDefs) {
+        // ----- Extract field paths -----
+        Set<String> oldPaths = oldIndexDefs.stream().map(JsonFieldIndexDefinition::getFieldPath).collect(Collectors.toSet());
 
-        Set<String> fieldsToAdd = new HashSet<>(newFields);
-        fieldsToAdd.removeAll(oldFields);
+        Set<String> newPaths = newIndexDefs.stream().map(JsonFieldIndexDefinition::getFieldPath).collect(Collectors.toSet());
 
-        Set<String> fieldsToDrop = new HashSet<>(oldFields);
-        fieldsToDrop.removeAll(newFields);
+        // ----- Compute diff -----
+        Set<String> fieldsToAdd = new HashSet<>(newPaths);
+        fieldsToAdd.removeAll(oldPaths);
 
-        if (!fieldsToDrop.isEmpty()) {
-            valueDao.dropJsonFieldIndexes(tableName, fieldsToDrop);
+        Set<String> fieldsToDrop = new HashSet<>(oldPaths);
+        fieldsToDrop.removeAll(newPaths);
+
+        // ----- Filter definitions -----
+        List<JsonFieldIndexDefinition> defsToDrop = oldIndexDefs.stream().filter(def -> fieldsToDrop.contains(def.getFieldPath())).collect(Collectors.toList());
+
+        List<JsonFieldIndexDefinition> defsToAdd = newIndexDefs.stream().filter(def -> fieldsToAdd.contains(def.getFieldPath())).collect(Collectors.toList());
+
+        // ----- Apply changes -----
+        if (!defsToDrop.isEmpty()) {
+            valueDao.dropJsonFieldIndexes(tableName, defsToDrop);
         }
-        if (!fieldsToAdd.isEmpty()) {
-            valueDao.createJsonFieldIndexes(tableName, fieldsToAdd);
+
+        if (!defsToAdd.isEmpty()) {
+            valueDao.createJsonFieldIndexes(tableName, defsToAdd);
         }
     }
 
-    // ========================================================================
-    // Field list utils
-    // ========================================================================
-
-    private Set<String> parseFieldSet(String jsonArray) {
-        if (jsonArray == null || jsonArray.trim().isEmpty()) {
-            return new LinkedHashSet<>();
-        }
-
-        return new LinkedHashSet<>(JsonUtils.fromJsonList(jsonArray, String.class));
-    }
 }

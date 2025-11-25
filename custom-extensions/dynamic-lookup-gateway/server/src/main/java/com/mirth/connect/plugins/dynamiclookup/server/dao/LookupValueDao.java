@@ -12,9 +12,9 @@ package com.mirth.connect.plugins.dynamiclookup.server.dao;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldCriterion;
+import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 
 public interface LookupValueDao {
@@ -65,9 +65,9 @@ public interface LookupValueDao {
 
     void dropJsonGinIndex(String tableName);
 
-    void createJsonFieldIndexes(String tableName, Set<String> fieldsToAdd);
+    void createJsonFieldIndexes(String tableName, List<JsonFieldIndexDefinition> fieldIndexes);
 
-    void dropJsonFieldIndexes(String tableName, Set<String> fieldsToDrop);
+    void dropJsonFieldIndexes(String tableName, List<JsonFieldIndexDefinition> fieldIndexes);
 
     List<LookupValue> searchByJsonFieldsGin(String tableName, Integer offset, Integer limit, String filterJson);
 

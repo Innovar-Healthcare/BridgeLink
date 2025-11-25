@@ -59,6 +59,10 @@ public class JsonFieldCriteriaBuilder {
                 case MYSQL:
                     expr = buildMysqlExpression(pv.path);
                     break;
+                case SQLSERVER:
+                    expr = buildSqlServerExpression(pv.path);
+                    break;
+
                 default:
                     throw new IllegalStateException("JSON FIELD search is not implemented for DB type: " + type);
                 }
@@ -96,6 +100,16 @@ public class JsonFieldCriteriaBuilder {
     private static String buildMysqlExpression(List<String> path) {
         String jsonPath = "$." + String.join(".", path);
         return "CAST(JSON_UNQUOTE(JSON_EXTRACT(VALUE_DATA, '" + jsonPath + "')) AS CHAR(255))";
+    }
+
+    /**
+     * SQL Server JSON expression: top-level: JSON_VALUE(VALUE_DATA, '$.email') - nested: JSON_VALUE(VALUE_DATA,
+     * '$.address.city')
+     *
+     */
+    private static String buildSqlServerExpression(List<String> path) {
+        String jsonPath = "$." + String.join(".", path);
+        return "JSON_VALUE(VALUE_DATA, '" + jsonPath + "')";
     }
 
     private static void collectLeafPaths(JsonNode node, List<String> currentPath, List<PathValue> out) {
