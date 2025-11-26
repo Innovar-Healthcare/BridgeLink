@@ -508,10 +508,9 @@ public class MyBatisLookupValueDao implements LookupValueDao {
     }
 
     @Override
-    public void createJsonGinIndex(String tableName) {
+    public void createJsonGinIndex(String tableName, String indexName) {
         SqlSession session = sqlSessionManager.openSession();
         boolean commitSuccess = false;
-        String indexName = buildGinIndexName(tableName);
 
         try {
             Map<String, Object> params = new HashMap<>();
@@ -533,10 +532,9 @@ public class MyBatisLookupValueDao implements LookupValueDao {
     }
 
     @Override
-    public void dropJsonGinIndex(String tableName) {
+    public void dropJsonGinIndex(String tableName, String indexName) {
         SqlSession session = sqlSessionManager.openSession();
         boolean commitSuccess = false;
-        String indexName = buildGinIndexName(tableName);
 
         try {
             Map<String, Object> params = new HashMap<>();
@@ -688,11 +686,5 @@ public class MyBatisLookupValueDao implements LookupValueDao {
         params.put("tableName", tableName);
         params.put("keyValues", batch);
         return session.selectList("Lookup.selectExistingKeys", params);
-    }
-
-    private String buildGinIndexName(String tableName) {
-        // Example: dl_group_12_values → idx_dl_group_12_values_json_gin
-        String sanitized = tableName.toLowerCase().replaceAll("[^a-z0-9_]+", "_");
-        return "idx_" + sanitized + "_json_gin";
     }
 }

@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupValueDao;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
+import com.mirth.connect.plugins.dynamiclookup.server.util.PostgresJsonIndexNaming;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
@@ -97,7 +98,8 @@ public class JsonIndexConfigurator {
     private void handleNoneTo(String newMode, String tableName, List<JsonFieldIndexDefinition> newIndexDefs) {
 
         if (LookupConstants.isGinMode(newMode)) {
-            valueDao.createJsonGinIndex(tableName);
+            String indexName = PostgresJsonIndexNaming.buildGinIndexName(tableName);
+            valueDao.createJsonGinIndex(tableName, indexName);
             return;
         }
 
@@ -111,7 +113,8 @@ public class JsonIndexConfigurator {
     private void handleGinTo(String newMode, String tableName, List<JsonFieldIndexDefinition> newIndexDefs) {
 
         // Step 1: drop old mode
-        valueDao.dropJsonGinIndex(tableName);
+        String indexName = PostgresJsonIndexNaming.buildGinIndexName(tableName);
+        valueDao.dropJsonGinIndex(tableName, indexName);
 
         // Step 2: create new mode
         if (LookupConstants.isFieldMode(newMode)) {
@@ -131,7 +134,8 @@ public class JsonIndexConfigurator {
         // Step 2: create new mode
         // FIELD -> GIN
         if (LookupConstants.isGinMode(newMode)) {
-            valueDao.createJsonGinIndex(tableName);
+            String indexName = PostgresJsonIndexNaming.buildGinIndexName(tableName);
+            valueDao.createJsonGinIndex(tableName, indexName);
         }
 
         // FIELD → NONE = no-op

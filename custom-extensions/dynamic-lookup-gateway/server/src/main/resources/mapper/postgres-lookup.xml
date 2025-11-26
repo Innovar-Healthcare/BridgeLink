@@ -14,6 +14,12 @@
         <result property="valueType" column="VALUE_TYPE" javaType="String"/>
     </resultMap>
 
+	<resultMap id="lookup-group-extra" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra">
+        <id     property="groupId"           column="GROUP_ID"            javaType="Integer"/>
+        <result property="jsonIndexMode"     column="JSON_INDEX_MODE"     javaType="String"/>
+        <result property="indexedJsonFields" column="INDEXED_JSON_FIELDS" javaType="String"/>
+    </resultMap>
+    
 	<resultMap id="lookup-value" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue">
         <id property="keyValue" column="KEY_VALUE" javaType="String"/>
         <result property="valueData" column="VALUE_DATA" javaType="String"/>
@@ -81,6 +87,38 @@
         WHERE ID = #{value}
     </delete>
 
+	<select id="getByGroupId" parameterType="Integer" resultMap="lookup-group-extra">
+        SELECT GROUP_ID, JSON_INDEX_MODE, INDEXED_JSON_FIELDS
+        FROM LOOKUP_GROUP_EXTRA
+        WHERE GROUP_ID = #{value}
+    </select>
+
+	<select id="getAllGroupExtras" resultMap="lookup-group-extra">
+        SELECT GROUP_ID, JSON_INDEX_MODE, INDEXED_JSON_FIELDS
+        FROM LOOKUP_GROUP_EXTRA
+    </select>
+    
+    <insert id="insertGroupExtra" parameterType="map">
+        INSERT INTO LOOKUP_GROUP_EXTRA 
+            (GROUP_ID, JSON_INDEX_MODE, INDEXED_JSON_FIELDS)
+        VALUES
+            (#{groupId}, #{jsonIndexMode}, #{indexedJsonFields}::jsonb)
+    </insert>
+
+    <update id="updateGroupExtra" parameterType="map">
+        UPDATE LOOKUP_GROUP_EXTRA
+        SET 
+            JSON_INDEX_MODE = #{jsonIndexMode},
+            INDEXED_JSON_FIELDS = #{indexedJsonFields}::jsonb
+        WHERE GROUP_ID = #{groupId}
+    </update>
+
+    <select id="groupExtraExists" parameterType="Integer" resultType="Integer">
+        SELECT 1
+        FROM LOOKUP_GROUP_EXTRA
+        WHERE GROUP_ID = #{value}
+    </select>
+	
 	<!-- Value Operations -->
     <sql id="searchLookupValuesBody">
         <where>

@@ -61,9 +61,9 @@ public interface LookupValueDao {
 
     boolean updateValueByDelta(String tableName, String keyValue, Long delta);
 
-    void createJsonGinIndex(String tableName);
+    void createJsonGinIndex(String tableName, String indexName);
 
-    void dropJsonGinIndex(String tableName);
+    void dropJsonGinIndex(String tableName, String indexName);
 
     void createJsonFieldIndexes(String tableName, List<JsonFieldIndexDefinition> fieldIndexes);
 
