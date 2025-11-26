@@ -96,7 +96,7 @@ public class LookupTableController implements LookupPropertiesProvider {
 
             LookupGroupDao groupDao = new MyBatisLookupGroupDao(sqlSessionManager);
             LookupGroupExtraDao groupExtraDao = new MyBatisLookupGroupExtraDao(sqlSessionManager);
-            LookupValueDao valueDao = new MyBatisLookupValueDao(sqlSessionManager, dbInfo.getType());
+            LookupValueDao valueDao = new MyBatisLookupValueDao(sqlSessionManager);
             LookupAuditDao auditDao = new MyBatisLookupAuditDao(sqlSessionManager);
             LookupStatisticsDao statisticsDao = new MyBatisLookupStatisticsDao(sqlSessionManager);
 

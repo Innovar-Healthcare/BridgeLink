@@ -27,15 +27,14 @@ import com.mirth.connect.plugins.dynamiclookup.server.exception.ValueOperationEx
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldCriterion;
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 
 public class MyBatisLookupValueDao implements LookupValueDao {
     private SqlSessionManager sqlSessionManager;
-    DatabaseType dbType;
 
-    public MyBatisLookupValueDao(SqlSessionManager sqlSessionManager, DatabaseType dbType) {
+    public MyBatisLookupValueDao(SqlSessionManager sqlSessionManager) {
         this.sqlSessionManager = sqlSessionManager;
-        this.dbType = dbType;
     }
 
     @Override
@@ -477,7 +476,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
 
     @Override
     public boolean updateValueByDelta(String tableName, String keyValue, Long delta) {
-        if (dbType == DatabaseType.DERBY) {
+        if (LookupJsonCapability.getInstance().getDatabaseInfo().getType() == DatabaseType.DERBY) {
             throw new ValueOperationException("Atomic delta update is not supported on Derby (CLOB field).");
         }
 
@@ -567,9 +566,16 @@ public class MyBatisLookupValueDao implements LookupValueDao {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
-            params.put("fieldIndexes", fieldIndexes);
 
-            session.update("Lookup.createJsonFieldIndexes", params);
+            if (LookupJsonCapability.getInstance().getDatabaseInfo().getType() == DatabaseType.ORACLE) {
+                for (JsonFieldIndexDefinition def : fieldIndexes) {
+                    params.put("fieldIndex", def);
+                    session.update("Lookup.createJsonFieldIndex", params);
+                }
+            } else {
+                params.put("fieldIndexes", fieldIndexes);
+                session.update("Lookup.createJsonFieldIndexes", params);
+            }
             session.commit();
             commitSuccess = true;
         } finally {

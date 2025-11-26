@@ -66,6 +66,9 @@ public class JsonFieldDialectRegistry {
         case SQLSERVER:
             return new SqlServerJsonFieldDialect();
 
+        case ORACLE:
+            return new OracleJsonFieldDialect();
+
         default:
             // Any database type that does not support JSON field dialects
             // will use NoJsonFieldDialect. That dialect throws on usage.

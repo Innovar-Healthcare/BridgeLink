@@ -50,18 +50,24 @@ public final class LookupJsonCapability {
 
         case POSTGRESQL:
             if (dbInfo.isAtLeast(9, 4)) {
-                return postgres(dbInfo);
+                return postgres9_4(dbInfo);
             }
             return noJson(dbInfo);
 
         case MYSQL:
             if (dbInfo.isAtLeast(8, 0)) {
-                return mysql8(dbInfo);
+                return mysql8_0(dbInfo);
             }
             return noJson(dbInfo);
 
         case SQLSERVER:
             return sqlserver(dbInfo);
+
+        case ORACLE:
+            if (dbInfo.isAtLeast(12, 1)) {
+                return oracle12_1(dbInfo);
+            }
+            return noJson(dbInfo);
 
         default:
             return noJson(dbInfo);
@@ -76,15 +82,19 @@ public final class LookupJsonCapability {
         return new LookupJsonCapability(dbInfo, false, Collections.emptySet());
     }
 
-    private static LookupJsonCapability postgres(DatabaseInfo dbInfo) {
+    private static LookupJsonCapability postgres9_4(DatabaseInfo dbInfo) {
         return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD, LookupConstants.JSON_INDEX_GIN));
     }
 
-    private static LookupJsonCapability mysql8(DatabaseInfo dbInfo) {
+    private static LookupJsonCapability mysql8_0(DatabaseInfo dbInfo) {
         return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD));
     }
 
     private static LookupJsonCapability sqlserver(DatabaseInfo dbInfo) {
+        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD));
+    }
+
+    private static LookupJsonCapability oracle12_1(DatabaseInfo dbInfo) {
         return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD));
     }
     // ----------------------------------------------------------------------
