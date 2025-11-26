@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldCriterion;
 import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.server.util.JsonFieldUtils;
-import com.mirth.connect.plugins.dynamiclookup.server.util.JsonIndexConfigUtils;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
@@ -39,7 +38,7 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
             return Collections.emptyList();
         }
 
-        Set<String> fieldPaths = JsonIndexConfigUtils.parseIndexedFieldPaths(extra.getIndexedJsonFields());
+        Set<String> fieldPaths = JsonFieldUtils.parseIndexedFieldPaths(extra.getIndexedJsonFields());
         if (fieldPaths.isEmpty()) {
             return Collections.emptyList();
         }
@@ -47,13 +46,7 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
         String tableName = LookupTableNaming.valueTableName(group);
 
         List<JsonFieldIndexDefinition> definitions = new ArrayList<>();
-        for (String rawFieldPath : fieldPaths) {
-            String fieldPath = JsonFieldUtils.normalizeFieldPath(rawFieldPath);
-
-            if (fieldPath == null || fieldPath.isEmpty()) {
-                continue;
-            }
-
+        for (String fieldPath : fieldPaths) {
             String expression = buildExpression(fieldPath);
             String computedColumnName = buildComputedColumnName(fieldPath);
             String indexName = buildIndexName(tableName, fieldPath);
