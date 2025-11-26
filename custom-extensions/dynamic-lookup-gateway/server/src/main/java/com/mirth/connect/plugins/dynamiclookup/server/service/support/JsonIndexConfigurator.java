@@ -16,7 +16,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupValueDao;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
 import com.mirth.connect.plugins.dynamiclookup.server.util.PostgresJsonIndexNaming;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;

@@ -8,7 +8,7 @@
  * been included with this distribution in the LICENSE.txt file.
  */
 
-package com.mirth.connect.plugins.dynamiclookup.server.dao.support;
+package com.mirth.connect.plugins.dynamiclookup.server.service.support;
 
 public class JsonFieldCriterion {
     private String expression;

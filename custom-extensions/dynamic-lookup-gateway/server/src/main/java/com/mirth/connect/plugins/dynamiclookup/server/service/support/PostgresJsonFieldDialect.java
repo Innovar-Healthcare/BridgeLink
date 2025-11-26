@@ -16,8 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldCriterion;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.server.util.JsonFieldUtils;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;

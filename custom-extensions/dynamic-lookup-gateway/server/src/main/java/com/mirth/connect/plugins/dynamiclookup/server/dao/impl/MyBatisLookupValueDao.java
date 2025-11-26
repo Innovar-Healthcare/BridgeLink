@@ -23,9 +23,9 @@ import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionManager;
 
 import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupValueDao;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldCriterion;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.ValueOperationException;
+import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldCriterion;
+import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 

@@ -13,8 +13,8 @@ package com.mirth.connect.plugins.dynamiclookup.server.dao;
 import java.util.List;
 import java.util.Map;
 
-import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldCriterion;
-import com.mirth.connect.plugins.dynamiclookup.server.dao.support.JsonFieldIndexDefinition;
+import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldCriterion;
+import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 
 public interface LookupValueDao {
