@@ -229,25 +229,46 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
             ));
 
         templates.add(new CodeTemplate(
-        	    "Creates a lookup group",
-        	    CodeTemplateType.DRAG_AND_DROP_CODE,
-        	    CodeTemplateContextSet.getConnectorContextSet(),
-        	    "var payload = {\n" +
-        	    "  name: 'MyGroup',\n" +
-        	    "  description: 'optional',\n" +
-        	    "  version: '1.0.0',\n" +
-        	    "  cacheSize: '1000',\n" +
-        	    "  cachePolicy: 'LRU' // or 'FIFO'\n" +
-        	    "};\n" +
-        	    "var res = LookupHelper.createGroup(payload);\n" +
-        	    "if (!res || String(res.ok) !== 'true') {\n" +
-        	    "  logger.error('Create group failed: ' + (res ? (res.errorCode + ' - ' + res.errorMessage) : 'unknown'));\n" +
-        	    "} else {\n" +
-        	    "  logger.info('Created group id=' + res.group.id + ', name=' + res.group.name);\n" +
-        	    "}\n",
-        	    "Creates a lookup group with fields: name, description, version, cacheSize, cachePolicy. " +
-        	    "Returns { ok: 'true', group: {...} } on success; otherwise { ok: 'false', errorCode, errorMessage }."
-    	));
+                "Creates a lookup group",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var payload = {\n" +
+                "  name: 'MyGroup',\n" +
+                "  description: 'optional',\n" +
+                "  version: '1.0.0',\n" +
+                "  cacheSize: '1000',\n" +
+                "  cachePolicy: 'LRU', // or 'FIFO'\n" +
+                "\n" +
+                "  // --- Optional JSON configuration ---\n" +
+                "  // NOTE: Derby does NOT support JSON. On Derby, always set valueType = 'TEXT'.\n" +
+                "  // Other databases may support JSON; the server will validate JSON capability automatically.\n" +
+                "\n" +
+                "  // valueType: 'TEXT' (default) or 'JSON'\n" +
+                "  // jsonIndexMode (only when valueType = 'JSON'):\n" +
+                "  //    'NONE'  - no index\n" +
+                "  //    'FIELD' - per-field index (database-specific)\n" +
+                "  //    'GIN'   - PostgreSQL-only JSONB GIN index\n" +
+                "  // indexedJsonFields must be a JSON array string when jsonIndexMode = 'FIELD'\n" +
+                "  //   e.g.: '[\"email\", \"address.city\"]'\n" +
+                "\n" +
+                "  // Example JSON group:\n" +
+                "  // valueType: 'JSON',\n" +
+                "  // jsonIndexMode: 'FIELD',\n" +
+                "  // indexedJsonFields: '[\"email\", \"address.city\"]'\n" +
+                "};\n" +
+                "\n" +
+                "var res = LookupHelper.createGroup(payload);\n" +
+                "if (!res || String(res.ok) !== 'true') {\n" +
+                "  logger.error('Create group failed: ' + (res ? (res.errorCode + ' - ' + res.errorMessage) : 'unknown'));\n" +
+                "} else {\n" +
+                "  logger.info('Created group id=' + res.group.id + ', name=' + res.group.name);\n" +
+                "}\n",
+                "Creates a lookup group. Required fields: name, description, version, cacheSize, cachePolicy. " +
+                "Optional: valueType (TEXT/JSON), jsonIndexMode (NONE/FIELD/GIN), and indexedJsonFields (JSON array string) when FIELD mode is used. " +
+                "JSON is not available on Derby; the server validates JSON support per database. " +
+                "Returns { ok: 'true', group: {...} } on success; otherwise { ok: 'false', errorCode, errorMessage }."
+            ));
+
         
         templates.add(new CodeTemplate(
                 "Deletes a lookup group",

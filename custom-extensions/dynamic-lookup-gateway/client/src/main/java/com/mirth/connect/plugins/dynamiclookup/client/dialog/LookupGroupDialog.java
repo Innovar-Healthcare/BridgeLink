@@ -32,7 +32,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.mirth.connect.client.ui.Frame;
 import com.mirth.connect.client.ui.MirthDialog;
 import com.mirth.connect.client.ui.PlatformUI;
@@ -270,8 +269,7 @@ public class LookupGroupDialog extends MirthDialog {
 
             if (LookupConstants.isJsonValueType(valueType) && LookupConstants.isFieldMode(jsonIndexMode) && extra.getIndexedJsonFields() != null) {
                 try {
-                    List<String> fields = JsonUtils.getMapper().readValue(extra.getIndexedJsonFields(), new TypeReference<List<String>>() {
-                    });
+                    List<String> fields = JsonUtils.fromJsonList(extra.getIndexedJsonFields(), String.class);
                     for (String f : fields) {
                         if (f != null && !f.isEmpty()) {
                             jsonIndexFieldsModel.addElement(f);

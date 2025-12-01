@@ -36,6 +36,7 @@ import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldC
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldDialectRegistry;
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonIndexConfigurator;
 import com.mirth.connect.plugins.dynamiclookup.server.util.JsonFilterUtils;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.CacheStatistics;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.HistoryFilterState;
@@ -144,6 +145,9 @@ public class LookupService {
      * Creates a new lookup group and its corresponding value table
      */
     public int createGroup(LookupGroup group) {
+        // Normalizer
+        LookupGroupNormalizer.normalize(group);
+
         // Validate group data
         validateGroup(group);
 
@@ -163,16 +167,20 @@ public class LookupService {
         boolean isValueJson = LookupConstants.isJsonValueType(group.getValueType());
 
         // insert group extra
-        LookupGroupExtra extra = null;
         if (isValueJson) {
-            extra = group.getExtra();
+            try {
+                LookupGroupExtra extra = group.getExtra();
+                extra.setGroupId(groupId);
+                groupExtraDao.insert(extra);
+            } catch (Exception e) {
+                try {
+                    groupDao.deleteGroup(groupId);
+                } catch (Exception ex) {
+                    logger.error("Failed to rollback group creation after table creation error", ex);
+                }
 
-            if (extra == null) {
-                throw new IllegalArgumentException("LookupGroupExtra is required for JSON valueType.");
+                throw new RuntimeException("Failed to create group extra table: " + e.getMessage(), e);
             }
-
-            extra.setGroupId(groupId);
-            groupExtraDao.insert(extra);
         }
 
         try {
@@ -210,6 +218,9 @@ public class LookupService {
      * Updates an existing lookup group
      */
     public void updateGroup(LookupGroup group) {
+        // Normalizer
+        LookupGroupNormalizer.normalize(group);
+
         // Validate group data
         validateGroup(group);
 
@@ -1167,6 +1178,61 @@ public class LookupService {
         // Validate cache size
         if (group.getCacheSize() < 0) {
             throw new IllegalArgumentException("Cache size must be >= 0");
+        }
+
+        // Validate value type
+        String valueType = group.getValueType();
+        if (!LookupConstants.isJsonValueType(valueType) && !LookupConstants.isTextValueType(valueType)) {
+            throw new IllegalArgumentException("Invalid valueType: " + valueType + ". Allowed values are: TEXT or JSON");
+        }
+
+        // Validate JSON index type
+        if (LookupConstants.isJsonValueType(valueType)) {
+            LookupJsonCapability capability = LookupJsonCapability.getInstance();
+            if (!capability.isJsonSupported()) {
+                throw new IllegalArgumentException("JSON valueType is not supported by current database: " + capability.getDatabaseInfo().getProductName());
+            }
+
+            LookupGroupExtra extra = group.getExtra();
+            if (extra == null) {
+                throw new IllegalArgumentException("LookupGroupExtra is required for JSON valueType.");
+            }
+
+            // Validate jsonIndexMode
+            String mode = LookupConstants.normalizeJsonIndexMode(extra.getJsonIndexMode());
+            if (!LookupConstants.isNoneMode(mode) && !LookupConstants.isFieldMode(mode) && !LookupConstants.isGinMode(mode)) {
+                throw new IllegalArgumentException("Invalid jsonIndexMode: " + extra.getJsonIndexMode());
+            }
+
+            if (!capability.isJsonIndexModeSupported(mode)) {
+                throw new IllegalArgumentException("JSON index mode '" + mode + "' is not supported for database: " + capability.getDatabaseInfo().getProductName() + ". Supported modes: " + capability.getSupportedJsonIndexModes());
+            }
+
+            // Extra rules
+            if (LookupConstants.isFieldMode(mode)) {
+                String fieldsJson = extra.getIndexedJsonFields();
+
+                if (fieldsJson == null || fieldsJson.trim().isEmpty()) {
+                    throw new IllegalArgumentException("indexedJsonFields is required when jsonIndexMode = FIELD.");
+                }
+
+                List<String> fields;
+                try {
+                    fields = JsonUtils.fromJsonList(fieldsJson, String.class);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("indexedJsonFields must be a valid JSON array string, e.g. [\"email\", \"address.city\"].");
+                }
+
+                if (fields.isEmpty()) {
+                    throw new IllegalArgumentException("indexedJsonFields cannot be an empty JSON array.");
+                }
+
+                for (String f : fields) {
+                    if (f == null || f.trim().isEmpty()) {
+                        throw new IllegalArgumentException("indexedJsonFields contains an empty field name.");
+                    }
+                }
+            }
         }
     }
 

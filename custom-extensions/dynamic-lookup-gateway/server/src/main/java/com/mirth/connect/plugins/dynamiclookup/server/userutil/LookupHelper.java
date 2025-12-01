@@ -19,11 +19,13 @@ import java.util.Map;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.mirth.connect.plugins.dynamiclookup.server.audit.LookupAuditLogger;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.DuplicateGroupNameException;
 import com.mirth.connect.plugins.dynamiclookup.server.service.LookupService;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupGroupConverter;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.CacheStatistics;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupStatistics;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.TtlUtils;
 
@@ -536,6 +538,11 @@ public class LookupHelper {
 
             // Persist using service layer (which handles validation)
             int id = lookupService.createGroup(group);
+
+            // Add event log manual
+            LookupAuditLogger.getInstance().logHelperGroupCreated(group);
+
+            // get full group from database
             LookupGroup full = lookupService.getGroupById(id);
 
             // Build response payload
@@ -546,7 +553,12 @@ public class LookupHelper {
             out.put("version", full.getVersion());
             out.put("cacheSize", full.getCacheSize());
             out.put("cachePolicy", full.getCachePolicy());
-
+            out.put("valueType", full.getValueType());
+            LookupGroupExtra extra = full.getExtra();
+            if (extra != null) {
+                out.put("jsonIndexMode", extra.getJsonIndexMode());
+                out.put("indexedJsonFields", extra.getIndexedJsonFields());
+            }
             res.put("ok", "true");
             res.put("group", out);
             return res;
@@ -582,6 +594,10 @@ public class LookupHelper {
             }
 
             lookupService.deleteGroup(group.getId());
+
+            // Add event log manual
+            LookupAuditLogger.getInstance().logHelperGroupDeleted(groupName, group.getId());
+
             return true;
         } catch (Exception e) {
             logger.error("Failed to delete lookup group [group='{}']: {}", groupName, e.getMessage(), e);
