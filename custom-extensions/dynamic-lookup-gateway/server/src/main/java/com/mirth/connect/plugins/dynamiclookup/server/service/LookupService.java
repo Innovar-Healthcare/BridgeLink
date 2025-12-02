@@ -1199,10 +1199,12 @@ public class LookupService {
             }
 
             // Validate jsonIndexMode
-            String mode = LookupConstants.normalizeJsonIndexMode(extra.getJsonIndexMode());
-            if (!LookupConstants.isNoneMode(mode) && !LookupConstants.isFieldMode(mode) && !LookupConstants.isGinMode(mode)) {
+            String rawMode = extra.getJsonIndexMode();
+            if (!LookupConstants.isNoneMode(rawMode) && !LookupConstants.isFieldMode(rawMode) && !LookupConstants.isGinMode(rawMode)) {
                 throw new IllegalArgumentException("Invalid jsonIndexMode: " + extra.getJsonIndexMode());
             }
+
+            String mode = LookupConstants.normalizeJsonIndexMode(rawMode);
 
             if (!capability.isJsonIndexModeSupported(mode)) {
                 throw new IllegalArgumentException("JSON index mode '" + mode + "' is not supported for database: " + capability.getDatabaseInfo().getProductName() + ". Supported modes: " + capability.getSupportedJsonIndexModes());

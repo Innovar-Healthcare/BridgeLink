@@ -315,19 +315,19 @@
 	</update>
 
 	<update id="dropJsonFieldIndexes" parameterType="map">
-	  <foreach collection="fieldIndexes" item="idx" separator=";">
-	    DECLARE
-	      v_cnt INTEGER;
+		DECLARE
+	        v_cnt INTEGER;
 	    BEGIN
-	      SELECT COUNT(*) INTO v_cnt 
-	      FROM user_indexes 
-	      WHERE index_name = UPPER('${idx.indexName}');
+	        <foreach collection="fieldIndexes" item="idx">
+	            SELECT COUNT(*) INTO v_cnt
+	            FROM user_indexes
+	            WHERE index_name = UPPER('${idx.indexName}');
 	
-	      IF v_cnt > 0 THEN
-	        EXECUTE IMMEDIATE 'DROP INDEX ${idx.indexName}';
-	      END IF;
+	            IF v_cnt > 0 THEN
+	                EXECUTE IMMEDIATE 'DROP INDEX ${idx.indexName}';
+	            END IF;
+	        </foreach>
 	    END;
-	  </foreach>
 	</update>
     	
 	<select id="searchByJsonFieldsField" parameterType="map" resultMap="lookup-value">
