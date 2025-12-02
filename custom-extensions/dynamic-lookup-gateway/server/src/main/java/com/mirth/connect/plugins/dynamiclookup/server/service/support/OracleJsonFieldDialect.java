@@ -33,7 +33,7 @@ public class OracleJsonFieldDialect implements JsonFieldDialect {
         List<JsonFieldIndexDefinition> definitions = new ArrayList<>();
         for (String fieldPath : fieldPaths) {
             String expression = buildExpression(fieldPath);
-            String indexName = buildIndexName(tableName, fieldPath);
+            String indexName = JsonIndexNaming.buildIndexName(tableName, fieldPath);
 
             JsonFieldIndexDefinition def = new JsonFieldIndexDefinition();
             def.setFieldPath(fieldPath);
@@ -89,16 +89,5 @@ public class OracleJsonFieldDialect implements JsonFieldDialect {
     private String buildExpression(String fieldPath) {
         String jsonPath = "$." + fieldPath;
         return "JSON_VALUE(VALUE_DATA, '" + jsonPath + "' RETURNING VARCHAR2(4000))";
-    }
-
-    /**
-     * Builds an index name for Oracle, based on table name and field path.
-     *
-     * Example: tableName = LOOKUP_VALUE_1008, fieldPath = "email" -> idx_LOOKUP_VALUE_1008_json_email
-     */
-    private String buildIndexName(String tableName, String fieldPath) {
-        String sanitizedField = fieldPath.toLowerCase().replaceAll("[^a-z0-9]+", "_");
-
-        return "idx_" + tableName + "_json_" + sanitizedField;
     }
 }

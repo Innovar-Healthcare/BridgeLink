@@ -29,14 +29,16 @@ public final class LookupJsonCapability {
     private final DatabaseInfo databaseInfo;
     private final boolean jsonSupported;
     private final Set<String> supportedJsonIndexModes;
+    private final int maxIdentifierLength;
 
     // Optional singleton for server-side (initialized once)
     private static volatile LookupJsonCapability instance;
 
-    private LookupJsonCapability(DatabaseInfo dbInfo, boolean jsonSupported, Set<String> modes) {
+    private LookupJsonCapability(DatabaseInfo dbInfo, boolean jsonSupported, Set<String> modes, int maxIdentifierLength) {
         this.databaseInfo = Objects.requireNonNull(dbInfo, "databaseInfo");
         this.jsonSupported = jsonSupported;
         this.supportedJsonIndexModes = Collections.unmodifiableSet(new HashSet<>(modes));
+        this.maxIdentifierLength = maxIdentifierLength;
     }
 
     // ----------------------------------------------------------------------
@@ -64,8 +66,8 @@ public final class LookupJsonCapability {
             return sqlserver(dbInfo);
 
         case ORACLE:
-            if (dbInfo.isAtLeast(12, 1)) {
-                return oracle12_1(dbInfo);
+            if (dbInfo.isAtLeast(12, 2)) {
+                return oracle12_2(dbInfo);
             }
             return noJson(dbInfo);
 
@@ -79,23 +81,23 @@ public final class LookupJsonCapability {
     // ----------------------------------------------------------------------
 
     private static LookupJsonCapability noJson(DatabaseInfo dbInfo) {
-        return new LookupJsonCapability(dbInfo, false, Collections.emptySet());
+        return new LookupJsonCapability(dbInfo, false, Collections.emptySet(), 32);
     }
 
     private static LookupJsonCapability postgres9_4(DatabaseInfo dbInfo) {
-        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD, LookupConstants.JSON_INDEX_GIN));
+        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD, LookupConstants.JSON_INDEX_GIN), 63);
     }
 
     private static LookupJsonCapability mysql8_0(DatabaseInfo dbInfo) {
-        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD));
+        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD), 64);
     }
 
     private static LookupJsonCapability sqlserver(DatabaseInfo dbInfo) {
-        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD));
+        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD), 128);
     }
 
-    private static LookupJsonCapability oracle12_1(DatabaseInfo dbInfo) {
-        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD));
+    private static LookupJsonCapability oracle12_2(DatabaseInfo dbInfo) {
+        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD), 128);
     }
     // ----------------------------------------------------------------------
     // Optional server-side singleton
@@ -151,13 +153,18 @@ public final class LookupJsonCapability {
         return false;
     }
 
-    @Override
+    public int getMaxIdentifierLength() {
+        return maxIdentifierLength;
+    }
+
     // @formatter:off
+    @Override
     public String toString() {
         return "LookupJsonCapability{" +
                 "db=" + databaseInfo +
                 ", jsonSupported=" + jsonSupported +
                 ", modes=" + supportedJsonIndexModes +
+                ", maxIdentifierLength=" + maxIdentifierLength +
                 '}';
     }
     // @formatter:on

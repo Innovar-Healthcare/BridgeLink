@@ -43,7 +43,7 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
         List<JsonFieldIndexDefinition> definitions = new ArrayList<>();
         for (String fieldPath : fieldPaths) {
             String expression = buildExpression(fieldPath);
-            String indexName = buildIndexName(tableName, fieldPath);
+            String indexName = JsonIndexNaming.buildIndexName(tableName, fieldPath);
 
             JsonFieldIndexDefinition def = new JsonFieldIndexDefinition();
             def.setFieldPath(fieldPath);
@@ -100,16 +100,5 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
 
         String path = "{" + fieldPath.replace(".", ",") + "}";
         return "VALUE_DATA #>> '" + path + "'";
-    }
-
-    /**
-     * Builds an index name for Postgres, based on table name and field path.
-     *
-     * Example: tableName = LOOKUP_VALUE_1008, fieldPath = "email" -> idx_LOOKUP_VALUE_1008_json_email
-     */
-    private String buildIndexName(String tableName, String fieldPath) {
-        String sanitizedField = fieldPath.toLowerCase().replaceAll("[^a-z0-9]+", "_");
-
-        return "idx_" + tableName + "_json_" + sanitizedField;
     }
 }

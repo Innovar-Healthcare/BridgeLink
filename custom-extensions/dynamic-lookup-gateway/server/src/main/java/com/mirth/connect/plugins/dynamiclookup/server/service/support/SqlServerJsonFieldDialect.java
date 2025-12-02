@@ -47,7 +47,7 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
         for (String fieldPath : fieldPaths) {
             String expression = buildExpression(fieldPath);
             String computedColumnName = buildComputedColumnName(fieldPath);
-            String indexName = buildIndexName(tableName, fieldPath);
+            String indexName = JsonIndexNaming.buildIndexName(tableName, fieldPath);
 
             JsonFieldIndexDefinition def = new JsonFieldIndexDefinition();
             def.setFieldPath(fieldPath);
@@ -154,16 +154,4 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
 
         return sb.toString();
     }
-
-    /**
-     * Builds an index name for SQL Server, based on table name and field path.
-     *
-     * Example: tableName = LOOKUP_VALUE_1008, fieldPath = "email" -> idx_LOOKUP_VALUE_1008_json_email
-     */
-    private String buildIndexName(String tableName, String fieldPath) {
-        String sanitizedField = fieldPath.toLowerCase().replaceAll("[^a-z0-9]+", "_");
-
-        return "idx_" + tableName + "_json_" + sanitizedField;
-    }
-
 }

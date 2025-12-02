@@ -20,4 +20,8 @@ public final class LookupTableNaming {
     public static String valueTableName(LookupGroup group) {
         return "LOOKUP_VALUE_" + group.getId();
     }
+
+    public static String valueTableName(int groupId) {
+        return "LOOKUP_VALUE_" + groupId;
+    }
 }
