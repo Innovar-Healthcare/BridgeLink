@@ -10,6 +10,50 @@
 
 package com.mirth.connect.plugins.dynamiclookup.client.panel;
 
+import java.awt.BorderLayout;
+import java.awt.FlowLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.text.SimpleDateFormat;
+import java.util.Collections;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.ExecutionException;
+
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JProgressBar;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingWorker;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.event.ListSelectionListener;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,59 +69,11 @@ import com.mirth.connect.plugins.dynamiclookup.client.service.LookupServiceClien
 import com.mirth.connect.plugins.dynamiclookup.client.util.FileChooser;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.ImportLookupGroupRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ExportGroupPagedResponse;
-import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ExportLookupGroupResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ImportLookupGroupResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 
 import net.miginfocom.swing.MigLayout;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
-import javax.swing.JPanel;
-import javax.swing.JTable;
-import javax.swing.JTextField;
-import javax.swing.JButton;
-import javax.swing.JLabel;
-import javax.swing.JPopupMenu;
-import javax.swing.JMenuItem;
-import javax.swing.JScrollPane;
-import javax.swing.SwingWorker;
-import javax.swing.JOptionPane;
-import javax.swing.JFileChooser;
-import javax.swing.JDialog;
-import javax.swing.JProgressBar;
-import javax.swing.BorderFactory;
-import javax.swing.ListSelectionModel;
-import javax.swing.filechooser.FileNameExtensionFilter;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
-import javax.swing.event.ListSelectionListener;
-
-import java.awt.BorderLayout;
-import java.awt.FlowLayout;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Collections;
-import java.util.Properties;
-import java.util.concurrent.ExecutionException;
 
 /**
  * @author Thai Tran (thaitran@innovarhealthcare.com)
@@ -210,19 +206,13 @@ public class GroupPanel extends JPanel {
     }
 
     private void importFromJSON(File file) {
-        if (file == null || !checkJsonFile(file)) return;
+        if (file == null || !checkJsonFile(file))
+            return;
 
-        int result = JOptionPane.showConfirmDialog(
-                parent,
-                "<html>If the group you're importing already exists,<br>"
-                        + "<b>its information will be updated</b> and <b>all existing values will be permanently deleted</b> and replaced.<br><br>"
-                        + "Do you want to proceed with updating the group?</html>",
-                "Confirm Import Overwrite",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE
-        );
+        int result = JOptionPane.showConfirmDialog(parent, "<html>If the group you're importing already exists,<br>" + "<b>its information will be updated</b> and <b>all existing values will be permanently deleted</b> and replaced.<br><br>" + "Do you want to proceed with updating the group?</html>", "Confirm Import Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
 
-        if (result != JOptionPane.YES_OPTION) return;
+        if (result != JOptionPane.YES_OPTION)
+            return;
 
         JDialog progressDialog = new JDialog(parent, "Importing JSON", true);
         JProgressBar progressBar = new JProgressBar(0, 100);
@@ -321,7 +311,7 @@ public class GroupPanel extends JPanel {
                 int progress = total > 0 ? (int) ((processed / (double) total) * 100) : 0;
                 progress = Math.min(progress, 100);
 
-                publish(new int[]{progress, processed, total});
+                publish(new int[] { progress, processed, total });
             }
 
             @Override
@@ -350,9 +340,7 @@ public class GroupPanel extends JPanel {
 
                     // Update table
                     if (finalGroupId != -1) {
-                        LookupGroup selectedGroup = groupTable.getSelectedRow() >= 0
-                                ? groupTableModel.getGroup(groupTable.getSelectedRow())
-                                : null;
+                        LookupGroup selectedGroup = groupTable.getSelectedRow() >= 0 ? groupTableModel.getGroup(groupTable.getSelectedRow()) : null;
                         try {
                             LookupGroup importedGroup = LookupServiceClient.getInstance().getGroupById(finalGroupId);
                             groupTableModel.addOrUpdateGroup(importedGroup);
@@ -400,9 +388,7 @@ public class GroupPanel extends JPanel {
         Properties importProperties = dialog.getImportProperties();
         String groupName = importProperties.getProperty("defaultGroup");
         if ("system".equals(importProperties.getProperty("importMethod"))) {
-            String resourcePath = "/defaultLookUpTables/default-"
-                    + groupName.replace(" ", "_")
-                    + "-group.json";
+            String resourcePath = "/defaultLookUpTables/default-" + groupName.replace(" ", "_") + "-group.json";
 
             try (InputStream is = getClass().getResourceAsStream(resourcePath)) {
                 if (is == null) {
@@ -438,10 +424,7 @@ public class GroupPanel extends JPanel {
         try {
             Path path = file.toPath();
             String mimeType = Files.probeContentType(path);
-            if (mimeType == null || !(
-                    mimeType.equals("application/json") ||
-                            mimeType.equals("text/plain")
-            )) {
+            if (mimeType == null || !(mimeType.equals("application/json") || mimeType.equals("text/plain"))) {
                 showError("File does not appear to be a valid JSON (detected type: " + mimeType + ").");
                 return false;
             }
@@ -476,10 +459,7 @@ public class GroupPanel extends JPanel {
         int selectedRow = groupTable.getSelectedRow();
         if (selectedRow >= 0) {
             LookupGroup group = groupTableModel.getGroup(selectedRow);
-            int confirm = JOptionPane.showConfirmDialog(parent,
-                    "Are you sure you want to delete group: " + group.getName() + "?",
-                    "Confirm Delete",
-                    JOptionPane.YES_NO_OPTION);
+            int confirm = JOptionPane.showConfirmDialog(parent, "Are you sure you want to delete group: " + group.getName() + "?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
 
             if (confirm != JOptionPane.YES_OPTION) {
                 return;
@@ -549,34 +529,64 @@ public class GroupPanel extends JPanel {
                 int limit = 10000;
                 int processed = 0;
                 int total = -1;
-                Date exportDate = null;
-
-                Map<String, String> allValues = new LinkedHashMap<>();
 
                 try {
+                    // First page to get total count and export date
                     ExportGroupPagedResponse page = LookupServiceClient.getInstance().exportGroupPaged(group.getId(), offset, limit);
 
-                    exportDate = page.getExportDate();
+                    Date exportDate = page.getExportDate();
                     total = page.getTotalCount();
-                    allValues.putAll(page.getValues());
                     processed += page.getValues().size();
                     publishProgress(processed, total);
 
-                    while (!isCancelled() && page.getPagination().isHasMore()) {
-                        offset += limit;
-                        page = LookupServiceClient.getInstance().exportGroupPaged(group.getId(), offset, limit);
-                        allValues.putAll(page.getValues());
-                        processed += page.getValues().size();
-                        publishProgress(processed, total);
+                    // Use streaming JSON writing to avoid loading all values into memory
+                    ObjectMapper mapper = JsonUtils.getMapper();
+                    try (OutputStream out = java.nio.file.Files.newOutputStream(file.toPath()); JsonGenerator gen = mapper.getFactory().createGenerator(out)) {
+
+                        gen.useDefaultPrettyPrinter();
+
+                        // Start root object {
+                        gen.writeStartObject();
+
+                        // "group": { ... }
+                        gen.writeFieldName("group");
+                        mapper.writeValue(gen, group);
+
+                        // "values": {
+                        gen.writeFieldName("values");
+                        gen.writeStartObject();
+
+                        // Write values for the first page
+                        writeValuesPage(gen, page.getValues());
+
+                        // Fetch and write remaining pages
+                        while (!isCancelled() && page.getPagination().isHasMore()) {
+                            offset += limit;
+                            page = LookupServiceClient.getInstance().exportGroupPaged(group.getId(), offset, limit);
+
+                            processed += page.getValues().size();
+                            publishProgress(processed, total);
+
+                            writeValuesPage(gen, page.getValues());
+                        }
+
+                        // Close the "values" object }
+                        gen.writeEndObject();
+
+                        // "exportDate": ...
+                        gen.writeFieldName("exportDate");
+                        mapper.writeValue(gen, exportDate);
+
+                        // Close the root object }
+                        gen.writeEndObject();
+
+                        gen.flush();
                     }
 
-                    ExportLookupGroupResponse exportResponse = new ExportLookupGroupResponse();
-                    exportResponse.setGroup(group);
-                    exportResponse.setValues(allValues);
-                    exportResponse.setExportDate(exportDate);
-
-                    String json = JsonUtils.toJsonPretty(exportResponse);
-                    java.nio.file.Files.write(file.toPath(), json.getBytes());
+                    // Remove partial file if the export was cancelled
+                    if (isCancelled()) {
+                        java.nio.file.Files.deleteIfExists(file.toPath());
+                    }
 
                 } catch (Exception ex) {
                     logger.error("Failed to export group to JSON", ex);
@@ -586,11 +596,22 @@ public class GroupPanel extends JPanel {
                 return null;
             }
 
+            private void writeValuesPage(JsonGenerator gen, Map<String, String> values) throws IOException {
+                if (values == null || values.isEmpty()) {
+                    return;
+                }
+                for (Map.Entry<String, String> e : values.entrySet()) {
+                    String key = e.getKey();
+                    String value = e.getValue();
+                    gen.writeStringField(key, value);
+                }
+            }
+
             private void publishProgress(int processed, int total) {
                 int progress = total > 0 ? (int) ((processed / (double) total) * 100) : 0;
                 progress = Math.min(progress, 100);
 
-                publish(new int[]{progress, processed, total});
+                publish(new int[] { progress, processed, total });
             }
 
             @Override
@@ -629,12 +650,7 @@ public class GroupPanel extends JPanel {
         progressDialog.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                int confirm = JOptionPane.showConfirmDialog(
-                        progressDialog,
-                        "Export is still in progress. Do you want to cancel?",
-                        "Confirm Cancel",
-                        JOptionPane.YES_NO_OPTION
-                );
+                int confirm = JOptionPane.showConfirmDialog(progressDialog, "Export is still in progress. Do you want to cancel?", "Confirm Cancel", JOptionPane.YES_NO_OPTION);
                 if (confirm == JOptionPane.YES_OPTION) {
                     exportWorker.cancel(true);
                 }
