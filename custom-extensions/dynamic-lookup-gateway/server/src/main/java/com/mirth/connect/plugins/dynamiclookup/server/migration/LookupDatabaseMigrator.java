@@ -46,13 +46,12 @@ public final class LookupDatabaseMigrator {
             String sqlScript = SqlScriptRunner.loadScript(getCreateSchemaScriptPath(dbType));
             SqlScriptRunner.runWithSemicolon(sqlSessionManager, sqlScript);
             logger.info("Database schema initialized successfully");
-            return;
         }
 
         // Use the migration manager to handle both fresh installs and migrations
-        logger.info("Tables exist - Checking for schema migrations...");
+        logger.info("Running schema migrations (including fresh install)...");
         (new LookupSchemaMigrator(sqlSessionManager)).migrate();
-        logger.info("Tables exist - Database schema migration check completed");
+        logger.info("Database schema migration completed");
     }
 
     /**
