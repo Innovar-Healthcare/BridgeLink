@@ -346,7 +346,22 @@ public class LookupService {
             }
 
             // Import all values
-            int count = valueDao.importValues(tableName, values);
+            Map<String, String> importValues = (values == null) ? Collections.emptyMap() : values;
+            boolean isValueJson = LookupConstants.isJsonValueType(group.getValueType());
+
+            if (isValueJson && !importValues.isEmpty()) {
+                Map<String, String> filtered = new LinkedHashMap<>();
+                for (Map.Entry<String, String> entry : importValues.entrySet()) {
+                    String key = entry.getKey();
+                    String value = entry.getValue();
+                    if (JsonUtils.isValidJson(value)) {
+                        filtered.put(key, value);
+                    }
+                }
+
+                importValues = filtered;
+            }
+            int count = valueDao.importValues(tableName, importValues);
 
             // Audit
             recordAudit(groupId, tableName, "*", "IMPORT", null, count + " values imported", userId);
@@ -534,14 +549,20 @@ public class LookupService {
             throw new GroupNotFoundException("Group not found: " + groupId);
         }
 
+        // Must be JSON group
+        if (!LookupConstants.isJsonValueType(group.getValueType())) {
+            throw new IllegalStateException("JSON field search is only supported for groups with valueType=JSON (groupId=" + groupId + ")");
+        }
+
+        // Check database JSON capability
+        LookupJsonCapability capability = LookupJsonCapability.getInstance();
+        if (!capability.isJsonSupported()) {
+            throw new IllegalStateException("Database does not support JSON search");
+        }
+
         LookupGroupExtra extra = groupExtraDao.getByGroupId(groupId);
         if (extra == null) {
             throw new IllegalStateException("Group extra missing for group: " + groupId);
-        }
-
-        // Must be JSON group
-        if (!LookupConstants.isJsonValueType(group.getValueType())) {
-            throw new IllegalStateException("Search by JSON fields is only supported for JSON groups (groupId=" + groupId + ")");
         }
 
         // Get index mode
@@ -885,8 +906,12 @@ public class LookupService {
         String tableName = getTableNameForGroup(groupId);
 
         try {
-
-            boolean inserted = valueDao.putIfAbsent(tableName, key, value);
+            boolean inserted;
+            if (isValueJson) {
+                inserted = valueDao.putIfAbsentJson(tableName, key, value);
+            } else {
+                inserted = valueDao.putIfAbsent(tableName, key, value);
+            }
 
             if (inserted) {
                 // Audit
@@ -941,8 +966,12 @@ public class LookupService {
         String tableName = getTableNameForGroup(groupId);
 
         try {
-
-            boolean inserted = valueDao.compareAndSwap(tableName, key, expectedValue, newValue);
+            boolean inserted;
+            if (isValueJson) {
+                inserted = valueDao.compareAndSwapJson(tableName, key, expectedValue, newValue);
+            } else {
+                inserted = valueDao.compareAndSwap(tableName, key, expectedValue, newValue);
+            }
 
             if (inserted) {
                 // Audit
@@ -971,6 +1000,10 @@ public class LookupService {
         LookupGroup group = groupDao.getGroupById(groupId);
         if (group == null) {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
+        }
+
+        if (LookupConstants.isJsonValueType(group.getValueType())) {
+            throw new IllegalArgumentException("Delta update is not supported for JSON groups (groupId=" + groupId + ")");
         }
 
         String tableName = getTableNameForGroup(groupId);
