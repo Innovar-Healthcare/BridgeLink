@@ -277,17 +277,20 @@
 	</update>
 	
 	<update id="createJsonFieldIndexes" parameterType="map">
-	    <foreach collection="fieldIndexes" item="idx" separator=";">
-            CREATE INDEX ${idx.indexName}
-            ON ${tableName} (( ${idx.expression} ))
-        </foreach>
+	    ALTER TABLE ${tableName}
+	    <foreach collection="fieldIndexes" item="idx" separator=",">
+	        ADD INDEX ${idx.indexName} (
+	            ( ${idx.expression} )
+	        )
+	    </foreach>
 	</update>
 
 	<update id="dropJsonFieldIndexes" parameterType="map">
-        <foreach collection="fieldIndexes" item="idx" separator=";">
-            DROP INDEX ${idx.indexName} ON ${tableName}
-        </foreach>
-    </update>
+	    ALTER TABLE ${tableName}
+	    <foreach collection="fieldIndexes" item="idx" separator=",">
+	        DROP INDEX ${idx.indexName}
+	    </foreach>
+	</update>
     	
 	<select id="searchByJsonFieldsField" parameterType="map" resultMap="lookup-value">
 	    SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
