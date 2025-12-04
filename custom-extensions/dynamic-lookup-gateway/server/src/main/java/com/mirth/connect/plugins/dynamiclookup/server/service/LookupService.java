@@ -588,6 +588,24 @@ public class LookupService {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
         }
 
+        // validate keyPattern
+        if (keyPattern == null) {
+            throw new IllegalArgumentException("Key pattern must not be null.");
+        }
+
+        String trimmed = keyPattern.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException("Key pattern must not be empty.");
+        }
+
+        // Remove all wildcard characters % and _
+        String stripped = trimmed.replaceAll("[_%]", "");
+
+        // If nothing left → wildcard-only → dangerous (match-all)
+        if (stripped.isEmpty()) {
+            throw new IllegalArgumentException("Wildcard-only key patterns (e.g. '%', '_', '%%__') are not allowed. Please include at least one non-wildcard character.");
+        }
+
         String tableName = getTableNameForGroup(groupId);
         List<LookupValue> values = valueDao.getMatchingValues(tableName, keyPattern);
 
