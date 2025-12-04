@@ -38,6 +38,7 @@ import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonIndexC
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonIndexNaming;
 import com.mirth.connect.plugins.dynamiclookup.server.util.JsonFilterUtils;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.CacheStatistics;
@@ -957,6 +958,10 @@ public class LookupService {
         boolean isValueJson = LookupConstants.isJsonValueType(group.getValueType());
 
         if (isValueJson) {
+            if (LookupJsonCapability.getInstance().getDatabaseInfo().getType() == DatabaseType.MYSQL) {
+                throw new IllegalArgumentException("JSON compareAndSwap is not supported on MySQL");
+            }
+
             // validate value
             if (!JsonUtils.isValidJson(newValue)) {
                 throw new IllegalArgumentException("newValue must be a valid JSON string.");
