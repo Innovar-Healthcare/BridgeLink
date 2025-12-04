@@ -959,7 +959,7 @@ public class LookupService {
 
         if (isValueJson) {
             if (LookupJsonCapability.getInstance().getDatabaseInfo().getType() == DatabaseType.MYSQL) {
-                throw new IllegalArgumentException("JSON compareAndSwap is not supported on MySQL");
+                throw new ValueOperationException("JSON compareAndSwap is not supported on MySQL");
             }
 
             // validate value
@@ -998,6 +998,10 @@ public class LookupService {
     }
 
     public boolean updateValueByDelta(int groupId, String key, long delta, String userId) {
+        if (LookupJsonCapability.getInstance().getDatabaseInfo().getType() == DatabaseType.DERBY) {
+            throw new ValueOperationException("Atomic delta update is not supported on Derby (CLOB field).");
+        }
+
         // Validate inputs
         validateKey(key);
 
