@@ -83,12 +83,16 @@
 	
 	<!-- Value Operations -->
 	<sql id="searchLookupValuesBody">
-        <where>
-            <if test='pattern != null'>LOWER(KEY_VALUE) LIKE LOWER('%' || #{pattern} || '%')
-                OR LOWER(VALUE_DATA) LIKE LOWER('%' || #{pattern} || '%')
-            </if>
-        </where>
-    </sql>
+	    <trim prefix="WHERE" prefixOverrides="AND |OR ">
+	        <if test="keyFilter != null and keyFilter != ''">
+	            AND LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyFilter} || '%')
+	        </if>
+	        <if test="valueFilter != null and valueFilter != ''">
+	            AND LOWER(VALUE_DATA) LIKE LOWER('%' || #{valueFilter} || '%')
+	        </if>
+	    </trim>
+	</sql>
+
 
 	<sql id="commonOrderByLimitOffset">
 	    ORDER BY KEY_VALUE ASC
