@@ -569,6 +569,84 @@ public interface LookupTableServletInterface extends BaseServletInterface {
     ) throws ClientException;
 
     @POST
+    @Path("/groups/{groupId}/values/search")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "Searches values in a lookup group using filter criteria.",
+            description = "Performs a filtered search within the specified lookup group. "
+                    + "Search supports pagination and multiple filter fields such as keyFilter and valueFilter. "
+                    + "If no filter criteria are provided, all values in the group will be returned (equivalent to an unfiltered search). "
+                    + "This endpoint is designed for UI usage."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "Successfully retrieved filtered or unfiltered values",
+            content = @Content(
+                    mediaType = MediaType.APPLICATION_JSON,
+                    examples = @ExampleObject(
+                            name = "Successful response",
+                            value = "{\n" +
+                                    "  \"groupId\": 1,\n" +
+                                    "  \"groupName\": \"Billing Codes\",\n" +
+                                    "  \"totalCount\": 7,\n" +
+                                    "  \"values\": [\n" +
+                                    "    {\n" +
+                                    "      \"keyValue\": \"99213\",\n" +
+                                    "      \"valueData\": \"Office Visit\",\n" +
+                                    "      \"createdDate\": \"2025-06-22T01:19:25.213+00:00\",\n" +
+                                    "      \"updatedDate\": \"2025-06-22T01:29:45.123+00:00\"\n" +
+                                    "    },\n" +
+                                    "    {\n" +
+                                    "      \"keyValue\": \"99214\",\n" +
+                                    "      \"valueData\": \"Office Visit, Level 4\",\n" +
+                                    "      \"createdDate\": \"2025-06-22T01:19:25.213+00:00\",\n" +
+                                    "      \"updatedDate\": \"2025-06-22T01:19:25.213+00:00\"\n" +
+                                    "    }\n" +
+                                    "    // truncated for brevity\n" +
+                                    "  ],\n" +
+                                    "  \"pagination\": {\n" +
+                                    "    \"limit\": 100,\n" +
+                                    "    \"offset\": 0,\n" +
+                                    "    \"hasMore\": false\n" +
+                                    "  }\n" +
+                                    "}"
+                    )
+            )
+    )
+    @MirthOperation(name = "searchValues", display = "Search values", permission = PERMISSION_ACCESS)
+    public String searchValues(
+            @Param("groupId")
+            @Parameter(description = "The unique ID of the group to retrieve.", required = true)
+            @PathParam("groupId") Integer groupId,
+
+            @Param("offset")
+            @Parameter(description = "Offset for pagination (default: 0)", required = false)
+            @QueryParam("offset") @DefaultValue("0") Integer offset,
+
+            @Param("limit")
+            @Parameter(description = "Maximum number of values to return (default: 100)", required = false)
+            @QueryParam("limit") @DefaultValue("100") Integer limit,
+
+            @Param("filterState")
+            @RequestBody(
+                    description = "JSON object representing filter criteria for value search.",
+                    required = false,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            examples = @ExampleObject(
+                                    name = "filter",
+                                    summary = "Example filter for value search",
+                                    value = "{\n" +
+                                            "  \"keyFilter\": \"provider\",\n" +
+                                            "  \"valueFilter\": \"active\"\n" +
+                                            "}"
+                            )
+                    )
+            )
+            String filterState
+    ) throws ClientException;
+    
+    @POST
     @Path("/groups/{groupId}/values")
     @Operation(summary = "Imports key-value pairs into a specific lookup group.")
     @ApiResponse(

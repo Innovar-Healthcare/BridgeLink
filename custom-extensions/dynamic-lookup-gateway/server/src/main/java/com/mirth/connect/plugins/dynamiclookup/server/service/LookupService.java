@@ -48,6 +48,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupStatistics;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.TtlUtils;
 
@@ -505,14 +506,14 @@ public class LookupService {
      * Returns the total count of lookup values in the specified group that match the given search pattern on key or value
      * fields.
      */
-    public int searchLookupValuesCount(int groupId, String pattern) {
+    public int searchLookupValuesCount(int groupId, ValueFilterState filter) {
         if (groupDao.getGroupById(groupId) == null) {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
         }
 
         String tableName = getTableNameForGroup(groupId);
 
-        long count = valueDao.searchLookupValuesCount(tableName, pattern);
+        long count = valueDao.searchLookupValuesCount(tableName, filter);
 
         return Math.toIntExact(count);
     }
@@ -520,7 +521,7 @@ public class LookupService {
     /**
      * Retrieves key-value pairs from the specified lookup group that match the given pattern.
      */
-    public List<LookupValue> searchLookupValues(Integer groupId, Integer offset, Integer limit, String pattern) {
+    public List<LookupValue> searchLookupValues(Integer groupId, Integer offset, Integer limit, ValueFilterState filter) {
         // Verify group exists
         if (groupDao.getGroupById(groupId) == null) {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
@@ -528,7 +529,7 @@ public class LookupService {
 
         String tableName = getTableNameForGroup(groupId);
 
-        return valueDao.searchLookupValues(tableName, offset, limit, pattern);
+        return valueDao.searchLookupValues(tableName, offset, limit, filter);
     }
 
     public Map<String, String> findValuesByJsonFields(Integer groupId, String filterJson) {

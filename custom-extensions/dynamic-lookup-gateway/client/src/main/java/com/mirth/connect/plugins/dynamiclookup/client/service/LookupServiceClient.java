@@ -37,6 +37,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.interfaces.LookupTableServ
 import com.mirth.connect.plugins.dynamiclookup.shared.model.HistoryFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.LookupErrorCode;
 
@@ -292,10 +293,10 @@ public class LookupServiceClient {
         }
     }
 
-    public LookupAllValuesResponse getAllValues(Integer groupId, int offset, int limit, String pattern) throws ClientException {
+    public LookupAllValuesResponse searchValues(Integer groupId, int offset, int limit, ValueFilterState filter) throws ClientException {
         try {
             // 1. Make the call
-            String response = getServlet().getAllValues(groupId, offset, limit, pattern);
+            String response = getServlet().searchValues(groupId, offset, limit, filter.toJson());
 
             return JsonUtils.fromJson(response, LookupAllValuesResponse.class);
         } catch (ClientException e) {
@@ -305,7 +306,7 @@ public class LookupServiceClient {
             return null; // unreachable — rethrowParsedClientError always throws
         } catch (Exception e) {
             // 3. JSON serialization or unexpected errors
-            throw new RuntimeException("Failed to get all values", e);
+            throw new RuntimeException("Failed to search Values", e);
         }
     }
 

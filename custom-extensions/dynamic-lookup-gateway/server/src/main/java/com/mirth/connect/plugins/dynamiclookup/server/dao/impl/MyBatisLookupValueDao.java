@@ -28,6 +28,7 @@ import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldI
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState;
 
 public class MyBatisLookupValueDao implements LookupValueDao {
     private SqlSessionManager sqlSessionManager;
@@ -78,7 +79,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
     }
 
     @Override
-    public List<LookupValue> searchLookupValues(String tableName, Integer offset, Integer limit, String pattern) {
+    public List<LookupValue> searchLookupValues(String tableName, Integer offset, Integer limit, ValueFilterState filter) {
         SqlSession session = sqlSessionManager.openSession();
 
         try {
@@ -86,7 +87,8 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("tableName", tableName);
             params.put("offset", offset);
             params.put("limit", limit);
-            params.put("pattern", pattern);
+            params.put("keyFilter", filter.getKeyFilter());
+            params.put("valueFilter", filter.getValueFilter());
             return session.selectList("Lookup.searchLookupValues", params);
         } finally {
             session.close();
@@ -361,12 +363,13 @@ public class MyBatisLookupValueDao implements LookupValueDao {
     }
 
     @Override
-    public long searchLookupValuesCount(String tableName, String pattern) {
+    public long searchLookupValuesCount(String tableName, ValueFilterState filter) {
         SqlSession session = sqlSessionManager.openSession();
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
-            params.put("pattern", pattern);
+            params.put("keyFilter", filter.getKeyFilter());
+            params.put("valueFilter", filter.getValueFilter());
             return session.selectOne("Lookup.searchLookupValuesCount", params);
         } finally {
             session.close(); // Ensure session is always closed

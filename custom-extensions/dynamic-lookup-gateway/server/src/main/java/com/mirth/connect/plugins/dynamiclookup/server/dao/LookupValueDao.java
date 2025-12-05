@@ -16,6 +16,7 @@ import java.util.Map;
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldCriterion;
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState;
 
 public interface LookupValueDao {
     // Value operations
@@ -25,7 +26,7 @@ public interface LookupValueDao {
 
     List<LookupValue> getAllValues(String tableName);
 
-    List<LookupValue> searchLookupValues(String tableName, Integer offset, Integer limit, String pattern);
+    List<LookupValue> searchLookupValues(String tableName, Integer offset, Integer limit, ValueFilterState filter);
 
     List<LookupValue> getMatchingValues(String tableName, String keyPattern, Integer offset, Integer limit);
 
@@ -51,7 +52,7 @@ public interface LookupValueDao {
 
     long getValueCount(String tableName);
 
-    long searchLookupValuesCount(String tableName, String pattern);
+    long searchLookupValuesCount(String tableName, ValueFilterState filter);
 
     boolean putIfAbsent(String tableName, String keyValue, String valueData);
 

@@ -55,6 +55,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupAudit;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupStatistics;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.LookupErrorCode;
 import com.mirth.connect.server.api.MirthServlet;
@@ -321,31 +322,7 @@ public class LookupTableServlet extends MirthServlet implements LookupTableServl
 
     @Override
     public String getAllValues(Integer groupId, Integer offset, Integer limit, String pattern) throws ClientException {
-        try {
-            // Validate group first
-            LookupGroup lookupGroup = LookupService.getInstance().getGroupById(groupId);
-            if (lookupGroup == null) {
-                throw new LookupApiException(Response.Status.NOT_FOUND, LookupErrorCode.GROUP_NOT_FOUND, "Lookup group not found with ID: " + groupId);
-            }
-
-            // Normalize pagination and pattern
-            int safeOffset = offset != null ? offset : 0;
-            int safeLimit = limit != null ? limit : Integer.MAX_VALUE;
-            String safePattern = (pattern != null) ? pattern.trim() : null;
-
-            List<LookupValue> paginated = LookupService.getInstance().searchLookupValues(groupId, safeOffset, safeLimit, safePattern);
-            int totalCount = LookupService.getInstance().searchLookupValuesCount(groupId, safePattern);
-
-            LookupAllValuesResponse response = LookupAllValuesResponse.fromResult(groupId, lookupGroup.getName(), totalCount, paginated, safeLimit, safeOffset);
-
-            return JsonUtils.toJson(response);
-        } catch (GroupNotFoundException e) {
-            throw new LookupApiException(Response.Status.NOT_FOUND, LookupErrorCode.GROUP_NOT_FOUND, "Lookup group not found with ID: " + groupId);
-        } catch (LookupApiException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new ClientException("Failed to process getAllValues request. Error: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
-        }
+        return searchValues(groupId, offset, limit, null);
     }
 
     @Override
@@ -425,6 +402,36 @@ public class LookupTableServlet extends MirthServlet implements LookupTableServl
             LookupService.getInstance().deleteValue(groupId, key, userId);
         } catch (GroupNotFoundException e) {
             throw new LookupApiException(Response.Status.NOT_FOUND, LookupErrorCode.GROUP_NOT_FOUND, "Lookup group not found with ID: " + groupId);
+        }
+    }
+
+    @Override
+    public String searchValues(Integer groupId, Integer offset, Integer limit, String filterState) throws ClientException {
+        try {
+            ValueFilterState filter = (filterState != null && !filterState.isEmpty()) ? ValueFilterState.fromJson(filterState) : new ValueFilterState();
+
+            // Validate group first
+            LookupGroup lookupGroup = LookupService.getInstance().getGroupById(groupId);
+            if (lookupGroup == null) {
+                throw new LookupApiException(Response.Status.NOT_FOUND, LookupErrorCode.GROUP_NOT_FOUND, "Lookup group not found with ID: " + groupId);
+            }
+
+            // Normalize pagination and pattern
+            int safeOffset = offset != null ? offset : 0;
+            int safeLimit = limit != null ? limit : Integer.MAX_VALUE;
+
+            List<LookupValue> paginated = LookupService.getInstance().searchLookupValues(groupId, safeOffset, safeLimit, filter);
+            int totalCount = LookupService.getInstance().searchLookupValuesCount(groupId, filter);
+
+            LookupAllValuesResponse response = LookupAllValuesResponse.fromResult(groupId, lookupGroup.getName(), totalCount, paginated, safeLimit, safeOffset);
+
+            return JsonUtils.toJson(response);
+        } catch (GroupNotFoundException e) {
+            throw new LookupApiException(Response.Status.NOT_FOUND, LookupErrorCode.GROUP_NOT_FOUND, "Lookup group not found with ID: " + groupId);
+        } catch (LookupApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ClientException("Failed to process getAllValues request. Error: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
         }
     }
 
