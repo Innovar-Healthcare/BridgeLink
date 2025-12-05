@@ -171,6 +171,24 @@ public class LookupHelper {
     }
 
     /**
+     * Retrieves values count matching a pattern. Returns 0 if the group does not exist or an error occurs.
+     */
+    public static long getMatchingCount(String groupName, String keyPattern) {
+        try {
+            LookupGroup group = lookupService.getGroupByName(groupName);
+            if (group == null) {
+                logger.error("Lookup group not found: {}", groupName);
+                return 0;
+            }
+
+            return lookupService.getMatchingValuesCount(group.getId(), keyPattern);
+        } catch (Exception e) {
+            logger.error("Failed to retrieve matching lookup values count [group='{}', pattern='{}']: {}", groupName, keyPattern, e.getMessage(), e);
+            return 0;
+        }
+    }
+
+    /**
      * Retrieves values matching a pattern
      */
     public static Map<String, String> getMatching(String groupName, String keyPattern) {
@@ -184,6 +202,24 @@ public class LookupHelper {
             return lookupService.getMatchingValues(group.getId(), keyPattern);
         } catch (Exception e) {
             logger.error("Failed to retrieve matching lookup values [group='{}', pattern='{}']: {}", groupName, keyPattern, e.getMessage(), e);
+            return Collections.emptyMap();
+        }
+    }
+
+    /**
+     * Retrieves values matching a pattern
+     */
+    public static Map<String, String> getMatching(String groupName, String keyPattern, int limit) {
+        try {
+            LookupGroup group = lookupService.getGroupByName(groupName);
+            if (group == null) {
+                logger.error("Lookup group not found: {}", groupName);
+                return Collections.emptyMap();
+            }
+
+            return lookupService.getMatchingValues(group.getId(), keyPattern, limit);
+        } catch (Exception e) {
+            logger.error("Failed to retrieve matching lookup values [group='{}', pattern='{}', limit={}]: {}", groupName, keyPattern, limit, e.getMessage(), e);
             return Collections.emptyMap();
         }
     }

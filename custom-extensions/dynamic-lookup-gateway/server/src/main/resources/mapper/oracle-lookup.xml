@@ -47,8 +47,6 @@
         <result property="timestamp" column="AUDIT_TIMESTAMP" javaType="java.sql.Timestamp"/>
     </resultMap>
 
-    
-
     <sql id="oraclePagination">
         <if test="offset != null and limit != null">
             <![CDATA[
@@ -162,11 +160,22 @@
     </select>
 
     <select id="getMatchingLookupValues" parameterType="map" resultMap="lookup-value">
+        <include refid="oraclePagination"/>
+         
         SELECT KEY_VALUE, VALUE_DATA
         FROM ${tableName}
         WHERE LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyPattern} || '%')
+        ORDER BY KEY_VALUE ASC
+        
+        <include refid="oraclePaginationEnd"/>
     </select>
 
+	<select id="getMatchingLookupValuesCount" parameterType="map" resultType="long">
+	    SELECT COUNT(*)
+	    FROM ${tableName}
+	    WHERE LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyPattern} || '%')
+	</select>
+	
     <select id="getValue" parameterType="map" resultType="String">
         SELECT VALUE_DATA
         FROM ${tableName}

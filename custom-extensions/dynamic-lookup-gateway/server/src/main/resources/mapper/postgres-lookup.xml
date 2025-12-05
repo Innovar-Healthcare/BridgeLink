@@ -128,6 +128,16 @@
         </where>
     </sql>
     
+    <sql id="commonOrderByLimitOffset">
+	    ORDER BY KEY_VALUE ASC
+	    <if test="offset != null">
+            OFFSET #{offset}
+        </if>
+        <if test="limit != null">
+            LIMIT #{limit}
+        </if>
+	</sql>
+
     <select id="getLookupValues" parameterType="map" resultMap="lookup-value">
         SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
         FROM ${tableName}
@@ -143,8 +153,16 @@
     <select id="getMatchingLookupValues" parameterType="map" resultMap="lookup-value">
         SELECT KEY_VALUE, VALUE_DATA
         FROM ${tableName}
-        WHERE LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyPattern} || '%')
+        WHERE KEY_VALUE ILIKE '%' || #{keyPattern} || '%'
+        
+        <include refid="commonOrderByLimitOffset"/>
     </select>
+
+	<select id="getMatchingLookupValuesCount" parameterType="map" resultType="long">
+	    SELECT COUNT(*)
+	    FROM ${tableName}
+	    WHERE KEY_VALUE ILIKE '%' || #{keyPattern} || '%'
+	</select>
 
     <select id="getValue" parameterType="map" resultType="String">
         SELECT VALUE_DATA
@@ -223,14 +241,7 @@
 
         <include refid="searchLookupValuesBody"/>
 
-        ORDER BY KEY_VALUE ASC
-
-        <if test="offset != null">
-            OFFSET ${offset}
-        </if>
-        <if test="limit != null">
-            LIMIT ${limit}
-        </if>
+        <include refid="commonOrderByLimitOffset"/>
     </select>
   
    	<select id="selectExistingKeys" parameterType="map" resultType="string">
@@ -311,12 +322,8 @@
 	            VALUE_DATA @> #{filterJson}::jsonb
 	        </if>
 	    </where>
-	    <if test="offset != null">
-            OFFSET ${offset}
-        </if>
-        <if test="limit != null">
-            LIMIT ${limit}
-        </if>
+	    
+	    <include refid="commonOrderByLimitOffset"/>
 	</select>
 
 	<select id="searchByJsonFieldsField" parameterType="map" resultMap="lookup-value">
@@ -329,12 +336,8 @@
             	${c.expression} = #{c.value}
         	</foreach>
 	    </where>
-	    <if test="offset != null">
-            OFFSET ${offset}
-        </if>
-        <if test="limit != null">
-            LIMIT ${limit}
-        </if>
+	    
+	    <include refid="commonOrderByLimitOffset"/>
 	</select>
 	<!-- End Value Operations -->
 	

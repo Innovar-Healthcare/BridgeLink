@@ -27,7 +27,9 @@ public interface LookupValueDao {
 
     List<LookupValue> searchLookupValues(String tableName, Integer offset, Integer limit, String pattern);
 
-    List<LookupValue> getMatchingValues(String tableName, String keyPattern);
+    List<LookupValue> getMatchingValues(String tableName, String keyPattern, Integer offset, Integer limit);
+
+    long getMatchingValuesCount(String tableName, String keyPattern);
 
     List<String> getKeys(String tableName, String keyPattern);
 

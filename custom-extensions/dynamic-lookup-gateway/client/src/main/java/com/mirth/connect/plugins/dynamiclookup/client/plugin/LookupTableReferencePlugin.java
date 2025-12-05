@@ -82,8 +82,28 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 CodeTemplateType.DRAG_AND_DROP_CODE,
                 CodeTemplateContextSet.getConnectorContextSet(),
                 "var values = LookupHelper.getMatching(group, keyPattern);",
-                "Retrieves key-value pairs from the specified lookup group where keys match a pattern. Returns an empty map if the group does not exist or no matches are found."
-        ));
+                "Retrieves key-value pairs from the specified lookup group using the default limit (1000). "
+                    + "Returns an empty map if the group does not exist or no matches are found."
+            ));
+
+        templates.add(new CodeTemplate(
+                "Lookup Values Matching Pattern (Custom Limit)",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var values = LookupHelper.getMatching(group, keyPattern, limit);",
+                "Retrieves key-value pairs from the specified lookup group using a custom limit. "
+                    + "The limit is capped internally to prevent excessive memory usage. "
+                    + "Returns an empty map if the group does not exist or no matches are found."
+            ));
+
+        templates.add(new CodeTemplate(
+                "Lookup Values Count Matching Pattern",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var count = LookupHelper.getMatchingCount(group, keyPattern);",
+                "Retrieves the number of entries in the specified lookup group whose keys match the given pattern. "
+                    + "Returns 0 if the group does not exist or no matches are found."
+            ));
 
         templates.add(new CodeTemplate(
                 "Batch Lookup by Keys",

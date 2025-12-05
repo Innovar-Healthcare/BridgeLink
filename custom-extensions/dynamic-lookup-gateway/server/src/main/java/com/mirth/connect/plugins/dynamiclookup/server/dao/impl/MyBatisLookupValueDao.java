@@ -94,14 +94,30 @@ public class MyBatisLookupValueDao implements LookupValueDao {
     }
 
     @Override
-    public List<LookupValue> getMatchingValues(String tableName, String keyPattern) {
+    public List<LookupValue> getMatchingValues(String tableName, String keyPattern, Integer offset, Integer limit) {
         SqlSession session = sqlSessionManager.openSession();
 
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
             params.put("keyPattern", keyPattern);
+            params.put("offset", offset);
+            params.put("limit", limit);
             return session.selectList("Lookup.getMatchingLookupValues", params);
+        } finally {
+            session.close();
+        }
+    }
+
+    @Override
+    public long getMatchingValuesCount(String tableName, String keyPattern) {
+        SqlSession session = sqlSessionManager.openSession();
+
+        try {
+            Map<String, Object> params = new HashMap<>();
+            params.put("tableName", tableName);
+            params.put("keyPattern", keyPattern);
+            return session.selectOne("Lookup.getMatchingLookupValuesCount", params);
         } finally {
             session.close();
         }

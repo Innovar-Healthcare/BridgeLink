@@ -52,6 +52,9 @@ import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.TtlUtils;
 
 public class LookupService {
+    private static final int DEFAULT_MATCH_LIMIT = 1000;
+    private static final int MAX_MATCH_LIMIT = 10000;
+
     private static LookupService instance = null;
 
     private LookupGroupDao groupDao;
@@ -582,7 +585,7 @@ public class LookupService {
     /**
      * Retrieves values matching a pattern from a lookup group
      */
-    public Map<String, String> getMatchingValues(int groupId, String keyPattern) {
+    public long getMatchingValuesCount(int groupId, String keyPattern) {
         // Verify group exists
         if (groupDao.getGroupById(groupId) == null) {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
@@ -598,16 +601,50 @@ public class LookupService {
             throw new IllegalArgumentException("Key pattern must not be empty.");
         }
 
-        // Remove all wildcard characters % and _
-        String stripped = trimmed.replaceAll("[_%]", "");
+        String tableName = getTableNameForGroup(groupId);
+        long count = valueDao.getMatchingValuesCount(tableName, trimmed);
 
-        // If nothing left → wildcard-only → dangerous (match-all)
-        if (stripped.isEmpty()) {
-            throw new IllegalArgumentException("Wildcard-only key patterns (e.g. '%', '_', '%%__') are not allowed. Please include at least one non-wildcard character.");
+        return count;
+    }
+
+    /**
+     * Retrieves values matching a pattern using the default limit, starting at offset 0.
+     */
+    public Map<String, String> getMatchingValues(int groupId, String keyPattern) {
+        return getMatchingValues(groupId, keyPattern, 0, DEFAULT_MATCH_LIMIT);
+    }
+
+    /**
+     * Retrieves values matching a pattern with a custom limit, starting at offset 0.
+     */
+    public Map<String, String> getMatchingValues(int groupId, String keyPattern, int limit) {
+        return getMatchingValues(groupId, keyPattern, 0, limit);
+    }
+
+    /**
+     * Retrieves values matching a pattern with paging support (offset + limit).
+     */
+    public Map<String, String> getMatchingValues(int groupId, String keyPattern, int offset, int limit) {
+        // Verify group exists
+        if (groupDao.getGroupById(groupId) == null) {
+            throw new GroupNotFoundException("Group not found with ID: " + groupId);
         }
 
+        // validate keyPattern
+        if (keyPattern == null) {
+            throw new IllegalArgumentException("Key pattern must not be null.");
+        }
+
+        String trimmed = keyPattern.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException("Key pattern must not be empty.");
+        }
+
+        int effectiveLimit = normalizeLimit(limit);
+        int effectiveOffset = Math.max(0, offset);
+
         String tableName = getTableNameForGroup(groupId);
-        List<LookupValue> values = valueDao.getMatchingValues(tableName, keyPattern);
+        List<LookupValue> values = valueDao.getMatchingValues(tableName, trimmed, effectiveOffset, effectiveLimit);
 
         Map<String, String> map = new LinkedHashMap<>();
         for (LookupValue value : values) {
@@ -1327,5 +1364,13 @@ public class LookupService {
         if (key.length() > 255) {
             throw new IllegalArgumentException("Key cannot exceed 255 characters");
         }
+    }
+
+    private int normalizeLimit(int limit) {
+        if (limit <= 0) {
+            return DEFAULT_MATCH_LIMIT;
+        }
+
+        return Math.min(limit, MAX_MATCH_LIMIT);
     }
 }
