@@ -88,6 +88,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("offset", offset);
             params.put("limit", limit);
             params.put("keyFilter", filter.getKeyFilter());
+            params.put("keyFilterMode", filter.getKeyFilterMode().name());
             params.put("valueFilter", filter.getValueFilter());
             return session.selectList("Lookup.searchLookupValues", params);
         } finally {
@@ -369,6 +370,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
             params.put("keyFilter", filter.getKeyFilter());
+            params.put("keyFilterMode", filter.getKeyFilterMode().name());
             params.put("valueFilter", filter.getValueFilter());
             return session.selectOne("Lookup.searchLookupValuesCount", params);
         } finally {

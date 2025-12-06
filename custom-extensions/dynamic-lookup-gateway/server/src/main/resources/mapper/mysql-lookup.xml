@@ -123,9 +123,18 @@
     <sql id="searchLookupValuesBody">
 	    <trim prefix="WHERE" prefixOverrides="AND |OR ">
 	        <if test="keyFilter != null and keyFilter != ''">
-	            AND LOWER(KEY_VALUE) LIKE LOWER(CONCAT('%', #{keyFilter}, '%'))
+	            <choose>
+	                <when test="keyFilterMode == 'EXACT'">
+	                    AND KEY_VALUE = #{keyFilter}
+	                </when>
+	                <when test="keyFilterMode == 'PREFIX'">
+	                    AND LOWER(KEY_VALUE) LIKE LOWER(CONCAT(#{keyFilter}, '%'))
+	                </when>
+	                <otherwise>
+	                    AND LOWER(KEY_VALUE) LIKE LOWER(CONCAT('%', #{keyFilter}, '%'))
+	                </otherwise>	
+	            </choose>
 	        </if>
-	
 	        <if test="valueFilter != null and valueFilter != ''">
 	            AND LOWER(VALUE_DATA) LIKE LOWER(CONCAT('%', #{valueFilter}, '%'))
 	        </if>

@@ -15,20 +15,28 @@ import java.util.Objects;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 
 public class ValueFilterState {
+    public enum KeyFilterMode {
+        CONTAINS, // default, LIKE %xxx%
+        PREFIX, // LIKE xxx%
+        EXACT // KEY_VALUE = xxx
+    }
+
     private String keyFilter;
     private String valueFilter;
+    private KeyFilterMode keyFilterMode = KeyFilterMode.CONTAINS;
 
     public static ValueFilterState empty() {
-        return new ValueFilterState("", "");
+        return new ValueFilterState("", "", KeyFilterMode.CONTAINS);
     }
 
     // Constructors
     public ValueFilterState() {
     }
 
-    public ValueFilterState(String keyFilter, String valueFilter) {
+    public ValueFilterState(String keyFilter, String valueFilter, KeyFilterMode mode) {
         this.keyFilter = normalize(keyFilter);
         this.valueFilter = normalize(valueFilter);
+        this.keyFilterMode = (mode != null ? mode : KeyFilterMode.CONTAINS);
     }
 
     // Getters and setters
@@ -38,6 +46,14 @@ public class ValueFilterState {
 
     public void setKeyFilter(String keyFilter) {
         this.keyFilter = normalize(keyFilter);
+    }
+
+    public KeyFilterMode getKeyFilterMode() {
+        return keyFilterMode;
+    }
+
+    public void setKeyFilterMode(KeyFilterMode keyFilterMode) {
+        this.keyFilterMode = (keyFilterMode != null ? keyFilterMode : KeyFilterMode.CONTAINS);
     }
 
     public String getValueFilter() {

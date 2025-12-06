@@ -123,7 +123,17 @@
     <sql id="searchLookupValuesBody">
 	    <trim prefix="WHERE" prefixOverrides="AND |OR ">
 	        <if test="keyFilter != null and keyFilter != ''">
-	            AND KEY_VALUE ILIKE '%' || #{keyFilter} || '%'
+	            <choose>
+	                <when test="keyFilterMode == 'EXACT'">
+	                    AND KEY_VALUE = #{keyFilter}
+	                </when>
+	                <when test="keyFilterMode == 'PREFIX'">
+	                    AND KEY_VALUE ILIKE #{keyFilter} || '%'
+	                </when>
+	                <otherwise>
+	                    AND KEY_VALUE ILIKE '%' || #{keyFilter} || '%'
+	                </otherwise>	
+	            </choose>
 	        </if>
 	        <if test="valueFilter != null and valueFilter != ''">
 	            AND VALUE_DATA::text ILIKE '%' || #{valueFilter} || '%'

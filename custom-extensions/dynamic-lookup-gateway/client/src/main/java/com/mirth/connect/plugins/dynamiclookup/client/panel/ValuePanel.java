@@ -66,6 +66,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupAllValu
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState.KeyFilterMode;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.CsvLineParser;
 
 import net.miginfocom.swing.MigLayout;
@@ -85,6 +86,7 @@ public class ValuePanel extends JPanel {
     private JTable valueTable;
     private LookupValueTableModel valueTableModel;
     private JTextField keyFilterField;
+    private JComboBox<KeyFilterMode> keyFilterModeBox;
     private JTextField valueFilterField;
     private JButton searchButton;
     private JButton clearSearchButton;
@@ -127,6 +129,10 @@ public class ValuePanel extends JPanel {
             currentPage = 1;
             loadPage(currentPage);
         });
+
+        keyFilterModeBox = new JComboBox<>(KeyFilterMode.values());
+        keyFilterModeBox.setSelectedItem(KeyFilterMode.CONTAINS);
+        keyFilterModeBox.addActionListener(e -> applyKeyFilterModeEffects());
 
         // Value Filter
         valueFilterField = new JTextField();
@@ -227,14 +233,18 @@ public class ValuePanel extends JPanel {
         contentPanel.setBackground(UIConstants.BACKGROUND_COLOR);
 
         // Filter Criteria Group
-        JPanel topFilterPanel = new JPanel(new MigLayout("insets 0, wrap 2", "[60!][150!]", ""));
+        JPanel topFilterPanel = new JPanel(new MigLayout("insets 0", "[60!][150!][grow]", ""));
         topFilterPanel.setBackground(UIConstants.BACKGROUND_COLOR);
+
         // Line 1: Key
         topFilterPanel.add(new JLabel("Key:"), "gapright 5");
         topFilterPanel.add(keyFilterField, "w 150!");
+        topFilterPanel.add(keyFilterModeBox, "gapleft 5, wrap");
+
         // Line 2: Value
         topFilterPanel.add(new JLabel("Value:"), "gapright 5");
-        topFilterPanel.add(valueFilterField, "w 150!");
+        topFilterPanel.add(valueFilterField, "w 150!, span 2");
+
         // Add to contentPanel
         contentPanel.add(topFilterPanel, "growx, wrap");
 
@@ -287,8 +297,7 @@ public class ValuePanel extends JPanel {
 
         // Detect group change
         if (!Objects.equals(this.selectedGroup, selectedGroup)) {
-            // Clear filters only on group change
-            valueFilterField.setText("");
+            clearFilterFields();
         }
 
         this.selectedGroup = selectedGroup;
@@ -297,16 +306,29 @@ public class ValuePanel extends JPanel {
         loadPage(currentPage);
     }
 
+    private void applyKeyFilterModeEffects() {
+        KeyFilterMode mode = (KeyFilterMode) keyFilterModeBox.getSelectedItem();
+
+        if (mode == KeyFilterMode.EXACT) {
+            valueFilterField.setText("");
+            valueFilterField.setEnabled(false);
+        } else {
+            valueFilterField.setEnabled(true);
+        }
+    }
+
     private void clearFilterFields() {
         keyFilterField.setText("");
         valueFilterField.setText("");
+        keyFilterModeBox.setSelectedItem(KeyFilterMode.CONTAINS);
     }
 
     private ValueFilterState buildValueFilterStateFromUI() {
         String keyFilter = normalizeField(keyFilterField.getText());
         String valueFilter = normalizeField(valueFilterField.getText());
+        KeyFilterMode keyFilterMode = (KeyFilterMode) keyFilterModeBox.getSelectedItem();
 
-        return new ValueFilterState(keyFilter, valueFilter);
+        return new ValueFilterState(keyFilter, valueFilter, keyFilterMode);
     }
 
     private String normalizeField(String value) {
