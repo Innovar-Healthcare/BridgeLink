@@ -214,13 +214,15 @@ public class LookupJsonValueDialog extends MirthDialog {
         if (StringUtils.isEmpty(rawValue)) {
             rawTextArea.setText("");
         } else {
-            // Normalize to compact JSON if possible
             try {
                 JsonNode node = objectMapper.readTree(rawValue);
-                String compact = objectMapper.writeValueAsString(node);
-                rawTextArea.setText(compact);
+
+                // Pretty for editing
+                String pretty = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
+
+                rawTextArea.setText(pretty);
             } catch (Exception e) {
-                // If not valid JSON, just show raw so user can fix it
+                // Invalid JSON → show raw
                 rawTextArea.setText(rawValue);
             }
         }
