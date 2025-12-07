@@ -56,11 +56,13 @@ import org.apache.logging.log4j.Logger;
 import com.mirth.connect.client.ui.Frame;
 import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.client.ui.UIConstants;
+import com.mirth.connect.plugins.dynamiclookup.client.dialog.LookupJsonValueDialog;
 import com.mirth.connect.plugins.dynamiclookup.client.dialog.LookupValueDialog;
 import com.mirth.connect.plugins.dynamiclookup.client.exception.LookupApiClientException;
 import com.mirth.connect.plugins.dynamiclookup.client.model.LookupValueTableModel;
 import com.mirth.connect.plugins.dynamiclookup.client.service.LookupServiceClient;
 import com.mirth.connect.plugins.dynamiclookup.client.util.FileChooser;
+import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ImportValuesResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupAllValuesResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
@@ -429,9 +431,18 @@ public class ValuePanel extends JPanel {
 
     private void handleAddValue() {
         if (selectedGroup != null) {
+            boolean isSaved = false;
             LookupValue lookupValue = new LookupValue();
-            LookupValueDialog dialog = new LookupValueDialog(parent, lookupValue, selectedGroup, false);
-            if (dialog.isSaved()) {
+            if (LookupConstants.isJsonValueType(selectedGroup.getValueType())) {
+                LookupJsonValueDialog dialog = new LookupJsonValueDialog(parent, lookupValue, selectedGroup, false);
+                isSaved = dialog.isSaved();
+            } else {
+
+                LookupValueDialog dialog = new LookupValueDialog(parent, lookupValue, selectedGroup, false);
+                isSaved = dialog.isSaved();
+            }
+
+            if (isSaved) {
                 currentPage = 1;
                 loadPage(currentPage);
             }
@@ -584,8 +595,16 @@ public class ValuePanel extends JPanel {
             LookupValue lookupValue = valueTableModel.getValue(row);
             LookupValue copy = new LookupValue(lookupValue);
             if (selectedGroup != null) {
-                LookupValueDialog dialog = new LookupValueDialog(parent, copy, selectedGroup, true);
-                if (dialog.isSaved()) {
+                boolean isSaved = false;
+                if (LookupConstants.isJsonValueType(selectedGroup.getValueType())) {
+                    LookupJsonValueDialog dialog = new LookupJsonValueDialog(parent, copy, selectedGroup, true);
+                    isSaved = dialog.isSaved();
+                } else {
+                    LookupValueDialog dialog = new LookupValueDialog(parent, copy, selectedGroup, true);
+                    isSaved = dialog.isSaved();
+                }
+
+                if (isSaved) {
                     loadPage(currentPage);
                 }
             }

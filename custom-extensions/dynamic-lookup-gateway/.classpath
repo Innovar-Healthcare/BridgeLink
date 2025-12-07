@@ -38,6 +38,7 @@
 	<classpathentry kind="lib" path="../../client/lib/jackson-databind-2.14.3.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/commons-lang3-3.13.0.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/swingx-core-1.6.2.jar"/>
+	<classpathentry kind="lib" path="../../client/lib/rsyntaxtextarea-2.5.6.jar"/>
 	
     <!-- Optional: Add plugin/lib dependencies here -->
 	<classpathentry kind="lib" path="libs/jfreechart-1.5.6.jar"/>
