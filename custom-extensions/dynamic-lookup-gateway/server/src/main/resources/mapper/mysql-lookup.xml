@@ -130,6 +130,9 @@
 	                <when test="keyFilterMode == 'PREFIX'">
 	                    AND LOWER(KEY_VALUE) LIKE LOWER(CONCAT(#{keyFilter}, '%'))
 	                </when>
+	                <when test="keyFilterMode == 'PATTERN'">
+	                    AND LOWER(KEY_VALUE) LIKE LOWER(#{keyFilter})
+	                </when>
 	                <otherwise>
 	                    AND LOWER(KEY_VALUE) LIKE LOWER(CONCAT('%', #{keyFilter}, '%'))
 	                </otherwise>	

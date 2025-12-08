@@ -130,6 +130,9 @@
 	                <when test="keyFilterMode == 'PREFIX'">
 	                    AND KEY_VALUE ILIKE #{keyFilter} || '%'
 	                </when>
+	                <when test="keyFilterMode == 'PATTERN'">
+	                    AND KEY_VALUE ILIKE #{keyFilter}
+	                </when>
 	                <otherwise>
 	                    AND KEY_VALUE ILIKE '%' || #{keyFilter} || '%'
 	                </otherwise>	

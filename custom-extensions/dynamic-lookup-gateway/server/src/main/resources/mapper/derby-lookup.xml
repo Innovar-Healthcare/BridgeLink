@@ -92,6 +92,9 @@
 	                <when test="keyFilterMode == 'PREFIX'">
 	                    AND LOWER(KEY_VALUE) LIKE LOWER(#{keyFilter} || '%')
 	                </when>
+	                <when test="keyFilterMode == 'PATTERN'">
+	                    AND LOWER(KEY_VALUE) LIKE LOWER(#{keyFilter})
+	                </when>
 	                <otherwise>
 	                    AND LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyFilter} || '%')
 	                </otherwise>

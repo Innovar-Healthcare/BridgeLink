@@ -16,17 +16,18 @@ import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 
 public class ValueFilterState {
     public enum KeyFilterMode {
-        CONTAINS, // default, LIKE %xxx%
-        PREFIX, // LIKE xxx%
-        EXACT // KEY_VALUE = xxx
+        CONTAINS, // LIKE %xxx%
+        PREFIX, // default, LIKE xxx%
+        EXACT, // KEY_VALUE = xxx
+        PATTERN
     }
 
     private String keyFilter;
     private String valueFilter;
-    private KeyFilterMode keyFilterMode = KeyFilterMode.CONTAINS;
+    private KeyFilterMode keyFilterMode = KeyFilterMode.PREFIX;
 
     public static ValueFilterState empty() {
-        return new ValueFilterState("", "", KeyFilterMode.CONTAINS);
+        return new ValueFilterState("", "", KeyFilterMode.PREFIX);
     }
 
     // Constructors
@@ -36,7 +37,7 @@ public class ValueFilterState {
     public ValueFilterState(String keyFilter, String valueFilter, KeyFilterMode mode) {
         this.keyFilter = normalize(keyFilter);
         this.valueFilter = normalize(valueFilter);
-        this.keyFilterMode = (mode != null ? mode : KeyFilterMode.CONTAINS);
+        this.keyFilterMode = (mode != null ? mode : KeyFilterMode.PREFIX);
     }
 
     // Getters and setters
@@ -53,7 +54,7 @@ public class ValueFilterState {
     }
 
     public void setKeyFilterMode(KeyFilterMode keyFilterMode) {
-        this.keyFilterMode = (keyFilterMode != null ? keyFilterMode : KeyFilterMode.CONTAINS);
+        this.keyFilterMode = (keyFilterMode != null ? keyFilterMode : KeyFilterMode.PREFIX);
     }
 
     public String getValueFilter() {
@@ -87,6 +88,20 @@ public class ValueFilterState {
         return JsonUtils.fromJson(json, ValueFilterState.class);
     }
 
+    public static String toDisplay(KeyFilterMode mode) {
+        switch (mode) {
+        case EXACT:
+            return "Exact match";
+        case PREFIX:
+            return "Starts with";
+        case CONTAINS:
+            return "Contains";
+        case PATTERN:
+            return "Pattern (SQL wildcards)";
+        }
+        return mode.name();
+    }
+
     //@formatter:off
     @Override
     public String toString() {
@@ -95,19 +110,24 @@ public class ValueFilterState {
                 ", valueFilter='" + valueFilter + '\'' +
                 '}';
     }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof ValueFilterState)) return false;
-        ValueFilterState that = (ValueFilterState) o;
-        return Objects.equals(keyFilter, that.keyFilter) &&
-               Objects.equals(valueFilter, that.valueFilter);
-    }
     //@formatter:on
 
     @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (!(o instanceof ValueFilterState)) {
+            return false;
+        }
+
+        ValueFilterState that = (ValueFilterState) o;
+        return Objects.equals(keyFilter, that.keyFilter) && Objects.equals(valueFilter, that.valueFilter) && keyFilterMode == that.keyFilterMode;
+    }
+
+    @Override
     public int hashCode() {
-        return Objects.hash(keyFilter, valueFilter);
+        return Objects.hash(keyFilter, valueFilter, keyFilterMode);
     }
 }

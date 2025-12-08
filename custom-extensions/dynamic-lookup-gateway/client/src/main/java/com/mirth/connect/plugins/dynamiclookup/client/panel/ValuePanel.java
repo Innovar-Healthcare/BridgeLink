@@ -12,6 +12,8 @@ package com.mirth.connect.plugins.dynamiclookup.client.panel;
 
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
+import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -36,11 +38,13 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
@@ -92,6 +96,7 @@ public class ValuePanel extends JPanel {
     private JTextField valueFilterField;
     private JButton searchButton;
     private JButton clearSearchButton;
+    private JProgressBar loadingBar;
     private JButton addValueButton;
     private JButton removeSelectedButton;
     private JButton importCsvButton;
@@ -133,7 +138,20 @@ public class ValuePanel extends JPanel {
         });
 
         keyFilterModeBox = new JComboBox<>(KeyFilterMode.values());
-        keyFilterModeBox.setSelectedItem(KeyFilterMode.CONTAINS);
+        keyFilterModeBox.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+
+                if (value instanceof ValueFilterState.KeyFilterMode) {
+                    setText(ValueFilterState.toDisplay((ValueFilterState.KeyFilterMode) value));
+                }
+
+                return this;
+            }
+        });
+        keyFilterModeBox.setSelectedItem(KeyFilterMode.PREFIX);
         keyFilterModeBox.addActionListener(e -> applyKeyFilterModeEffects());
 
         // Value Filter
@@ -179,6 +197,14 @@ public class ValuePanel extends JPanel {
             currentPage = 1;
             loadPage(currentPage);
         });
+
+        // loading bar
+        loadingBar = new JProgressBar();
+        loadingBar.setIndeterminate(true);
+        loadingBar.setBorder(null);
+        loadingBar.setPreferredSize(new Dimension(90, 9));
+        loadingBar.setForeground(UIConstants.JX_CONTAINER_BACKGROUND_COLOR);
+        loadingBar.setVisible(false);
 
         // Value Buttons
         addValueButton = new JButton("Add");
@@ -256,6 +282,7 @@ public class ValuePanel extends JPanel {
         topButtonPanel.add(new JLabel("Search:"), "gapright 5");
         topButtonPanel.add(searchButton, "split 6"); // [search]
         topButtonPanel.add(clearSearchButton, "gapleft 5"); // [X]
+
         // Right: CRUD buttons
         topButtonPanel.add(addValueButton, "gapleft push");
         topButtonPanel.add(removeSelectedButton, "gapleft 5");
@@ -266,24 +293,33 @@ public class ValuePanel extends JPanel {
 
         contentPanel.add(new JScrollPane(valueTable), "grow, push, wrap");
 
-        JPanel paginationPanel = new JPanel(new BorderLayout());
+        JPanel paginationPanel = new JPanel(new MigLayout("insets 0, fill", "[left] [center] [right]", "[]"));
         paginationPanel.setBackground(UIConstants.BACKGROUND_COLOR);
 
-        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        // Left group
+        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         leftPanel.setBackground(UIConstants.BACKGROUND_COLOR);
         leftPanel.add(new JLabel("Page size:"));
         leftPanel.add(pageSizeComboBox);
         leftPanel.add(entriesInfoLabel);
 
-        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        // Center (spinner)
+        JPanel centerPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
+        centerPanel.setBackground(UIConstants.BACKGROUND_COLOR);
+        centerPanel.add(loadingBar);
+
+        // Right group
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
         rightPanel.setBackground(UIConstants.BACKGROUND_COLOR);
         rightPanel.add(prevPageButton);
         rightPanel.add(pageInfoLabel);
         rightPanel.add(nextPageButton);
         rightPanel.add(goToPageButton);
 
-        paginationPanel.add(leftPanel, BorderLayout.WEST);
-        paginationPanel.add(rightPanel, BorderLayout.EAST);
+        // Add
+        paginationPanel.add(leftPanel, "align left");
+        paginationPanel.add(centerPanel, "align center");
+        paginationPanel.add(rightPanel, "align right");
 
         contentPanel.add(paginationPanel, "growx, wrap");
 
@@ -322,7 +358,7 @@ public class ValuePanel extends JPanel {
     private void clearFilterFields() {
         keyFilterField.setText("");
         valueFilterField.setText("");
-        keyFilterModeBox.setSelectedItem(KeyFilterMode.CONTAINS);
+        keyFilterModeBox.setSelectedItem(KeyFilterMode.PREFIX);
     }
 
     private ValueFilterState buildValueFilterStateFromUI() {
@@ -344,6 +380,8 @@ public class ValuePanel extends JPanel {
             return;
         }
 
+        setLoading(true);
+
         int offset = (page - 1) * pageSize;
 
         new SwingWorker<LookupAllValuesResponse, Void>() {
@@ -353,6 +391,8 @@ public class ValuePanel extends JPanel {
             }
 
             protected void done() {
+                setLoading(false);
+
                 try {
                     LookupAllValuesResponse response = get();
                     List<LookupValue> values = response.getValues();
@@ -374,6 +414,18 @@ public class ValuePanel extends JPanel {
                 }
             }
         }.execute();
+    }
+
+    private void setLoading(boolean loading) {
+        loadingBar.setVisible(loading);
+
+        searchButton.setEnabled(!loading);
+        clearSearchButton.setEnabled(!loading);
+
+        prevPageButton.setEnabled(!loading);
+        nextPageButton.setEnabled(!loading);
+        goToPageButton.setEnabled(!loading);
+        pageSizeComboBox.setEnabled(!loading);
     }
 
     private void updatePaginationControls() {
@@ -421,12 +473,6 @@ public class ValuePanel extends JPanel {
                 loadPage(selectedPage);
             }
         }
-    }
-
-    private void setPaginationControlsEnabled(boolean enabled) {
-        prevPageButton.setEnabled(enabled);
-        nextPageButton.setEnabled(enabled);
-        pageSizeComboBox.setEnabled(enabled);
     }
 
     private void handleAddValue() {
