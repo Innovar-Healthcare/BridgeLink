@@ -38,7 +38,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
+import javax.swing.ButtonGroup;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
@@ -48,6 +50,7 @@ import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
+import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
@@ -60,15 +63,19 @@ import org.apache.logging.log4j.Logger;
 import com.mirth.connect.client.ui.Frame;
 import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.client.ui.UIConstants;
+import com.mirth.connect.plugins.dynamiclookup.client.dialog.AdvancedSearchCodeSnippetDialog;
+import com.mirth.connect.plugins.dynamiclookup.client.dialog.AdvancedSearchDialog;
 import com.mirth.connect.plugins.dynamiclookup.client.dialog.LookupJsonValueDialog;
 import com.mirth.connect.plugins.dynamiclookup.client.dialog.LookupValueDialog;
 import com.mirth.connect.plugins.dynamiclookup.client.exception.LookupApiClientException;
 import com.mirth.connect.plugins.dynamiclookup.client.model.LookupValueTableModel;
 import com.mirth.connect.plugins.dynamiclookup.client.service.LookupServiceClient;
+import com.mirth.connect.plugins.dynamiclookup.client.util.AdvancedSearchSnippetHelper;
 import com.mirth.connect.plugins.dynamiclookup.client.util.FileChooser;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ImportValuesResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupAllValuesResponse;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.AdvancedJsonFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState;
@@ -89,11 +96,15 @@ public class ValuePanel extends JPanel {
     private JPanel noGroupSelectedPanel;
     private JPanel contentPanel;
 
+    private JRadioButton simpleModeButton;
+    private JRadioButton advancedModeButton;
     private JTable valueTable;
     private LookupValueTableModel valueTableModel;
     private JTextField keyFilterField;
     private JComboBox<KeyFilterMode> keyFilterModeBox;
     private JTextField valueFilterField;
+    private JButton advancedButton;
+    private JButton exportCodeSnippetButton;
     private JButton searchButton;
     private JButton clearSearchButton;
     private JProgressBar loadingBar;
@@ -109,6 +120,8 @@ public class ValuePanel extends JPanel {
     private JLabel entriesInfoLabel;
 
     private LookupGroup selectedGroup;
+
+    private AdvancedJsonFilterState advancedState;
 
     private int currentPage = 1;
     private int pageSize = 25;
@@ -128,6 +141,17 @@ public class ValuePanel extends JPanel {
         noGroupSelectedPanel = new NoGroupSelectedPanel();
 
         // Content panel
+
+        // Simple/Advanced search
+        simpleModeButton = new JRadioButton("Simple");
+        simpleModeButton.setSelected(true);
+        simpleModeButton.setOpaque(false);
+        advancedModeButton = new JRadioButton("Advanced");
+        advancedModeButton.setOpaque(false);
+
+        ButtonGroup modeGroup = new ButtonGroup();
+        modeGroup.add(simpleModeButton);
+        modeGroup.add(advancedModeButton);
 
         // Key Filter
         keyFilterField = new JTextField();
@@ -161,6 +185,17 @@ public class ValuePanel extends JPanel {
             currentPage = 1;
             loadPage(currentPage);
         });
+
+        // Advanced button
+        advancedButton = new JButton("");
+        advancedButton.setIcon(new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/wrench.png")));
+        advancedButton.setToolTipText("Advanced search options");
+        advancedButton.addActionListener(e -> handleAdvancedJson());
+
+        exportCodeSnippetButton = new JButton("");
+        exportCodeSnippetButton.setIcon(new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/script_edit.png")));
+        exportCodeSnippetButton.setToolTipText("Export search as code snippet");
+        exportCodeSnippetButton.addActionListener(e -> handleExportAsCodeSnippet());
 
         // Value Table
         valueTableModel = new LookupValueTableModel();
@@ -260,21 +295,52 @@ public class ValuePanel extends JPanel {
         contentPanel = new JPanel(new MigLayout("insets 8, fill"));
         contentPanel.setBackground(UIConstants.BACKGROUND_COLOR);
 
-        // Filter Criteria Group
-        JPanel topFilterPanel = new JPanel(new MigLayout("insets 0", "[60!][150!][grow]", ""));
-        topFilterPanel.setBackground(UIConstants.BACKGROUND_COLOR);
+        // ===== 1. Simple / Advanced switch =====
+        JPanel modeSwitchPanel = new JPanel(new MigLayout("insets 0"));
+        modeSwitchPanel.setBackground(UIConstants.BACKGROUND_COLOR);
+        modeSwitchPanel.add(new JLabel("Search Mode:"), "gapright 10");
+        modeSwitchPanel.add(simpleModeButton, "gapright 15");
+        modeSwitchPanel.add(advancedModeButton);
+
+        contentPanel.add(modeSwitchPanel, "growx, wrap");
+
+        // ===== 2. Filter: Simple vs Advanced =====
+        CardLayout filterCardLayout = new CardLayout();
+        JPanel filterModePanel = new JPanel(filterCardLayout);
+        filterModePanel.setOpaque(false);
+
+        // --- Simple filter panel (Key + Mode + Value) ---
+        JPanel simpleFilterPanel = new JPanel(new MigLayout("insets 0", "[60!][150!][grow]", ""));
+        simpleFilterPanel.setBackground(UIConstants.BACKGROUND_COLOR);
 
         // Line 1: Key
-        topFilterPanel.add(new JLabel("Key:"), "gapright 5");
-        topFilterPanel.add(keyFilterField, "w 150!");
-        topFilterPanel.add(keyFilterModeBox, "gapleft 5, wrap");
+        simpleFilterPanel.add(new JLabel("Key:"), "gapright 5");
+        simpleFilterPanel.add(keyFilterField, "w 150!");
+        simpleFilterPanel.add(keyFilterModeBox, "gapleft 5, wrap");
 
         // Line 2: Value
-        topFilterPanel.add(new JLabel("Value:"), "gapright 5");
-        topFilterPanel.add(valueFilterField, "w 150!, span 2");
+        simpleFilterPanel.add(new JLabel("Value:"), "gapright 5");
+        simpleFilterPanel.add(valueFilterField, "w 150!, span 2");
 
-        // Add to contentPanel
-        contentPanel.add(topFilterPanel, "growx, wrap");
+        // --- Advanced filter panel ---
+        JPanel advancedFilterPanel = new JPanel(new MigLayout("insets 0", "[60!][grow]", ""));
+        advancedFilterPanel.setBackground(UIConstants.BACKGROUND_COLOR);
+        advancedFilterPanel.add(new JLabel("Advanced:"), "gapright 5");
+        advancedFilterPanel.add(advancedButton, "wrap");
+        advancedFilterPanel.add(new JLabel("Snippet:"), "gapright 5");
+        advancedFilterPanel.add(exportCodeSnippetButton);
+
+        // filterModePanel
+        filterModePanel.add(simpleFilterPanel, "simple");
+        filterModePanel.add(advancedFilterPanel, "advanced");
+
+        // contentPanel
+        contentPanel.add(filterModePanel, "growx, wrap");
+        filterCardLayout.show(filterModePanel, "simple");
+
+        // Switch logic
+        simpleModeButton.addActionListener(e -> filterCardLayout.show(filterModePanel, "simple"));
+        advancedModeButton.addActionListener(e -> filterCardLayout.show(filterModePanel, "advanced"));
 
         JPanel topButtonPanel = new JPanel(new MigLayout("insets 0", "[60!][grow][pref!]", ""));
         topButtonPanel.setBackground(UIConstants.BACKGROUND_COLOR);
@@ -332,6 +398,7 @@ public class ValuePanel extends JPanel {
 
         contentPanel.setVisible(showContent);
         noGroupSelectedPanel.setVisible(!showContent);
+        advancedButton.setVisible(selectedGroup != null && LookupConstants.isJsonValueType(selectedGroup.getValueType()));
 
         // Detect group change
         if (!Objects.equals(this.selectedGroup, selectedGroup)) {
@@ -356,9 +423,17 @@ public class ValuePanel extends JPanel {
     }
 
     private void clearFilterFields() {
+        simpleModeButton.doClick();
+
         keyFilterField.setText("");
         valueFilterField.setText("");
         keyFilterModeBox.setSelectedItem(KeyFilterMode.PREFIX);
+
+        advancedState = new AdvancedJsonFilterState();
+    }
+
+    private AdvancedJsonFilterState buildAdvanceFilterStateFromUI() {
+        return this.advancedState;
     }
 
     private ValueFilterState buildValueFilterStateFromUI() {
@@ -367,6 +442,22 @@ public class ValuePanel extends JPanel {
         KeyFilterMode keyFilterMode = (KeyFilterMode) keyFilterModeBox.getSelectedItem();
 
         return new ValueFilterState(keyFilter, valueFilter, keyFilterMode);
+    }
+
+    private void handleAdvancedJson() {
+        AdvancedSearchDialog dialog = new AdvancedSearchDialog(parent, advancedState);
+        if (!dialog.isOkPressed()) {
+            return;
+        }
+
+        currentPage = 1;
+        loadPage(currentPage);
+    }
+
+    private void handleExportAsCodeSnippet() {
+        String snippet = AdvancedSearchSnippetHelper.buildJavaScriptSnippetForAdvancedState(selectedGroup, advancedState);
+
+        new AdvancedSearchCodeSnippetDialog(parent, snippet);
     }
 
     private String normalizeField(String value) {
@@ -386,8 +477,11 @@ public class ValuePanel extends JPanel {
 
         new SwingWorker<LookupAllValuesResponse, Void>() {
             protected LookupAllValuesResponse doInBackground() throws Exception {
-                ValueFilterState filter = buildValueFilterStateFromUI();
-                return LookupServiceClient.getInstance().searchValues(selectedGroup.getId(), offset, pageSize, filter);
+                if (advancedModeButton.isSelected()) {
+                    return LookupServiceClient.getInstance().searchValuesByJsonFields(selectedGroup.getId(), offset, pageSize, buildAdvanceFilterStateFromUI());
+                }
+
+                return LookupServiceClient.getInstance().searchValues(selectedGroup.getId(), offset, pageSize, buildValueFilterStateFromUI());
             }
 
             protected void done() {

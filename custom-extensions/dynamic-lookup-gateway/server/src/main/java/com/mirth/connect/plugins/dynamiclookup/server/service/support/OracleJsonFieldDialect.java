@@ -10,6 +10,7 @@ import com.mirth.connect.plugins.dynamiclookup.server.util.JsonFieldUtils;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
 
 public class OracleJsonFieldDialect implements JsonFieldDialect {
     @Override
@@ -78,6 +79,10 @@ public class OracleJsonFieldDialect implements JsonFieldDialect {
         }
 
         return criteria;
+    }
+
+    public List<JsonFieldCriterion> buildCriteria(LookupGroup group, List<JsonCondition> conditions) {
+        return new ArrayList<>();
     }
 
     /**

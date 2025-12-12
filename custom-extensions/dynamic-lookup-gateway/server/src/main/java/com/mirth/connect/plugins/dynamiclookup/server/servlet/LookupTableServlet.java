@@ -32,6 +32,7 @@ import com.mirth.connect.plugins.dynamiclookup.server.exception.DuplicateGroupNa
 import com.mirth.connect.plugins.dynamiclookup.server.exception.GroupNotFoundException;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.LookupApiException;
 import com.mirth.connect.plugins.dynamiclookup.server.service.LookupService;
+import com.mirth.connect.plugins.dynamiclookup.shared.builder.AdvancedJsonFilterBuilder;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.LookupModelMapper;
@@ -50,6 +51,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ImportLookupG
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ImportValuesResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupAllValuesResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.interfaces.LookupTableServletInterface;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.AdvancedJsonFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.HistoryFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupAudit;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
@@ -431,7 +433,37 @@ public class LookupTableServlet extends MirthServlet implements LookupTableServl
         } catch (LookupApiException e) {
             throw e;
         } catch (Exception e) {
-            throw new ClientException("Failed to process getAllValues request. Error: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
+            throw new ClientException("Failed to process searchValues request. Error: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
+        }
+    }
+
+    @Override
+    public String searchValuesByJsonFields(Integer groupId, Integer offset, Integer limit, String filterState) throws ClientException {
+        try {
+            AdvancedJsonFilterState filter = (filterState != null && !filterState.isEmpty()) ? AdvancedJsonFilterBuilder.fromJson(filterState) : new AdvancedJsonFilterState();
+
+            // Validate group first
+            LookupGroup lookupGroup = LookupService.getInstance().getGroupById(groupId);
+            if (lookupGroup == null) {
+                throw new LookupApiException(Response.Status.NOT_FOUND, LookupErrorCode.GROUP_NOT_FOUND, "Lookup group not found with ID: " + groupId);
+            }
+
+            // Normalize pagination and pattern
+            int safeOffset = offset != null ? offset : 0;
+            int safeLimit = limit != null ? limit : Integer.MAX_VALUE;
+
+            List<LookupValue> paginated = LookupService.getInstance().searchLookupValuesByJsonFields(groupId, safeOffset, safeLimit, filter);
+            int totalCount = LookupService.getInstance().searchLookupValuesByJsonFieldsCount(groupId, filter);
+
+            LookupAllValuesResponse response = LookupAllValuesResponse.fromResult(groupId, lookupGroup.getName(), totalCount, paginated, safeLimit, safeOffset);
+
+            return JsonUtils.toJson(response);
+        } catch (GroupNotFoundException e) {
+            throw new LookupApiException(Response.Status.NOT_FOUND, LookupErrorCode.GROUP_NOT_FOUND, "Lookup group not found with ID: " + groupId);
+        } catch (LookupApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ClientException("Failed to process searchValuesByJsonFields request. Error: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
         }
     }
 

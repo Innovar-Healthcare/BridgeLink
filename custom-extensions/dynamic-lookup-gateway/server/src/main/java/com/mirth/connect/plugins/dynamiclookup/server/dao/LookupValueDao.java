@@ -74,5 +74,7 @@ public interface LookupValueDao {
 
     List<LookupValue> searchByJsonFieldsGin(String tableName, Integer offset, Integer limit, String filterJson);
 
-    List<LookupValue> searchByJsonFieldsField(String tableName, Integer offset, Integer limit, List<JsonFieldCriterion> criteria);
+    long searchByJsonFieldsFieldCount(String tableName, String keyPattern, List<JsonFieldCriterion> criteria);
+
+    List<LookupValue> searchByJsonFieldsField(String tableName, Integer offset, Integer limit, String keyPattern, List<JsonFieldCriterion> criteria);
 }

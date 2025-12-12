@@ -22,6 +22,7 @@ import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.core.EntityException;
 import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.plugins.dynamiclookup.client.exception.LookupApiClientException;
+import com.mirth.connect.plugins.dynamiclookup.shared.builder.AdvancedJsonFilterBuilder;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupValueRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ErrorResponse;
@@ -34,6 +35,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ImportValuesR
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupAllValuesResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.LookupValueResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.interfaces.LookupTableServletInterface;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.AdvancedJsonFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.HistoryFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
@@ -290,6 +292,23 @@ public class LookupServiceClient {
         } catch (Exception e) {
             // 3. JSON serialization or unexpected errors
             throw new RuntimeException("Failed to delete value", e);
+        }
+    }
+
+    public LookupAllValuesResponse searchValuesByJsonFields(Integer groupId, int offset, int limit, AdvancedJsonFilterState filter) throws ClientException {
+        try {
+            // 1. Make the call
+            String response = getServlet().searchValuesByJsonFields(groupId, offset, limit, AdvancedJsonFilterBuilder.toJson(filter));
+
+            return JsonUtils.fromJson(response, LookupAllValuesResponse.class);
+        } catch (ClientException e) {
+            // 2. Rethrow ClientException with parsed ErrorResponse if available
+            rethrowParsedClientError(e);
+
+            return null; // unreachable — rethrowParsedClientError always throws
+        } catch (Exception e) {
+            // 3. JSON serialization or unexpected errors
+            throw new RuntimeException("Failed to search Values", e);
         }
     }
 

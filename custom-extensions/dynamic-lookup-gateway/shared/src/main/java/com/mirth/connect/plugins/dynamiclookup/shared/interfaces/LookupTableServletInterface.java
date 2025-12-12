@@ -576,7 +576,8 @@ public interface LookupTableServletInterface extends BaseServletInterface {
             description = "Performs a filtered search within the specified lookup group. "
                     + "Search supports pagination and multiple filter fields such as keyFilter and valueFilter. "
                     + "If no filter criteria are provided, all values in the group will be returned (equivalent to an unfiltered search). "
-                    + "This endpoint is designed for UI usage."
+                    + "This endpoint is designed for UI usage.",
+            hidden = true
     )
     @ApiResponse(
             responseCode = "200",
@@ -613,7 +614,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                     )
             )
     )
-    @MirthOperation(name = "searchValues", display = "Search values", permission = PERMISSION_ACCESS)
+    @MirthOperation(name = "searchValues", display = "Search values", permission = PERMISSION_ACCESS, auditable = false)
     public String searchValues(
             @Param("groupId")
             @Parameter(description = "The unique ID of the group to retrieve.", required = true)
@@ -642,6 +643,76 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                             "}"
                             )
                     )
+            )
+            String filterState
+    ) throws ClientException;
+    
+    @POST
+    @Path("/groups/{groupId}/values/search-advanced")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "Advanced search within a lookup group (key pattern + JSON field filters).",
+            description =
+                    "Performs an advanced search within the specified lookup group using:\n"
+                    + "SQL key pattern matching (e.g., '2025-11-21_%')\n"
+                    + "JSON field conditions (e.g., field = 'status', operator = 'EQ', value = 'active')\n\n"
+                    + "This endpoint is intended for the Advanced Search UI and supports pagination. "
+                    + "If no filters are provided, all values are returned.",
+            hidden = true
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "Successfully retrieved filtered or unfiltered values",
+            content = @Content(
+                    mediaType = MediaType.APPLICATION_JSON,
+                    examples = @ExampleObject(
+                            name = "Successful response",
+                            value = "{\n" +
+                                    "  \"groupId\": 1,\n" +
+                                    "  \"groupName\": \"Billing Codes\",\n" +
+                                    "  \"totalCount\": 7,\n" +
+                                    "  \"values\": [\n" +
+                                    "    {\n" +
+                                    "      \"keyValue\": \"99213\",\n" +
+                                    "      \"valueData\": \"Office Visit\",\n" +
+                                    "      \"createdDate\": \"2025-06-22T01:19:25.213+00:00\",\n" +
+                                    "      \"updatedDate\": \"2025-06-22T01:29:45.123+00:00\"\n" +
+                                    "    },\n" +
+                                    "    {\n" +
+                                    "      \"keyValue\": \"99214\",\n" +
+                                    "      \"valueData\": \"Office Visit, Level 4\",\n" +
+                                    "      \"createdDate\": \"2025-06-22T01:19:25.213+00:00\",\n" +
+                                    "      \"updatedDate\": \"2025-06-22T01:19:25.213+00:00\"\n" +
+                                    "    }\n" +
+                                    "    // truncated for brevity\n" +
+                                    "  ],\n" +
+                                    "  \"pagination\": {\n" +
+                                    "    \"limit\": 100,\n" +
+                                    "    \"offset\": 0,\n" +
+                                    "    \"hasMore\": false\n" +
+                                    "  }\n" +
+                                    "}"
+                    )
+            )
+    )
+    @MirthOperation(name = "searchValuesAdvanced", display = "Advanced Search", permission = PERMISSION_ACCESS, auditable = false)
+    public String searchValuesByJsonFields(
+            @Param("groupId")
+            @Parameter(description = "The unique ID of the group to retrieve.", required = true)
+            @PathParam("groupId") Integer groupId,
+
+            @Param("offset")
+            @Parameter(description = "Offset for pagination (default: 0)", required = false)
+            @QueryParam("offset") @DefaultValue("0") Integer offset,
+
+            @Param("limit")
+            @Parameter(description = "Maximum number of values to return (default: 100)", required = false)
+            @QueryParam("limit") @DefaultValue("100") Integer limit,
+
+            @Param("filterState")
+            @RequestBody(
+                    description = "Advanced filter state (keyPattern + JSON conditions).",
+                    required = false
             )
             String filterState
     ) throws ClientException;

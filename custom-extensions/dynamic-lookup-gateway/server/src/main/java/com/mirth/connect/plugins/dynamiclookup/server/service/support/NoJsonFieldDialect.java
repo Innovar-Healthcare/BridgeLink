@@ -10,10 +10,12 @@
 
 package com.mirth.connect.plugins.dynamiclookup.server.service.support;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
 
 /**
  * JsonFieldDialect implementation for databases that do NOT support JSON.
@@ -31,5 +33,9 @@ public final class NoJsonFieldDialect implements JsonFieldDialect {
     @Override
     public List<JsonFieldCriterion> buildCriteria(LookupGroup group, Map<String, String> filters) {
         throw new UnsupportedOperationException("JSON search is not supported for this database.");
+    }
+
+    public List<JsonFieldCriterion> buildCriteria(LookupGroup group, List<JsonCondition> conditions) {
+        return new ArrayList<>();
     }
 }

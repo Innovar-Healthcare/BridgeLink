@@ -23,7 +23,9 @@ import com.mirth.connect.plugins.dynamiclookup.server.audit.LookupAuditLogger;
 import com.mirth.connect.plugins.dynamiclookup.server.exception.DuplicateGroupNameException;
 import com.mirth.connect.plugins.dynamiclookup.server.service.LookupService;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupGroupConverter;
+import com.mirth.connect.plugins.dynamiclookup.shared.builder.AdvancedJsonFilterBuilder;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.CacheStatistics;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.AdvancedJsonFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupStatistics;
@@ -541,7 +543,7 @@ public class LookupHelper {
      *
      * @return Map of key -> valueData, or {@code null} if group not found or an error occurs.
      */
-    public static Map<String, String> findValuesByJsonFields(String groupName, String filterJson) {
+    public static Map<String, String> searchValuesByJsonFields(String groupName, String keyPattern, String simpleMapJson) {
         try {
             LookupGroup group = lookupService.getGroupByName(groupName);
             if (group == null) {
@@ -549,10 +551,17 @@ public class LookupHelper {
                 return null;
             }
 
-            return lookupService.findValuesByJsonFields(group.getId(), filterJson);
+            AdvancedJsonFilterState filter;
+            try {
+                filter = AdvancedJsonFilterBuilder.fromLookupHelperInputs(keyPattern, simpleMapJson);
+            } catch (IllegalArgumentException e) {
+                logger.error("Invalid simple JSON filter for lookup group='{}', keyPattern={}, filterJson={}", groupName, keyPattern, simpleMapJson, e);
+                return null;
+            }
 
+            return lookupService.searchValuesByJsonFields(group.getId(), filter);
         } catch (Exception e) {
-            logger.error("Failed to search lookup values [group='{}', filterJson={}]: {}", groupName, filterJson, e.getMessage(), e);
+            logger.error("Failed to search lookup values [group='{}', keyPattern={}, filterJson={}]: {}", groupName, keyPattern, simpleMapJson, e.getMessage(), e);
             return null;
         }
     }

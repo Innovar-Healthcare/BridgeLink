@@ -88,6 +88,12 @@ public class ValueFilterState {
         return JsonUtils.fromJson(json, ValueFilterState.class);
     }
 
+    public void clearAll() {
+        keyFilter = null;
+        keyFilterMode = KeyFilterMode.PREFIX;
+        valueFilter = null;
+    }
+
     public static String toDisplay(KeyFilterMode mode) {
         switch (mode) {
         case EXACT:

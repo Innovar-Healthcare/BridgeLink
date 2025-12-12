@@ -650,7 +650,21 @@ public class MyBatisLookupValueDao implements LookupValueDao {
     }
 
     @Override
-    public List<LookupValue> searchByJsonFieldsField(String tableName, Integer offset, Integer limit, List<JsonFieldCriterion> criteria) {
+    public long searchByJsonFieldsFieldCount(String tableName, String keyPattern, List<JsonFieldCriterion> criteria) {
+        SqlSession session = sqlSessionManager.openSession();
+        try {
+            Map<String, Object> params = new HashMap<>();
+            params.put("tableName", tableName);
+            params.put("keyPattern", keyPattern);
+            params.put("criteria", criteria);
+            return session.selectOne("Lookup.searchByJsonFieldsFieldCount", params);
+        } finally {
+            session.close(); // Ensure session is always closed
+        }
+    }
+
+    @Override
+    public List<LookupValue> searchByJsonFieldsField(String tableName, Integer offset, Integer limit, String keyPattern, List<JsonFieldCriterion> criteria) {
         SqlSession session = sqlSessionManager.openSession();
 
         try {
@@ -658,6 +672,7 @@ public class MyBatisLookupValueDao implements LookupValueDao {
             params.put("tableName", tableName);
             params.put("offset", offset);
             params.put("limit", limit);
+            params.put("keyPattern", keyPattern);
             params.put("criteria", criteria);
             return session.selectList("Lookup.searchByJsonFieldsField", params);
         } finally {

@@ -20,6 +20,8 @@ import com.mirth.connect.plugins.dynamiclookup.server.util.JsonFieldUtils;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonOperator;
 
 public class PostgresJsonFieldDialect implements JsonFieldDialect {
     @Override
@@ -59,30 +61,73 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
 
     @Override
     public List<JsonFieldCriterion> buildCriteria(LookupGroup group, Map<String, String> filters) {
-        if (group == null || filters == null || filters.isEmpty()) {
+        throw new IllegalArgumentException("Unsupported for PostgreSQL");
+//        if (group == null || filters == null || filters.isEmpty()) {
+//            return Collections.emptyList();
+//        }
+//
+//        List<JsonFieldCriterion> criteria = new ArrayList<>();
+//
+//        for (Map.Entry<String, String> entry : filters.entrySet()) {
+//            String rawFieldPath = entry.getKey();
+//            String value = entry.getValue();
+//
+//            if (rawFieldPath == null || rawFieldPath.trim().isEmpty()) {
+//                continue;
+//            }
+//
+//            String fieldPath = JsonFieldUtils.normalizeFieldPath(rawFieldPath);
+//            if (fieldPath.isEmpty()) {
+//                continue;
+//            }
+//
+//            String expression = buildExpression(fieldPath);
+//
+//            JsonFieldCriterion criterion = new JsonFieldCriterion();
+//            criterion.setExpression(expression);
+//            criterion.setValue(value);
+//
+//            criteria.add(criterion);
+//        }
+//
+//        return criteria;
+    }
+
+    @Override
+    public List<JsonFieldCriterion> buildCriteria(LookupGroup group, List<JsonCondition> conditions) {
+        if (group == null || conditions == null || conditions.isEmpty()) {
             return Collections.emptyList();
         }
 
         List<JsonFieldCriterion> criteria = new ArrayList<>();
 
-        for (Map.Entry<String, String> entry : filters.entrySet()) {
-            String rawFieldPath = entry.getKey();
-            String value = entry.getValue();
+        for (JsonCondition cond : conditions) {
 
+            if (cond == null) {
+                continue;
+            }
+
+            String rawFieldPath = cond.getField();
             if (rawFieldPath == null || rawFieldPath.trim().isEmpty()) {
                 continue;
             }
 
+            // Normalize field path: "address.city" → "address.city"
             String fieldPath = JsonFieldUtils.normalizeFieldPath(rawFieldPath);
             if (fieldPath.isEmpty()) {
                 continue;
             }
 
+            // Dialect builds SQL expression, e.g.:
             String expression = buildExpression(fieldPath);
+
+            // Map JsonOperator → SQL operator string
+            String operatorSql = buildSqlOperator(cond.getOp());
 
             JsonFieldCriterion criterion = new JsonFieldCriterion();
             criterion.setExpression(expression);
-            criterion.setValue(value);
+            criterion.setOperatorSql(operatorSql);
+            criterion.setValue(cond.getValue());
 
             criteria.add(criterion);
         }
@@ -100,5 +145,22 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
 
         String path = "{" + fieldPath.replace(".", ",") + "}";
         return "VALUE_DATA #>> '" + path + "'";
+    }
+
+    /**
+     * PostgreSQL: Maps a high-level JsonOperator to its SQL operator
+     */
+    private String buildSqlOperator(JsonOperator op) {
+        if (op == null) {
+            // Default defensive behavior
+            return "=";
+        }
+
+        switch (op) {
+        case EQUAL:
+            return "=";
+        default:
+            throw new IllegalArgumentException("Unsupported JsonOperator for PostgreSQL: " + op);
+        }
     }
 }

@@ -36,12 +36,12 @@ import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldC
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldDialectRegistry;
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonIndexConfigurator;
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonIndexNaming;
-import com.mirth.connect.plugins.dynamiclookup.server.util.JsonFilterUtils;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.CacheStatistics;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.AdvancedJsonFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.HistoryFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupAudit;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
@@ -532,8 +532,11 @@ public class LookupService {
         return valueDao.searchLookupValues(tableName, offset, limit, filter);
     }
 
-    public Map<String, String> findValuesByJsonFields(Integer groupId, String filterJson) {
-        List<LookupValue> values = searchLookupValuesByJsonFields(groupId, null, null, filterJson);
+    public Map<String, String> searchValuesByJsonFields(Integer groupId, AdvancedJsonFilterState filter) {
+        final int offset = 0;
+        final int limit = 1000;
+
+        List<LookupValue> values = searchLookupValuesByJsonFields(groupId, offset, limit, filter);
 
         Map<String, String> map = new LinkedHashMap<>();
         for (LookupValue value : values) {
@@ -543,11 +546,40 @@ public class LookupService {
         return map;
     }
 
-    public List<LookupValue> searchLookupValuesByJsonFields(Integer groupId, Integer offset, Integer limit, String filterJson) {
-        if (!JsonUtils.isValidJson(filterJson)) {
-            throw new IllegalStateException("Invalid JSON filter: " + filterJson);
+    public int searchLookupValuesByJsonFieldsCount(Integer groupId, AdvancedJsonFilterState filter) {
+        LookupGroup group = groupDao.getGroupById(groupId);
+        if (group == null) {
+            throw new GroupNotFoundException("Group not found: " + groupId);
         }
 
+        // Must be JSON group
+        if (!LookupConstants.isJsonValueType(group.getValueType())) {
+            throw new IllegalStateException("JSON field search is only supported for groups with valueType=JSON (groupId=" + groupId + ")");
+        }
+
+        // Check database JSON capability
+        LookupJsonCapability capability = LookupJsonCapability.getInstance();
+        if (!capability.isJsonSupported()) {
+            throw new IllegalStateException("Database does not support JSON search");
+        }
+
+        LookupGroupExtra extra = groupExtraDao.getByGroupId(groupId);
+        if (extra == null) {
+            throw new IllegalStateException("Group extra missing for group: " + groupId);
+        }
+
+        // Get index mode
+        String mode = LookupConstants.normalizeJsonIndexMode(extra.getJsonIndexMode());
+        String tableName = getTableNameForGroup(groupId);
+        String keyPattern = filter.getKeyPattern();
+
+        List<JsonFieldCriterion> criteria = JsonFieldDialectRegistry.getDialect().buildCriteria(group, filter.getConditions());
+        long count = valueDao.searchByJsonFieldsFieldCount(tableName, keyPattern, criteria);
+
+        return Math.toIntExact(count);
+    }
+
+    public List<LookupValue> searchLookupValuesByJsonFields(Integer groupId, Integer offset, Integer limit, AdvancedJsonFilterState filter) {
         // Load group + extra
         LookupGroup group = groupDao.getGroupById(groupId);
         if (group == null) {
@@ -574,13 +606,14 @@ public class LookupService {
         String mode = LookupConstants.normalizeJsonIndexMode(extra.getJsonIndexMode());
         String tableName = getTableNameForGroup(groupId);
 
-        if (LookupConstants.isGinMode(mode)) {
-            return valueDao.searchByJsonFieldsGin(tableName, offset, limit, filterJson);
-        }
+//        if (LookupConstants.isGinMode(mode)) {
+//            return valueDao.searchByJsonFieldsGin(tableName, offset, limit, filterJson);
+//        }
 
-        Map<String, String> filters = JsonFilterUtils.parseFilterJson(filterJson);
-        List<JsonFieldCriterion> criteria = JsonFieldDialectRegistry.getDialect().buildCriteria(group, filters);
-        return valueDao.searchByJsonFieldsField(tableName, offset, limit, criteria);
+        String keyPattern = filter.getKeyPattern();
+
+        List<JsonFieldCriterion> criteria = JsonFieldDialectRegistry.getDialect().buildCriteria(group, filter.getConditions());
+        return valueDao.searchByJsonFieldsField(tableName, offset, limit, keyPattern, criteria);
     }
 
     /**

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
 
 public interface JsonFieldDialect {
 
@@ -40,4 +41,6 @@ public interface JsonFieldDialect {
      * Intended for mappers like: ${c.expression} = #{c.value}
      */
     List<JsonFieldCriterion> buildCriteria(LookupGroup group, Map<String, String> filters);
+
+    List<JsonFieldCriterion> buildCriteria(LookupGroup group, List<JsonCondition> conditions);
 }
