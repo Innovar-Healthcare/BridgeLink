@@ -224,28 +224,45 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
     	));
 
         templates.add(new CodeTemplate(
-                "Search lookup values by JSON filter",
+                "Search lookup values by JSON filter (Advanced)",
                 CodeTemplateType.DRAG_AND_DROP_CODE,
                 CodeTemplateContextSet.getConnectorContextSet(),
-                "var filter = {\n" +
-                "  email: 'user_1@example.com',\n" +
-                "  address: {\n" +
-                "    city: 'New York'\n" +
-                "  }\n" +
-                "};\n\n" +
-                "// Convert JS object to JSON string\n" +
-                "var filterJson = JSON.stringify(filter);\n\n" +
-                "var results = LookupHelper.findValuesByJsonFields(groupName, filterJson);\n\n" +
-                "if (!results) {\n" +
-                "  logger.error('Search by JSON filter failed for group: ' + groupName);\n" +
+                "// JavaScript Transformer snippet for Dynamic Lookup (Advanced Search)\n" +
+                "var groupName = \"JSON - ADVANCED SEARCH\";\n\n" +
+                "// Optional KEY pattern filter (SQL LIKE)\n" +
+                "var keyPattern = \"ARCHIVE_user_10231%\";\n\n" +
+                "// JSON field filters (simple mode; nested fields supported)\n" +
+                "var filterJson = \"{\\\"zip\\\":\\\"750008\\\",\\\"department\\\":\\\"dept_18\\\"}\";\n\n" +
+                "var start = new Date().getTime();\n" +
+                "var results = LookupHelper.searchValuesByJsonFields(\n" +
+                "    groupName,\n" +
+                "    keyPattern,\n" +
+                "    filterJson\n" +
+                ");\n" +
+                "var elapsed = new Date().getTime() - start;\n\n" +
+                "// DEBUG OUTPUT (remove or comment out in production)\n" +
+                "if (results == null) {\n" +
+                "    logger.error(\"Lookup failed for group: \" + groupName);\n" +
+                "} else if (results.isEmpty()) {\n" +
+                "    logger.info(\"No matching entries (elapsed=\" + elapsed + \" ms) in group=\" + groupName);\n" +
                 "} else {\n" +
-                "  var count = Object.keys(results).length;\n" +
-                "  logger.info('Found ' + count + ' matching entries in group=' + groupName);\n" +
+                "    logger.info(\"Sample results (showing up to 2 entries):\");\n" +
+                "    var iter = results.keySet().iterator();\n" +
+                "    var count = 0;\n\n" +
+                "    while (iter.hasNext() && count < 2) {\n" +
+                "        var key = iter.next();\n" +
+                "        var value = results.get(key);\n" +
+                "        logger.info(\"  key=\" + key + \", value=\" + value);\n" +
+                "        count++;\n" +
+                "    }\n\n" +
+                "    logger.info(\n" +
+                "        \"Found \" + results.size() + \" matching entries (elapsed=\" + elapsed + \" ms) in group=\" + groupName\n" +
+                "    );\n" +
                 "}\n",
-                "Retrieves key-value pairs from the specified lookup group by matching JSON filter string. " +
-                "The filter is built as a standard JSON object (supports nested JSON). " +
-                "Use JSON.stringify() to convert the filter object before calling the helper. " +
-                "Returns an empty map if the group does not exist or no matches are found."
+                "Retrieves lookup values using advanced JSON field filtering with an optional key pattern. " +
+                "The JSON filter is provided as a JSON string and supports nested fields. " +
+                "The key pattern is applied using SQL LIKE semantics. " +
+                "Returns a map of matching key-value pairs, or an empty map if no matches are found."
             ));
 
         templates.add(new CodeTemplate(
