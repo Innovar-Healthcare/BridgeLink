@@ -23,6 +23,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonOperator;
 
 public class SqlServerJsonFieldDialect implements JsonFieldDialect {
 
@@ -63,14 +64,17 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
         return definitions;
     }
 
-    @Override
-    public List<JsonFieldCriterion> buildCriteria(LookupGroup group, Map<String, String> filters) {
-        if (group == null || filters == null || filters.isEmpty()) {
+    public List<JsonFieldCriterion> buildCriteria(LookupGroup group, List<JsonCondition> conditions) {
+        if (group == null || conditions == null || conditions.isEmpty()) {
             return Collections.emptyList();
         }
 
         LookupGroupExtra extra = group.getExtra();
-        String normalizedMode = LookupConstants.normalizeJsonIndexMode(extra != null ? extra.getJsonIndexMode() : null);
+        if (extra == null) {
+            throw new IllegalStateException("Group extra missing for group: " + group.getId());
+        }
+
+        String normalizedMode = LookupConstants.normalizeJsonIndexMode(extra.getJsonIndexMode());
 
         // Reuse the same definitions used for physical index creation.
         List<JsonFieldIndexDefinition> defs = LookupConstants.isFieldMode(normalizedMode) ? buildIndexDefinitions(group) : Collections.emptyList();
@@ -78,19 +82,24 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
 
         List<JsonFieldCriterion> criteria = new ArrayList<>();
 
-        for (Map.Entry<String, String> entry : filters.entrySet()) {
-            String rawFieldPath = entry.getKey();
-            String value = entry.getValue();
+        for (JsonCondition cond : conditions) {
 
+            if (cond == null) {
+                continue;
+            }
+
+            String rawFieldPath = cond.getField();
             if (rawFieldPath == null || rawFieldPath.trim().isEmpty()) {
                 continue;
             }
 
+            // Normalize field path: "address.city" → "address.city"
             String fieldPath = JsonFieldUtils.normalizeFieldPath(rawFieldPath);
             if (fieldPath.isEmpty()) {
                 continue;
             }
 
+            // Dialect builds SQL expression, e.g.:
             String expression;
 
             JsonFieldIndexDefinition def = indexByField.get(fieldPath);
@@ -104,18 +113,17 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
                 expression = buildExpression(fieldPath);
             }
 
+            // Map JsonOperator → SQL operator string
+            String operatorSql = buildSqlOperator(cond.getOp());
+
             JsonFieldCriterion criterion = new JsonFieldCriterion();
             criterion.setExpression(expression);
-            criterion.setValue(value);
-
+            criterion.setOperatorSql(operatorSql);
+            criterion.setValue(cond.getValue());
             criteria.add(criterion);
         }
 
         return criteria;
-    }
-
-    public List<JsonFieldCriterion> buildCriteria(LookupGroup group, List<JsonCondition> conditions) {
-        return new ArrayList<>();
     }
 
     private String buildExpression(String fieldPath) {
@@ -159,4 +167,32 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
 
         return sb.toString();
     }
+
+    /**
+     * SQL Server: Maps a high-level JsonOperator to its SQL operator
+     */
+    private String buildSqlOperator(JsonOperator op) {
+        if (op == null) {
+            // Default defensive behavior
+            return "=";
+        }
+
+        switch (op) {
+        case EQUAL:
+            return "=";
+        case NOT_EQUAL:
+            return "<>";
+        case GREATER_THAN:
+            return ">";
+        case GREATER_OR_EQUAL:
+            return ">=";
+        case LESS_THAN:
+            return "<";
+        case LESS_OR_EQUAL:
+            return "<=";
+        default:
+            throw new IllegalArgumentException("Unsupported JsonOperator for SQL Server: " + op);
+        }
+    }
+
 }

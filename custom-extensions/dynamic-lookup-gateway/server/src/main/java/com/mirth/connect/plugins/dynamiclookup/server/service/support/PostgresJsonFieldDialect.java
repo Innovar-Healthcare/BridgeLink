@@ -63,11 +63,6 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
     }
 
     @Override
-    public List<JsonFieldCriterion> buildCriteria(LookupGroup group, Map<String, String> filters) {
-        throw new IllegalArgumentException("Unsupported for PostgreSQL");
-    }
-
-    @Override
     public List<JsonFieldCriterion> buildCriteria(LookupGroup group, List<JsonCondition> conditions) {
         if (group == null || conditions == null || conditions.isEmpty()) {
             return Collections.emptyList();

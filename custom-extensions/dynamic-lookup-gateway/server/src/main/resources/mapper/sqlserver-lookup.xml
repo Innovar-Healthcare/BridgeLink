@@ -131,7 +131,7 @@
 	                    AND LOWER(KEY_VALUE) LIKE LOWER(#{keyFilter} + '%')
 	                </when>
 	                <when test="keyFilterMode == 'PATTERN'">
-	                    AND LOWER(KEY_VALUE) LIKE LOWER(#{Pattern})
+	                    AND LOWER(KEY_VALUE) LIKE LOWER(#{keyFilter})
 	                </when>
 	                <otherwise>
 	                    AND LOWER(KEY_VALUE) LIKE LOWER('%' + #{keyFilter} + '%')
@@ -144,6 +144,23 @@
 	    </trim>
 	</sql>
 
+	<sql id="searchByJsonFieldsFieldBody">
+	    <trim prefix="WHERE" prefixOverrides="AND |OR ">
+	        <if test="keyPattern != null and keyPattern != ''">
+	        	AND LOWER(KEY_VALUE) LIKE LOWER(#{keyPattern})
+	        </if>
+	        <if test="criteria != null and criteria.size() > 0">
+			    AND (
+			        <foreach collection="criteria"
+			                 item="c"
+			                 separator=" AND ">
+			            ${c.expression} ${c.operatorSql} #{c.value}
+			        </foreach>
+			    )
+			</if>
+	    </trim>
+	</sql>
+	
 	<sql id="commonOrderByLimitOffset">
 	    ORDER BY KEY_VALUE ASC
 
@@ -366,18 +383,18 @@
 	    </foreach>
 	</update>
 
+	<select id="searchByJsonFieldsFieldCount" parameterType="map" resultType="long">
+        SELECT COUNT(*) FROM ${tableName}
+
+        <include refid="searchByJsonFieldsFieldBody"/>
+    </select>
+    
     <select id="searchByJsonFieldsField" parameterType="map" resultMap="lookup-value">
 	    SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
         FROM ${tableName}
-	    <where>
-	        <foreach collection="criteria"
-	                 item="c"
-	                 separator=" AND ">
-	            ${c.expression} = #{c.value}
-	        </foreach>
-	    </where>
-		
-		 <include refid="commonOrderByLimitOffset"/>
+	    
+	    <include refid="searchByJsonFieldsFieldBody"/>
+		<include refid="commonOrderByLimitOffset"/>
 	</select>
   	<!-- End Value Operations -->
   	

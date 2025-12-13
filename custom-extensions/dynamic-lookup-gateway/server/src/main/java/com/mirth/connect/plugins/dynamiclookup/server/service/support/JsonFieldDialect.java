@@ -11,7 +11,6 @@
 package com.mirth.connect.plugins.dynamiclookup.server.service.support;
 
 import java.util.List;
-import java.util.Map;
 
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
@@ -30,17 +29,22 @@ public interface JsonFieldDialect {
     List<JsonFieldIndexDefinition> buildIndexDefinitions(LookupGroup group);
 
     /**
-     * Builds JSON search criteria for the given group and filter values.
+     * Builds JSON-based search criteria for the given lookup group and conditions.
      *
-     * Implementations typically: - internally call buildIndexDefinitions(group) - determine whether a field is indexed -
-     * use computedColumnName when available - fall back to raw JSON extraction expressions when no index exists
+     * Implementations typically: - Inspect group metadata (e.g. indexed JSON fields or computed columns) - Prefer indexed
+     * or computed columns when available - Fall back to raw JSON extraction expressions when no index exists
      *
-     * Each JsonFieldCriterion contains: - expression: SQL fragment (e.g., JSON_VALUE(...), computed column name) - value:
-     * value to compare against
+     * Each JsonFieldCriterion contains: - expression: SQL fragment representing the JSON field (e.g. JSON_VALUE(...),
+     * JSON_EXTRACT(...), or a computed column name) - value: value to compare against
      *
-     * Intended for mappers like: ${c.expression} = #{c.value}
+     * The returned criteria are intended to be consumed by MyBatis mappers such as:
+     *
+     * ${c.expression} = #{c.value}
+     *
+     * @param group      the lookup group containing metadata and index definitions
+     * @param conditions the list of JSON field conditions to apply
+     * @return a list of SQL-ready JSON field criteria
      */
-    List<JsonFieldCriterion> buildCriteria(LookupGroup group, Map<String, String> filters);
-
     List<JsonFieldCriterion> buildCriteria(LookupGroup group, List<JsonCondition> conditions);
+
 }
