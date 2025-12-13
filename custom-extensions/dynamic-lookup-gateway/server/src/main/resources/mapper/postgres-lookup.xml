@@ -144,6 +144,7 @@
 	    </trim>
 	</sql>
     
+<!--
     <sql id="searchByJsonFieldsFieldBody">
 	    <trim prefix="WHERE" prefixOverrides="AND |OR ">
 	        <if test="keyPattern != null and keyPattern != ''">
@@ -160,6 +161,38 @@
 			</if>
 	    </trim>
 	</sql>
+ -->
+ 
+	<sql id="searchByJsonFieldsFieldBody">
+	    <trim prefix="WHERE" prefixOverrides="AND |OR ">
+	        <!-- Key filter -->
+	        <if test="keyPattern != null and keyPattern != ''">
+	            AND KEY_VALUE ILIKE #{keyPattern}
+	        </if>
+	
+	        <!-- JSON criteria (FIELD or merged GIN) -->
+	        <if test="criteria != null and criteria.size() > 0">
+	            AND (
+	                <foreach collection="criteria"
+	                         item="c"
+	                         separator=" AND ">
+	                    <choose>
+	                        <!-- GIN merged criterion -->
+	                        <when test="c.operatorSql == '@>'">
+	                            ${c.expression} @> #{c.value}::jsonb
+	                        </when>
+	
+	                        <!-- Normal FIELD comparison -->
+	                        <otherwise>
+	                            ${c.expression} ${c.operatorSql} #{c.value}
+	                        </otherwise>
+	                    </choose>
+	                </foreach>
+	            )
+	        </if>
+	    </trim>
+	</sql>
+
 
     <sql id="commonOrderByLimitOffset">
 	    ORDER BY KEY_VALUE ASC
@@ -346,19 +379,6 @@
         </foreach>
     </update>
     	
-	<select id="searchByJsonFieldsGin" parameterType="map" resultMap="lookup-value">
-	    SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
-        FROM ${tableName}
-	    <where>
-	        <!-- Only apply the filter if provided -->
-	        <if test="filterJson != null and filterJson != ''">
-	            VALUE_DATA @> #{filterJson}::jsonb
-	        </if>
-	    </where>
-	    
-	    <include refid="commonOrderByLimitOffset"/>
-	</select>
-
 	<select id="searchByJsonFieldsFieldCount" parameterType="map" resultType="long">
         SELECT COUNT(*) FROM ${tableName}
 

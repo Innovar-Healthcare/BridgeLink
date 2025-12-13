@@ -567,9 +567,8 @@ public class LookupService {
         if (extra == null) {
             throw new IllegalStateException("Group extra missing for group: " + groupId);
         }
+        group.setExtra(extra);
 
-        // Get index mode
-        String mode = LookupConstants.normalizeJsonIndexMode(extra.getJsonIndexMode());
         String tableName = getTableNameForGroup(groupId);
         String keyPattern = filter.getKeyPattern();
 
@@ -601,15 +600,9 @@ public class LookupService {
         if (extra == null) {
             throw new IllegalStateException("Group extra missing for group: " + groupId);
         }
+        group.setExtra(extra);
 
-        // Get index mode
-        String mode = LookupConstants.normalizeJsonIndexMode(extra.getJsonIndexMode());
         String tableName = getTableNameForGroup(groupId);
-
-//        if (LookupConstants.isGinMode(mode)) {
-//            return valueDao.searchByJsonFieldsGin(tableName, offset, limit, filterJson);
-//        }
-
         String keyPattern = filter.getKeyPattern();
 
         List<JsonFieldCriterion> criteria = JsonFieldDialectRegistry.getDialect().buildCriteria(group, filter.getConditions());

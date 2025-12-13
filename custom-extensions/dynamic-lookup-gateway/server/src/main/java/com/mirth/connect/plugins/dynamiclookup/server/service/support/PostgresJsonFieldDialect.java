@@ -12,16 +12,19 @@ package com.mirth.connect.plugins.dynamiclookup.server.service.support;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import com.mirth.connect.plugins.dynamiclookup.server.util.JsonFieldUtils;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
+import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonOperator;
+import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 
 public class PostgresJsonFieldDialect implements JsonFieldDialect {
     @Override
@@ -62,35 +65,6 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
     @Override
     public List<JsonFieldCriterion> buildCriteria(LookupGroup group, Map<String, String> filters) {
         throw new IllegalArgumentException("Unsupported for PostgreSQL");
-//        if (group == null || filters == null || filters.isEmpty()) {
-//            return Collections.emptyList();
-//        }
-//
-//        List<JsonFieldCriterion> criteria = new ArrayList<>();
-//
-//        for (Map.Entry<String, String> entry : filters.entrySet()) {
-//            String rawFieldPath = entry.getKey();
-//            String value = entry.getValue();
-//
-//            if (rawFieldPath == null || rawFieldPath.trim().isEmpty()) {
-//                continue;
-//            }
-//
-//            String fieldPath = JsonFieldUtils.normalizeFieldPath(rawFieldPath);
-//            if (fieldPath.isEmpty()) {
-//                continue;
-//            }
-//
-//            String expression = buildExpression(fieldPath);
-//
-//            JsonFieldCriterion criterion = new JsonFieldCriterion();
-//            criterion.setExpression(expression);
-//            criterion.setValue(value);
-//
-//            criteria.add(criterion);
-//        }
-//
-//        return criteria;
     }
 
     @Override
@@ -99,6 +73,23 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
             return Collections.emptyList();
         }
 
+        LookupGroupExtra extra = group.getExtra();
+        if (extra == null) {
+            throw new IllegalStateException("Group extra missing for group: " + group.getId());
+        }
+
+        // Get index mode
+        String mode = LookupConstants.normalizeJsonIndexMode(extra.getJsonIndexMode());
+
+        if (LookupConstants.isGinMode(mode)) {
+            return buildGinCriterion(group, conditions);
+        }
+
+        return buildFieldCriterion(group, conditions);
+
+    }
+
+    private List<JsonFieldCriterion> buildFieldCriterion(LookupGroup group, List<JsonCondition> conditions) {
         List<JsonFieldCriterion> criteria = new ArrayList<>();
 
         for (JsonCondition cond : conditions) {
@@ -135,6 +126,82 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
         return criteria;
     }
 
+    private List<JsonFieldCriterion> buildGinCriterion(LookupGroup group, List<JsonCondition> conditions) {
+        List<JsonFieldCriterion> criteria = new ArrayList<>();
+
+        Map<String, Object> root = new LinkedHashMap<>();
+
+        for (JsonCondition cond : conditions) {
+            if (cond == null) {
+                continue;
+            }
+
+            if (cond.getOp() != JsonOperator.EQUAL) {
+                throw new UnsupportedOperationException("PostgreSQL GIN search supports only EQUAL for now. op=" + cond.getOp());
+            }
+
+            String rawFieldPath = cond.getField();
+            if (rawFieldPath == null || rawFieldPath.trim().isEmpty()) {
+                continue;
+            }
+
+            String fieldPath = JsonFieldUtils.normalizeFieldPath(rawFieldPath);
+            if (fieldPath.isEmpty()) {
+                continue;
+            }
+
+            mergePath(root, fieldPath.split("\\."), cond.getValue());
+        }
+
+        if (root.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        final String mergedJson;
+        try {
+            mergedJson = JsonUtils.toJson(root);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to build merged GIN filter JSON", e);
+        }
+
+        JsonFieldCriterion c = new JsonFieldCriterion();
+        c.setExpression("VALUE_DATA");
+        c.setOperatorSql("@>");
+        c.setValue(mergedJson);
+
+        criteria.add(c);
+
+        return criteria;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void mergePath(Map<String, Object> root, String[] parts, Object value) {
+        Map<String, Object> current = root;
+
+        for (int i = 0; i < parts.length; i++) {
+            String key = parts[i] == null ? "" : parts[i].trim();
+            if (key.isEmpty()) {
+                throw new IllegalArgumentException("Invalid JSON field path part");
+            }
+
+            if (i == parts.length - 1) {
+                current.put(key, value);
+                return;
+            }
+
+            Object existing = current.get(key);
+            if (existing == null) {
+                Map<String, Object> child = new LinkedHashMap<>();
+                current.put(key, child);
+                current = child;
+            } else if (existing instanceof Map) {
+                current = (Map<String, Object>) existing;
+            } else {
+                throw new IllegalArgumentException("Conflicting JSON path: cannot descend into non-object at '" + key + "'");
+            }
+        }
+    }
+
     /**
      * PostgreSQL: - top-level: VALUE_DATA->>'email' - nested: VALUE_DATA #>> '{address,city,zip}'
      */
@@ -159,6 +226,16 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
         switch (op) {
         case EQUAL:
             return "=";
+        case NOT_EQUAL:
+            return "!=";
+        case GREATER_THAN:
+            return ">";
+        case GREATER_OR_EQUAL:
+            return ">=";
+        case LESS_THAN:
+            return "<";
+        case LESS_OR_EQUAL:
+            return "<=";
         default:
             throw new IllegalArgumentException("Unsupported JsonOperator for PostgreSQL: " + op);
         }

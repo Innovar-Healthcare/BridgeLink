@@ -72,8 +72,6 @@ public interface LookupValueDao {
 
     void dropJsonFieldIndexes(String tableName, List<JsonFieldIndexDefinition> fieldIndexes);
 
-    List<LookupValue> searchByJsonFieldsGin(String tableName, Integer offset, Integer limit, String filterJson);
-
     long searchByJsonFieldsFieldCount(String tableName, String keyPattern, List<JsonFieldCriterion> criteria);
 
     List<LookupValue> searchByJsonFieldsField(String tableName, Integer offset, Integer limit, String keyPattern, List<JsonFieldCriterion> criteria);
