@@ -25,18 +25,24 @@ public class JsonCondition {
     private JsonOperator op;
 
     /**
-     * Typed value: "adt", 0, true, null, etc.
+     * Required type.
+     */
+    private JsonValueType valueType;
+
+    /**
+     * Typed value: "adt", 0, true.
      *
-     * When deserialized from JSON this will typically be a String / Number / Boolean / List / Map / null.
+     * When deserialized from JSON this will typically be a String / Number / Boolean.
      */
     private Object value;
 
     public JsonCondition() {
     }
 
-    public JsonCondition(String field, JsonOperator op, Object value) {
+    public JsonCondition(String field, JsonOperator op, JsonValueType valueType, Object value) {
         this.field = field;
         this.op = op;
+        this.valueType = valueType;
         this.value = value;
     }
 
@@ -56,6 +62,14 @@ public class JsonCondition {
         this.op = op;
     }
 
+    public JsonValueType getValueType() {
+        return valueType;
+    }
+
+    public void setValueType(JsonValueType valueType) {
+        this.valueType = valueType;
+    }
+
     public Object getValue() {
         return value;
     }
@@ -70,6 +84,7 @@ public class JsonCondition {
         return "JsonCondition{" +
                 "field='" + field + '\'' +
                 ", op=" + op +
+                ", valueType=" + valueType +
                 ", value=" + value +
                 '}';
     }
@@ -86,11 +101,11 @@ public class JsonCondition {
         }
 
         JsonCondition that = (JsonCondition) o;
-        return Objects.equals(field, that.field) && op == that.op && Objects.equals(value, that.value);
+        return Objects.equals(field, that.field) && op == that.op && valueType == that.valueType && Objects.equals(value, that.value);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(field, op, value);
+        return Objects.hash(field, op, valueType, value);
     }
 }

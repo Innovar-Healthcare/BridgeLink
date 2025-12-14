@@ -20,8 +20,10 @@ import java.util.Properties;
 
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
+import javax.swing.DefaultCellEditor;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
@@ -51,12 +53,15 @@ import com.mirth.connect.plugins.dynamiclookup.shared.model.AdvancedJsonFilterSt
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupProperties;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonOperator;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonValueType;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 
 import net.miginfocom.swing.MigLayout;
 
 public class AdvancedSearchDialog extends MirthDialog {
     private final Logger logger = LogManager.getLogger(this.getClass());
+    private static final JsonOperator[] SUPPORTED_OPERATORS = { JsonOperator.EQUAL };
+    private static final JsonValueType[] SUPPORTED_VALUE_TYPES = { JsonValueType.STRING, JsonValueType.NUMBER };
 
     // Split layout
     private JSplitPane splitPane;
@@ -117,6 +122,17 @@ public class AdvancedSearchDialog extends MirthDialog {
         conditionTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         conditionTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         conditionTable.setRowHeight(26);
+
+        // --- ComboBox editors ---
+        // Operator
+        JComboBox<JsonOperator> operatorBox = new JComboBox<>(SUPPORTED_OPERATORS);
+        conditionTable.getColumnModel().getColumn(1) // Operator column
+                .setCellEditor(new DefaultCellEditor(operatorBox));
+
+        // Value Type: STRING / NUMBER / BOOLEAN
+        JComboBox<JsonValueType> typeBox = new JComboBox<>(SUPPORTED_VALUE_TYPES);
+        conditionTable.getColumnModel().getColumn(2) // Type column
+                .setCellEditor(new DefaultCellEditor(typeBox));
 
         // Right panel: Saved Filters UI (no actions yet)
         loadFilterButton = new JButton("Load");
@@ -278,6 +294,7 @@ public class AdvancedSearchDialog extends MirthDialog {
                 JsonCondition cc = new JsonCondition();
                 cc.setField(c.getField());
                 cc.setOp(c.getOp());
+                cc.setValueType(c.getValueType());
                 cc.setValue(c.getValue());
                 copy.add(cc);
             }
@@ -490,13 +507,12 @@ public class AdvancedSearchDialog extends MirthDialog {
         String keyPattern = getKeyPattern();
         List<JsonCondition> conds = getConditions();
 
-        // NEW: Reject empty filter (no key pattern AND no conditions)
+        // Reject empty filter
         if (keyPattern.isEmpty() && conds.isEmpty()) {
             showError("Filter is empty. Please specify a Key Pattern or at least one JSON condition.");
             return null;
         }
 
-        // cleanup then validate conditions
         for (int i = 0; i < conds.size(); i++) {
 
             JsonCondition c = conds.get(i);
@@ -508,11 +524,25 @@ public class AdvancedSearchDialog extends MirthDialog {
             c.setField(field);
             c.setValue(value);
 
-            // Validate
+            // Validate field
             if (field.isEmpty()) {
                 showError("Condition " + (i + 1) + ": Field cannot be empty.");
                 return null;
             }
+
+            // Validate operator
+            if (c.getOp() == null) {
+                showError("Condition " + (i + 1) + ": Operator is required.");
+                return null;
+            }
+
+            // Validate value type
+            if (c.getValueType() == null) {
+                showError("Condition " + (i + 1) + ": Value type is required.");
+                return null;
+            }
+
+            // Validate value
             if (value.isEmpty()) {
                 showError("Condition " + (i + 1) + ": Value cannot be empty.");
                 return null;
@@ -542,38 +572,13 @@ public class AdvancedSearchDialog extends MirthDialog {
     }
 
     private void apply() {
-        if (conditionTable.isEditing()) {
-            conditionTable.getCellEditor().stopCellEditing();
+        AdvancedJsonFilterState state = collectStateFromUi();
+        if (state == null) {
+            return; // error already shown
         }
 
-        String keyPattern = getKeyPattern();
-        List<JsonCondition> conds = getConditions();
-
-        // cleanup then validate conditions
-        for (int i = 0; i < conds.size(); i++) {
-
-            JsonCondition c = conds.get(i);
-
-            // cleanup
-            String field = c.getField() != null ? c.getField().trim() : "";
-            String value = c.getValue() != null ? c.getValue().toString().trim() : "";
-
-            c.setField(field);
-            c.setValue(value);
-
-            // Validate
-            if (field.isEmpty()) {
-                showError("Condition " + (i + 1) + ": Field cannot be empty.");
-                return;
-            }
-            if (value.isEmpty()) {
-                showError("Condition " + (i + 1) + ": Value cannot be empty.");
-                return;
-            }
-        }
-
-        currentState.setKeyPattern(keyPattern != null ? keyPattern.trim() : null);
-        currentState.setConditions(conds);
+        currentState.setKeyPattern(state.getKeyPattern());
+        currentState.setConditions(state.getConditions());
 
         okPressed = true;
         dispose();
@@ -584,7 +589,7 @@ public class AdvancedSearchDialog extends MirthDialog {
     }
 
     private void addConditionRow() {
-        conditionTableModel.addCondition(new JsonCondition("", JsonOperator.EQUAL, ""));
+        conditionTableModel.addCondition(new JsonCondition("", JsonOperator.EQUAL, JsonValueType.STRING, ""));
         int lastRow = conditionTableModel.getRowCount() - 1;
         conditionTable.setRowSelectionInterval(lastRow, lastRow);
         conditionTable.editCellAt(lastRow, 0);
@@ -617,7 +622,7 @@ public class AdvancedSearchDialog extends MirthDialog {
 
     private static class ConditionTableModel extends AbstractTableModel {
 
-        private final String[] columns = { "Field", "Operator", "Value" };
+        private final String[] columns = { "Field", "Operator", "Type", "Value" };
         private final List<JsonCondition> conditions = new ArrayList<>();
 
         @Override
@@ -637,7 +642,8 @@ public class AdvancedSearchDialog extends MirthDialog {
 
         @Override
         public boolean isCellEditable(int row, int col) {
-            return col != 1; // only Field + Value editable
+            // Operator editable (ComboBox), Field / Type / Value editable
+            return true;
         }
 
         @Override
@@ -647,22 +653,35 @@ public class AdvancedSearchDialog extends MirthDialog {
             case 0:
                 return c.getField();
             case 1:
-                return "equals";
+                return c.getOp();
             case 2:
+                return c.getValueType();
+            case 3:
                 return c.getValue() == null ? "" : c.getValue().toString();
+            default:
+                return "";
             }
-            return "";
         }
 
         @Override
         public void setValueAt(Object value, int row, int col) {
             JsonCondition c = conditions.get(row);
-            String text = value != null ? value.toString().trim() : "";
 
-            if (col == 0) {
-                c.setField(text);
-            } else if (col == 2) {
-                c.setValue(text);
+            switch (col) {
+            case 0:
+                c.setField(value != null ? value.toString().trim() : "");
+                break;
+            case 1:
+                c.setOp((JsonOperator) value);
+                break;
+            case 2:
+                c.setValueType((JsonValueType) value);
+                break;
+            case 3:
+                c.setValue(value != null ? value.toString().trim() : null);
+                break;
+            default:
+                break;
             }
 
             fireTableCellUpdated(row, col);
@@ -684,7 +703,6 @@ public class AdvancedSearchDialog extends MirthDialog {
             if (newConditions != null) {
                 conditions.addAll(newConditions);
             }
-
             fireTableDataChanged();
         }
 

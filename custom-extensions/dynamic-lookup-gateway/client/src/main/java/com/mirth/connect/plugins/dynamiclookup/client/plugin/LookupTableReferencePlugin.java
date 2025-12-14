@@ -227,12 +227,29 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 "Search lookup values by JSON filter (Advanced)",
                 CodeTemplateType.DRAG_AND_DROP_CODE,
                 CodeTemplateContextSet.getConnectorContextSet(),
-                "// JavaScript Transformer snippet for Dynamic Lookup (Advanced Search)\n" +
+                "// JavaScript snippet for Dynamic Lookup (Advanced Search)\n" +
                 "var groupName = \"JSON - ADVANCED SEARCH\";\n\n" +
                 "// Optional KEY pattern filter (SQL LIKE)\n" +
                 "var keyPattern = \"ARCHIVE_user_10231%\";\n\n" +
-                "// JSON field filters (simple mode; nested fields supported)\n" +
-                "var filterJson = \"{\\\"zip\\\":\\\"750008\\\",\\\"department\\\":\\\"dept_18\\\"}\";\n\n" +
+                "// JSON field filters (array form; easy to edit)\n" +
+                "var filterObj = [\n" +
+                "  {\n" +
+                "    \"field\": \"zip\",\n" +
+                "    \"op\": \"=\",\n" +
+                "    \"valueType\": \"STRING\",\n" +
+                "    \"value\": \"750008\"\n" +
+                "  },\n" +
+                "  {\n" +
+                "    \"field\": \"department\",\n" +
+                "    \"op\": \"=\",\n" +
+                "    \"valueType\": \"STRING\",\n" +
+                "    \"value\": \"dept_18\"\n" +
+                "  }\n" +
+                "];\n" +
+                "var filterJson = JSON.stringify(filterObj);\n\n" +
+                "// NOTE:\n" +
+                "// The lookup returns only the FIRST 1000 matching entries.\n" +
+                "// This limit is applied to protect performance.\n\n" +
                 "var start = new Date().getTime();\n" +
                 "var results = LookupHelper.searchValuesByJsonFields(\n" +
                 "    groupName,\n" +
@@ -260,10 +277,13 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 "    );\n" +
                 "}\n",
                 "Retrieves lookup values using advanced JSON field filtering with an optional key pattern. " +
-                "The JSON filter is provided as a JSON string and supports nested fields. " +
+                "The JSON filter is provided as an array of conditions (field, operator, value type, value) " +
+                "and is converted to a JSON string before execution. " +
+                "Nested JSON fields are supported. " +
                 "The key pattern is applied using SQL LIKE semantics. " +
-                "Returns a map of matching key-value pairs, or an empty map if no matches are found."
+                "For performance reasons, only the first 1000 matching entries are returned."
             ));
+
 
         templates.add(new CodeTemplate(
                 "Creates a lookup group",

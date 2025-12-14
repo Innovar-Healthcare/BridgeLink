@@ -30,29 +30,29 @@ public final class AdvancedSearchSnippetHelper {
             throw new IllegalArgumentException("AdvancedJsonFilterState cannot be null");
         }
 
-        // Build JSON filter
-        String filterJson = AdvancedJsonFilterBuilder.toSimpleJson(state);
-        if (filterJson == null || filterJson.trim().isEmpty()) {
-            filterJson = "{}";
+        // NEW: Build filter as JSON array literal for JS (conditions form)
+        String filterArrayJson = AdvancedJsonFilterBuilder.toConditionsJsonArray(state);
+        if (filterArrayJson == null || filterArrayJson.trim().isEmpty()) {
+            filterArrayJson = "[]";
         }
 
         // Key pattern (Advanced normally uses SQL LIKE)
         String keyPattern = state.getKeyPattern();
 
-        return buildJavaScriptSnippet(group.getName(), keyPattern, filterJson);
+        return buildJavaScriptSnippet(group.getName(), keyPattern, filterArrayJson);
     }
 
     /**
      * Build final JavaScript snippet.
      */
-    private static String buildJavaScriptSnippet(String groupName, String keyPattern, String filterJson) {
+    private static String buildJavaScriptSnippet(String groupName, String keyPattern, String filterArrayJson) {
+
         String escapedGroupName = escapeJs(groupName);
         String escapedKey = keyPattern != null ? escapeJs(keyPattern) : null;
-        String escapedJson = escapeJs(filterJson);
 
-        StringBuilder sb = new StringBuilder(512);
+        StringBuilder sb = new StringBuilder(1024);
 
-        sb.append("// JavaScript Transformer snippet for Dynamic Lookup (Advanced Search)\n");
+        sb.append("// JavaScript snippet for Dynamic Lookup (Advanced Search)\n");
         sb.append("var groupName = \"").append(escapedGroupName).append("\";\n\n");
 
         // --- KEY PATTERN FILTER ---
@@ -64,9 +64,15 @@ public final class AdvancedSearchSnippetHelper {
             sb.append("var keyPattern = null;\n\n");
         }
 
-        // --- JSON FILTER ---
-        sb.append("// JSON field filters (simple mode; operators like >=, !=, ~ are supported)\n");
-        sb.append("var filterJson = \"").append(escapedJson).append("\";\n\n");
+        // --- JSON FILTER (ARRAY FORM) ---
+        sb.append("// JSON field filters (array form; easy to edit)\n");
+        sb.append("var filterObj = ").append(filterArrayJson).append(";\n");
+        sb.append("var filterJson = JSON.stringify(filterObj);\n\n");
+
+        // --- RESULT LIMIT NOTE ---
+        sb.append("// NOTE:\n");
+        sb.append("// The lookup returns only the FIRST 1000 matching entries.\n");
+        sb.append("// This limit is applied to protect performance.\n\n");
 
         // --- EXECUTE LOOKUP ---
         sb.append("var start = new Date().getTime();\n");
@@ -87,28 +93,18 @@ public final class AdvancedSearchSnippetHelper {
         sb.append("    logger.info(\"Sample results (showing up to 2 entries):\");\n");
         sb.append("    var iter = results.keySet().iterator();\n");
         sb.append("    var count = 0;\n\n");
-
         sb.append("    while (iter.hasNext() && count < 2) {\n");
         sb.append("        var key = iter.next();\n");
         sb.append("        var value = results.get(key);\n");
         sb.append("        logger.info(\"  key=\" + key + \", value=\" + value);\n");
         sb.append("        count++;\n");
         sb.append("    }\n\n");
-
         sb.append("    logger.info(\n");
         sb.append("        \"Found \" + results.size() + \" matching entries (elapsed=\" + elapsed + \" ms) in group=\" + groupName\n");
         sb.append("    );\n");
         sb.append("}\n");
 
         return sb.toString();
-    }
-
-    private static String trim(String s) {
-        return s != null ? s.trim() : "";
-    }
-
-    private static String escapeJson(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private static String escapeJs(String s) {
