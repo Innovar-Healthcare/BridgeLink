@@ -61,7 +61,7 @@ import net.miginfocom.swing.MigLayout;
 public class AdvancedSearchDialog extends MirthDialog {
     private final Logger logger = LogManager.getLogger(this.getClass());
     private static final JsonOperator[] SUPPORTED_OPERATORS = { JsonOperator.EQUAL };
-    private static final JsonValueType[] SUPPORTED_VALUE_TYPES = { JsonValueType.STRING, JsonValueType.NUMBER };
+    private static final JsonValueType[] SUPPORTED_VALUE_TYPES = { JsonValueType.STRING, JsonValueType.NUMBER, JsonValueType.BOOLEAN };
 
     // Split layout
     private JSplitPane splitPane;

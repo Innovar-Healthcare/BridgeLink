@@ -49,6 +49,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupStatistics;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.TtlUtils;
 
@@ -569,10 +570,27 @@ public class LookupService {
         }
         group.setExtra(extra);
 
-        String tableName = getTableNameForGroup(groupId);
-        String keyPattern = filter.getKeyPattern();
+        if (filter == null) {
+            throw new IllegalArgumentException("Filter cannot be null");
+        }
 
+        for (JsonCondition c : filter.getConditions()) {
+            if (c.getField() == null || c.getField().trim().isEmpty()) {
+                throw new IllegalArgumentException("Field is required");
+            }
+            if (c.getOp() == null) {
+                throw new IllegalArgumentException("Operator is required for field: " + c.getField());
+            }
+            if (c.getValueType() == null) {
+                throw new IllegalArgumentException("Value type is required for field: " + c.getField());
+            }
+        }
+
+        String keyPattern = filter.getKeyPattern();
         List<JsonFieldCriterion> criteria = JsonFieldDialectRegistry.getDialect().buildCriteria(group, filter.getConditions());
+
+        String tableName = getTableNameForGroup(groupId);
+
         long count = valueDao.searchByJsonFieldsFieldCount(tableName, keyPattern, criteria);
 
         return Math.toIntExact(count);
@@ -602,10 +620,27 @@ public class LookupService {
         }
         group.setExtra(extra);
 
-        String tableName = getTableNameForGroup(groupId);
-        String keyPattern = filter.getKeyPattern();
+        if (filter == null) {
+            throw new IllegalArgumentException("Filter cannot be null");
+        }
 
+        for (JsonCondition c : filter.getConditions()) {
+            if (c.getField() == null || c.getField().trim().isEmpty()) {
+                throw new IllegalArgumentException("Field is required");
+            }
+            if (c.getOp() == null) {
+                throw new IllegalArgumentException("Operator is required for field: " + c.getField());
+            }
+            if (c.getValueType() == null) {
+                throw new IllegalArgumentException("Value type is required for field: " + c.getField());
+            }
+        }
+
+        String keyPattern = filter.getKeyPattern();
         List<JsonFieldCriterion> criteria = JsonFieldDialectRegistry.getDialect().buildCriteria(group, filter.getConditions());
+
+        String tableName = getTableNameForGroup(groupId);
+
         return valueDao.searchByJsonFieldsField(tableName, offset, limit, keyPattern, criteria);
     }
 

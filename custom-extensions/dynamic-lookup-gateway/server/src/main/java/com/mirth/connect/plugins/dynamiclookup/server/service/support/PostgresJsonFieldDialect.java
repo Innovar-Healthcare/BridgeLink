@@ -10,6 +10,7 @@
 
 package com.mirth.connect.plugins.dynamiclookup.server.service.support;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -24,6 +25,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonOperator;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonValueType;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 
 public class PostgresJsonFieldDialect implements JsonFieldDialect {
@@ -47,7 +49,7 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
 
         List<JsonFieldIndexDefinition> definitions = new ArrayList<>();
         for (String fieldPath : fieldPaths) {
-            String expression = buildExpression(fieldPath);
+            String expression = buildIndexExpression(fieldPath);
             String indexName = JsonIndexNaming.buildIndexName(tableName, fieldPath);
 
             JsonFieldIndexDefinition def = new JsonFieldIndexDefinition();
@@ -93,28 +95,28 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
                 continue;
             }
 
-            String rawFieldPath = cond.getField();
-            if (rawFieldPath == null || rawFieldPath.trim().isEmpty()) {
-                continue;
-            }
+            validateCondition(cond);
 
-            // Normalize field path: "address.city" → "address.city"
-            String fieldPath = JsonFieldUtils.normalizeFieldPath(rawFieldPath);
-            if (fieldPath.isEmpty()) {
-                continue;
-            }
+            String fieldPath = cond.getField().trim();
+            JsonValueType valueType = cond.getValueType();
 
-            // Dialect builds SQL expression, e.g.:
-            String expression = buildExpression(fieldPath);
-
-            // Map JsonOperator → SQL operator string
-            String operatorSql = buildSqlOperator(cond.getOp());
+            String expression = buildCriterionExpression(fieldPath, valueType);
 
             JsonFieldCriterion criterion = new JsonFieldCriterion();
-            criterion.setExpression(expression);
-            criterion.setOperatorSql(operatorSql);
-            criterion.setValue(cond.getValue());
+            if (valueType == JsonValueType.NUMBER) {
+                criterion.setTypeCheckSql("jsonb_typeof(" + expression + ") = 'number'");
+                criterion.setExpression("(" + expression + ")::numeric");
+            } else if (valueType == JsonValueType.BOOLEAN) {
+                criterion.setTypeCheckSql("jsonb_typeof(" + expression + ") = 'boolean'");
+                criterion.setExpression("(" + expression + ")::boolean");
+            } else {
+                criterion.setExpression(expression);
+            }
 
+            // Map JsonOperator → SQL operator string
+            criterion.setOperatorSql(buildOperatorSql(cond.getOp()));
+            criterion.setValue(cond.getValue());
+            criterion.setValueSql(buildValueSql(valueType));
             criteria.add(criterion);
         }
 
@@ -200,7 +202,7 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
     /**
      * PostgreSQL: - top-level: VALUE_DATA->>'email' - nested: VALUE_DATA #>> '{address,city,zip}'
      */
-    private String buildExpression(String fieldPath) {
+    private String buildIndexExpression(String fieldPath) {
         if (!fieldPath.contains(".")) {
             return "VALUE_DATA->>'" + fieldPath + "'";
         }
@@ -209,10 +211,43 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
         return "VALUE_DATA #>> '" + path + "'";
     }
 
+    //@formatter:off
+    /**
+     * Build PostgreSQL criterion expression based on value type.
+     *
+     * STRING:
+     *   - top-level: VALUE_DATA->>'field'
+     *   - nested:    VALUE_DATA #>> '{a,b}'
+     *
+     * NUMBER / BOOLEAN:
+     *   - top-level: VALUE_DATA->'field'
+     *   - nested:    VALUE_DATA #> '{a,b}'
+     */
+    //@formatter:on
+    private String buildCriterionExpression(String fieldPath, JsonValueType type) {
+        JsonValueType valueType = type != null ? type : JsonValueType.STRING;
+
+        boolean nested = fieldPath.contains(".");
+        String path = nested ? "{" + fieldPath.replace(".", ",") + "}" : null;
+
+        if (valueType == JsonValueType.STRING) {
+            if (!nested) {
+                return "VALUE_DATA->>'" + fieldPath + "'";
+            }
+            return "VALUE_DATA #>> '" + path + "'";
+        }
+
+        // NUMBER / BOOLEAN
+        if (!nested) {
+            return "VALUE_DATA->'" + fieldPath + "'";
+        }
+        return "VALUE_DATA #> '" + path + "'";
+    }
+
     /**
      * PostgreSQL: Maps a high-level JsonOperator to its SQL operator
      */
-    private String buildSqlOperator(JsonOperator op) {
+    private String buildOperatorSql(JsonOperator op) {
         if (op == null) {
             // Default defensive behavior
             return "=";
@@ -235,4 +270,66 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
             throw new IllegalArgumentException("Unsupported JsonOperator for PostgreSQL: " + op);
         }
     }
+
+    //@formatter:off
+    /**
+     * Build RHS SQL for value binding based on value type.
+     *
+     * Note:
+     * - value is not interpolated here (still bound via MyBatis)
+     * - type controls only SQL casting behavior
+     */
+    //@formatter:on
+    private String buildValueSql(JsonValueType type) {
+        JsonValueType valueType = type != null ? type : JsonValueType.STRING;
+
+        switch (valueType) {
+        case NUMBER:
+            return "CAST(#{c.value} AS numeric)";
+        case BOOLEAN:
+            return "CAST(#{c.value} AS boolean)";
+        case STRING:
+        default:
+            return "#{c.value}";
+        }
+    }
+
+    private void validateCondition(JsonCondition c) {
+        // Service already validated: field/op/valueType not null
+
+        String rawField = c.getField().trim();
+
+        // --- Validate raw field path (fail fast, no silent mutation) ---
+        if (!rawField.matches("[A-Za-z0-9_.]+")) {
+            throw new IllegalArgumentException("Invalid JSON field path: '" + rawField + "'. Only letters, digits, underscore (_), and dot (.) are allowed.");
+        }
+        if (rawField.startsWith(".") || rawField.endsWith(".")) {
+            throw new IllegalArgumentException("Invalid JSON field path: '" + rawField + "'. Path cannot start or end with '.'.");
+        }
+        if (rawField.contains("..")) {
+            throw new IllegalArgumentException("Invalid JSON field path: '" + rawField + "'. Consecutive dots are not allowed.");
+        }
+
+        // --- Validate value (dialect responsibility) ---
+        String valueText = c.getValue() != null ? c.getValue().toString().trim() : "";
+        if (valueText.isEmpty()) {
+            throw new IllegalArgumentException("Value cannot be empty for field: " + rawField);
+        }
+
+        JsonValueType vt = c.getValueType();
+
+        if (vt == JsonValueType.NUMBER) {
+            try {
+                new BigDecimal(valueText);
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Invalid NUMBER value for field '" + rawField + "': " + valueText);
+            }
+        } else if (vt == JsonValueType.BOOLEAN) {
+            String v = valueText.toLowerCase();
+            if (!"true".equals(v) && !"false".equals(v)) {
+                throw new IllegalArgumentException("Invalid BOOLEAN value for field '" + rawField + "': " + valueText);
+            }
+        }
+    }
+
 }

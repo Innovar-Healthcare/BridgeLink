@@ -12,8 +12,10 @@ package com.mirth.connect.plugins.dynamiclookup.server.service.support;
 
 public class JsonFieldCriterion {
     private String expression;
+    private String typeCheckSql;
     private String operatorSql;
     private Object value;
+    private String valueSql;
 
     public String getExpression() {
         return expression;
@@ -21,6 +23,14 @@ public class JsonFieldCriterion {
 
     public void setExpression(String expression) {
         this.expression = expression;
+    }
+
+    public String getTypeCheckSql() {
+        return typeCheckSql;
+    }
+
+    public void setTypeCheckSql(String typeCheckSql) {
+        this.typeCheckSql = typeCheckSql;
     }
 
     public String getOperatorSql() {
@@ -37,5 +47,13 @@ public class JsonFieldCriterion {
 
     public void setValue(Object value) {
         this.value = value;
+    }
+
+    public String getValueSql() {
+        return valueSql;
+    }
+
+    public void setValueSql(String valueSql) {
+        this.valueSql = valueSql;
     }
 }
