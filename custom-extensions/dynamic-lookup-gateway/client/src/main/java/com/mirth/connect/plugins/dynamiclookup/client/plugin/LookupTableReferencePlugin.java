@@ -228,22 +228,23 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 CodeTemplateType.DRAG_AND_DROP_CODE,
                 CodeTemplateContextSet.getConnectorContextSet(),
                 "// JavaScript snippet for Dynamic Lookup (Advanced Search)\n" +
-                "var groupName = \"JSON - ADVANCED SEARCH\";\n\n" +
+                "var groupName = \"JSON - Search Test\";\n\n" +
                 "// Optional KEY pattern filter (SQL LIKE)\n" +
-                "var keyPattern = \"ARCHIVE_user_10231%\";\n\n" +
+                "var keyPattern = \"user_5%\";\n\n" +
                 "// JSON field filters (array form; easy to edit)\n" +
+                "// NOTE: The server normalizes \"value\" to text; valueType controls validation and casting (STRING/NUMBER/BOOLEAN).\n" +
                 "var filterObj = [\n" +
                 "  {\n" +
-                "    \"field\": \"zip\",\n" +
-                "    \"op\": \"=\",\n" +
-                "    \"valueType\": \"STRING\",\n" +
-                "    \"value\": \"750008\"\n" +
+                "    \"field\": \"user.profile.age\",\n" +
+                "    \"op\": \">=\",\n" +
+                "    \"valueType\": \"NUMBER\",\n" +
+                "    \"value\": \"40\"\n" +
                 "  },\n" +
                 "  {\n" +
-                "    \"field\": \"department\",\n" +
+                "    \"field\": \"meta.role\",\n" +
                 "    \"op\": \"=\",\n" +
                 "    \"valueType\": \"STRING\",\n" +
-                "    \"value\": \"dept_18\"\n" +
+                "    \"value\": \"support\"\n" +
                 "  }\n" +
                 "];\n" +
                 "var filterJson = JSON.stringify(filterObj);\n\n" +
@@ -277,10 +278,9 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 "    );\n" +
                 "}\n",
                 "Retrieves lookup values using advanced JSON field filtering with an optional key pattern. " +
-                "The JSON filter is provided as an array of conditions (field, operator, value type, value) " +
-                "and is converted to a JSON string before execution. " +
-                "Nested JSON fields are supported. " +
-                "The key pattern is applied using SQL LIKE semantics. " +
+                "Filters are provided as an array of conditions (field, operator, valueType, value) and " +
+                "converted to JSON before execution. Nested JSON paths are supported. " +
+                "The key pattern uses SQL LIKE semantics. " +
                 "For performance reasons, only the first 1000 matching entries are returned."
             ));
 

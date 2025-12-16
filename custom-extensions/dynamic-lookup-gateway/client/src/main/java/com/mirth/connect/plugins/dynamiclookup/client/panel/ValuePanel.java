@@ -398,11 +398,14 @@ public class ValuePanel extends JPanel {
 
         contentPanel.setVisible(showContent);
         noGroupSelectedPanel.setVisible(!showContent);
-        advancedButton.setVisible(selectedGroup != null && LookupConstants.isJsonValueType(selectedGroup.getValueType()));
 
         // Detect group change
         if (!Objects.equals(this.selectedGroup, selectedGroup)) {
             clearFilterFields();
+
+            boolean enabledSearchMode = selectedGroup != null && LookupConstants.isJsonValueType(selectedGroup.getValueType());
+            simpleModeButton.setEnabled(enabledSearchMode);
+            advancedModeButton.setEnabled(enabledSearchMode);
         }
 
         this.selectedGroup = selectedGroup;
