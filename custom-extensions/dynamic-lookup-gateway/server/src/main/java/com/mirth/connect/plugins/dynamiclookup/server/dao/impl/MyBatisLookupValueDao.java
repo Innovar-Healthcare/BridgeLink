@@ -523,54 +523,6 @@ public class MyBatisLookupValueDao implements LookupValueDao {
     }
 
     @Override
-    public void createJsonGinIndex(String tableName, String indexName) {
-        SqlSession session = sqlSessionManager.openSession();
-        boolean commitSuccess = false;
-
-        try {
-            Map<String, Object> params = new HashMap<>();
-            params.put("tableName", tableName);
-            params.put("indexName", indexName);
-
-            session.update("Lookup.createJsonGinIndex", params);
-            session.commit();
-            commitSuccess = true;
-        } finally {
-            if (!commitSuccess) {
-                try {
-                    session.rollback();
-                } catch (Exception ignored) {
-                }
-            }
-            session.close();
-        }
-    }
-
-    @Override
-    public void dropJsonGinIndex(String tableName, String indexName) {
-        SqlSession session = sqlSessionManager.openSession();
-        boolean commitSuccess = false;
-
-        try {
-            Map<String, Object> params = new HashMap<>();
-            params.put("tableName", tableName);
-            params.put("indexName", indexName);
-
-            session.update("Lookup.dropJsonGinIndex", params);
-            session.commit();
-            commitSuccess = true;
-        } finally {
-            if (!commitSuccess) {
-                try {
-                    session.rollback();
-                } catch (Exception ignored) {
-                }
-            }
-            session.close();
-        }
-    }
-
-    @Override
     public void createJsonFieldIndexes(String tableName, List<JsonFieldIndexDefinition> fieldIndexes) {
         if (fieldIndexes.isEmpty()) {
             return;

@@ -304,7 +304,6 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 "  // jsonIndexMode (only when valueType = 'JSON'):\n" +
                 "  //    'NONE'  - no index\n" +
                 "  //    'FIELD' - per-field index (database-specific)\n" +
-                "  //    'GIN'   - PostgreSQL-only JSONB GIN index\n" +
                 "  // indexedJsonFields must be a JSON array string when jsonIndexMode = 'FIELD'\n" +
                 "  //   e.g.: '[\"email\", \"address.city\"]'\n" +
                 "\n" +
@@ -321,7 +320,7 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 "  logger.info('Created group id=' + res.group.id + ', name=' + res.group.name);\n" +
                 "}\n",
                 "Creates a lookup group. Required fields: name, description, version, cacheSize, cachePolicy. " +
-                "Optional: valueType (TEXT/JSON), jsonIndexMode (NONE/FIELD/GIN), and indexedJsonFields (JSON array string) when FIELD mode is used. " +
+                "Optional: valueType (TEXT/JSON), jsonIndexMode (NONE/FIELD), and indexedJsonFields (JSON array string) when FIELD mode is used. " +
                 "JSON is not available on Derby; the server validates JSON support per database. " +
                 "Returns { ok: 'true', group: {...} } on success; otherwise { ok: 'false', errorCode, errorMessage }."
             ));

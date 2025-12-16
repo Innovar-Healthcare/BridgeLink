@@ -2,7 +2,7 @@ package com.mirth.connect.plugins.dynamiclookup.shared.model;
 
 public class LookupGroupExtra {
     private int groupId; // PK = LOOKUP_GROUP.ID
-    private String jsonIndexMode; // NONE | GIN | FIELD
+    private String jsonIndexMode; // NONE | FIELD
     private String indexedJsonFields; // JSON string (mapping to JSONB/TEXT)
 
     public LookupGroupExtra() {

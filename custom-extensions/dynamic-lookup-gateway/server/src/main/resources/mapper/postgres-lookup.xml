@@ -151,26 +151,16 @@
 	            AND KEY_VALUE ILIKE #{keyPattern}
 	        </if>
 	
-	        <!-- JSON criteria (FIELD or merged GIN) -->
+	        <!-- JSON criteria -->
 	        <if test="criteria != null and criteria.size() > 0">
 	            AND (
 	                <foreach collection="criteria"
 	                         item="c"
 	                         separator=" AND ">
-	                    <choose>
-	                        <!-- GIN merged criterion -->
-	                        <when test="c.operatorSql == '@>'">
-	                            ${c.expression} @> #{c.value}::jsonb
-	                        </when>
-	
-	                        <!-- Normal FIELD comparison -->
-	                        <otherwise>
-		                        <if test="c.typeCheckSql != null and c.typeCheckSql != ''">
-	                                ${c.typeCheckSql} AND
-	                            </if>
-	                            ${c.expression} ${c.operatorSql} ${c.valueSql}
-	                        </otherwise>
-	                    </choose>
+                        <if test="c.typeCheckSql != null and c.typeCheckSql != ''">
+                            ${c.typeCheckSql} AND
+                        </if>
+                        ${c.expression} ${c.operatorSql} ${c.valueSql}
 	                </foreach>
 	            )
 	        </if>
@@ -338,16 +328,6 @@
 	        UPDATED_DATE = CURRENT_TIMESTAMP
 	    WHERE KEY_VALUE = #{keyValue}
 	      AND VALUE_DATA = #{expectedValue}::jsonb
-	</update>
-
-	<update id="createJsonGinIndex" parameterType="map">
-	    CREATE INDEX IF NOT EXISTS ${indexName}
-	    ON ${tableName}
-	    USING gin (VALUE_DATA);
-	</update>
-
-    <update id="dropJsonGinIndex" parameterType="map">
-    	DROP INDEX IF EXISTS ${indexName};
 	</update>
 
 	<update id="createJsonFieldIndexes" parameterType="map">

@@ -66,6 +66,7 @@ public final class AdvancedSearchSnippetHelper {
 
         // --- JSON FILTER (ARRAY FORM) ---
         sb.append("// JSON field filters (array form; easy to edit)\n");
+        sb.append("// NOTE: The server normalizes \"value\" to text; valueType controls validation and casting (STRING/NUMBER/BOOLEAN).\n");
         sb.append("var filterObj = ").append(filterArrayJson).append(";\n");
         sb.append("var filterJson = JSON.stringify(filterObj);\n\n");
 

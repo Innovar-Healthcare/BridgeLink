@@ -15,7 +15,7 @@ import java.util.Locale;
 /**
  * Shared constants and helper methods for Dynamic Lookup value types and JSON index modes.
  *
- * This avoids scattering raw string literals ("TEXT"/"JSON", "GIN"/"NONE") across the system.
+ * This avoids scattering raw string literals ("TEXT"/"JSON", "NONE") across the system.
  */
 public final class LookupConstants {
 
@@ -33,7 +33,6 @@ public final class LookupConstants {
     // JSON index mode constants
     // ----------------------------------------------------------------------
     public static final String JSON_INDEX_NONE = "NONE";
-    public static final String JSON_INDEX_GIN = "GIN";
     public static final String JSON_INDEX_FIELD = "FIELD";
 
     // ----------------------------------------------------------------------
@@ -57,15 +56,13 @@ public final class LookupConstants {
     }
 
     /**
-     * Normalize JSON index mode to "NONE", "GIN", or "FIELD".
+     * Normalize JSON index mode to "NONE" or "FIELD".
      */
     public static String normalizeJsonIndexMode(String mode) {
         if (mode == null) {
             return JSON_INDEX_NONE;
         }
         switch (mode.toUpperCase(Locale.ROOT)) {
-        case JSON_INDEX_GIN:
-            return JSON_INDEX_GIN;
         case JSON_INDEX_FIELD:
             return JSON_INDEX_FIELD;
         default:
@@ -88,10 +85,6 @@ public final class LookupConstants {
     // ----------------------------------------------------------------------
     // JSON index mode checks
     // ----------------------------------------------------------------------
-
-    public static boolean isGinMode(String mode) {
-        return JSON_INDEX_GIN.equalsIgnoreCase(mode);
-    }
 
     public static boolean isFieldMode(String mode) {
         return JSON_INDEX_FIELD.equalsIgnoreCase(mode);

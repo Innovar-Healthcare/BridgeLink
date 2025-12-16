@@ -37,7 +37,7 @@ public class JsonIndexConfigurator {
     }
 
     /**
-     * Apply index configuration changes when group extra is updated. Handles transitions between NONE, GIN, FIELD modes and
+     * Apply index configuration changes when group extra is updated. Handles transitions between NONE, FIELD modes and
      * FIELD->FIELD field list diffs.
      */
     public void apply(LookupGroup oldGroup, LookupGroup newGroup) {
@@ -79,10 +79,6 @@ public class JsonIndexConfigurator {
             handleNoneTo(newMode, tableName, newIndexDefs);
             break;
 
-        case LookupConstants.JSON_INDEX_GIN:
-            handleGinTo(newMode, tableName, newIndexDefs);
-            break;
-
         case LookupConstants.JSON_INDEX_FIELD:
             handleFieldTo(newMode, tableName, oldIndexDefs);
             break;
@@ -95,32 +91,11 @@ public class JsonIndexConfigurator {
 
     private void handleNoneTo(String newMode, String tableName, List<JsonFieldIndexDefinition> newIndexDefs) {
 
-        if (LookupConstants.isGinMode(newMode)) {
-            String indexName = JsonIndexNaming.buildGinIndexName(tableName);
-            valueDao.createJsonGinIndex(tableName, indexName);
-            return;
-        }
-
         if (LookupConstants.isFieldMode(newMode)) {
             if (!newIndexDefs.isEmpty()) {
                 valueDao.createJsonFieldIndexes(tableName, newIndexDefs);
             }
         }
-    }
-
-    private void handleGinTo(String newMode, String tableName, List<JsonFieldIndexDefinition> newIndexDefs) {
-
-        // Step 1: drop old mode
-        String indexName = JsonIndexNaming.buildGinIndexName(tableName);
-        valueDao.dropJsonGinIndex(tableName, indexName);
-
-        // Step 2: create new mode
-        if (LookupConstants.isFieldMode(newMode)) {
-            if (!newIndexDefs.isEmpty()) {
-                valueDao.createJsonFieldIndexes(tableName, newIndexDefs);
-            }
-        }
-        // GIN → NONE = done
     }
 
     private void handleFieldTo(String newMode, String tableName, List<JsonFieldIndexDefinition> oldIndexDefs) {
@@ -130,12 +105,6 @@ public class JsonIndexConfigurator {
         }
 
         // Step 2: create new mode
-        // FIELD -> GIN
-        if (LookupConstants.isGinMode(newMode)) {
-            String indexName = JsonIndexNaming.buildGinIndexName(tableName);
-            valueDao.createJsonGinIndex(tableName, indexName);
-        }
-
         // FIELD → NONE = no-op
     }
 

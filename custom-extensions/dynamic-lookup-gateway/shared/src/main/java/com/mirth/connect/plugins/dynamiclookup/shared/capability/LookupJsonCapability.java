@@ -85,7 +85,7 @@ public final class LookupJsonCapability {
     }
 
     private static LookupJsonCapability postgres9_4(DatabaseInfo dbInfo) {
-        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD, LookupConstants.JSON_INDEX_GIN), 63);
+        return new LookupJsonCapability(dbInfo, true, Set.of(LookupConstants.JSON_INDEX_NONE, LookupConstants.JSON_INDEX_FIELD), 63);
     }
 
     private static LookupJsonCapability mysql8_0(DatabaseInfo dbInfo) {

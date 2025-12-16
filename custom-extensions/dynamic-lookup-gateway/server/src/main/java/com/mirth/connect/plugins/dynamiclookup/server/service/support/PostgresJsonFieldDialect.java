@@ -20,13 +20,11 @@ import java.util.Set;
 
 import com.mirth.connect.plugins.dynamiclookup.server.util.JsonFieldUtils;
 import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
-import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonOperator;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonValueType;
-import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 
 public class PostgresJsonFieldDialect implements JsonFieldDialect {
     @Override
@@ -75,15 +73,7 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
             throw new IllegalStateException("Group extra missing for group: " + group.getId());
         }
 
-        // Get index mode
-        String mode = LookupConstants.normalizeJsonIndexMode(extra.getJsonIndexMode());
-
-        if (LookupConstants.isGinMode(mode)) {
-            return buildGinCriterion(group, conditions);
-        }
-
         return buildFieldCriterion(group, conditions);
-
     }
 
     private List<JsonFieldCriterion> buildFieldCriterion(LookupGroup group, List<JsonCondition> conditions) {
@@ -124,54 +114,6 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
             criterion.setValueSql(buildValueSql(valueType));
             criteria.add(criterion);
         }
-
-        return criteria;
-    }
-
-    private List<JsonFieldCriterion> buildGinCriterion(LookupGroup group, List<JsonCondition> conditions) {
-        List<JsonFieldCriterion> criteria = new ArrayList<>();
-
-        Map<String, Object> root = new LinkedHashMap<>();
-
-        for (JsonCondition cond : conditions) {
-            if (cond == null) {
-                continue;
-            }
-
-            if (cond.getOp() != JsonOperator.EQUAL) {
-                throw new UnsupportedOperationException("PostgreSQL GIN search supports only EQUAL for now. op=" + cond.getOp());
-            }
-
-            String rawFieldPath = cond.getField();
-            if (rawFieldPath == null || rawFieldPath.trim().isEmpty()) {
-                continue;
-            }
-
-            String fieldPath = JsonFieldUtils.normalizeFieldPath(rawFieldPath);
-            if (fieldPath.isEmpty()) {
-                continue;
-            }
-
-            mergePath(root, fieldPath.split("\\."), cond.getValue());
-        }
-
-        if (root.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        final String mergedJson;
-        try {
-            mergedJson = JsonUtils.toJson(root);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to build merged GIN filter JSON", e);
-        }
-
-        JsonFieldCriterion c = new JsonFieldCriterion();
-        c.setExpression("VALUE_DATA");
-        c.setOperatorSql("@>");
-        c.setValue(mergedJson);
-
-        criteria.add(c);
 
         return criteria;
     }

@@ -111,12 +111,10 @@ public class LookupGroupDialog extends MirthDialog {
 
     private void initComponents() {
         boolean jsonSupported = false;
-        boolean ginSupported = false;
 
         try {
             LookupJsonCapability capability = LookupJsonCapability.getInstance();
             jsonSupported = capability.isJsonSupported();
-            ginSupported = capability.isJsonIndexModeSupported(LookupConstants.JSON_INDEX_GIN);
         } catch (Exception e) {
             // no-op
         }
@@ -161,9 +159,6 @@ public class LookupGroupDialog extends MirthDialog {
         jsonIndexTypeLabel = new JLabel("JSON Index:");
         jsonIndexTypeComboBox = new JComboBox<>();
         jsonIndexTypeComboBox.addItem(LookupConstants.JSON_INDEX_NONE);
-        if (ginSupported) {
-            jsonIndexTypeComboBox.addItem(LookupConstants.JSON_INDEX_GIN);
-        }
         jsonIndexTypeComboBox.addItem(LookupConstants.JSON_INDEX_FIELD);
         jsonIndexTypeComboBox.setSelectedItem(LookupConstants.JSON_INDEX_NONE);
         jsonIndexTypeComboBox.addActionListener(e -> updateJsonIndexControls());

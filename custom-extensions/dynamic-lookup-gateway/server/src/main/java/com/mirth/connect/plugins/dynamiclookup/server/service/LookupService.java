@@ -1358,7 +1358,7 @@ public class LookupService {
 
             // Validate jsonIndexMode
             String rawMode = extra.getJsonIndexMode();
-            if (!LookupConstants.isNoneMode(rawMode) && !LookupConstants.isFieldMode(rawMode) && !LookupConstants.isGinMode(rawMode)) {
+            if (!LookupConstants.isNoneMode(rawMode) && !LookupConstants.isFieldMode(rawMode)) {
                 throw new IllegalArgumentException("Invalid jsonIndexMode: " + extra.getJsonIndexMode());
             }
 

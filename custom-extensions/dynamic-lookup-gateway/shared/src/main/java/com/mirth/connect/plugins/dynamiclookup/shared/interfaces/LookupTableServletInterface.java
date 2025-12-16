@@ -131,21 +131,6 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                                 "}"
                                     ),
                                     @ExampleObject(
-                                        name = "json-group-gin-index",
-                                        summary = "Example JSON group with GIN index (PostgreSQL only)",
-                                        value = "{\n" +
-                                                "  \"name\": \"Provider Directory\",\n" +
-                                                "  \"description\": \"Provider information lookup\",\n" +
-                                                "  \"version\": \"1.0\",\n" +
-                                                "  \"cacheSize\": 500,\n" +
-                                                "  \"cachePolicy\": \"LRU\",\n" +
-                                                "  \"valueType\": \"JSON\",\n" +
-                                                "  \"extra\": {\n" +
-                                                "    \"jsonIndexMode\": \"GIN\"\n" +
-                                                "  }\n" +
-                                                "}"
-                                    ),
-                                    @ExampleObject(
                                         name = "json-group-none-index",
                                         summary = "Example JSON group with NONE index",
                                         value = "{\n" +
@@ -263,22 +248,6 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                 "  \"extra\": {\n" +
                                 "    \"jsonIndexMode\": \"FIELD\",\n" +
                                 "    \"indexedJsonFields\": \"[\\\"email\\\", \\\"address.city\\\"]\"\n" +
-                                "  }\n" +
-                                "}"
-                    ),
-                    @ExampleObject(
-                        name = "json-group-request-gin-index",
-                        summary = "Update JSON group with GIN index (PostgreSQL only)",
-                        value =
-                                "{\n" +
-                                "  \"name\": \"Provider Directory JSON Updated\",\n" +
-                                "  \"description\": \"Updated JSON provider info\",\n" +
-                                "  \"version\": \"2.0\",\n" +
-                                "  \"cacheSize\": 800,\n" +
-                                "  \"cachePolicy\": \"FIFO\",\n" +
-                                "  \"valueType\": \"JSON\",\n" +
-                                "  \"extra\": {\n" +
-                                "    \"jsonIndexMode\": \"GIN\"\n" +
                                 "  }\n" +
                                 "}"
                     ),
@@ -934,31 +903,6 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                     "  }\n" +
                                     "}"
                         ),
-
-                        // ------------------------- JSON + GIN ---------------------------
-                        @ExampleObject(
-                            name = "import-json-group-gin",
-                            summary = "Import a JSON lookup group with GIN index (PostgreSQL only)",
-                            value =
-                                    "{\n" +
-                                    "  \"group\": {\n" +
-                                    "    \"name\": \"Audit Log\",\n" +
-                                    "    \"description\": \"GIN-indexed JSON entries for fast search\",\n" +
-                                    "    \"version\": \"2.0\",\n" +
-                                    "    \"cacheSize\": 800,\n" +
-                                    "    \"cachePolicy\": \"LRU\",\n" +
-                                    "    \"valueType\": \"JSON\",\n" +
-                                    "    \"extra\": {\n" +
-                                    "      \"jsonIndexMode\": \"GIN\"\n" +
-                                    "    }\n" +
-                                    "  },\n" +
-                                    "  \"values\": {\n" +
-                                    "    \"log1\": \"{ \\\"event\\\": \\\"LOGIN\\\", \\\"success\\\": true }\",\n" +
-                                    "    \"log2\": \"{ \\\"event\\\": \\\"LOGOUT\\\", \\\"success\\\": false }\"\n" +
-                                    "  }\n" +
-                                    "}"
-                        ),
-
                         // ------------------------- JSON + NONE --------------------------
                         @ExampleObject(
                             name = "import-json-group-none",

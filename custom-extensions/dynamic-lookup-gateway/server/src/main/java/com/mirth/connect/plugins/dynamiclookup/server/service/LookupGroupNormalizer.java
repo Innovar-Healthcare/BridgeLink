@@ -41,7 +41,7 @@ public class LookupGroupNormalizer {
 
         // --- Normalize jsonIndexMode (NONE default)
         if (!LookupConstants.isFieldMode(extra.getJsonIndexMode())) {
-            // NONE or GIN -> indexedJsonFields must be ignored
+            // NONE -> indexedJsonFields must be ignored
             extra.setIndexedJsonFields(null);
         }
     }
