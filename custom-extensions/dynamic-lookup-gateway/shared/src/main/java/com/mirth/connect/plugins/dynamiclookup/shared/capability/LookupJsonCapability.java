@@ -15,7 +15,10 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonOperator;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonValueType;
 
 /**
  * Describes JSON feature support based on a specific DatabaseInfo. Used by both server and client.
@@ -155,6 +158,45 @@ public final class LookupJsonCapability {
 
     public int getMaxIdentifierLength() {
         return maxIdentifierLength;
+    }
+
+    public boolean supportsValueType(JsonValueType type) {
+        if (!jsonSupported || type == null) {
+            return false;
+        }
+
+        // Only enable "full" support for Postgres for now.
+        // Other DBs can be added in later steps.
+        if (databaseInfo.getType() != DatabaseType.POSTGRESQL) {
+            return false;
+        }
+
+        // Postgres: STRING / NUMBER / BOOLEAN
+        return type == JsonValueType.STRING || type == JsonValueType.NUMBER || type == JsonValueType.BOOLEAN;
+    }
+
+    public boolean supportsOperator(JsonValueType type, JsonOperator op) {
+        if (!jsonSupported || type == null || op == null) {
+            return false;
+        }
+
+        if (databaseInfo.getType() != DatabaseType.POSTGRESQL) {
+            return false;
+        }
+
+        switch (type) {
+        case STRING:
+        case BOOLEAN:
+            // Core rule: only EQ / NE
+            return op == JsonOperator.EQUAL || op == JsonOperator.NOT_EQUAL;
+
+        case NUMBER:
+            // Postgres supports ordered comparisons for numeric
+            return op == JsonOperator.EQUAL || op == JsonOperator.NOT_EQUAL || op == JsonOperator.GREATER_THAN || op == JsonOperator.GREATER_OR_EQUAL || op == JsonOperator.LESS_THAN || op == JsonOperator.LESS_OR_EQUAL;
+
+        default:
+            return false;
+        }
     }
 
     // @formatter:off

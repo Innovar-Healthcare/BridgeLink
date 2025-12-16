@@ -182,10 +182,7 @@ public final class AdvancedJsonFilterBuilder {
             return ">";
         case LESS_THAN:
             return "<";
-//        case CONTAINS:
-//            return "~";
-//        case NOT_CONTAINS:
-//            return "!~";
+
         default:
             throw new IllegalArgumentException("Unsupported operator: " + op);
         }
@@ -217,15 +214,8 @@ public final class AdvancedJsonFilterBuilder {
             return JsonOperator.LESS_THAN;
         }
 
-//        if ("~".equals(s)) {
-//            return JsonOperator.CONTAINS;
-//        }
-//
-//        if ("!~".equals(s)) {
-//            return JsonOperator.NOT_CONTAINS;
-//        }
+        throw new IllegalArgumentException("Unsupported operator symbol: '" + op + "'");
 
-        throw new IllegalArgumentException("Unsupported operator: " + op);
     }
 
 }

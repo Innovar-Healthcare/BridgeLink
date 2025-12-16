@@ -10,7 +10,6 @@
 
 package com.mirth.connect.plugins.dynamiclookup.server.service.support;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -84,8 +83,6 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
             if (cond == null) {
                 continue;
             }
-
-            validateCondition(cond);
 
             String fieldPath = cond.getField().trim();
             JsonValueType valueType = cond.getValueType();
@@ -269,43 +266,4 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
             throw new IllegalArgumentException("Unsupported JsonOperator for PostgreSQL: " + op);
         }
     }
-
-    private void validateCondition(JsonCondition c) {
-        // Service already validated: field/op/valueType not null
-
-        String rawField = c.getField().trim();
-
-        // --- Validate raw field path (fail fast, no silent mutation) ---
-        if (!rawField.matches("[A-Za-z0-9_.]+")) {
-            throw new IllegalArgumentException("Invalid JSON field path: '" + rawField + "'. Only letters, digits, underscore (_), and dot (.) are allowed.");
-        }
-        if (rawField.startsWith(".") || rawField.endsWith(".")) {
-            throw new IllegalArgumentException("Invalid JSON field path: '" + rawField + "'. Path cannot start or end with '.'.");
-        }
-        if (rawField.contains("..")) {
-            throw new IllegalArgumentException("Invalid JSON field path: '" + rawField + "'. Consecutive dots are not allowed.");
-        }
-
-        // --- Validate value (dialect responsibility) ---
-        String valueText = c.getValue() != null ? c.getValue().toString().trim() : "";
-        if (valueText.isEmpty()) {
-            throw new IllegalArgumentException("Value cannot be empty for field: " + rawField);
-        }
-
-        JsonValueType vt = c.getValueType();
-
-        if (vt == JsonValueType.NUMBER) {
-            try {
-                new BigDecimal(valueText);
-            } catch (Exception e) {
-                throw new IllegalArgumentException("Invalid NUMBER value for field '" + rawField + "': " + valueText);
-            }
-        } else if (vt == JsonValueType.BOOLEAN) {
-            String v = valueText.toLowerCase();
-            if (!"true".equals(v) && !"false".equals(v)) {
-                throw new IllegalArgumentException("Invalid BOOLEAN value for field '" + rawField + "': " + valueText);
-            }
-        }
-    }
-
 }

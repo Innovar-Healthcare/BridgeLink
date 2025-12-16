@@ -49,9 +49,9 @@ import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupStatistics;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState;
-import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.TtlUtils;
+import com.mirth.connect.plugins.dynamiclookup.shared.validation.AdvancedJsonFilterValidator;
 
 public class LookupService {
     private static final int DEFAULT_MATCH_LIMIT = 1000;
@@ -548,43 +548,9 @@ public class LookupService {
     }
 
     public int searchLookupValuesByJsonFieldsCount(Integer groupId, AdvancedJsonFilterState filter) {
-        LookupGroup group = groupDao.getGroupById(groupId);
-        if (group == null) {
-            throw new GroupNotFoundException("Group not found: " + groupId);
-        }
+        LookupGroup group = loadJsonGroupOrThrow(groupId);
 
-        // Must be JSON group
-        if (!LookupConstants.isJsonValueType(group.getValueType())) {
-            throw new IllegalStateException("JSON field search is only supported for groups with valueType=JSON (groupId=" + groupId + ")");
-        }
-
-        // Check database JSON capability
-        LookupJsonCapability capability = LookupJsonCapability.getInstance();
-        if (!capability.isJsonSupported()) {
-            throw new IllegalStateException("Database does not support JSON search");
-        }
-
-        LookupGroupExtra extra = groupExtraDao.getByGroupId(groupId);
-        if (extra == null) {
-            throw new IllegalStateException("Group extra missing for group: " + groupId);
-        }
-        group.setExtra(extra);
-
-        if (filter == null) {
-            throw new IllegalArgumentException("Filter cannot be null");
-        }
-
-        for (JsonCondition c : filter.getConditions()) {
-            if (c.getField() == null || c.getField().trim().isEmpty()) {
-                throw new IllegalArgumentException("Field is required");
-            }
-            if (c.getOp() == null) {
-                throw new IllegalArgumentException("Operator is required for field: " + c.getField());
-            }
-            if (c.getValueType() == null) {
-                throw new IllegalArgumentException("Value type is required for field: " + c.getField());
-            }
-        }
+        validateJsonFilterOrThrow(filter);
 
         String keyPattern = filter.getKeyPattern();
         List<JsonFieldCriterion> criteria = JsonFieldDialectRegistry.getDialect().buildCriteria(group, filter.getConditions());
@@ -597,44 +563,9 @@ public class LookupService {
     }
 
     public List<LookupValue> searchLookupValuesByJsonFields(Integer groupId, Integer offset, Integer limit, AdvancedJsonFilterState filter) {
-        // Load group + extra
-        LookupGroup group = groupDao.getGroupById(groupId);
-        if (group == null) {
-            throw new GroupNotFoundException("Group not found: " + groupId);
-        }
+        LookupGroup group = loadJsonGroupOrThrow(groupId);
 
-        // Must be JSON group
-        if (!LookupConstants.isJsonValueType(group.getValueType())) {
-            throw new IllegalStateException("JSON field search is only supported for groups with valueType=JSON (groupId=" + groupId + ")");
-        }
-
-        // Check database JSON capability
-        LookupJsonCapability capability = LookupJsonCapability.getInstance();
-        if (!capability.isJsonSupported()) {
-            throw new IllegalStateException("Database does not support JSON search");
-        }
-
-        LookupGroupExtra extra = groupExtraDao.getByGroupId(groupId);
-        if (extra == null) {
-            throw new IllegalStateException("Group extra missing for group: " + groupId);
-        }
-        group.setExtra(extra);
-
-        if (filter == null) {
-            throw new IllegalArgumentException("Filter cannot be null");
-        }
-
-        for (JsonCondition c : filter.getConditions()) {
-            if (c.getField() == null || c.getField().trim().isEmpty()) {
-                throw new IllegalArgumentException("Field is required");
-            }
-            if (c.getOp() == null) {
-                throw new IllegalArgumentException("Operator is required for field: " + c.getField());
-            }
-            if (c.getValueType() == null) {
-                throw new IllegalArgumentException("Value type is required for field: " + c.getField());
-            }
-        }
+        validateJsonFilterOrThrow(filter);
 
         String keyPattern = filter.getKeyPattern();
         List<JsonFieldCriterion> criteria = JsonFieldDialectRegistry.getDialect().buildCriteria(group, filter.getConditions());
@@ -1435,4 +1366,33 @@ public class LookupService {
 
         return Math.min(limit, MAX_MATCH_LIMIT);
     }
+
+    private void validateJsonFilterOrThrow(AdvancedJsonFilterState filter) {
+        if (filter == null) {
+            throw new IllegalArgumentException("Filter cannot be null");
+        }
+
+        LookupJsonCapability cap = LookupJsonCapability.getInstance();
+        AdvancedJsonFilterValidator.validateForDialect(filter.getConditions(), cap);
+    }
+
+    private LookupGroup loadJsonGroupOrThrow(Integer groupId) {
+        LookupGroup group = groupDao.getGroupById(groupId);
+        if (group == null) {
+            throw new GroupNotFoundException("Group not found: " + groupId);
+        }
+
+        if (!LookupConstants.isJsonValueType(group.getValueType())) {
+            throw new IllegalStateException("JSON field search is only supported for groups with valueType=JSON (groupId=" + groupId + ")");
+        }
+
+        LookupGroupExtra extra = groupExtraDao.getByGroupId(groupId);
+        if (extra == null) {
+            throw new IllegalStateException("Group extra missing for group: " + groupId);
+        }
+        group.setExtra(extra);
+
+        return group;
+    }
+
 }
