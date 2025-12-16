@@ -15,7 +15,6 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 
-import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonOperator;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonValueType;
@@ -165,14 +164,15 @@ public final class LookupJsonCapability {
             return false;
         }
 
-        // Only enable "full" support for Postgres for now.
-        // Other DBs can be added in later steps.
-        if (databaseInfo.getType() != DatabaseType.POSTGRESQL) {
-            return false;
-        }
+        switch (databaseInfo.getType()) {
+        case POSTGRESQL:
+        case SQLSERVER:
+            return type == JsonValueType.STRING || type == JsonValueType.NUMBER || type == JsonValueType.BOOLEAN;
 
-        // Postgres: STRING / NUMBER / BOOLEAN
-        return type == JsonValueType.STRING || type == JsonValueType.NUMBER || type == JsonValueType.BOOLEAN;
+        default:
+            // keep others conservative for now
+            return type == JsonValueType.STRING; // or false if you haven't enabled anything yet
+        }
     }
 
     public boolean supportsOperator(JsonValueType type, JsonOperator op) {
@@ -180,19 +180,21 @@ public final class LookupJsonCapability {
             return false;
         }
 
-        if (databaseInfo.getType() != DatabaseType.POSTGRESQL) {
-            return false;
-        }
+        switch (databaseInfo.getType()) {
 
-        switch (type) {
-        case STRING:
-        case BOOLEAN:
-            // Core rule: only EQ / NE
-            return op == JsonOperator.EQUAL || op == JsonOperator.NOT_EQUAL;
+        case POSTGRESQL:
+        case SQLSERVER:
+            switch (type) {
+            case STRING:
+            case BOOLEAN:
+                return op == JsonOperator.EQUAL || op == JsonOperator.NOT_EQUAL;
 
-        case NUMBER:
-            // Postgres supports ordered comparisons for numeric
-            return op == JsonOperator.EQUAL || op == JsonOperator.NOT_EQUAL || op == JsonOperator.GREATER_THAN || op == JsonOperator.GREATER_OR_EQUAL || op == JsonOperator.LESS_THAN || op == JsonOperator.LESS_OR_EQUAL;
+            case NUMBER:
+                return op == JsonOperator.EQUAL || op == JsonOperator.NOT_EQUAL || op == JsonOperator.GREATER_THAN || op == JsonOperator.GREATER_OR_EQUAL || op == JsonOperator.LESS_THAN || op == JsonOperator.LESS_OR_EQUAL;
+
+            default:
+                return false;
+            }
 
         default:
             return false;

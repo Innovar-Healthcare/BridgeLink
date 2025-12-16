@@ -24,6 +24,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonCondition;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonOperator;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.json.JsonValueType;
 
 public class SqlServerJsonFieldDialect implements JsonFieldDialect {
 
@@ -47,7 +48,7 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
 
         List<JsonFieldIndexDefinition> definitions = new ArrayList<>();
         for (String fieldPath : fieldPaths) {
-            String expression = buildExpression(fieldPath);
+            String expression = buildIndexExpression(fieldPath);
             String computedColumnName = buildComputedColumnName(fieldPath);
             String indexName = JsonIndexNaming.buildIndexName(tableName, fieldPath);
 
@@ -64,6 +65,7 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
         return definitions;
     }
 
+    @Override
     public List<JsonFieldCriterion> buildCriteria(LookupGroup group, List<JsonCondition> conditions) {
         if (group == null || conditions == null || conditions.isEmpty()) {
             return Collections.emptyList();
@@ -74,6 +76,11 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
             throw new IllegalStateException("Group extra missing for group: " + group.getId());
         }
 
+        return buildFieldCriterion(group, conditions);
+    }
+
+    public List<JsonFieldCriterion> buildFieldCriterion(LookupGroup group, List<JsonCondition> conditions) {
+        LookupGroupExtra extra = group.getExtra();
         String normalizedMode = LookupConstants.normalizeJsonIndexMode(extra.getJsonIndexMode());
 
         // Reuse the same definitions used for physical index creation.
@@ -88,45 +95,34 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
                 continue;
             }
 
-            String rawFieldPath = cond.getField();
-            if (rawFieldPath == null || rawFieldPath.trim().isEmpty()) {
-                continue;
-            }
-
-            // Normalize field path: "address.city" → "address.city"
-            String fieldPath = JsonFieldUtils.normalizeFieldPath(rawFieldPath);
-            if (fieldPath.isEmpty()) {
-                continue;
-            }
-
+            String fieldPath = cond.getField();
+            JsonValueType valueType = cond.getValueType();
             // Dialect builds SQL expression, e.g.:
-            String expression;
-
             JsonFieldIndexDefinition def = indexByField.get(fieldPath);
-            boolean canUseIndex = canUseFieldIndex(normalizedMode, def);
+            String computedColumnName = canUseFieldIndex(normalizedMode, def) ? def.getComputedColumnName() : null;
 
-            if (canUseIndex) {
-                // Use the persisted computed column so SQL Server can leverage the index.
-                expression = def.getComputedColumnName();
-            } else {
-                // No index (or mode != FIELD) -> fall back to JSON_VALUE expression.
-                expression = buildExpression(fieldPath);
-            }
+            // Guard/type check (prevents conversion failures; invalid rows are skipped)
+            String typeCheckSql = buildTypeCheckSql(fieldPath, valueType, computedColumnName);
+
+            // expression (typed)
+            String expression = buildCriterionExpression(fieldPath, valueType, computedColumnName);
 
             // Map JsonOperator → SQL operator string
             String operatorSql = buildSqlOperator(cond.getOp());
 
             JsonFieldCriterion criterion = new JsonFieldCriterion();
+            criterion.setTypeCheckSql(typeCheckSql);
             criterion.setExpression(expression);
             criterion.setOperatorSql(operatorSql);
             criterion.setValue(cond.getValue());
+            criterion.setValueSql(buildValueSql(valueType)); // RHS (typed)
             criteria.add(criterion);
         }
 
         return criteria;
     }
 
-    private String buildExpression(String fieldPath) {
+    private String buildIndexExpression(String fieldPath) {
         String jsonPath = "$." + fieldPath; // e.g. address.city
         return "JSON_VALUE(VALUE_DATA, '" + jsonPath + "')";
     }
@@ -166,6 +162,71 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
         }
 
         return sb.toString();
+    }
+
+    private String buildTypeCheckSql(String fieldPath, JsonValueType valueType, String computedColumnName) {
+        if (valueType == null || valueType == JsonValueType.STRING) {
+            return null;
+        }
+
+        String baseExpr = resolveBaseExpr(fieldPath, computedColumnName);
+
+        if (valueType == JsonValueType.NUMBER) {
+            return "TRY_CONVERT(DECIMAL(38,10), " + baseExpr + ") IS NOT NULL" + " AND TRY_CONVERT(DECIMAL(38,10), #{c.value}) IS NOT NULL";
+        }
+
+        if (valueType == JsonValueType.BOOLEAN) {
+            // strict true/false to match your validator
+            return baseExpr + " IN ('true','false') AND #{c.value} IN ('true','false')";
+        }
+
+        return null;
+    }
+
+    private String buildCriterionExpression(String fieldPath, JsonValueType type, String computedColumnName) {
+        String baseExpr = resolveBaseExpr(fieldPath, computedColumnName);
+
+        if (type == JsonValueType.NUMBER) {
+            return "TRY_CONVERT(DECIMAL(38,10), " + baseExpr + ")";
+        }
+
+        if (type == JsonValueType.BOOLEAN) {
+            return "CASE WHEN " + baseExpr + " = 'true' THEN CAST(1 AS BIT) " + "WHEN " + baseExpr + " = 'false' THEN CAST(0 AS BIT) " + "ELSE NULL END";
+        }
+
+        return baseExpr; // STRING
+    }
+
+    private String resolveBaseExpr(String fieldPath, String computedColumnName) {
+        if (computedColumnName != null && !computedColumnName.isEmpty()) {
+            return computedColumnName;
+        }
+
+        String jsonPath = "$." + fieldPath;
+        return "JSON_VALUE(VALUE_DATA, '" + jsonPath + "')";
+    }
+
+    //@formatter:off
+    /**
+     * Build RHS SQL for value binding based on value type.
+     *
+     * Note:
+     * - value is not interpolated here (still bound via MyBatis)
+     * - type controls only SQL casting behavior
+     */
+    //@formatter:on
+    private String buildValueSql(JsonValueType type) {
+        JsonValueType valueType = type != null ? type : JsonValueType.STRING;
+
+        switch (valueType) {
+        case NUMBER:
+            return "TRY_CONVERT(DECIMAL(38,10), #{c.value})";
+        case BOOLEAN:
+            return "CASE WHEN #{c.value} = 'true' THEN CAST(1 AS BIT) " + "WHEN #{c.value} = 'false' THEN CAST(0 AS BIT) " + "ELSE NULL END";
+        case STRING:
+        default:
+            return "#{c.value}";
+        }
     }
 
     /**
