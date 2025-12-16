@@ -100,20 +100,25 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
             String fieldPath = cond.getField().trim();
             JsonValueType valueType = cond.getValueType();
 
-            String expression = buildCriterionExpression(fieldPath, valueType);
+            // JSONB extraction for jsonb_typeof(...) checks
+            String typeCheckSql = buildTypeCheckSql(fieldPath, valueType);
+
+            // Always TEXT extraction (safe for casting/comparison)
+            String textExpr = buildCriterionExpression(fieldPath, valueType);
 
             JsonFieldCriterion criterion = new JsonFieldCriterion();
+
             if (valueType == JsonValueType.NUMBER) {
-                criterion.setTypeCheckSql("jsonb_typeof(" + expression + ") = 'number'");
-                criterion.setExpression("(" + expression + ")::numeric");
+                criterion.setTypeCheckSql(typeCheckSql);
+                criterion.setExpression("(" + textExpr + ")::numeric");
             } else if (valueType == JsonValueType.BOOLEAN) {
-                criterion.setTypeCheckSql("jsonb_typeof(" + expression + ") = 'boolean'");
-                criterion.setExpression("(" + expression + ")::boolean");
+                criterion.setTypeCheckSql(typeCheckSql);
+                criterion.setExpression("(" + textExpr + ")::boolean");
             } else {
-                criterion.setExpression(expression);
+                // STRING (or null -> default STRING)
+                criterion.setExpression(textExpr);
             }
 
-            // Map JsonOperator → SQL operator string
             criterion.setOperatorSql(buildOperatorSql(cond.getOp()));
             criterion.setValue(cond.getValue());
             criterion.setValueSql(buildValueSql(valueType));
@@ -213,35 +218,87 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
 
     //@formatter:off
     /**
-     * Build PostgreSQL criterion expression based on value type.
+     * Build JSON type check SQL for Postgres JSONB fields.
      *
-     * STRING:
-     *   - top-level: VALUE_DATA->>'field'
-     *   - nested:    VALUE_DATA #>> '{a,b}'
+     * Rules:
+     * - NUMBER  : accept ONLY real JSON numbers (e.g. 18), reject numeric strings ("18")
+     * - BOOLEAN : accept ONLY real JSON booleans (true/false)
+     * - STRING  : no type check (always treated as text)
      *
-     * NUMBER / BOOLEAN:
-     *   - top-level: VALUE_DATA->'field'
-     *   - nested:    VALUE_DATA #> '{a,b}'
+     * Notes:
+     * - Uses JSONB extraction (-> / #>) so jsonb_typeof() works correctly
+     * - Casting is done separately on text expression (->> / #>>) to avoid exceptions
+     */
+  //@formatter:on
+    private String buildTypeCheckSql(String fieldPath, JsonValueType valueType) {
+        if (valueType == null || valueType == JsonValueType.STRING) {
+            return null;
+        }
+
+        boolean nested = fieldPath.contains(".");
+        String jsonbExpr;
+        if (!nested) {
+            jsonbExpr = "VALUE_DATA->'" + fieldPath + "'";
+        } else {
+            String path = "{" + fieldPath.replace(".", ",") + "}";
+            jsonbExpr = "VALUE_DATA #> '" + path + "'";
+        }
+
+        if (valueType == JsonValueType.NUMBER) {
+            return "jsonb_typeof(" + jsonbExpr + ") = 'number'";
+        }
+        if (valueType == JsonValueType.BOOLEAN) {
+            return "jsonb_typeof(" + jsonbExpr + ") = 'boolean'";
+        }
+
+        return null;
+    }
+
+    //@formatter:off
+    /**
+     * Build PostgreSQL JSON text extraction expression for filtering/comparison.
+     *
+     * Rules:
+     * - Always extract JSON value as TEXT using ->> / #>>
+     * - Used for STRING comparison and for casting NUMBER / BOOLEAN
+     * - JSON type validation (NUMBER / BOOLEAN) is handled separately
+     *
+     * Examples:
+     * - top-level field : VALUE_DATA->>'field'
+     * - nested field    : VALUE_DATA #>> '{a,b}'
      */
     //@formatter:on
     private String buildCriterionExpression(String fieldPath, JsonValueType type) {
+        boolean nested = fieldPath.contains(".");
+        if (!nested) {
+            return "VALUE_DATA->>'" + fieldPath + "'";
+        }
+
+        String path = "{" + fieldPath.replace(".", ",") + "}";
+        return "VALUE_DATA #>> '" + path + "'";
+    }
+
+    //@formatter:off
+    /**
+     * Build RHS SQL for value binding based on value type.
+     *
+     * Note:
+     * - value is not interpolated here (still bound via MyBatis)
+     * - type controls only SQL casting behavior
+     */
+    //@formatter:on
+    private String buildValueSql(JsonValueType type) {
         JsonValueType valueType = type != null ? type : JsonValueType.STRING;
 
-        boolean nested = fieldPath.contains(".");
-        String path = nested ? "{" + fieldPath.replace(".", ",") + "}" : null;
-
-        if (valueType == JsonValueType.STRING) {
-            if (!nested) {
-                return "VALUE_DATA->>'" + fieldPath + "'";
-            }
-            return "VALUE_DATA #>> '" + path + "'";
+        switch (valueType) {
+        case NUMBER:
+            return "CAST(#{c.value} AS numeric)";
+        case BOOLEAN:
+            return "CAST(#{c.value} AS boolean)";
+        case STRING:
+        default:
+            return "#{c.value}";
         }
-
-        // NUMBER / BOOLEAN
-        if (!nested) {
-            return "VALUE_DATA->'" + fieldPath + "'";
-        }
-        return "VALUE_DATA #> '" + path + "'";
     }
 
     /**
@@ -268,29 +325,6 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
             return "<=";
         default:
             throw new IllegalArgumentException("Unsupported JsonOperator for PostgreSQL: " + op);
-        }
-    }
-
-    //@formatter:off
-    /**
-     * Build RHS SQL for value binding based on value type.
-     *
-     * Note:
-     * - value is not interpolated here (still bound via MyBatis)
-     * - type controls only SQL casting behavior
-     */
-    //@formatter:on
-    private String buildValueSql(JsonValueType type) {
-        JsonValueType valueType = type != null ? type : JsonValueType.STRING;
-
-        switch (valueType) {
-        case NUMBER:
-            return "CAST(#{c.value} AS numeric)";
-        case BOOLEAN:
-            return "CAST(#{c.value} AS boolean)";
-        case STRING:
-        default:
-            return "#{c.value}";
         }
     }
 

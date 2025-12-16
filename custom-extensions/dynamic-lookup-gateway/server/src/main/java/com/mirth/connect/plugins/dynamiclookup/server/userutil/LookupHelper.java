@@ -551,15 +551,12 @@ public class LookupHelper {
                 return null;
             }
 
-            AdvancedJsonFilterState filter;
-            try {
-                filter = AdvancedJsonFilterBuilder.fromLookupHelperInputs(keyPattern, simpleMapJson);
-            } catch (IllegalArgumentException e) {
-                logger.error("Invalid simple JSON filter for lookup group='{}', keyPattern={}, filterJson={}", groupName, keyPattern, simpleMapJson, e);
-                return null;
-            }
+            AdvancedJsonFilterState filter = AdvancedJsonFilterBuilder.fromLookupHelperInputs(keyPattern, simpleMapJson);
 
             return lookupService.searchValuesByJsonFields(group.getId(), filter);
+        } catch (IllegalArgumentException e) {
+            logger.error("Invalid lookup JSON filter [group='{}', keyPattern={}, filterJson={}]: {}", groupName, keyPattern, simpleMapJson, e.getMessage());
+            return null;
         } catch (Exception e) {
             logger.error("Failed to search lookup values [group='{}', keyPattern={}, filterJson={}]: {}", groupName, keyPattern, simpleMapJson, e.getMessage(), e);
             return null;

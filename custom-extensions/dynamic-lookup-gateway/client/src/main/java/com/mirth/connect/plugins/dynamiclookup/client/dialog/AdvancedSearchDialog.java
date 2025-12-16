@@ -12,6 +12,7 @@ package com.mirth.connect.plugins.dynamiclookup.client.dialog;
 
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -60,7 +61,7 @@ import net.miginfocom.swing.MigLayout;
 
 public class AdvancedSearchDialog extends MirthDialog {
     private final Logger logger = LogManager.getLogger(this.getClass());
-    private static final JsonOperator[] SUPPORTED_OPERATORS = { JsonOperator.EQUAL };
+    private static final JsonOperator[] SUPPORTED_OPERATORS = { JsonOperator.EQUAL, JsonOperator.GREATER_OR_EQUAL };
     private static final JsonValueType[] SUPPORTED_VALUE_TYPES = { JsonValueType.STRING, JsonValueType.NUMBER, JsonValueType.BOOLEAN };
 
     // Split layout
@@ -514,38 +515,56 @@ public class AdvancedSearchDialog extends MirthDialog {
         }
 
         for (int i = 0; i < conds.size(); i++) {
-
             JsonCondition c = conds.get(i);
 
-            // cleanup
             String field = c.getField() != null ? c.getField().trim() : "";
-            String value = c.getValue() != null ? c.getValue().toString().trim() : "";
+            String valueText = c.getValue() != null ? c.getValue().toString().trim() : "";
 
             c.setField(field);
-            c.setValue(value);
+            c.setValue(valueText);
 
-            // Validate field
             if (field.isEmpty()) {
                 showError("Condition " + (i + 1) + ": Field cannot be empty.");
                 return null;
             }
-
-            // Validate operator
             if (c.getOp() == null) {
                 showError("Condition " + (i + 1) + ": Operator is required.");
                 return null;
             }
-
-            // Validate value type
             if (c.getValueType() == null) {
                 showError("Condition " + (i + 1) + ": Value type is required.");
                 return null;
             }
-
-            // Validate value
-            if (value.isEmpty()) {
+            if (valueText.isEmpty()) {
                 showError("Condition " + (i + 1) + ": Value cannot be empty.");
                 return null;
+            }
+
+            // ---- Field path validation (same as server) ----
+            if (!field.matches("[A-Za-z0-9_.]+")) {
+                showError("Condition " + (i + 1) + ": Invalid JSON field path '" + field + "'. Only letters, digits, underscore (_), and dot (.) are allowed.");
+                return null;
+            }
+            if (field.startsWith(".") || field.endsWith(".") || field.contains("..")) {
+                showError("Condition " + (i + 1) + ": Invalid JSON field path '" + field + "'.");
+                return null;
+            }
+
+            // ---- Value validation by type (same as server) ----
+            JsonValueType vt = c.getValueType();
+            if (vt == JsonValueType.NUMBER) {
+                try {
+                    new BigDecimal(valueText);
+                } catch (Exception e) {
+                    showError("Condition " + (i + 1) + ": Invalid NUMBER value for field '" + field + "': " + valueText);
+                    return null;
+                }
+            } else if (vt == JsonValueType.BOOLEAN) {
+                String v = valueText.toLowerCase();
+                if (!"true".equals(v) && !"false".equals(v)) {
+                    showError("Condition " + (i + 1) + ": Invalid BOOLEAN value for field '" + field + "': " + valueText);
+                    return null;
+                }
             }
         }
 
