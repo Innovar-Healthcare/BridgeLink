@@ -262,11 +262,12 @@ public class LookupTableServlet extends MirthServlet implements LookupTableServl
             }
 
             // Normalize pagination and pattern
+            ValueFilterState filter = ValueFilterState.empty();
             int safeOffset = offset != null ? offset : 0;
             int safeLimit = limit != null ? limit : 10000;
 
-            List<LookupValue> paginated = LookupService.getInstance().searchLookupValues(groupId, safeOffset, safeLimit, null);
-            int totalCount = LookupService.getInstance().searchLookupValuesCount(groupId, null);
+            List<LookupValue> paginated = LookupService.getInstance().searchLookupValues(groupId, safeOffset, safeLimit, filter);
+            int totalCount = LookupService.getInstance().searchLookupValuesCount(groupId, filter);
 
             // create response
             ExportGroupPagedResponse response = ExportGroupPagedResponse.fromResult(groupId, safeOffset, safeLimit, totalCount, paginated);
@@ -410,7 +411,7 @@ public class LookupTableServlet extends MirthServlet implements LookupTableServl
     @Override
     public String searchValues(Integer groupId, Integer offset, Integer limit, String filterState) throws ClientException {
         try {
-            ValueFilterState filter = (filterState != null && !filterState.isEmpty()) ? ValueFilterState.fromJson(filterState) : new ValueFilterState();
+            ValueFilterState filter = (filterState != null && !filterState.isEmpty()) ? ValueFilterState.fromJson(filterState) : ValueFilterState.empty();
 
             // Validate group first
             LookupGroup lookupGroup = LookupService.getInstance().getGroupById(groupId);
