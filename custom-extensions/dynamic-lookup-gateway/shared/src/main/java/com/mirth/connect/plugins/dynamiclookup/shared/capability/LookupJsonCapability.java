@@ -168,6 +168,7 @@ public final class LookupJsonCapability {
         case POSTGRESQL:
         case SQLSERVER:
         case MYSQL:
+        case ORACLE:
             return type == JsonValueType.STRING || type == JsonValueType.NUMBER || type == JsonValueType.BOOLEAN;
 
         default:
@@ -186,6 +187,7 @@ public final class LookupJsonCapability {
         case POSTGRESQL:
         case SQLSERVER:
         case MYSQL:
+        case ORACLE:
             switch (type) {
             case STRING:
             case BOOLEAN:
