@@ -52,6 +52,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.TtlUtils;
 import com.mirth.connect.plugins.dynamiclookup.shared.validation.AdvancedJsonFilterValidator;
+import com.mirth.connect.plugins.dynamiclookup.shared.validation.FieldPathFormatValidator;
 
 public class LookupService {
     private static final int DEFAULT_MATCH_LIMIT = 1000;
@@ -1319,14 +1320,12 @@ public class LookupService {
                 }
 
                 for (String f : fields) {
-                    if (f == null || f.trim().isEmpty()) {
-                        throw new IllegalArgumentException("indexedJsonFields contains an empty field name.");
-                    }
+                    FieldPathFormatValidator.validate(f);
                 }
-
                 validateJsonFieldIndexNames(fields);
             }
         }
+
     }
 
     private void validateJsonFieldIndexNames(List<String> fields) {

@@ -90,23 +90,16 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
             // JSONB extraction for jsonb_typeof(...) checks
             String typeCheckSql = buildTypeCheckSql(fieldPath, valueType);
 
-            // Always TEXT extraction (safe for casting/comparison)
-            String textExpr = buildCriterionExpression(fieldPath, valueType);
+            // Dialect builds SQL expression, e.g.:
+            String expression = buildCriterionExpression(fieldPath, valueType);
+
+            // Map JsonOperator → SQL operator string
+            String operatorSql = buildOperatorSql(cond.getOp());
 
             JsonFieldCriterion criterion = new JsonFieldCriterion();
-
-            if (valueType == JsonValueType.NUMBER) {
-                criterion.setTypeCheckSql(typeCheckSql);
-                criterion.setExpression("(" + textExpr + ")::numeric");
-            } else if (valueType == JsonValueType.BOOLEAN) {
-                criterion.setTypeCheckSql(typeCheckSql);
-                criterion.setExpression("(" + textExpr + ")::boolean");
-            } else {
-                // STRING (or null -> default STRING)
-                criterion.setExpression(textExpr);
-            }
-
-            criterion.setOperatorSql(buildOperatorSql(cond.getOp()));
+            criterion.setTypeCheckSql(typeCheckSql);
+            criterion.setExpression(expression);
+            criterion.setOperatorSql(operatorSql);
             criterion.setValue(cond.getValue());
             criterion.setValueSql(buildValueSql(valueType));
             criteria.add(criterion);
@@ -168,7 +161,7 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
      * - Uses JSONB extraction (-> / #>) so jsonb_typeof() works correctly
      * - Casting is done separately on text expression (->> / #>>) to avoid exceptions
      */
-  //@formatter:on
+    //@formatter:on
     private String buildTypeCheckSql(String fieldPath, JsonValueType valueType) {
         if (valueType == null || valueType == JsonValueType.STRING) {
             return null;
@@ -209,12 +202,22 @@ public class PostgresJsonFieldDialect implements JsonFieldDialect {
     //@formatter:on
     private String buildCriterionExpression(String fieldPath, JsonValueType type) {
         boolean nested = fieldPath.contains(".");
+        String jsonbExpr;
         if (!nested) {
-            return "VALUE_DATA->>'" + fieldPath + "'";
+            jsonbExpr = "VALUE_DATA->>'" + fieldPath + "'";
+        } else {
+            String path = "{" + fieldPath.replace(".", ",") + "}";
+            jsonbExpr = "VALUE_DATA #>> '" + path + "'";
         }
 
-        String path = "{" + fieldPath.replace(".", ",") + "}";
-        return "VALUE_DATA #>> '" + path + "'";
+        if (type == JsonValueType.NUMBER) {
+            return "(" + jsonbExpr + ")::numeric";
+        }
+        if (type == JsonValueType.BOOLEAN) {
+            return "(" + jsonbExpr + ")::boolean";
+        }
+
+        return jsonbExpr;
     }
 
     //@formatter:off

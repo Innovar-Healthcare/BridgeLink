@@ -44,6 +44,7 @@ import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra;
 import com.mirth.connect.plugins.dynamiclookup.shared.util.JsonUtils;
+import com.mirth.connect.plugins.dynamiclookup.shared.validation.FieldPathFormatValidator;
 
 import net.miginfocom.swing.MigLayout;
 
@@ -418,6 +419,25 @@ public class LookupGroupDialog extends MirthDialog {
             errorMessage.append("Please provide a cache size.").append(System.lineSeparator());
         }
 
+        // Indexed JSON fields (Field mode)
+        String valueType = (String) valueTypeComboBox.getSelectedItem();
+        if (LookupConstants.isJsonValueType(valueType)) {
+            String jsonIndexMode = (String) jsonIndexTypeComboBox.getSelectedItem();
+            if (LookupConstants.isFieldMode(jsonIndexMode)) {
+                for (int i = 0; i < jsonIndexFieldsModel.size(); i++) {
+                    String field = jsonIndexFieldsModel.get(i);
+                    try {
+                        FieldPathFormatValidator.validate(field);
+                    } catch (IllegalArgumentException ex) {
+                        valid = false;
+
+                        jsonIndexFieldsList.setBackground(UIConstants.INVALID_COLOR);
+                        errorMessage.append("Indexed JSON field #").append(i + 1).append(": ").append(ex.getMessage()).append(System.lineSeparator());
+                    }
+                }
+            }
+        }
+
         if (!valid) {
             showError(errorMessage.toString());
         }
@@ -429,6 +449,8 @@ public class LookupGroupDialog extends MirthDialog {
         nameField.setBackground(null);
         versionField.setBackground(null);
         cacheSizeField.setBackground(null);
+
+        jsonIndexFieldsList.setBackground(UIConstants.BACKGROUND_COLOR);
     }
 
     protected void showInformation(String msg) {
