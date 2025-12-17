@@ -115,7 +115,7 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
             criterion.setExpression(expression);
             criterion.setOperatorSql(operatorSql);
             criterion.setValue(cond.getValue());
-            criterion.setValueSql(buildValueSql(valueType)); // RHS (typed)
+            criterion.setValueSql(buildValueSql(valueType));
             criteria.add(criterion);
         }
 

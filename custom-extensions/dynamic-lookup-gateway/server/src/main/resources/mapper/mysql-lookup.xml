@@ -149,15 +149,20 @@
 	        <if test="keyPattern != null and keyPattern != ''">
 	        	AND LOWER(KEY_VALUE) LIKE LOWER(#{keyPattern})
 	        </if>
+	        
+	        <!-- JSON criteria -->
 	        <if test="criteria != null and criteria.size() > 0">
-			    AND (
-			        <foreach collection="criteria"
-			                 item="c"
-			                 separator=" AND ">
-			            ${c.expression} ${c.operatorSql} #{c.value}
-			        </foreach>
-			    )
-			</if>
+	            AND (
+	                <foreach collection="criteria"
+	                         item="c"
+	                         separator=" AND ">
+                        <if test="c.typeCheckSql != null and c.typeCheckSql != ''">
+                            ${c.typeCheckSql} AND
+                        </if>
+                        ${c.expression} ${c.operatorSql} ${c.valueSql}
+	                </foreach>
+	            )
+	        </if>
 	    </trim>
 	</sql>
 	
