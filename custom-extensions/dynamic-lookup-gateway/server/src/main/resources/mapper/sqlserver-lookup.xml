@@ -12,6 +12,7 @@
         <result property="createdDate" column="CREATED_DATE" javaType="java.sql.Timestamp"/>
         <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
         <result property="valueType" column="VALUE_TYPE" javaType="String"/>
+        <result property="statisticsEnabled" column="STATISTICS_ENABLED" javaType="Boolean"/>
     </resultMap>
 
 	<resultMap id="lookup-group-extra" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra">
@@ -49,25 +50,25 @@
 
     <!-- Group Operations -->
     <select id="getGroupById" parameterType="Integer" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE, STATISTICS_ENABLED
         FROM LOOKUP_GROUP
         WHERE ID = #{value}
     </select>
 
     <select id="getGroupByName" parameterType="String" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE, STATISTICS_ENABLED
         FROM LOOKUP_GROUP
         WHERE NAME = #{value}
     </select>
 
     <select id="getAllGroups" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE, STATISTICS_ENABLED
         FROM LOOKUP_GROUP
     </select>
 
     <insert id="insertGroup" parameterType="map" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO LOOKUP_GROUP (NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, VALUE_TYPE)
-        VALUES (#{name}, #{description}, #{version}, #{cacheSize}, #{cachePolicy}, #{valueType})
+        INSERT INTO LOOKUP_GROUP (NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, VALUE_TYPE, STATISTICS_ENABLED)
+        VALUES (#{name}, #{description}, #{version}, #{cacheSize}, #{cachePolicy}, #{valueType}, #{statisticsEnabled,jdbcType=BIT})
     </insert>
 
     <update id="updateGroup" parameterType="map">
@@ -78,6 +79,7 @@
         CACHE_SIZE = #{cacheSize},
         CACHE_POLICY = #{cachePolicy},
         VALUE_TYPE = #{valueType},
+        STATISTICS_ENABLED = #{statisticsEnabled,jdbcType=BIT},
         UPDATED_DATE = CURRENT_TIMESTAMP
         WHERE ID = #{id}
     </update>

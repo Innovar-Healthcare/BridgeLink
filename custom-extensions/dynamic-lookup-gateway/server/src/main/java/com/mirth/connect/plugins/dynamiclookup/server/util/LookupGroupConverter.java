@@ -50,6 +50,12 @@ public final class LookupGroupConverter {
             group.setExtra(extra);
         }
 
+        String statsEnabledStr = trimOrNull(map.get("statisticsEnabled"));
+        if (statsEnabledStr != null) {
+            // Boolean.parseBoolean: only "true" (ignore case) => true; everything else => false
+            group.setStatisticsEnabled(Boolean.parseBoolean(statsEnabledStr));
+        }
+
         return group;
     }
 

@@ -21,6 +21,7 @@ public class LookupGroupRequest {
     private Integer cacheSize; // Required
     private String cachePolicy; // Required
     private String valueType; // Option
+    private Boolean statisticsEnabled; // Option
     private LookupGroupExtra extra; // Option
 
     public String getName() {
@@ -73,6 +74,14 @@ public class LookupGroupRequest {
 
     public void setValueType(String valueType) {
         this.valueType = valueType;
+    }
+
+    public Boolean getStatisticsEnabled() {
+        return statisticsEnabled;
+    }
+
+    public void setStatisticsEnabled(Boolean statisticsEnabled) {
+        this.statisticsEnabled = statisticsEnabled;
     }
 
     public void setExtra(LookupGroupExtra extra) {

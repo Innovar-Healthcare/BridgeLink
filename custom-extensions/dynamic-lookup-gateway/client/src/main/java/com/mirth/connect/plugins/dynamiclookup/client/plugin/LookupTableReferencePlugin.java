@@ -295,6 +295,7 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 "  version: '1.0.0',\n" +
                 "  cacheSize: '1000',\n" +
                 "  cachePolicy: 'LRU', // or 'FIFO'\n" +
+                "  statisticsEnabled: 'true',\n" +
                 "\n" +
                 "  // --- Optional JSON configuration ---\n" +
                 "  // NOTE: Derby does NOT support JSON. On Derby, always set valueType = 'TEXT'.\n" +

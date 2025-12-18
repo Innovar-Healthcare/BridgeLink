@@ -595,6 +595,7 @@ public class LookupHelper {
             out.put("version", full.getVersion());
             out.put("cacheSize", full.getCacheSize());
             out.put("cachePolicy", full.getCachePolicy());
+            out.put("statisticsEnabled", full.isStatisticsEnabled());
             out.put("valueType", full.getValueType());
             LookupGroupExtra extra = full.getExtra();
             if (extra != null) {

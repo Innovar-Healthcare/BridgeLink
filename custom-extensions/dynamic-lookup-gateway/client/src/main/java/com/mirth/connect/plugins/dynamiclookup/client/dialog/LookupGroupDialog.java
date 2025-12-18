@@ -10,6 +10,7 @@
 
 package com.mirth.connect.plugins.dynamiclookup.client.dialog;
 
+import java.awt.Color;
 import java.awt.Dimension;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +18,7 @@ import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -66,6 +68,9 @@ public class LookupGroupDialog extends MirthDialog {
 
     private JLabel cachePolicyLabel;
     private JComboBox<String> cachePolicyComboBox;
+
+    private JLabel statisticsEnabledLabel;
+    private JCheckBox statisticsEnabledCheckBox;
 
     private JLabel valueTypeLabel;
     private JComboBox<String> valueTypeComboBox;
@@ -146,6 +151,10 @@ public class LookupGroupDialog extends MirthDialog {
         cachePolicyComboBox.addItem("FIFO");
         cachePolicyComboBox.getModel().setSelectedItem("LRU");
 
+        statisticsEnabledLabel = new JLabel("Statistics Enabled:");
+        statisticsEnabledCheckBox = new JCheckBox();
+        statisticsEnabledCheckBox.setSelected(true);
+        statisticsEnabledCheckBox.setBackground(new Color(255, 255, 255));
         // --- VALUE TYPE ---
         valueTypeLabel = new JLabel("Value Type:");
         valueTypeComboBox = new JComboBox<>();
@@ -213,6 +222,9 @@ public class LookupGroupDialog extends MirthDialog {
         addPanel.add(cachePolicyLabel, "newline, right");
         addPanel.add(cachePolicyComboBox, "w 100!");
 
+        addPanel.add(statisticsEnabledLabel, "newline, right");
+        addPanel.add(statisticsEnabledCheckBox, "w 20!");
+
         // --- VALUE TYPE ---
         addPanel.add(valueTypeLabel, "newline, right");
         addPanel.add(valueTypeComboBox, "w 120!");
@@ -248,6 +260,7 @@ public class LookupGroupDialog extends MirthDialog {
         versionField.setText(lookupGroup.getVersion());
         cacheSizeField.setText(String.valueOf(lookupGroup.getCacheSize()));
         cachePolicyComboBox.getModel().setSelectedItem(lookupGroup.getCachePolicy());
+        statisticsEnabledCheckBox.setSelected(lookupGroup.isStatisticsEnabled());
 
         String valueType = LookupConstants.normalizeValueType(lookupGroup.getValueType());
         valueTypeComboBox.setSelectedItem(lookupGroup.getValueType());
@@ -333,6 +346,7 @@ public class LookupGroupDialog extends MirthDialog {
         this.lookupGroup.setCacheSize(Integer.parseInt(cacheSizeField.getText().trim()));
         this.lookupGroup.setCachePolicy((String) cachePolicyComboBox.getSelectedItem());
         this.lookupGroup.setValueType((String) valueTypeComboBox.getSelectedItem());
+        this.lookupGroup.setStatisticsEnabled(statisticsEnabledCheckBox.isSelected());
 
         String valueType = (String) valueTypeComboBox.getSelectedItem();
 

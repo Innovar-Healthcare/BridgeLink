@@ -66,6 +66,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                         "  \"version\": \"1.0\",\n" +
                                         "  \"cacheSize\": 500,\n" +
                                         "  \"cachePolicy\": \"LRU\",\n" +
+                                        "  \"statisticsEnabled\": true,\n" +
                                         "  \"valueType\": \"TEXT\",\n" +
                                         "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
                                         "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
@@ -81,6 +82,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                         "  \"version\": \"1.0\",\n" +
                                         "  \"cacheSize\": 500,\n" +
                                         "  \"cachePolicy\": \"LRU\",\n" +
+                                        "  \"statisticsEnabled\": true,\n" +
                                         "  \"valueType\": \"JSON\",\n" +
                                         "  \"extra\": {\n" +
                                         "    \"jsonIndexMode\": \"FIELD\",\n" +
@@ -91,6 +93,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                         "}"
                             )
                         }
+
             )
     )
     @MirthOperation(name = "createGroup", display = "Create new group", permission = PERMISSION_ACCESS)
@@ -106,46 +109,58 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                         name = "text-group",
                                         summary = "Example TEXT group (default)",
                                         value = "{\n" +
+                                                "  \"id\": 3,\n" +
                                                 "  \"name\": \"Provider Directory\",\n" +
                                                 "  \"description\": \"Provider information lookup\",\n" +
                                                 "  \"version\": \"1.0\",\n" +
                                                 "  \"cacheSize\": 500,\n" +
                                                 "  \"cachePolicy\": \"LRU\",\n" +
-                                                "  \"valueType\": \"TEXT\"\n" +
+                                                "  \"statisticsEnabled\": true,\n" +
+                                                "  \"valueType\": \"TEXT\",\n" +
+                                                "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
+                                                "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
                                                 "}"
                                     ),
                                     @ExampleObject(
                                         name = "json-group-field-index",
                                         summary = "Example JSON group with FIELD index",
                                         value = "{\n" +
+                                                "  \"id\": 3,\n" +
                                                 "  \"name\": \"Provider Directory\",\n" +
                                                 "  \"description\": \"Provider information lookup\",\n" +
                                                 "  \"version\": \"1.0\",\n" +
                                                 "  \"cacheSize\": 500,\n" +
                                                 "  \"cachePolicy\": \"LRU\",\n" +
+                                                "  \"statisticsEnabled\": true,\n" +
                                                 "  \"valueType\": \"JSON\",\n" +
                                                 "  \"extra\": {\n" +
                                                 "    \"jsonIndexMode\": \"FIELD\",\n" +
                                                 "    \"indexedJsonFields\": \"[\\\"email\\\", \\\"address.city\\\"]\"\n" +
-                                                "  }\n" +
+                                                "  },\n" +
+                                                "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
+                                                "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
                                                 "}"
                                     ),
                                     @ExampleObject(
                                         name = "json-group-none-index",
                                         summary = "Example JSON group with NONE index",
                                         value = "{\n" +
+                                                "  \"id\": 3,\n" +
                                                 "  \"name\": \"Provider Directory\",\n" +
                                                 "  \"description\": \"Provider information lookup\",\n" +
                                                 "  \"version\": \"1.0\",\n" +
                                                 "  \"cacheSize\": 500,\n" +
                                                 "  \"cachePolicy\": \"LRU\",\n" +
+                                                "  \"statisticsEnabled\": true,\n" +
                                                 "  \"valueType\": \"JSON\",\n" +
                                                 "  \"extra\": {\n" +
                                                 "    \"jsonIndexMode\": \"NONE\"\n" +
-                                                "  }\n" +
+                                                "  },\n" +
+                                                "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
+                                                "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
                                                 "}"
                                     )
-                                }
+                            }
                     )
             )
             String requestBody
@@ -177,6 +192,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                             "  \"version\": \"1.1\",\n" +
                             "  \"cacheSize\": 1000,\n" +
                             "  \"cachePolicy\": \"LRU\",\n" +
+                            "  \"statisticsEnabled\": true,\n" +
                             "  \"valueType\": \"TEXT\",\n" +
                             "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
                             "  \"updatedDate\": \"2025-05-01T09:30:00Z\"\n" +
@@ -193,6 +209,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                             "  \"version\": \"2.0\",\n" +
                             "  \"cacheSize\": 800,\n" +
                             "  \"cachePolicy\": \"FIFO\",\n" +
+                            "  \"statisticsEnabled\": true,\n" +
                             "  \"valueType\": \"JSON\",\n" +
                             "  \"extra\": {\n" +
                             "    \"jsonIndexMode\": \"FIELD\",\n" +
@@ -231,6 +248,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                 "  \"version\": \"1.1\",\n" +
                                 "  \"cacheSize\": 900,\n" +
                                 "  \"cachePolicy\": \"LRU\",\n" +
+                                "  \"statisticsEnabled\": true,\n" +
                                 "  \"valueType\": \"TEXT\"\n" +
                                 "}"
                     ),
@@ -244,6 +262,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                 "  \"version\": \"2.0\",\n" +
                                 "  \"cacheSize\": 800,\n" +
                                 "  \"cachePolicy\": \"FIFO\",\n" +
+                                "  \"statisticsEnabled\": true,\n" +
                                 "  \"valueType\": \"JSON\",\n" +
                                 "  \"extra\": {\n" +
                                 "    \"jsonIndexMode\": \"FIELD\",\n" +
@@ -261,6 +280,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                 "  \"version\": \"2.0\",\n" +
                                 "  \"cacheSize\": 800,\n" +
                                 "  \"cachePolicy\": \"FIFO\",\n" +
+                                "  \"statisticsEnabled\": true,\n" +
                                 "  \"valueType\": \"JSON\",\n" +
                                 "  \"extra\": {\n" +
                                 "    \"jsonIndexMode\": \"NONE\"\n" +
@@ -293,6 +313,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                     "  \"cachePolicy\": \"LRU\",\n" +
                                     "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
                                     "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
+                                    "  \"statisticsEnabled\": true,\n" +
                                     "  \"valueType\": \"TEXT\"\n" +
                                     "}"
                     )
@@ -324,6 +345,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                     "  \"cachePolicy\": \"LRU\",\n" +
                                     "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
                                     "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
+                                    "  \"statisticsEnabled\": true,\n" +
                                     "  \"valueType\": \"TEXT\"\n" +
                                     "}"
                     )
@@ -759,6 +781,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                     "    \"version\": \"1.0\",\n" +
                                     "    \"cacheSize\": 1000,\n" +
                                     "    \"cachePolicy\": \"LRU\",\n" +
+                                    "    \"statisticsEnabled\": true,\n" +
                                     "    \"createdDate\": \"2024-12-15T08:00:00Z\",\n" +
                                     "    \"updatedDate\": \"2025-05-01T10:00:00Z\"\n" +
                                     "  },\n" +
@@ -868,6 +891,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                     "    \"version\": \"1.0\",\n" +
                                     "    \"cacheSize\": 1000,\n" +
                                     "    \"cachePolicy\": \"LRU\",\n" +
+                                    "    \"statisticsEnabled\": true,\n" +
                                     "    \"valueType\": \"TEXT\"\n" +
                                     "  },\n" +
                                     "  \"values\": {\n" +
@@ -891,6 +915,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                     "    \"version\": \"1.0\",\n" +
                                     "    \"cacheSize\": 500,\n" +
                                     "    \"cachePolicy\": \"FIFO\",\n" +
+                                    "    \"statisticsEnabled\": true,\n" +
                                     "    \"valueType\": \"JSON\",\n" +
                                     "    \"extra\": {\n" +
                                     "      \"jsonIndexMode\": \"FIELD\",\n" +
@@ -915,6 +940,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                     "    \"version\": \"1.0\",\n" +
                                     "    \"cacheSize\": 300,\n" +
                                     "    \"cachePolicy\": \"LRU\",\n" +
+                                    "    \"statisticsEnabled\": true,\n" +
                                     "    \"valueType\": \"JSON\",\n" +
                                     "    \"extra\": {\n" +
                                     "      \"jsonIndexMode\": \"NONE\"\n" +

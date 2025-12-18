@@ -40,6 +40,9 @@ public class LookupModelMapper {
         group.setCreatedDate(new Date());
         group.setUpdatedDate(new Date());
         group.setValueType(dto.getValueType());
+        if (dto.getStatisticsEnabled() != null) {
+            group.setStatisticsEnabled(dto.getStatisticsEnabled());
+        }
         group.setExtra(cloneExtra(dto.getExtra()));
 
         return group;

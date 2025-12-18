@@ -442,7 +442,8 @@ public class LookupService {
         validateKey(key);
 
         // Verify group exists
-        if (groupDao.getGroupById(groupId) == null) {
+        LookupGroup group = groupDao.getGroupById(groupId);
+        if (group == null) {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
         }
 
@@ -472,13 +473,14 @@ public class LookupService {
         }
 
         // Update statistics
-        try {
-            statisticsDao.updateStatistics(groupId, cacheHit);
-        } catch (Exception e) {
-            // Non-critical error, just log it
-            logger.warn("Failed to update statistics: {}", e.getMessage());
+        if (group.isStatisticsEnabled()) {
+            try {
+                statisticsDao.updateStatistics(groupId, cacheHit);
+            } catch (Exception e) {
+                // Non-critical error, just log it
+                logger.warn("Failed to update statistics: {}", e.getMessage());
+            }
         }
-
         return value;
     }
 
@@ -682,7 +684,8 @@ public class LookupService {
      */
     public Map<String, String> getBatchValues(int groupId, List<String> keys, long ttlSeconds) {
         // Verify group exists
-        if (groupDao.getGroupById(groupId) == null) {
+        LookupGroup group = groupDao.getGroupById(groupId);
+        if (group == null) {
             throw new GroupNotFoundException("Group not found with ID: " + groupId);
         }
 
@@ -725,16 +728,18 @@ public class LookupService {
         }
 
         // Update statistics
-        try {
-            for (int i = 0; i < cacheHits; i++) {
-                statisticsDao.updateStatistics(groupId, true);
+        if (group.isStatisticsEnabled()) {
+            try {
+                for (int i = 0; i < cacheHits; i++) {
+                    statisticsDao.updateStatistics(groupId, true);
+                }
+                for (int i = 0; i < keysToFetch.size(); i++) {
+                    statisticsDao.updateStatistics(groupId, false);
+                }
+            } catch (Exception e) {
+                // Non-critical error, just log it
+                logger.warn("Failed to update statistics: {}", e.getMessage());
             }
-            for (int i = 0; i < keysToFetch.size(); i++) {
-                statisticsDao.updateStatistics(groupId, false);
-            }
-        } catch (Exception e) {
-            // Non-critical error, just log it
-            logger.warn("Failed to update statistics: {}", e.getMessage());
         }
 
         return result;

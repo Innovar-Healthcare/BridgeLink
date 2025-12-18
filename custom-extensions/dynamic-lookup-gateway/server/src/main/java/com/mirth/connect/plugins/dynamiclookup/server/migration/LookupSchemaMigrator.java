@@ -48,6 +48,13 @@ public class LookupSchemaMigrator {
             SqlScriptRunner.runWithSemicolon(sqlSessionManager, sqlScript);
         }
 
+        if (needUpdateV210_AddGroupStatisticsEnabled()) {
+            String path = "/sql/" + folder + "/fixes/V210_add_statistics_enabled_to_group_table.sql";
+            String sqlScript = SqlScriptRunner.loadScript(path);
+
+            SqlScriptRunner.runWithSemicolon(sqlSessionManager, sqlScript);
+        }
+
         if (needUpdateV210_AddGroupExtra()) {
             String path = "/sql/" + folder + "/fixes/V210_add_group_extra_table.sql";
             String sqlScript = SqlScriptRunner.loadScript(path);
@@ -107,6 +114,28 @@ public class LookupSchemaMigrator {
         } catch (Exception e) {
             // TODO: handle exception
             logger.warn("needUpdateV210_AddGroupValueType() check failed: {}", e.getMessage());
+            return false;
+        } finally {
+
+            try {
+                if (session != null) {
+                    session.close();
+                }
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private boolean needUpdateV210_AddGroupStatisticsEnabled() {
+        SqlSession session = null;
+
+        try {
+            session = sqlSessionManager.openSession();
+
+            return !LookupDbUtil.columnExists(session.getConnection(), "LOOKUP_GROUP", "STATISTICS_ENABLED");
+        } catch (Exception e) {
+            // TODO: handle exception
+            logger.warn("needUpdateV210_AddGroupStatisticsEnabled() check failed: {}", e.getMessage());
             return false;
         } finally {
 

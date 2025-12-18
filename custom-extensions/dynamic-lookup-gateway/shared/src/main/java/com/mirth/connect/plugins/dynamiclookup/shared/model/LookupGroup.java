@@ -26,6 +26,7 @@ public class LookupGroup {
     private Date createdDate;
     private Date updatedDate;
     private String valueType; // "TEXT" or "JSON"
+    private boolean statisticsEnabled;
     private LookupGroupExtra extra;
 
     public LookupGroup() {
@@ -36,6 +37,7 @@ public class LookupGroup {
         cacheSize = 1000;
         cachePolicy = "LRU";
         valueType = "TEXT";
+        statisticsEnabled = true;
     }
 
     public LookupGroup(LookupGroup other) {
@@ -48,6 +50,7 @@ public class LookupGroup {
         this.createdDate = other.createdDate != null ? new Date(other.createdDate.getTime()) : null;
         this.updatedDate = other.updatedDate != null ? new Date(other.updatedDate.getTime()) : null;
         this.valueType = other.valueType;
+        this.statisticsEnabled = other.statisticsEnabled;
         this.extra = other.extra;
     }
 
@@ -121,6 +124,14 @@ public class LookupGroup {
 
     public void setValueType(String valueType) {
         this.valueType = valueType;
+    }
+
+    public boolean isStatisticsEnabled() {
+        return statisticsEnabled;
+    }
+
+    public void setStatisticsEnabled(boolean statisticsEnabled) {
+        this.statisticsEnabled = statisticsEnabled;
     }
 
     public LookupGroupExtra getExtra() {

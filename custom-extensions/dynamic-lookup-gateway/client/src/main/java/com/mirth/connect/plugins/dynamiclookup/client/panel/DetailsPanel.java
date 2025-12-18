@@ -101,13 +101,14 @@ public class DetailsPanel extends JPanel {
             detailsTextArea.setText("");
             return;
         }
-        //@formatter:off
+      //@formatter:off
         String headerAndCache = String.format(
-                "%-20s: %d%n" +
                 "%-20s: %s%n" +
                 "%-20s: %s%n" +
                 "%-20s: %s%n" +
-                "%-20s: %d%n" +
+                "%-20s: %s%n" +
+                "%-20s: %s%n" +
+                "%-20s: %s%n" +
                 "%-20s: %s%n" +
                 "%-20s: %s%n",
                 "ID", selectedGroup.getId(),
@@ -116,9 +117,11 @@ public class DetailsPanel extends JPanel {
                 "Version", selectedGroup.getVersion() != null ? selectedGroup.getVersion() : "",
                 "Cache Size", selectedGroup.getCacheSize(),
                 "Cache Policy", selectedGroup.getCachePolicy() != null ? selectedGroup.getCachePolicy() : "",
+                "Statistics Enabled", selectedGroup.isStatisticsEnabled() ? "Yes" : "No",
                 "Value Type", selectedGroup.getValueType() != null ? selectedGroup.getValueType() : "TEXT"
         );
         //@formatter:on
+
         String details = headerAndCache;
 
         if (LookupConstants.isJsonValueType(selectedGroup.getValueType())) {
