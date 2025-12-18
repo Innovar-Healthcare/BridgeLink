@@ -107,12 +107,12 @@ public class MysqlJsonFieldDialect implements JsonFieldDialect {
     }
 
     private String buildIndexExpression(String fieldPath) {
-        String jsonPath = "$." + fieldPath; // "address.city"
+        String jsonPath = normalizeJsonPath(fieldPath);
         return "CAST(JSON_UNQUOTE(JSON_EXTRACT(VALUE_DATA, '" + jsonPath + "')) AS CHAR(255))";
     }
 
     private String buildTypeCheckSql(String fieldPath, JsonValueType valueType) {
-        String jsonPath = "$." + fieldPath; // "address.city"
+        String jsonPath = normalizeJsonPath(fieldPath);
         String extract = "JSON_EXTRACT(VALUE_DATA, '" + jsonPath + "')";
         String type = "JSON_TYPE(" + extract + ")";
 
@@ -130,7 +130,7 @@ public class MysqlJsonFieldDialect implements JsonFieldDialect {
     }
 
     private String buildCriterionExpression(String fieldPath, JsonValueType valueType) {
-        String jsonPath = "$." + fieldPath; // "address.city"
+        String jsonPath = normalizeJsonPath(fieldPath);
         String extract = "JSON_EXTRACT(VALUE_DATA, '" + jsonPath + "')";
 
         if (valueType == null || valueType == JsonValueType.STRING) {
@@ -190,4 +190,23 @@ public class MysqlJsonFieldDialect implements JsonFieldDialect {
         }
     }
 
+    private String normalizeJsonPath(String fieldPath) {
+        if (fieldPath == null) {
+            return "$";
+        }
+        String trimmed = fieldPath.trim();
+        if (trimmed.isEmpty()) {
+            return "$";
+        }
+
+        String[] parts = trimmed.split("\\.");
+        StringBuilder sb = new StringBuilder("$");
+        for (String p : parts) {
+            if (p == null || p.isEmpty()) {
+                continue;
+            }
+            sb.append(".\"").append(p.replace("\"", "\\\"")).append("\"");
+        }
+        return sb.toString();
+    }
 }

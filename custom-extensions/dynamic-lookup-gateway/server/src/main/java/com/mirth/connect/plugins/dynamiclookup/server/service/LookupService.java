@@ -35,8 +35,6 @@ import com.mirth.connect.plugins.dynamiclookup.server.exception.ValueTableCreati
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldCriterion;
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldDialectRegistry;
 import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonIndexConfigurator;
-import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonIndexNaming;
-import com.mirth.connect.plugins.dynamiclookup.server.util.LookupTableNaming;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.LookupJsonCapability;
 import com.mirth.connect.plugins.dynamiclookup.shared.constant.LookupConstants;
@@ -1322,27 +1320,9 @@ public class LookupService {
                 for (String f : fields) {
                     FieldPathFormatValidator.validate(f);
                 }
-                validateJsonFieldIndexNames(fields);
             }
         }
 
-    }
-
-    private void validateJsonFieldIndexNames(List<String> fields) {
-        LookupJsonCapability capability = LookupJsonCapability.getInstance();
-        int maxLen = capability.getMaxIdentifierLength();
-
-        // Worst-case table name (longest possible groupId)
-        int worstGroupId = Integer.MAX_VALUE;
-        String tableName = LookupTableNaming.valueTableName(worstGroupId);
-
-        for (String fieldPath : fields) {
-            String indexName = JsonIndexNaming.buildIndexName(tableName, fieldPath);
-
-            if (indexName.length() > maxLen) {
-                throw new IllegalArgumentException("JSON index name for field '" + fieldPath + "' is too long (" + indexName.length() + " chars). " + "Database limit is " + maxLen + " for " + capability.getDatabaseInfo().getProductName() + ". Index would be: " + indexName);
-            }
-        }
     }
 
     /**

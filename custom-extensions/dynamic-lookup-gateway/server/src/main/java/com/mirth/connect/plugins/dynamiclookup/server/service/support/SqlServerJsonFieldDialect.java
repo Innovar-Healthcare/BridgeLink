@@ -123,7 +123,7 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
     }
 
     private String buildIndexExpression(String fieldPath) {
-        String jsonPath = "$." + fieldPath; // e.g. address.city
+        String jsonPath = normalizeJsonPath(fieldPath);
         return "JSON_VALUE(VALUE_DATA, '" + jsonPath + "')";
     }
 
@@ -202,7 +202,7 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
             return computedColumnName;
         }
 
-        String jsonPath = "$." + fieldPath;
+        String jsonPath = normalizeJsonPath(fieldPath);
         return "JSON_VALUE(VALUE_DATA, '" + jsonPath + "')";
     }
 
@@ -256,4 +256,23 @@ public class SqlServerJsonFieldDialect implements JsonFieldDialect {
         }
     }
 
+    private String normalizeJsonPath(String fieldPath) {
+        if (fieldPath == null) {
+            return "$";
+        }
+        String trimmed = fieldPath.trim();
+        if (trimmed.isEmpty()) {
+            return "$";
+        }
+
+        String[] parts = trimmed.split("\\.");
+        StringBuilder sb = new StringBuilder("$");
+        for (String p : parts) {
+            if (p == null || p.isEmpty()) {
+                continue;
+            }
+            sb.append(".\"").append(p.replace("\"", "\\\"")).append("\"");
+        }
+        return sb.toString();
+    }
 }
