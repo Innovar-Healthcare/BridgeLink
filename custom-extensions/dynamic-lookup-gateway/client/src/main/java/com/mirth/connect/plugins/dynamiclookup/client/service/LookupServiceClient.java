@@ -45,7 +45,6 @@ import com.mirth.connect.plugins.dynamiclookup.shared.util.LookupErrorCode;
 
 public class LookupServiceClient {
     private static LookupServiceClient instance = null;
-    private LookupTableServletInterface servlet;
     private final Logger logger = LogManager.getLogger(this.getClass());
 
     public static LookupServiceClient getInstance() {
@@ -445,12 +444,8 @@ public class LookupServiceClient {
     }
 
     private LookupTableServletInterface getServlet() {
-        if (servlet == null) {
-            Client client = PlatformUI.MIRTH_FRAME.mirthClient;
-            servlet = client.getServlet(LookupTableServletInterface.class);
-        }
-
-        return servlet;
+        Client client = PlatformUI.MIRTH_FRAME.mirthClient;
+        return client.getServlet(LookupTableServletInterface.class);
     }
 
     private void rethrowParsedClientError(ClientException e) throws ClientException {

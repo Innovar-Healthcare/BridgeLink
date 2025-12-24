@@ -37,7 +37,11 @@
 	<classpathentry kind="lib" path="../../client/lib/jackson-core-2.14.3.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/jackson-databind-2.14.3.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/commons-lang3-3.13.0.jar"/>
-	<classpathentry kind="lib" path="../../client/lib/swingx-core-1.6.2.jar"/>
+	<classpathentry kind="lib" path="../../client/lib/swingx-core-1.6.2.jar">
+		<attributes>
+			<attribute name="javadoc_location" value="http://www.jarvana.com/jarvana/view/org/swinglabs/swingx-core/1.6.2-2/swingx-core-1.6.2-2-javadoc.jar!/"/>
+		</attributes>
+	</classpathentry>
 	<classpathentry kind="lib" path="../../client/lib/rsyntaxtextarea-2.5.6.jar"/>
 	
     <!-- Optional: Add plugin/lib dependencies here -->
