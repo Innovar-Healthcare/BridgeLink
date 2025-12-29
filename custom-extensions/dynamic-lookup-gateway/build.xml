@@ -164,7 +164,7 @@
         <antcall target="install-to-server-setup"/>
 
     	<!-- Package everything in dist/ into a zip file -->
-    	<zip destfile="${package_install.dir}/${plugin.path}.zip" encoding="UTF-8" level="9" zip64Mode="never">
+    	<zip destfile="${package_install.dir}/${plugin.package.name}.zip" encoding="UTF-8" level="9" zip64Mode="never">
     	    <zipfileset dir="${dist.dir}" prefix="${plugin.path}/"></zipfileset>
     	</zip>
 
