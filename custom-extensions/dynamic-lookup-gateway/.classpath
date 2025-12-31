@@ -17,8 +17,6 @@
 	<classpathentry kind="lib" path="../../donkey/classes"/>
 	
 	<!-- Mirth dependencies -->
-	<classpathentry kind="lib" path="../../server/lib/mirth-client-core.jar"/>
-	<classpathentry kind="lib" path="../../server/lib/mirth-server.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/log4j/log4j-1.2-api-2.17.2.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/log4j/log4j-api-2.17.2.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/log4j/log4j-core-2.17.2.jar"/>
@@ -30,7 +28,6 @@
 	<classpathentry kind="lib" path="../../server/lib/donkey/guava/guava-32.0.1-jre.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/swagger/swagger-annotations-2.0.10.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/mybatis-3.1.1.jar"/>
-	<classpathentry kind="lib" path="../../client/lib/mirth-client.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/miglayout-core-4.2.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/miglayout-swing-4.2.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/jackson-annotations-2.14.3.jar"/>
