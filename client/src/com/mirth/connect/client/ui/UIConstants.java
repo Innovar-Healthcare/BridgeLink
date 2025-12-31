@@ -19,11 +19,7 @@ package com.mirth.connect.client.ui;
 
 import java.awt.Color;
 import java.awt.Font;
-import java.awt.Image;
-import java.io.File;
-import java.io.IOException;
 
-import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
 
 import org.apache.commons.lang3.SystemUtils;
@@ -158,73 +154,4 @@ public class UIConstants {
 
     // User preferences
     public static final String USER_PREF_KEY_BACKGROUND_COLOR = "backgroundColor";
-    
-    // Custom icon path for dynamic icon loading
-    private static String customIconPath = null;
-    
-    /**
-     * Sets the custom icon path for the application
-     * @param iconPath Path to the custom icon file
-     */
-    public static void setCustomIconPath(String iconPath) {
-        customIconPath = iconPath;
-        System.out.println("Custom icon path set via command line: " + iconPath);
-    }
-    
-    /**
-     * Debug method to print icon-related system property
-     */
-    public static void debugIconProperties() {
-        System.out.println("=== Icon Loading Debug Info ===");
-        String bridgeLinkIconPath = System.getProperty("bridgelink.icon.path");
-        System.out.println("bridgelink.icon.path = " + (bridgeLinkIconPath != null ? bridgeLinkIconPath : "<not set>"));
-        System.out.println("customIconPath = " + (customIconPath != null ? customIconPath : "<not set>"));
-        System.out.println("===============================");
-    }
-    
-    /**
-     * Returns the application icon, either custom or default
-     * Checks in this order:
-     * 1. System property bridgelink.icon.path
-     * 2. Custom icon path set via setCustomIconPath()
-     * 3. Default MIRTH_FAVICON
-     * @return ImageIcon for the application icon
-     */
-    public static ImageIcon getApplicationIcon() {
-        // First check bridgelink.icon.path system property
-        String iconPath = System.getProperty("bridgelink.icon.path");
-        if (iconPath != null && !iconPath.trim().isEmpty()) {
-            try {
-                File iconFile = new File(iconPath);
-                if (iconFile.exists() && iconFile.canRead()) {
-                    Image customImage = ImageIO.read(iconFile);
-                    if (customImage != null) {
-                        return new ImageIcon(customImage);
-                    }
-                }
-            } catch (IOException e) {
-                System.err.println("Failed to load icon from bridgelink.icon.path: " + iconPath);
-                e.printStackTrace();
-            }
-        }
-        
-        // Then check custom icon path set via command line
-        if (customIconPath != null && !customIconPath.trim().isEmpty()) {
-            try {
-                File iconFile = new File(customIconPath);
-                if (iconFile.exists() && iconFile.canRead()) {
-                    Image customImage = ImageIO.read(iconFile);
-                    if (customImage != null) {
-                        return new ImageIcon(customImage);
-                    }
-                }
-            } catch (IOException e) {
-                System.err.println("Failed to load custom icon from: " + customIconPath);
-                e.printStackTrace();
-            }
-        }
-        
-        // Fallback to default icon
-        return MIRTH_FAVICON;
-    }
 }

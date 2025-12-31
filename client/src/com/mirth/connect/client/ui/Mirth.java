@@ -277,6 +277,7 @@ public class Mirth {
         for (int i = 0; i < args.length; i++) {
             if (("-bridgelink.icon.path".equals(args[i]) || "-icon".equals(args[i])) && i + 1 < args.length) {
                 iconPath = args[i + 1];
+                ApplicationIconProvider.setCustomIconPath(iconPath);
                 // Remove the flag and its value from args for normal processing
                 String[] newArgs = new String[args.length - 2];
                 System.arraycopy(args, 0, newArgs, 0, i);
@@ -348,9 +349,6 @@ public class Mirth {
 
         SwingUtilities.invokeLater(new Runnable() {
             public void run() {
-                // Debug icon loading
-                UIConstants.debugIconProperties();
-                
                 initUIManager();
                 PlatformUI.BACKGROUND_IMAGE = new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/header_nologo.png"));
                 LoginPanelProvider.registerCustomLoginPanelFactory("com.mirth.connect.client.ui.CustomLoginPanelProviderImpl");

@@ -104,7 +104,7 @@ public class LoginPanel extends AbstractLoginPanel {
             com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION = version;
 
             setTitle("BridgeLink " + version + " - Login");//Change to BridgeLink by Innovar Healthcare
-            setIconImage(com.mirth.connect.client.ui.UIConstants.getApplicationIcon().getImage());
+            setIconImage(ApplicationIconProvider.getApplicationIcon().getImage());
 
             serverName.setText(mirthServer);
 
@@ -168,7 +168,7 @@ public class LoginPanel extends AbstractLoginPanel {
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setTitle("BridgeLink - Login");//Change to BridgeLink by Innovar Healthcare
-        setIconImage(com.mirth.connect.client.ui.UIConstants.getApplicationIcon().getImage());
+        setIconImage(ApplicationIconProvider.getApplicationIcon().getImage());
 
         loginMain.setBackground(new java.awt.Color(255, 255, 255));
         loginMain.setName(""); // NOI18N
