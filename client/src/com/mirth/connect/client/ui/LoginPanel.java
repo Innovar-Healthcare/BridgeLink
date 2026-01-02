@@ -58,7 +58,7 @@ public class LoginPanel extends AbstractLoginPanel {
         jLabel2.setForeground(com.mirth.connect.client.ui.UIConstants.HEADER_TITLE_TEXT_COLOR);
         jLabel5.setForeground(com.mirth.connect.client.ui.UIConstants.HEADER_TITLE_TEXT_COLOR);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setIconImage(com.mirth.connect.client.ui.UIConstants.getApplicationIcon().getImage());
+        setIconImage(ApplicationIconProvider.getApplicationIcon().getImage());
         ImageIcon imageIcon = com.mirth.connect.client.ui.UIConstants.MIRTHCORP_LOGO; // load the image to a imageIcon
         Image image = imageIcon.getImage(); // transform it
         Image newimg = image.getScaledInstance(175, 30, java.awt.Image.SCALE_SMOOTH); // scale it the smooth way 

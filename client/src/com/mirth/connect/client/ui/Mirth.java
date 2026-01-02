@@ -331,11 +331,7 @@ public class Mirth {
         if (StringUtils.isNotBlank(cipherSuites)) {
             PlatformUI.HTTPS_CIPHER_SUITES = StringUtils.split(cipherSuites, ',');
         }
-        
-        // Set custom icon path if provided
-        if (StringUtils.isNotBlank(iconPath)) {
-            UIConstants.setCustomIconPath(iconPath);
-        }
+
 
         start(server, version, username, password);
     }
