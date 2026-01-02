@@ -21,10 +21,13 @@ public class LookupGroup {
     private String name;
     private String description;
     private String version;
-    private int cacheSize;  // Default: 1000
-    private String cachePolicy;  // "LRU" or "FIFO"
+    private int cacheSize; // Default: 1000
+    private String cachePolicy; // "LRU" or "FIFO"
     private Date createdDate;
     private Date updatedDate;
+    private String valueType; // "TEXT" or "JSON"
+    private boolean statisticsEnabled;
+    private LookupGroupExtra extra;
 
     public LookupGroup() {
         id = 0;
@@ -33,6 +36,8 @@ public class LookupGroup {
         version = "";
         cacheSize = 1000;
         cachePolicy = "LRU";
+        valueType = "TEXT";
+        statisticsEnabled = true;
     }
 
     public LookupGroup(LookupGroup other) {
@@ -44,6 +49,9 @@ public class LookupGroup {
         this.cachePolicy = other.cachePolicy;
         this.createdDate = other.createdDate != null ? new Date(other.createdDate.getTime()) : null;
         this.updatedDate = other.updatedDate != null ? new Date(other.updatedDate.getTime()) : null;
+        this.valueType = other.valueType;
+        this.statisticsEnabled = other.statisticsEnabled;
+        this.extra = other.extra;
     }
 
     public int getId() {
@@ -108,5 +116,29 @@ public class LookupGroup {
 
     public void setUpdatedDate(Date updatedDate) {
         this.updatedDate = updatedDate;
+    }
+
+    public String getValueType() {
+        return valueType;
+    }
+
+    public void setValueType(String valueType) {
+        this.valueType = valueType;
+    }
+
+    public boolean isStatisticsEnabled() {
+        return statisticsEnabled;
+    }
+
+    public void setStatisticsEnabled(boolean statisticsEnabled) {
+        this.statisticsEnabled = statisticsEnabled;
+    }
+
+    public LookupGroupExtra getExtra() {
+        return extra;
+    }
+
+    public void setExtra(LookupGroupExtra extra) {
+        this.extra = extra;
     }
 }

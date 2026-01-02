@@ -163,10 +163,10 @@
         <!-- Now install the full plugin to the server setup extensions folder -->
         <antcall target="install-to-server-setup"/>
 
-        <!-- Package everything in dist/ into a zip file -->
-        <zip destfile="${dist.dir}/${plugin.name}.zip" basedir="${dist.dir}">
-            <exclude name="${plugin.name}.zip"/> <!-- Avoid zipping the zip itself -->
-        </zip>
+    	<!-- Package everything in dist/ into a zip file -->
+    	<zip destfile="${package_install.dir}/${plugin.package.name}.zip" encoding="UTF-8" level="9" zip64Mode="never">
+    	    <zipfileset dir="${dist.dir}" prefix="${plugin.path}/"></zipfileset>
+    	</zip>
 
         <echo message="Built, signed, installed, and zipped ${plugin.name}"/>
     </target>

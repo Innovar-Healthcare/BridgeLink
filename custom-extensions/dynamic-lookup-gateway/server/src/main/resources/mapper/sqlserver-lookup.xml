@@ -11,8 +11,16 @@
         <result property="cachePolicy" column="CACHE_POLICY" javaType="String"/>
         <result property="createdDate" column="CREATED_DATE" javaType="java.sql.Timestamp"/>
         <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
+        <result property="valueType" column="VALUE_TYPE" javaType="String"/>
+        <result property="statisticsEnabled" column="STATISTICS_ENABLED" javaType="Boolean"/>
     </resultMap>
 
+	<resultMap id="lookup-group-extra" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroupExtra">
+        <id     property="groupId"           column="GROUP_ID"            javaType="Integer"/>
+        <result property="jsonIndexMode"     column="JSON_INDEX_MODE"     javaType="String"/>
+        <result property="indexedJsonFields" column="INDEXED_JSON_FIELDS" javaType="String"/>
+    </resultMap>
+    
     <resultMap id="lookup-value" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue">
         <id property="keyValue" column="KEY_VALUE" javaType="String"/>
         <result property="valueData" column="VALUE_DATA" javaType="String"/>
@@ -40,38 +48,27 @@
         <result property="timestamp" column="AUDIT_TIMESTAMP" javaType="java.sql.Timestamp"/>
     </resultMap>
 
-    <sql id="searchLookupValuesBody">
-        <where>
-            <if test='pattern != null and pattern != ""'>
-                (
-                LOWER(KEY_VALUE) LIKE '%' + LOWER(#{pattern}) + '%'
-                OR LOWER(VALUE_DATA) LIKE '%' + LOWER(#{pattern}) + '%'
-                )
-            </if>
-        </where>
-    </sql>
-
     <!-- Group Operations -->
     <select id="getGroupById" parameterType="Integer" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE, STATISTICS_ENABLED
         FROM LOOKUP_GROUP
         WHERE ID = #{value}
     </select>
 
     <select id="getGroupByName" parameterType="String" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE, STATISTICS_ENABLED
         FROM LOOKUP_GROUP
         WHERE NAME = #{value}
     </select>
 
     <select id="getAllGroups" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE, STATISTICS_ENABLED
         FROM LOOKUP_GROUP
     </select>
 
     <insert id="insertGroup" parameterType="map" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO LOOKUP_GROUP (NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY)
-        VALUES (#{name}, #{description}, #{version}, #{cacheSize}, #{cachePolicy})
+        INSERT INTO LOOKUP_GROUP (NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, VALUE_TYPE, STATISTICS_ENABLED)
+        VALUES (#{name}, #{description}, #{version}, #{cacheSize}, #{cachePolicy}, #{valueType}, #{statisticsEnabled,jdbcType=BIT})
     </insert>
 
     <update id="updateGroup" parameterType="map">
@@ -81,6 +78,8 @@
         VERSION = #{version},
         CACHE_SIZE = #{cacheSize},
         CACHE_POLICY = #{cachePolicy},
+        VALUE_TYPE = #{valueType},
+        STATISTICS_ENABLED = #{statisticsEnabled,jdbcType=BIT},
         UPDATED_DATE = CURRENT_TIMESTAMP
         WHERE ID = #{id}
     </update>
@@ -90,7 +89,93 @@
         WHERE ID = #{value}
     </delete>
 
+	<select id="getByGroupId" parameterType="Integer" resultMap="lookup-group-extra">
+        SELECT GROUP_ID, JSON_INDEX_MODE, INDEXED_JSON_FIELDS
+        FROM LOOKUP_GROUP_EXTRA
+        WHERE GROUP_ID = #{value}
+    </select>
+
+	<select id="getAllGroupExtras" resultMap="lookup-group-extra">
+        SELECT GROUP_ID, JSON_INDEX_MODE, INDEXED_JSON_FIELDS
+        FROM LOOKUP_GROUP_EXTRA
+    </select>
+    
+    <insert id="insertGroupExtra" parameterType="map">
+        INSERT INTO LOOKUP_GROUP_EXTRA 
+            (GROUP_ID, JSON_INDEX_MODE, INDEXED_JSON_FIELDS)
+        VALUES
+            (#{groupId}, #{jsonIndexMode}, #{indexedJsonFields})
+    </insert>
+
+    <update id="updateGroupExtra" parameterType="map">
+        UPDATE LOOKUP_GROUP_EXTRA
+        SET 
+            JSON_INDEX_MODE = #{jsonIndexMode},
+            INDEXED_JSON_FIELDS = #{indexedJsonFields}
+        WHERE GROUP_ID = #{groupId}
+    </update>
+
+    <select id="groupExtraExists" parameterType="Integer" resultType="Integer">
+        SELECT 1
+        FROM LOOKUP_GROUP_EXTRA
+        WHERE GROUP_ID = #{value}
+    </select>
+    
     <!-- Value Operations -->
+    <sql id="searchLookupValuesBody">
+	    <trim prefix="WHERE" prefixOverrides="AND |OR ">
+	        <if test="keyFilter != null and keyFilter != ''">
+	            <choose>
+	                <when test="keyFilterMode == 'EXACT'">
+	                    AND KEY_VALUE = #{keyFilter}
+	                </when>
+	                <when test="keyFilterMode == 'PREFIX'">
+	                    AND LOWER(KEY_VALUE) LIKE LOWER(#{keyFilter} + '%')
+	                </when>
+	                <when test="keyFilterMode == 'PATTERN'">
+	                    AND LOWER(KEY_VALUE) LIKE LOWER(#{keyFilter})
+	                </when>
+	                <otherwise>
+	                    AND LOWER(KEY_VALUE) LIKE LOWER('%' + #{keyFilter} + '%')
+	                </otherwise>
+	            </choose>
+	        </if>
+	        <if test="valueFilter != null and valueFilter != ''">
+	            AND LOWER(VALUE_DATA) LIKE LOWER('%' + #{valueFilter} + '%')
+	        </if>
+	    </trim>
+	</sql>
+
+	<sql id="searchByJsonFieldsFieldBody">
+	    <trim prefix="WHERE" prefixOverrides="AND |OR ">
+	        <if test="keyPattern != null and keyPattern != ''">
+	        	AND LOWER(KEY_VALUE) LIKE LOWER(#{keyPattern})
+	        </if>
+	        
+	        <!-- JSON criteria -->
+	        <if test="criteria != null and criteria.size() > 0">
+	            AND (
+	                <foreach collection="criteria"
+	                         item="c"
+	                         separator=" AND ">
+                        <if test="c.typeCheckSql != null and c.typeCheckSql != ''">
+                            ${c.typeCheckSql} AND
+                        </if>
+                        ${c.expression} ${c.operatorSql} ${c.valueSql}
+	                </foreach>
+	            )
+	        </if>
+	    </trim>
+	</sql>
+	
+	<sql id="commonOrderByLimitOffset">
+	    ORDER BY KEY_VALUE ASC
+
+        <if test="offset != null and limit != null">
+            OFFSET #{offset} ROWS FETCH NEXT #{limit} ROWS ONLY
+        </if>
+	</sql>
+	
     <select id="getLookupValues" parameterType="map" resultMap="lookup-value">
         SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
         FROM ${tableName}
@@ -106,9 +191,17 @@
     <select id="getMatchingLookupValues" parameterType="map" resultMap="lookup-value">
         SELECT KEY_VALUE, VALUE_DATA
         FROM ${tableName}
-        WHERE LOWER(KEY_VALUE) LIKE LOWER('%' + #{keyPattern} + '%')
+        WHERE LOWER(KEY_VALUE) LIKE '%' + LOWER(#{keyPattern}) + '%'
+        
+        <include refid="commonOrderByLimitOffset"/>
     </select>
 
+	<select id="getMatchingLookupValuesCount" parameterType="map" resultType="long">
+	    SELECT COUNT(*)
+	    FROM ${tableName}
+	    WHERE LOWER(KEY_VALUE) LIKE '%' + LOWER(#{keyPattern}) + '%'
+	</select>
+	
     <select id="getValue" parameterType="map" resultType="String">
         SELECT VALUE_DATA
         FROM ${tableName}
@@ -188,13 +281,9 @@
         SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
         FROM ${tableName}
 
-        <include refid="searchLookupValuesBody"/>
-
-        ORDER BY KEY_VALUE ASC
-
-        <if test="offset != null and limit != null">
-            OFFSET #{offset} ROWS FETCH NEXT #{limit} ROWS ONLY
-        </if>
+		<include refid="searchLookupValuesBody"/>
+        
+        <include refid="commonOrderByLimitOffset"/>
     </select>
 
 	<select id="selectExistingKeys" parameterType="map" resultType="string">
@@ -205,6 +294,116 @@
 	      #{key}
 	    </foreach>
   	</select>
+  	
+  	<!-- JSON Value Operations -->
+  	<update id="createLookupValueJsonTable" parameterType="map">
+        CREATE TABLE ${tableName} (
+        KEY_VALUE NVARCHAR(255) NOT NULL,
+        VALUE_DATA NVARCHAR(MAX),
+        CREATED_DATE DATETIME DEFAULT GETDATE(),
+        UPDATED_DATE DATETIME DEFAULT GETDATE(),
+        PRIMARY KEY (KEY_VALUE)
+        )
+    </update>
+    
+     <insert id="insertValueJson" parameterType="map">
+        INSERT INTO ${tableName} (KEY_VALUE, VALUE_DATA)
+        VALUES (#{keyValue}, #{valueData})
+    </insert>
+
+    <update id="updateValueJson" parameterType="map">
+        UPDATE ${tableName}
+        SET VALUE_DATA = #{valueData},
+        UPDATED_DATE = CURRENT_TIMESTAMP
+        WHERE KEY_VALUE = #{keyValue}
+    </update>
+
+	<insert id="putIfAbsentJson" parameterType="map">
+	  	MERGE ${tableName} AS t
+	  	USING (SELECT #{keyValue} AS KEY_VALUE) AS s
+	    	ON (t.KEY_VALUE = s.KEY_VALUE)
+	  	WHEN NOT MATCHED THEN
+	    	INSERT (KEY_VALUE, VALUE_DATA)
+	    	VALUES (#{keyValue}, #{valueData});
+	</insert>
+
+	<update id="compareAndSwapJson" parameterType="map">
+	    UPDATE ${tableName}
+	    SET VALUE_DATA = #{newValue},
+	    UPDATED_DATE = CURRENT_TIMESTAMP
+	    WHERE KEY_VALUE = #{keyValue} AND VALUE_DATA = #{expectedValue}
+	</update>
+	
+	<update id="createJsonFieldIndexes" parameterType="map">
+	    <foreach collection="fieldIndexes" item="idx" separator=";">
+	        
+	        -- Create computed column if it does not exist
+	        IF NOT EXISTS (
+	            SELECT * FROM sys.computed_columns
+	            WHERE name = '${idx.computedColumnName}'
+	              AND object_id = OBJECT_ID('${tableName}')
+	        )
+	        BEGIN
+	            ALTER TABLE ${tableName}
+	            ADD ${idx.computedColumnName} 
+	                AS (${idx.expression}) PERSISTED;
+	        END;
+	
+	        -- Create index if it does not exist
+	        IF NOT EXISTS (
+	            SELECT * FROM sys.indexes
+	            WHERE name = '${idx.indexName}'
+	              AND object_id = OBJECT_ID('${tableName}')
+	        )
+	        BEGIN
+	            CREATE INDEX ${idx.indexName}
+	                ON ${tableName}(${idx.computedColumnName});
+	        END
+	
+	    </foreach>
+	</update>
+
+	<update id="dropJsonFieldIndexes" parameterType="map">
+	    <foreach collection="fieldIndexes" item="idx" separator=";">
+	        
+	        -- Drop index if it exists
+	        IF EXISTS (
+	            SELECT * FROM sys.indexes
+	            WHERE name = '${idx.indexName}'
+	              AND object_id = OBJECT_ID('${tableName}')
+	        )
+	        BEGIN
+	            DROP INDEX ${idx.indexName} ON ${tableName};
+	        END;
+	
+	        -- Drop computed column if it exists
+	        IF EXISTS (
+	            SELECT * FROM sys.computed_columns
+	            WHERE name = '${idx.computedColumnName}'
+	              AND object_id = OBJECT_ID('${tableName}')
+	        )
+	        BEGIN
+	            ALTER TABLE ${tableName}
+	            DROP COLUMN ${idx.computedColumnName};
+	        END;
+	
+	    </foreach>
+	</update>
+
+	<select id="searchByJsonFieldsFieldCount" parameterType="map" resultType="long">
+        SELECT COUNT(*) FROM ${tableName}
+
+        <include refid="searchByJsonFieldsFieldBody"/>
+    </select>
+    
+    <select id="searchByJsonFieldsField" parameterType="map" resultMap="lookup-value">
+	    SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
+        FROM ${tableName}
+	    
+	    <include refid="searchByJsonFieldsFieldBody"/>
+		<include refid="commonOrderByLimitOffset"/>
+	</select>
+  	<!-- End Value Operations -->
   	
     <!-- Statistics Operations -->
     <insert id="insertStatistics" parameterType="map">

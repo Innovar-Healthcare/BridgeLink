@@ -11,15 +11,17 @@
         <result property="cachePolicy" column="CACHE_POLICY" javaType="String"/>
         <result property="createdDate" column="CREATED_DATE" javaType="java.sql.Timestamp"/>
         <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
+        <result property="valueType" column="VALUE_TYPE" javaType="String"/>
+        <result property="statisticsEnabled" column="STATISTICS_ENABLED" javaType="Boolean"/>
     </resultMap>
 
-    <resultMap id="lookup-value" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue">
+	<resultMap id="lookup-value" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue">
         <id property="keyValue" column="KEY_VALUE" javaType="String"/>
         <result property="valueData" column="VALUE_DATA" javaType="String"/>
         <result property="createdDate" column="CREATED_DATE" javaType="java.sql.Timestamp"/>
         <result property="updatedDate" column="UPDATED_DATE" javaType="java.sql.Timestamp"/>
     </resultMap>
-
+    
     <resultMap id="lookup-statistics" type="com.mirth.connect.plugins.dynamiclookup.shared.model.LookupStatistics">
         <id property="groupId" column="GROUP_ID" javaType="Integer"/>
         <result property="totalLookups" column="TOTAL_LOOKUPS" javaType="Long"/>
@@ -40,35 +42,27 @@
         <result property="timestamp" column="AUDIT_TIMESTAMP" javaType="java.sql.Timestamp"/>
     </resultMap>
 
-    <sql id="searchLookupValuesBody">
-        <where>
-            <if test='pattern != null'>LOWER(KEY_VALUE) LIKE LOWER('%' || #{pattern} || '%')
-                OR LOWER(VALUE_DATA) LIKE LOWER('%' || #{pattern} || '%')
-            </if>
-        </where>
-    </sql>
-
     <!-- Group Operations -->
     <select id="getGroupById" parameterType="Integer" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE, STATISTICS_ENABLED
         FROM LOOKUP_GROUP
         WHERE ID = #{value}
     </select>
 
     <select id="getGroupByName" parameterType="String" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE, STATISTICS_ENABLED
         FROM LOOKUP_GROUP
         WHERE NAME = #{value}
     </select>
 
     <select id="getAllGroups" resultMap="lookup-group">
-        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE
+        SELECT ID, NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE, STATISTICS_ENABLED
         FROM LOOKUP_GROUP
     </select>
 
     <insert id="insertGroup" parameterType="map" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO LOOKUP_GROUP (NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE)
-        VALUES (#{name}, #{description}, #{version}, #{cacheSize}, #{cachePolicy}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO LOOKUP_GROUP (NAME, DESCRIPTION, VERSION, CACHE_SIZE, CACHE_POLICY, CREATED_DATE, UPDATED_DATE, VALUE_TYPE, STATISTICS_ENABLED)
+        VALUES (#{name}, #{description}, #{version}, #{cacheSize}, #{cachePolicy}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, #{valueType}, #{statisticsEnabled})
     </insert>
 
     <update id="updateGroup" parameterType="map">
@@ -78,6 +72,8 @@
         VERSION = #{version},
         CACHE_SIZE = #{cacheSize},
         CACHE_POLICY = #{cachePolicy},
+        VALUE_TYPE = #{valueType},
+        STATISTICS_ENABLED = #{statisticsEnabled},
         UPDATED_DATE = CURRENT_TIMESTAMP
         WHERE ID = #{id}
     </update>
@@ -86,8 +82,45 @@
         DELETE FROM LOOKUP_GROUP
         WHERE ID = #{value}
     </delete>
+	
+	<!-- Value Operations -->
+	<sql id="searchLookupValuesBody">
+	    <trim prefix="WHERE" prefixOverrides="AND |OR ">
+	        <if test="keyFilter != null and keyFilter != ''">
+	            <choose>
+	                <when test="keyFilterMode == 'EXACT'">
+	                    AND KEY_VALUE = #{keyFilter}
+	                </when>
+	                <when test="keyFilterMode == 'PREFIX'">
+	                    AND LOWER(KEY_VALUE) LIKE LOWER(#{keyFilter} || '%')
+	                </when>
+	                <when test="keyFilterMode == 'PATTERN'">
+	                    AND LOWER(KEY_VALUE) LIKE LOWER(#{keyFilter})
+	                </when>
+	                <otherwise>
+	                    AND LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyFilter} || '%')
+	                </otherwise>
+	
+	            </choose>
+	        </if>
+	        <if test="valueFilter != null and valueFilter != ''">
+	            AND LOWER(VALUE_DATA) LIKE LOWER('%' || #{valueFilter} || '%')
+	        </if>
+	    </trim>
+	</sql>
 
-    <!-- Value Operations -->
+
+	<sql id="commonOrderByLimitOffset">
+	    ORDER BY KEY_VALUE ASC
+
+        <if test="offset != null">
+            OFFSET #{offset} ROWS
+        </if>
+        <if test="limit != null">
+            FETCH FIRST #{limit} ROWS ONLY
+        </if>
+	</sql>
+	
     <select id="getLookupValues" parameterType="map" resultMap="lookup-value">
         SELECT KEY_VALUE, VALUE_DATA, CREATED_DATE, UPDATED_DATE
         FROM ${tableName}
@@ -104,8 +137,16 @@
         SELECT KEY_VALUE, VALUE_DATA
         FROM ${tableName}
         WHERE LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyPattern} || '%')
+         
+         <include refid="commonOrderByLimitOffset"/>
     </select>
 
+	<select id="getMatchingLookupValuesCount" parameterType="map" resultType="long">
+	    SELECT COUNT(*)
+	    FROM ${tableName}
+	    WHERE LOWER(KEY_VALUE) LIKE LOWER('%' || #{keyPattern} || '%')
+	</select>
+	
     <select id="getValue" parameterType="map" resultType="String">
         SELECT VALUE_DATA
         FROM ${tableName}
@@ -178,14 +219,7 @@
 
         <include refid="searchLookupValuesBody"/>
 
-        ORDER BY KEY_VALUE ASC
-
-        <if test="offset != null">
-            OFFSET ${offset} ROWS
-        </if>
-        <if test="limit != null">
-            FETCH FIRST ${limit} ROWS ONLY
-        </if>
+        <include refid="commonOrderByLimitOffset"/>
     </select>
 
  	<select id="selectExistingKeys" parameterType="map" resultType="string">
@@ -196,7 +230,8 @@
 	      #{key}
 	    </foreach>
   	</select>
-  	
+	<!-- End Value Operations -->
+    
     <!-- Statistics Operations -->
     <insert id="insertStatistics" parameterType="map">
         INSERT INTO LOOKUP_STATISTICS (

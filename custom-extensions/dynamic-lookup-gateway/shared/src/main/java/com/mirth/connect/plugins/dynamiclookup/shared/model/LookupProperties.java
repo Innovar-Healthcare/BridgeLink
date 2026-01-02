@@ -14,68 +14,94 @@ import java.util.Properties;
 
 public class LookupProperties {
 
-	// ----- Property Keys -----
-	public static final String AUDIT_PRUNE_ENABLED = "dynamiclookup.audit.prune.enabled";
-	public static final String AUDIT_PRUNE_RETENTION_DAYS = "dynamiclookup.audit.prune.retentionDays";
+    // ----- Property Keys -----
+    public static final String AUDIT_PRUNE_ENABLED = "dynamiclookup.audit.prune.enabled";
+    public static final String AUDIT_PRUNE_RETENTION_DAYS = "dynamiclookup.audit.prune.retentionDays";
+    public static final String ADVANCED_SEARCH_SAVED_FILTERS = "dynamiclookup.advancedSearch.savedFilters";
 
-	// ----- Fields -----
-	private boolean auditPruneEnabled;
-	private int auditPruneRetentionDays;
+    // ----- Fields -----
+    private boolean auditPruneEnabled;
+    private int auditPruneRetentionDays;
+    private String advancedSearchSavedFiltersJson;
 
-	// ----- Constructors -----
-	public LookupProperties(boolean auditPruneEnabled, int auditPruneRetentionDays) {
-		this.auditPruneEnabled = auditPruneEnabled;
-		this.auditPruneRetentionDays = auditPruneRetentionDays;
-	}
+    // ----- Constructors -----
+    public LookupProperties(boolean auditPruneEnabled, int auditPruneRetentionDays, String advancedSearchSavedFiltersJson) {
+        this.auditPruneEnabled = auditPruneEnabled;
+        this.auditPruneRetentionDays = auditPruneRetentionDays;
+        this.advancedSearchSavedFiltersJson = advancedSearchSavedFiltersJson;
+    }
 
-	// ----- Getters/Setters -----
-	public boolean isAuditPruneEnabled() {
-		return auditPruneEnabled;
-	}
+    // ----- Getters/Setters -----
+    public boolean isAuditPruneEnabled() {
+        return auditPruneEnabled;
+    }
 
-	public void setAuditPruneEnabled(boolean auditPruneEnabled) {
-		this.auditPruneEnabled = auditPruneEnabled;
-	}
+    public void setAuditPruneEnabled(boolean auditPruneEnabled) {
+        this.auditPruneEnabled = auditPruneEnabled;
+    }
 
-	public int getAuditPruneRetentionDays() {
-		return auditPruneRetentionDays;
-	}
+    public int getAuditPruneRetentionDays() {
+        return auditPruneRetentionDays;
+    }
 
-	public void setAuditPruneRetentionDays(int auditPruneRetentionDays) {
-		this.auditPruneRetentionDays = auditPruneRetentionDays;
-	}
+    public void setAuditPruneRetentionDays(int auditPruneRetentionDays) {
+        this.auditPruneRetentionDays = auditPruneRetentionDays;
+    }
 
-	// ----- Converters -----
-	public Properties toProperties() {
-		Properties p = new Properties();
-		p.setProperty(AUDIT_PRUNE_ENABLED, Boolean.toString(auditPruneEnabled));
-		p.setProperty(AUDIT_PRUNE_RETENTION_DAYS, Integer.toString(auditPruneRetentionDays));
-		return p;
-	}
+    public String getAdvancedSearchSavedFiltersJson() {
+        return advancedSearchSavedFiltersJson;
+    }
 
-	public static LookupProperties fromProperties(Properties p) {
-		if (p == null) {
-			return getDefault();
-		}
+    public void setAdvancedSearchSavedFiltersJson(String advancedSearchSavedFiltersJson) {
+        this.advancedSearchSavedFiltersJson = advancedSearchSavedFiltersJson;
+    }
 
-		boolean enabled = Boolean.parseBoolean(p.getProperty(AUDIT_PRUNE_ENABLED, "false"));
-		int retentionDays;
-		try {
-			retentionDays = Integer.parseInt(p.getProperty(AUDIT_PRUNE_RETENTION_DAYS, "30"));
-		} catch (NumberFormatException e) {
-			retentionDays = 30;
-		}
+    // ----- Converters -----
+    /**
+     * Returns a Properties object containing ONLY audit prune settings. Used with setPluginProperties(..., merge = true).
+     */
+    public Properties toAuditPruneProperties() {
+        Properties p = new Properties();
+        p.setProperty(AUDIT_PRUNE_ENABLED, Boolean.toString(auditPruneEnabled));
+        p.setProperty(AUDIT_PRUNE_RETENTION_DAYS, Integer.toString(auditPruneRetentionDays));
+        return p;
+    }
 
-		return new LookupProperties(enabled, retentionDays);
-	}
+    /**
+     * Returns a Properties object containing ONLY the saved advanced search filters. Used with setPluginProperties(...,
+     * merge = true).
+     */
+    public Properties toAdvancedSearchFilterProperties() {
+        Properties p = new Properties();
+        p.setProperty(ADVANCED_SEARCH_SAVED_FILTERS, advancedSearchSavedFiltersJson != null ? advancedSearchSavedFiltersJson : "[]");
+        return p;
+    }
 
-	// ----- Defaults -----
-	public static LookupProperties getDefault() {
-		return new LookupProperties(false, 30);
-	}
+    public static LookupProperties fromProperties(Properties p) {
+        if (p == null) {
+            return getDefault();
+        }
 
-	// ----- Utility -----
-	private LookupProperties() {
-		// Prevent instantiation without values
-	}
+        boolean enabled = Boolean.parseBoolean(p.getProperty(AUDIT_PRUNE_ENABLED, "false"));
+        int retentionDays;
+        try {
+            retentionDays = Integer.parseInt(p.getProperty(AUDIT_PRUNE_RETENTION_DAYS, "30"));
+        } catch (NumberFormatException e) {
+            retentionDays = 30;
+        }
+
+        String savedFiltersJson = p.getProperty(ADVANCED_SEARCH_SAVED_FILTERS, "[]");
+
+        return new LookupProperties(enabled, retentionDays, savedFiltersJson);
+    }
+
+    // ----- Defaults -----
+    public static LookupProperties getDefault() {
+        return new LookupProperties(false, 30, "[]");
+    }
+
+    // ----- Utility -----
+    private LookupProperties() {
+        // Prevent instantiation without values
+    }
 }

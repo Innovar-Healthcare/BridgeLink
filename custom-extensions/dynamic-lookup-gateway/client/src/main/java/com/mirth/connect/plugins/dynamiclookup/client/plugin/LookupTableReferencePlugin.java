@@ -24,13 +24,13 @@ import com.mirth.connect.model.codetemplates.CodeTemplateProperties.CodeTemplate
 import com.mirth.connect.plugins.CodeTemplatePlugin;
 
 public class LookupTableReferencePlugin extends CodeTemplatePlugin {
-	private static final Logger logger = LogManager.getLogger(LookupTableReferencePlugin.class);
+    private static final Logger logger = LogManager.getLogger(LookupTableReferencePlugin.class);
 
-	public LookupTableReferencePlugin(String name) {
-		super(name);
-	}
+    public LookupTableReferencePlugin(String name) {
+        super(name);
+    }
 
-	//@formatter:off
+    //@formatter:off
     @Override
     public Map<String, List<CodeTemplate>> getReferenceItems() {
         Map<String, List<CodeTemplate>> referenceItems = new HashMap<String, List<CodeTemplate>>();
@@ -82,8 +82,28 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
                 CodeTemplateType.DRAG_AND_DROP_CODE,
                 CodeTemplateContextSet.getConnectorContextSet(),
                 "var values = LookupHelper.getMatching(group, keyPattern);",
-                "Retrieves key-value pairs from the specified lookup group where keys match a pattern. Returns an empty map if the group does not exist or no matches are found."
-        ));
+                "Retrieves key-value pairs from the specified lookup group using the default limit (1000). "
+                    + "Returns an empty map if the group does not exist or no matches are found."
+            ));
+
+        templates.add(new CodeTemplate(
+                "Lookup Values Matching Pattern (Custom Limit)",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var values = LookupHelper.getMatching(group, keyPattern, limit);",
+                "Retrieves key-value pairs from the specified lookup group using a custom limit. "
+                    + "The limit is capped internally to prevent excessive memory usage. "
+                    + "Returns an empty map if the group does not exist or no matches are found."
+            ));
+
+        templates.add(new CodeTemplate(
+                "Lookup Values Count Matching Pattern",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var count = LookupHelper.getMatchingCount(group, keyPattern);",
+                "Retrieves the number of entries in the specified lookup group whose keys match the given pattern. "
+                    + "Returns 0 if the group does not exist or no matches are found."
+            ));
 
         templates.add(new CodeTemplate(
                 "Batch Lookup by Keys",
@@ -204,28 +224,109 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
     	));
 
         templates.add(new CodeTemplate(
-        	    "Creates a lookup group",
-        	    CodeTemplateType.DRAG_AND_DROP_CODE,
-        	    CodeTemplateContextSet.getConnectorContextSet(),
-        	    "var payload = {\n" +
-        	    "  name: 'MyGroup',\n" +
-        	    "  description: 'optional',\n" +
-        	    "  version: '1.0.0',\n" +
-        	    "  cacheSize: '1000',\n" +
-        	    "  cachePolicy: 'LRU' // or 'FIFO'\n" +
-        	    "};\n" +
-        	    "var res = LookupHelper.createGroup(payload);\n" +
-        	    "if (!res || String(res.ok) !== 'true') {\n" +
-        	    "  logger.error('Create group failed: ' + (res ? (res.errorCode + ' - ' + res.errorMessage) : 'unknown'));\n" +
-        	    "} else {\n" +
-        	    "  logger.info('Created group id=' + res.group.id + ', name=' + res.group.name);\n" +
-        	    "}\n",
-        	    "Creates a lookup group with fields: name, description, version, cacheSize, cachePolicy. " +
-        	    "Returns { ok: 'true', group: {...} } on success; otherwise { ok: 'false', errorCode, errorMessage }."
-    	));
+                "Search lookup values by JSON filter (Advanced)",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "// JavaScript snippet for Dynamic Lookup (Advanced Search)\n" +
+                "var groupName = \"JSON - Search Test\";\n\n" +
+                "// Optional KEY pattern filter (SQL LIKE)\n" +
+                "var keyPattern = \"user_5%\";\n\n" +
+                "// JSON field filters (array form; easy to edit)\n" +
+                "// NOTE: The server normalizes \"value\" to text; valueType controls validation and casting (STRING/NUMBER/BOOLEAN).\n" +
+                "var filterObj = [\n" +
+                "  {\n" +
+                "    \"field\": \"user.profile.age\",\n" +
+                "    \"op\": \">=\",\n" +
+                "    \"valueType\": \"NUMBER\",\n" +
+                "    \"value\": \"40\"\n" +
+                "  },\n" +
+                "  {\n" +
+                "    \"field\": \"meta.role\",\n" +
+                "    \"op\": \"=\",\n" +
+                "    \"valueType\": \"STRING\",\n" +
+                "    \"value\": \"support\"\n" +
+                "  }\n" +
+                "];\n" +
+                "var filterJson = JSON.stringify(filterObj);\n\n" +
+                "// NOTE:\n" +
+                "// The lookup returns only the FIRST 1000 matching entries.\n" +
+                "// This limit is applied to protect performance.\n\n" +
+                "var start = new Date().getTime();\n" +
+                "var results = LookupHelper.searchValuesByJsonFields(\n" +
+                "    groupName,\n" +
+                "    keyPattern,\n" +
+                "    filterJson\n" +
+                ");\n" +
+                "var elapsed = new Date().getTime() - start;\n\n" +
+                "// DEBUG OUTPUT (remove or comment out in production)\n" +
+                "if (results == null) {\n" +
+                "    logger.error(\"Lookup failed for group: \" + groupName);\n" +
+                "} else if (results.isEmpty()) {\n" +
+                "    logger.info(\"No matching entries (elapsed=\" + elapsed + \" ms) in group=\" + groupName);\n" +
+                "} else {\n" +
+                "    logger.info(\"Sample results (showing up to 2 entries):\");\n" +
+                "    var iter = results.keySet().iterator();\n" +
+                "    var count = 0;\n\n" +
+                "    while (iter.hasNext() && count < 2) {\n" +
+                "        var key = iter.next();\n" +
+                "        var value = results.get(key);\n" +
+                "        logger.info(\"  key=\" + key + \", value=\" + value);\n" +
+                "        count++;\n" +
+                "    }\n\n" +
+                "    logger.info(\n" +
+                "        \"Found \" + results.size() + \" matching entries (elapsed=\" + elapsed + \" ms) in group=\" + groupName\n" +
+                "    );\n" +
+                "}\n",
+                "Retrieves lookup values using advanced JSON field filtering with an optional key pattern. " +
+                "Filters are provided as an array of conditions (field, operator, valueType, value) and " +
+                "converted to JSON before execution. Nested JSON paths are supported. " +
+                "The key pattern uses SQL LIKE semantics. " +
+                "For performance reasons, only the first 1000 matching entries are returned."
+            ));
 
 
+        templates.add(new CodeTemplate(
+                "Creates a lookup group",
+                CodeTemplateType.DRAG_AND_DROP_CODE,
+                CodeTemplateContextSet.getConnectorContextSet(),
+                "var payload = {\n" +
+                "  name: 'MyGroup',\n" +
+                "  description: 'optional',\n" +
+                "  version: '1.0.0',\n" +
+                "  cacheSize: '1000',\n" +
+                "  cachePolicy: 'LRU', // or 'FIFO'\n" +
+                "  statisticsEnabled: 'true',\n" +
+                "\n" +
+                "  // --- Optional JSON configuration ---\n" +
+                "  // NOTE: Derby does NOT support JSON. On Derby, always set valueType = 'TEXT'.\n" +
+                "  // Other databases may support JSON; the server will validate JSON capability automatically.\n" +
+                "\n" +
+                "  // valueType: 'TEXT' (default) or 'JSON'\n" +
+                "  // jsonIndexMode (only when valueType = 'JSON'):\n" +
+                "  //    'NONE'  - no index\n" +
+                "  //    'FIELD' - per-field index (database-specific)\n" +
+                "  // indexedJsonFields must be a JSON array string when jsonIndexMode = 'FIELD'\n" +
+                "  //   e.g.: '[\"email\", \"address.city\"]'\n" +
+                "\n" +
+                "  // Example JSON group:\n" +
+                "  // valueType: 'JSON',\n" +
+                "  // jsonIndexMode: 'FIELD',\n" +
+                "  // indexedJsonFields: '[\"email\", \"address.city\"]'\n" +
+                "};\n" +
+                "\n" +
+                "var res = LookupHelper.createGroup(payload);\n" +
+                "if (!res || String(res.ok) !== 'true') {\n" +
+                "  logger.error('Create group failed: ' + (res ? (res.errorCode + ' - ' + res.errorMessage) : 'unknown'));\n" +
+                "} else {\n" +
+                "  logger.info('Created group id=' + res.group.id + ', name=' + res.group.name);\n" +
+                "}\n",
+                "Creates a lookup group. Required fields: name, description, version, cacheSize, cachePolicy. " +
+                "Optional: valueType (TEXT/JSON), jsonIndexMode (NONE/FIELD), and indexedJsonFields (JSON array string) when FIELD mode is used. " +
+                "JSON is not available on Derby; the server validates JSON support per database. " +
+                "Returns { ok: 'true', group: {...} } on success; otherwise { ok: 'false', errorCode, errorMessage }."
+            ));
 
+        
         templates.add(new CodeTemplate(
                 "Deletes a lookup group",
                 CodeTemplateType.DRAG_AND_DROP_CODE,
@@ -241,23 +342,23 @@ public class LookupTableReferencePlugin extends CodeTemplatePlugin {
     }
     //@formatter:on
 
-	@Override
-	public String getPluginPointName() {
-		return "Lookup Table Reference Plugin";
-	}
+    @Override
+    public String getPluginPointName() {
+        return "Lookup Table Reference Plugin";
+    }
 
-	@Override
-	public void start() {
+    @Override
+    public void start() {
 
-	}
+    }
 
-	@Override
-	public void stop() {
+    @Override
+    public void stop() {
 
-	}
+    }
 
-	@Override
-	public void reset() {
+    @Override
+    public void reset() {
 
-	}
+    }
 }

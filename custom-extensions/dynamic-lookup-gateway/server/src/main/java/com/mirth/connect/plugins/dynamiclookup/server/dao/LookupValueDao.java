@@ -13,39 +13,62 @@ package com.mirth.connect.plugins.dynamiclookup.server.dao;
 import java.util.List;
 import java.util.Map;
 
+import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldCriterion;
+import com.mirth.connect.plugins.dynamiclookup.server.service.support.JsonFieldIndexDefinition;
 import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupValue;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.ValueFilterState;
 
 public interface LookupValueDao {
-	// Value operations
-	LookupValue getLookupValue(String tableName, String keyValue);
+    // Value operations
+    LookupValue getLookupValue(String tableName, String keyValue);
 
-	String getValue(String tableName, String keyValue);
+    String getValue(String tableName, String keyValue);
 
-	List<LookupValue> getAllValues(String tableName);
+    List<LookupValue> getAllValues(String tableName);
 
-	List<LookupValue> searchLookupValues(String tableName, Integer offset, Integer limit, String pattern);
+    List<LookupValue> searchLookupValues(String tableName, Integer offset, Integer limit, ValueFilterState filter);
 
-	List<LookupValue> getMatchingValues(String tableName, String keyPattern);
+    List<LookupValue> getMatchingValues(String tableName, String keyPattern, Integer offset, Integer limit);
 
-	List<String> getKeys(String tableName, String keyPattern);
+    long getMatchingValuesCount(String tableName, String keyPattern);
 
-	void insertValue(String tableName, String keyValue, String valueData);
+    List<String> getKeys(String tableName, String keyPattern);
 
-	void updateValue(String tableName, String keyValue, String valueData);
+    void insertValue(String tableName, String keyValue, String valueData);
 
-	void deleteValue(String tableName, String keyValue);
+    void insertValueJson(String tableName, String keyValue, String valueData);
 
-	void deleteAllValues(String tableName);
+    void updateValue(String tableName, String keyValue, String valueData);
 
-	int importValues(String tableName, Map<String, String> values);
+    void updateValueJson(String tableName, String keyValue, String valueData);
 
-	long getValueCount(String tableName);
+    void deleteValue(String tableName, String keyValue);
 
-	long searchLookupValuesCount(String tableName, String pattern);
+    void deleteAllValues(String tableName);
 
-	boolean putIfAbsent(String tableName, String keyValue, String valueData);
+    int importValues(String tableName, Map<String, String> values);
 
-	boolean compareAndSwap(String tableName, String keyValue, String expectedValue, String newValue);
+    int importValuesJson(String tableName, Map<String, String> values);
 
-	boolean updateValueByDelta(String tableName, String keyValue, Long delta);
+    long getValueCount(String tableName);
+
+    long searchLookupValuesCount(String tableName, ValueFilterState filter);
+
+    boolean putIfAbsent(String tableName, String keyValue, String valueData);
+
+    boolean putIfAbsentJson(String tableName, String keyValue, String valueData);
+
+    boolean compareAndSwap(String tableName, String keyValue, String expectedValue, String newValue);
+
+    boolean compareAndSwapJson(String tableName, String keyValue, String expectedValue, String newValue);
+
+    boolean updateValueByDelta(String tableName, String keyValue, Long delta);
+
+    void createJsonFieldIndexes(String tableName, List<JsonFieldIndexDefinition> fieldIndexes);
+
+    void dropJsonFieldIndexes(String tableName, List<JsonFieldIndexDefinition> fieldIndexes);
+
+    long searchByJsonFieldsFieldCount(String tableName, String keyPattern, List<JsonFieldCriterion> criteria);
+
+    List<LookupValue> searchByJsonFieldsField(String tableName, Integer offset, Integer limit, String keyPattern, List<JsonFieldCriterion> criteria);
 }

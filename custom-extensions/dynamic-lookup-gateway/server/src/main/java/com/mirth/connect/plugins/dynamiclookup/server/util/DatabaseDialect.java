@@ -11,61 +11,62 @@
 package com.mirth.connect.plugins.dynamiclookup.server.util;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionManager;
+
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo;
+import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo.DatabaseType;
 
 /**
  * Utility for determining the underlying database type.
  */
 public final class DatabaseDialect {
 
-	private DatabaseDialect() {
-		// Utility class
-	}
+    private DatabaseDialect() {
+        // Utility class
+    }
 
-	/**
-	 * Supported database types for SQL dialect branching.
-	 */
-	public enum DatabaseType {
-		DERBY, POSTGRESQL, MYSQL, // Includes MySQL and MariaDB
-		SQLSERVER, ORACLE
-	}
+    public static DatabaseInfo determineDatabase(SqlSessionManager sqlSessionManager) throws SQLException {
+        SqlSession session = sqlSessionManager.openSession();
 
-	/**
-	 * Determine the database type by inspecting the JDBC connection metadata.
-	 * <p>
-	 * Notes: - MySQL and MariaDB are treated as MYSQL. - If the product name cannot
-	 * be matched, fallback is DERBY (safe for 2-step upsert).
-	 *
-	 * @param sqlSessionManager the MyBatis SqlSessionManager
-	 * @return detected {@link DatabaseType}
-	 * @throws SQLException if a JDBC error occurs while reading metadata
-	 */
-	public static DatabaseType determineDatabaseType(SqlSessionManager sqlSessionManager) throws SQLException {
-		SqlSession session = sqlSessionManager.openSession();
-		try {
-			Connection conn = session.getConnection();
-			String product = conn.getMetaData().getDatabaseProductName();
-			String name = (product == null ? "" : product).toLowerCase();
+        try {
+            Connection conn = session.getConnection();
+            DatabaseMetaData meta = conn.getMetaData();
 
-			if (name.contains("postgresql")) {
-				return DatabaseType.POSTGRESQL;
-			} else if (name.contains("mysql") || name.contains("mariadb")) {
-				return DatabaseType.MYSQL;
-			} else if (name.contains("microsoft") || name.contains("sql server")) {
-				return DatabaseType.SQLSERVER;
-			} else if (name.contains("oracle")) {
-				return DatabaseType.ORACLE;
-			} else if (name.contains("derby")) {
-				return DatabaseType.DERBY;
-			} else {
-				// Fallback to DERBY
-				return DatabaseType.DERBY;
-			}
-		} finally {
-			session.close();
-		}
-	}
+            String productName = meta.getDatabaseProductName();
+            String versionString = meta.getDatabaseProductVersion();
+            int major = meta.getDatabaseMajorVersion();
+            int minor = meta.getDatabaseMinorVersion();
+
+            String name = (productName == null ? "" : productName).toLowerCase();
+
+            DatabaseType type;
+
+            if (name.contains("postgresql")) {
+                type = DatabaseType.POSTGRESQL;
+            } else if (name.contains("mysql") || name.contains("mariadb")) {
+                type = DatabaseType.MYSQL;
+            } else if (name.contains("microsoft") || name.contains("sql server")) {
+                type = DatabaseType.SQLSERVER;
+            } else if (name.contains("oracle")) {
+                type = DatabaseType.ORACLE;
+            } else if (name.contains("derby")) {
+                type = DatabaseType.DERBY;
+            } else {
+                type = DatabaseType.DERBY;
+            }
+
+            return new DatabaseInfo(type, major, minor, productName, versionString);
+
+        } finally {
+            try {
+                session.close();
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
 }

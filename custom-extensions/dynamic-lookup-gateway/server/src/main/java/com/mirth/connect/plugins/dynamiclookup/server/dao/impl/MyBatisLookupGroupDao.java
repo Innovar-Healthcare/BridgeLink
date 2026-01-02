@@ -10,17 +10,17 @@
 
 package com.mirth.connect.plugins.dynamiclookup.server.dao.impl;
 
-import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupGroupDao;
-import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
-import org.apache.ibatis.session.SqlSession;
-import org.apache.ibatis.session.SqlSessionFactory;
-import org.apache.ibatis.session.SqlSessionManager;
-
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionManager;
+
+import com.mirth.connect.plugins.dynamiclookup.server.dao.LookupGroupDao;
+import com.mirth.connect.plugins.dynamiclookup.shared.model.LookupGroup;
 
 public class MyBatisLookupGroupDao implements LookupGroupDao {
     private SqlSessionManager sqlSessionManager;
@@ -71,6 +71,8 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
             params.put("version", group.getVersion());
             params.put("cacheSize", group.getCacheSize());
             params.put("cachePolicy", group.getCachePolicy());
+            params.put("valueType", group.getValueType());
+            params.put("statisticsEnabled", group.isStatisticsEnabled());
             session.insert("Lookup.insertGroup", params);
             session.commit();
             commitSuccess = true;
@@ -109,7 +111,8 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
             params.put("version", group.getVersion());
             params.put("cacheSize", group.getCacheSize());
             params.put("cachePolicy", group.getCachePolicy());
-
+            params.put("valueType", group.getValueType());
+            params.put("statisticsEnabled", group.isStatisticsEnabled());
             session.update("Lookup.updateGroup", params);
             session.commit();
             commitSuccess = true;
@@ -144,7 +147,6 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
         }
     }
 
-
     @Override
     public void createValueTable(String tableName) {
         SqlSession session = sqlSessionManager.openSession();
@@ -154,6 +156,28 @@ public class MyBatisLookupGroupDao implements LookupGroupDao {
             Map<String, Object> params = new HashMap<>();
             params.put("tableName", tableName);
             session.update("Lookup.createLookupValueTable", params);
+            session.commit();
+            commitSuccess = true;
+        } finally {
+            if (!commitSuccess) {
+                try {
+                    session.rollback();
+                } catch (Exception ignored) {
+                }
+            }
+            session.close();
+        }
+    }
+
+    @Override
+    public void createValueJsonTable(String tableName) {
+        SqlSession session = sqlSessionManager.openSession();
+        boolean commitSuccess = false;
+
+        try {
+            Map<String, Object> params = new HashMap<>();
+            params.put("tableName", tableName);
+            session.update("Lookup.createLookupValueJsonTable", params);
             session.commit();
             commitSuccess = true;
         } finally {

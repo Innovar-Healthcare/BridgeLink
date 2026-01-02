@@ -10,37 +10,36 @@
 
 package com.mirth.connect.plugins.dynamiclookup.shared.interfaces;
 
-import com.mirth.connect.client.core.ClientException;
-import com.mirth.connect.client.core.api.BaseServletInterface;
-
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-
-import com.mirth.connect.client.core.api.MirthOperation;
-import com.mirth.connect.client.core.api.Param;
-
 import javax.ws.rs.Consumes;
+import javax.ws.rs.DELETE;
+import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
-import javax.ws.rs.DELETE;
-import javax.ws.rs.DefaultValue;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 
+import com.mirth.connect.client.core.ClientException;
+import com.mirth.connect.client.core.api.BaseServletInterface;
+import com.mirth.connect.client.core.api.MirthOperation;
+import com.mirth.connect.client.core.api.Param;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 /**
  * @author Thai Tran (thaitran@innovarhealthcare.com)
  * @create 2025-05-13 10:25 AM
  */
-
+//@formatter:off
 @Path("/v1/lookups")
 @Tag(name = "Lookup Table")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -56,20 +55,45 @@ public interface LookupTableServletInterface extends BaseServletInterface {
             description = "The created lookup group returned as a JSON object.",
             content = @Content(
                     mediaType = MediaType.APPLICATION_JSON,
-                    examples = @ExampleObject(
-                            name = "group",
-                            summary = "Example response for a successfully created group",
-                            value = "{\n" +
-                                    "  \"id\": 3,\n" +
-                                    "  \"name\": \"Provider Directory\",\n" +
-                                    "  \"description\": \"Provider information lookup\",\n" +
-                                    "  \"version\": \"1.0\",\n" +
-                                    "  \"cacheSize\": 500,\n" +
-                                    "  \"cachePolicy\": \"LRU\",\n" +
-                                    "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
-                                    "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
-                                    "}"
-                    )
+                    examples = {
+                            @ExampleObject(
+                                name = "text-group",
+                                summary = "Example TEXT group response",
+                                value = "{\n" +
+                                        "  \"id\": 3,\n" +
+                                        "  \"name\": \"Provider Directory\",\n" +
+                                        "  \"description\": \"Provider information lookup\",\n" +
+                                        "  \"version\": \"1.0\",\n" +
+                                        "  \"cacheSize\": 500,\n" +
+                                        "  \"cachePolicy\": \"LRU\",\n" +
+                                        "  \"statisticsEnabled\": true,\n" +
+                                        "  \"valueType\": \"TEXT\",\n" +
+                                        "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
+                                        "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
+                                        "}"
+                            ),
+                            @ExampleObject(
+                                name = "json-group",
+                                summary = "Example JSON group response",
+                                value = "{\n" +
+                                        "  \"id\": 3,\n" +
+                                        "  \"name\": \"Provider Directory\",\n" +
+                                        "  \"description\": \"Provider information lookup\",\n" +
+                                        "  \"version\": \"1.0\",\n" +
+                                        "  \"cacheSize\": 500,\n" +
+                                        "  \"cachePolicy\": \"LRU\",\n" +
+                                        "  \"statisticsEnabled\": true,\n" +
+                                        "  \"valueType\": \"JSON\",\n" +
+                                        "  \"extra\": {\n" +
+                                        "    \"jsonIndexMode\": \"FIELD\",\n" +
+                                        "    \"indexedJsonFields\": \"[\\\"email\\\", \\\"address.city\\\"]\"\n" +
+                                        "  },\n" +
+                                        "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
+                                        "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
+                                        "}"
+                            )
+                        }
+
             )
     )
     @MirthOperation(name = "createGroup", display = "Create new group", permission = PERMISSION_ACCESS)
@@ -80,17 +104,63 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                     required = true,
                     content = @Content(
                             mediaType = MediaType.APPLICATION_JSON,
-                            examples = @ExampleObject(
-                                    name = "group",
-                                    summary = "group",
-                                    value = "{\n" +
-                                            "  \"name\": \"Provider Directory\",\n" +
-                                            "  \"description\": \"Provider information lookup\",\n" +
-                                            "  \"version\": \"1.0\",\n" +
-                                            "  \"cacheSize\": 500,\n" +
-                                            "  \"cachePolicy\": \"LRU\"\n" +
-                                            "}"
-                            )
+                            examples = {
+                                    @ExampleObject(
+                                        name = "text-group",
+                                        summary = "Example TEXT group (default)",
+                                        value = "{\n" +
+                                                "  \"id\": 3,\n" +
+                                                "  \"name\": \"Provider Directory\",\n" +
+                                                "  \"description\": \"Provider information lookup\",\n" +
+                                                "  \"version\": \"1.0\",\n" +
+                                                "  \"cacheSize\": 500,\n" +
+                                                "  \"cachePolicy\": \"LRU\",\n" +
+                                                "  \"statisticsEnabled\": true,\n" +
+                                                "  \"valueType\": \"TEXT\",\n" +
+                                                "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
+                                                "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
+                                                "}"
+                                    ),
+                                    @ExampleObject(
+                                        name = "json-group-field-index",
+                                        summary = "Example JSON group with FIELD index",
+                                        value = "{\n" +
+                                                "  \"id\": 3,\n" +
+                                                "  \"name\": \"Provider Directory\",\n" +
+                                                "  \"description\": \"Provider information lookup\",\n" +
+                                                "  \"version\": \"1.0\",\n" +
+                                                "  \"cacheSize\": 500,\n" +
+                                                "  \"cachePolicy\": \"LRU\",\n" +
+                                                "  \"statisticsEnabled\": true,\n" +
+                                                "  \"valueType\": \"JSON\",\n" +
+                                                "  \"extra\": {\n" +
+                                                "    \"jsonIndexMode\": \"FIELD\",\n" +
+                                                "    \"indexedJsonFields\": \"[\\\"email\\\", \\\"address.city\\\"]\"\n" +
+                                                "  },\n" +
+                                                "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
+                                                "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
+                                                "}"
+                                    ),
+                                    @ExampleObject(
+                                        name = "json-group-none-index",
+                                        summary = "Example JSON group with NONE index",
+                                        value = "{\n" +
+                                                "  \"id\": 3,\n" +
+                                                "  \"name\": \"Provider Directory\",\n" +
+                                                "  \"description\": \"Provider information lookup\",\n" +
+                                                "  \"version\": \"1.0\",\n" +
+                                                "  \"cacheSize\": 500,\n" +
+                                                "  \"cachePolicy\": \"LRU\",\n" +
+                                                "  \"statisticsEnabled\": true,\n" +
+                                                "  \"valueType\": \"JSON\",\n" +
+                                                "  \"extra\": {\n" +
+                                                "    \"jsonIndexMode\": \"NONE\"\n" +
+                                                "  },\n" +
+                                                "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
+                                                "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
+                                                "}"
+                                    )
+                            }
                     )
             )
             String requestBody
@@ -106,55 +176,123 @@ public interface LookupTableServletInterface extends BaseServletInterface {
     @Path("/groups/{groupId}")
     @Operation(summary = "Updates a specified group.")
     @ApiResponse(
-            responseCode = "200",
-            description = "Group was successfully updated.",
-            content = @Content(
-                    mediaType = MediaType.APPLICATION_JSON,
-                    examples = @ExampleObject(
-                            name = "UpdatedGroup",
-                            summary = "Updated group object",
-                            value = "{\n" +
-                                    "  \"id\": 3,\n" +
-                                    "  \"name\": \"Provider Directory\",\n" +
-                                    "  \"description\": \"Updated provider information lookup\",\n" +
-                                    "  \"version\": \"1.1\",\n" +
-                                    "  \"cacheSize\": 1000,\n" +
-                                    "  \"cachePolicy\": \"LRU\",\n" +
-                                    "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
-                                    "  \"updatedDate\": \"2025-05-01T09:30:00Z\"\n" +
-                                    "}"
-                    )
-            )
+        responseCode = "200",
+        description = "Group was successfully updated.",
+        content = @Content(
+            mediaType = MediaType.APPLICATION_JSON,
+            examples = {
+                @ExampleObject(
+                    name = "text-group-response",
+                    summary = "Updated TEXT group",
+                    value =
+                            "{\n" +
+                            "  \"id\": 3,\n" +
+                            "  \"name\": \"Provider Directory\",\n" +
+                            "  \"description\": \"Updated provider information lookup\",\n" +
+                            "  \"version\": \"1.1\",\n" +
+                            "  \"cacheSize\": 1000,\n" +
+                            "  \"cachePolicy\": \"LRU\",\n" +
+                            "  \"statisticsEnabled\": true,\n" +
+                            "  \"valueType\": \"TEXT\",\n" +
+                            "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
+                            "  \"updatedDate\": \"2025-05-01T09:30:00Z\"\n" +
+                            "}"
+                ),
+                @ExampleObject(
+                    name = "json-group-response",
+                    summary = "Updated JSON group (FIELD index mode)",
+                    value =
+                            "{\n" +
+                            "  \"id\": 5,\n" +
+                            "  \"name\": \"Provider Directory JSON\",\n" +
+                            "  \"description\": \"JSON provider lookup updated\",\n" +
+                            "  \"version\": \"2.0\",\n" +
+                            "  \"cacheSize\": 800,\n" +
+                            "  \"cachePolicy\": \"FIFO\",\n" +
+                            "  \"statisticsEnabled\": true,\n" +
+                            "  \"valueType\": \"JSON\",\n" +
+                            "  \"extra\": {\n" +
+                            "    \"jsonIndexMode\": \"FIELD\",\n" +
+                            "    \"indexedJsonFields\": \"[\\\"email\\\", \\\"address.city\\\"]\"\n" +
+                            "  },\n" +
+                            "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
+                            "  \"updatedDate\": \"2025-05-01T10:00:00Z\"\n" +
+                            "}"
+                )
+            }
+        )
     )
     @MirthOperation(name = "updateGroup", display = "Update group", permission = PERMISSION_ACCESS)
     public String updateGroup(
-            @Param("groupId")
-            @Parameter(
-                    name = "groupId",
-                    description = "The unique id of the group to update.",
-                    example = "1",
-                    required = true)
-            @PathParam("groupId") Integer groupId,
-            @RequestBody(
-                    description = "JSON object representing the lookup group to be update.",
-                    required = true,
-                    content = @Content(
-                            mediaType = MediaType.APPLICATION_JSON,
-                            examples = @ExampleObject(
-                                    name = "group",
-                                    summary = "group",
-                                    value = "{\n" +
-                                            "  \"name\": \"Provider Directory\",\n" +
-                                            "  \"description\": \"Updated provider information lookup\",\n" +
-                                            "  \"version\": \"1.0\",\n" +
-                                            "  \"cacheSize\": 500,\n" +
-                                            "  \"cachePolicy\": \"LRU\"\n" +
-                                            "}"
-                            )
+        @Param("groupId")
+        @Parameter(
+            name = "groupId",
+            description = "The unique ID of the group to update.",
+            example = "1",
+            required = true)
+        @PathParam("groupId") Integer groupId,
+
+        @RequestBody(
+            description = "JSON object representing the lookup group fields to update.",
+            required = true,
+            content = @Content(
+                mediaType = MediaType.APPLICATION_JSON,
+                examples = {
+                    @ExampleObject(
+                        name = "text-group-request",
+                        summary = "Update TEXT group",
+                        value =
+                                "{\n" +
+                                "  \"name\": \"Provider Directory Updated\",\n" +
+                                "  \"description\": \"Updated provider information\",\n" +
+                                "  \"version\": \"1.1\",\n" +
+                                "  \"cacheSize\": 900,\n" +
+                                "  \"cachePolicy\": \"LRU\",\n" +
+                                "  \"statisticsEnabled\": true,\n" +
+                                "  \"valueType\": \"TEXT\"\n" +
+                                "}"
+                    ),
+                    @ExampleObject(
+                        name = "json-group-request-field-index",
+                        summary = "Update JSON group with FIELD index",
+                        value =
+                                "{\n" +
+                                "  \"name\": \"Provider Directory JSON Updated\",\n" +
+                                "  \"description\": \"Updated JSON provider info\",\n" +
+                                "  \"version\": \"2.0\",\n" +
+                                "  \"cacheSize\": 800,\n" +
+                                "  \"cachePolicy\": \"FIFO\",\n" +
+                                "  \"statisticsEnabled\": true,\n" +
+                                "  \"valueType\": \"JSON\",\n" +
+                                "  \"extra\": {\n" +
+                                "    \"jsonIndexMode\": \"FIELD\",\n" +
+                                "    \"indexedJsonFields\": \"[\\\"email\\\", \\\"address.city\\\"]\"\n" +
+                                "  }\n" +
+                                "}"
+                    ),
+                    @ExampleObject(
+                        name = "json-group-request-none-index",
+                        summary = "Update JSON group with NONE index",
+                        value =
+                                "{\n" +
+                                "  \"name\": \"Provider Directory JSON Updated\",\n" +
+                                "  \"description\": \"Updated JSON provider info\",\n" +
+                                "  \"version\": \"2.0\",\n" +
+                                "  \"cacheSize\": 800,\n" +
+                                "  \"cachePolicy\": \"FIFO\",\n" +
+                                "  \"statisticsEnabled\": true,\n" +
+                                "  \"valueType\": \"JSON\",\n" +
+                                "  \"extra\": {\n" +
+                                "    \"jsonIndexMode\": \"NONE\"\n" +
+                                "  }\n" +
+                                "}"
                     )
+                }
             )
-            String requestBody
+        )
+        String requestBody
     ) throws ClientException;
+
 
     @GET
     @Path("/groups/{groupId}")
@@ -175,6 +313,8 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                     "  \"cachePolicy\": \"LRU\",\n" +
                                     "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
                                     "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
+                                    "  \"statisticsEnabled\": true,\n" +
+                                    "  \"valueType\": \"TEXT\"\n" +
                                     "}"
                     )
             )
@@ -205,6 +345,8 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                     "  \"cachePolicy\": \"LRU\",\n" +
                                     "  \"createdDate\": \"2025-05-01T08:15:00Z\",\n" +
                                     "  \"updatedDate\": \"2025-05-01T08:15:00Z\"\n" +
+                                    "  \"statisticsEnabled\": true,\n" +
+                                    "  \"valueType\": \"TEXT\"\n" +
                                     "}"
                     )
             )
@@ -418,6 +560,155 @@ public interface LookupTableServletInterface extends BaseServletInterface {
     ) throws ClientException;
 
     @POST
+    @Path("/groups/{groupId}/values/search")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "Searches values in a lookup group using filter criteria.",
+            description = "Performs a filtered search within the specified lookup group. "
+                    + "Search supports pagination and multiple filter fields such as keyFilter and valueFilter. "
+                    + "If no filter criteria are provided, all values in the group will be returned (equivalent to an unfiltered search). "
+                    + "This endpoint is designed for UI usage.",
+            hidden = true
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "Successfully retrieved filtered or unfiltered values",
+            content = @Content(
+                    mediaType = MediaType.APPLICATION_JSON,
+                    examples = @ExampleObject(
+                            name = "Successful response",
+                            value = "{\n" +
+                                    "  \"groupId\": 1,\n" +
+                                    "  \"groupName\": \"Billing Codes\",\n" +
+                                    "  \"totalCount\": 7,\n" +
+                                    "  \"values\": [\n" +
+                                    "    {\n" +
+                                    "      \"keyValue\": \"99213\",\n" +
+                                    "      \"valueData\": \"Office Visit\",\n" +
+                                    "      \"createdDate\": \"2025-06-22T01:19:25.213+00:00\",\n" +
+                                    "      \"updatedDate\": \"2025-06-22T01:29:45.123+00:00\"\n" +
+                                    "    },\n" +
+                                    "    {\n" +
+                                    "      \"keyValue\": \"99214\",\n" +
+                                    "      \"valueData\": \"Office Visit, Level 4\",\n" +
+                                    "      \"createdDate\": \"2025-06-22T01:19:25.213+00:00\",\n" +
+                                    "      \"updatedDate\": \"2025-06-22T01:19:25.213+00:00\"\n" +
+                                    "    }\n" +
+                                    "    // truncated for brevity\n" +
+                                    "  ],\n" +
+                                    "  \"pagination\": {\n" +
+                                    "    \"limit\": 100,\n" +
+                                    "    \"offset\": 0,\n" +
+                                    "    \"hasMore\": false\n" +
+                                    "  }\n" +
+                                    "}"
+                    )
+            )
+    )
+    @MirthOperation(name = "searchValues", display = "Search values", permission = PERMISSION_ACCESS, auditable = false)
+    public String searchValues(
+            @Param("groupId")
+            @Parameter(description = "The unique ID of the group to retrieve.", required = true)
+            @PathParam("groupId") Integer groupId,
+
+            @Param("offset")
+            @Parameter(description = "Offset for pagination (default: 0)", required = false)
+            @QueryParam("offset") @DefaultValue("0") Integer offset,
+
+            @Param("limit")
+            @Parameter(description = "Maximum number of values to return (default: 100)", required = false)
+            @QueryParam("limit") @DefaultValue("100") Integer limit,
+
+            @Param("filterState")
+            @RequestBody(
+                    description = "JSON object representing filter criteria for value search.",
+                    required = false,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            examples = @ExampleObject(
+                                    name = "filter",
+                                    summary = "Example filter for value search",
+                                    value = "{\n" +
+                                            "  \"keyFilter\": \"provider\",\n" +
+                                            "  \"valueFilter\": \"active\"\n" +
+                                            "}"
+                            )
+                    )
+            )
+            String filterState
+    ) throws ClientException;
+    
+    @POST
+    @Path("/groups/{groupId}/values/search-advanced")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "Advanced search within a lookup group (key pattern + JSON field filters).",
+            description =
+                    "Performs an advanced search within the specified lookup group using:\n"
+                    + "SQL key pattern matching (e.g., '2025-11-21_%')\n"
+                    + "JSON field conditions (e.g., field = 'status', operator = 'EQ', value = 'active')\n\n"
+                    + "This endpoint is intended for the Advanced Search UI and supports pagination. "
+                    + "If no filters are provided, all values are returned.",
+            hidden = true
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "Successfully retrieved filtered or unfiltered values",
+            content = @Content(
+                    mediaType = MediaType.APPLICATION_JSON,
+                    examples = @ExampleObject(
+                            name = "Successful response",
+                            value = "{\n" +
+                                    "  \"groupId\": 1,\n" +
+                                    "  \"groupName\": \"Billing Codes\",\n" +
+                                    "  \"totalCount\": 7,\n" +
+                                    "  \"values\": [\n" +
+                                    "    {\n" +
+                                    "      \"keyValue\": \"99213\",\n" +
+                                    "      \"valueData\": \"Office Visit\",\n" +
+                                    "      \"createdDate\": \"2025-06-22T01:19:25.213+00:00\",\n" +
+                                    "      \"updatedDate\": \"2025-06-22T01:29:45.123+00:00\"\n" +
+                                    "    },\n" +
+                                    "    {\n" +
+                                    "      \"keyValue\": \"99214\",\n" +
+                                    "      \"valueData\": \"Office Visit, Level 4\",\n" +
+                                    "      \"createdDate\": \"2025-06-22T01:19:25.213+00:00\",\n" +
+                                    "      \"updatedDate\": \"2025-06-22T01:19:25.213+00:00\"\n" +
+                                    "    }\n" +
+                                    "    // truncated for brevity\n" +
+                                    "  ],\n" +
+                                    "  \"pagination\": {\n" +
+                                    "    \"limit\": 100,\n" +
+                                    "    \"offset\": 0,\n" +
+                                    "    \"hasMore\": false\n" +
+                                    "  }\n" +
+                                    "}"
+                    )
+            )
+    )
+    @MirthOperation(name = "searchValuesAdvanced", display = "Advanced Search", permission = PERMISSION_ACCESS, auditable = false)
+    public String searchValuesByJsonFields(
+            @Param("groupId")
+            @Parameter(description = "The unique ID of the group to retrieve.", required = true)
+            @PathParam("groupId") Integer groupId,
+
+            @Param("offset")
+            @Parameter(description = "Offset for pagination (default: 0)", required = false)
+            @QueryParam("offset") @DefaultValue("0") Integer offset,
+
+            @Param("limit")
+            @Parameter(description = "Maximum number of values to return (default: 100)", required = false)
+            @QueryParam("limit") @DefaultValue("100") Integer limit,
+
+            @Param("filterState")
+            @RequestBody(
+                    description = "Advanced filter state (keyPattern + JSON conditions).",
+                    required = false
+            )
+            String filterState
+    ) throws ClientException;
+    
+    @POST
     @Path("/groups/{groupId}/values")
     @Operation(summary = "Imports key-value pairs into a specific lookup group.")
     @ApiResponse(
@@ -490,6 +781,7 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                                     "    \"version\": \"1.0\",\n" +
                                     "    \"cacheSize\": 1000,\n" +
                                     "    \"cachePolicy\": \"LRU\",\n" +
+                                    "    \"statisticsEnabled\": true,\n" +
                                     "    \"createdDate\": \"2024-12-15T08:00:00Z\",\n" +
                                     "    \"updatedDate\": \"2025-05-01T10:00:00Z\"\n" +
                                     "  },\n" +
@@ -580,31 +872,90 @@ public interface LookupTableServletInterface extends BaseServletInterface {
 
             @Param("requestBody")
             @RequestBody(
-                    description = "Raw JSON containing a group and its values to import.",
-                    required = true,
-                    content = @Content(
-                            mediaType = MediaType.APPLICATION_JSON,
-                            examples = @ExampleObject(
-                                    name = "ImportRequestExample",
-                                    summary = "Import a group",
-                                    value = "{\n" +
-                                            "  \"group\": {\n" +
-                                            "    \"name\": \"Billing Codes\",\n" +
-                                            "    \"description\": \"Standard billing codes for claims\",\n" +
-                                            "    \"version\": \"1.0\",\n" +
-                                            "    \"cacheSize\": 1000,\n" +
-                                            "    \"cachePolicy\": \"LRU\"\n" +
-                                            "  },\n" +
-                                            "  \"values\": {\n" +
-                                            "    \"99213\": \"Office Visit, Established Patient\",\n" +
-                                            "    \"99214\": \"Office Visit, Level 4\",\n" +
-                                            "    \"99215\": \"Office Visit, Level 5\",\n" +
-                                            "    \"J0696\": \"Injection, Ceftriaxone Sodium\"\n" +
-                                            "  }\n" +
-                                            "}"
-                            )
-                    )
+                description = "Raw JSON containing a lookup group and its values to import. " +
+                              "Supports TEXT and JSON groups. For JSON groups, values must be JSON strings.",
+                required = true,
+                content = @Content(
+                    mediaType = MediaType.APPLICATION_JSON,
+                    examples = {
+
+                        // -------------------------- TEXT GROUP --------------------------
+                        @ExampleObject(
+                            name = "import-text-group",
+                            summary = "Import a TEXT lookup group",
+                            value =
+                                    "{\n" +
+                                    "  \"group\": {\n" +
+                                    "    \"name\": \"Billing Codes\",\n" +
+                                    "    \"description\": \"Standard billing codes for claims\",\n" +
+                                    "    \"version\": \"1.0\",\n" +
+                                    "    \"cacheSize\": 1000,\n" +
+                                    "    \"cachePolicy\": \"LRU\",\n" +
+                                    "    \"statisticsEnabled\": true,\n" +
+                                    "    \"valueType\": \"TEXT\"\n" +
+                                    "  },\n" +
+                                    "  \"values\": {\n" +
+                                    "    \"99213\": \"Office Visit, Established Patient\",\n" +
+                                    "    \"99214\": \"Office Visit, Level 4\",\n" +
+                                    "    \"99215\": \"Office Visit, Level 5\",\n" +
+                                    "    \"J0696\": \"Injection, Ceftriaxone Sodium\"\n" +
+                                    "  }\n" +
+                                    "}"
+                        ),
+
+                        // ----------------------- JSON + FIELD ---------------------------
+                        @ExampleObject(
+                            name = "import-json-group-field",
+                            summary = "Import a JSON lookup group with FIELD index",
+                            value =
+                                    "{\n" +
+                                    "  \"group\": {\n" +
+                                    "    \"name\": \"User Directory\",\n" +
+                                    "    \"description\": \"JSON-based user data\",\n" +
+                                    "    \"version\": \"1.0\",\n" +
+                                    "    \"cacheSize\": 500,\n" +
+                                    "    \"cachePolicy\": \"FIFO\",\n" +
+                                    "    \"statisticsEnabled\": true,\n" +
+                                    "    \"valueType\": \"JSON\",\n" +
+                                    "    \"extra\": {\n" +
+                                    "      \"jsonIndexMode\": \"FIELD\",\n" +
+                                    "      \"indexedJsonFields\": \"[\\\"email\\\", \\\"address.city\\\"]\"\n" +
+                                    "    }\n" +
+                                    "  },\n" +
+                                    "  \"values\": {\n" +
+                                    "    \"user_1\": \"{ \\\"email\\\": \\\"user1@example.com\\\", \\\"status\\\": \\\"active\\\", \\\"address\\\": { \\\"city\\\": \\\"Houston\\\" } }\",\n" +
+                                    "    \"user_2\": \"{ \\\"email\\\": \\\"user2@example.com\\\", \\\"status\\\": \\\"inactive\\\", \\\"address\\\": { \\\"city\\\": \\\"Austin\\\" } }\"\n" +
+                                    "  }\n" +
+                                    "}"
+                        ),
+                        // ------------------------- JSON + NONE --------------------------
+                        @ExampleObject(
+                            name = "import-json-group-none",
+                            summary = "Import a JSON lookup group with NONE index",
+                            value =
+                                    "{\n" +
+                                    "  \"group\": {\n" +
+                                    "    \"name\": \"User Metadata\",\n" +
+                                    "    \"description\": \"JSON without any index (slower search, full scan)\",\n" +
+                                    "    \"version\": \"1.0\",\n" +
+                                    "    \"cacheSize\": 300,\n" +
+                                    "    \"cachePolicy\": \"LRU\",\n" +
+                                    "    \"statisticsEnabled\": true,\n" +
+                                    "    \"valueType\": \"JSON\",\n" +
+                                    "    \"extra\": {\n" +
+                                    "      \"jsonIndexMode\": \"NONE\"\n" +
+                                    "    }\n" +
+                                    "  },\n" +
+                                    "  \"values\": {\n" +
+                                    "    \"user_100\": \"{ \\\"role\\\": \\\"admin\\\", \\\"status\\\": \\\"active\\\" }\",\n" +
+                                    "    \"user_200\": \"{ \\\"role\\\": \\\"support\\\", \\\"status\\\": \\\"inactive\\\" }\"\n" +
+                                    "  }\n" +
+                                    "}"
+                        )
+                    }
+                )
             )
+
             String requestBody
     ) throws ClientException;
 
@@ -881,4 +1232,33 @@ public interface LookupTableServletInterface extends BaseServletInterface {
     )
     @MirthOperation(name = "clearAllCaches", display = "Clear All Caches", permission = PERMISSION_ACCESS)
     public String clearAllCaches() throws ClientException;
+    
+    @GET
+    @Path("/databaseInfo")
+    @Operation(
+            summary = "Get database metadata",
+            description = "Returns detailed information about the connected database, including type, version, and raw JDBC metadata."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "Database information retrieved successfully",
+            content = @Content(
+                    mediaType = MediaType.APPLICATION_JSON,
+                    examples = @ExampleObject(
+                            name = "DatabaseInfoExample",
+                            summary = "Example response for database metadata",
+                            value = "{\n" +
+                                    "  \"type\": \"POSTGRESQL\",\n" +
+                                    "  \"majorVersion\": 16,\n" +
+                                    "  \"minorVersion\": 2,\n" +
+                                    "  \"productName\": \"PostgreSQL\",\n" +
+                                    "  \"productVersion\": \"PostgreSQL 16.2 on x86_64-pc-linux-gnu\"\n" +
+                                    "}"
+                    )
+            )
+    )
+    @MirthOperation(name = "getDatabaseInfo", display = "Get Database Info", permission = PERMISSION_ACCESS, auditable = false)
+    public String getDatabaseInfo() throws ClientException;
+
 }
+//@formatter:on
