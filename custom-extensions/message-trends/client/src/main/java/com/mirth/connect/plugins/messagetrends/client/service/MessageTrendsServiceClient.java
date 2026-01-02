@@ -27,7 +27,6 @@ import com.mirth.connect.plugins.messagetrends.shared.util.JsonUtils;
 
 public class MessageTrendsServiceClient {
 	private static MessageTrendsServiceClient instance = null;
-	private MessageTrendsServletInterface servlet;
 	private final Logger logger = LogManager.getLogger(this.getClass());
 
 	public static MessageTrendsServiceClient getInstance() {
@@ -135,12 +134,10 @@ public class MessageTrendsServiceClient {
 	}
 
 	private MessageTrendsServletInterface getServlet() {
-		if (servlet == null) {
-			Client client = PlatformUI.MIRTH_FRAME.mirthClient;
-			servlet = client.getServlet(MessageTrendsServletInterface.class);
-		}
 
-		return servlet;
+		Client client = PlatformUI.MIRTH_FRAME.mirthClient;
+		return client.getServlet(MessageTrendsServletInterface.class);
+
 	}
 
 	private void rethrowParsedClientError(ClientException e) throws ClientException {

@@ -46,19 +46,19 @@ import com.mirth.connect.model.converters.ObjectXMLSerializer;
 import com.mirth.connect.plugins.MultiFactorAuthenticationClientPlugin;
 import com.mirth.connect.util.MirthSSLUtil;
 
-public class LoginPanel extends javax.swing.JFrame {
+public class LoginPanel extends AbstractLoginPanel {
 
     private Client client;
     private static final String ERROR_MESSAGE = "There was an error connecting to the server at the specified address. Please verify that the server is up and running.";
     private static LoginPanel instance = null;
 
-    private LoginPanel() {
+    public LoginPanel() {
         initComponents();
         DisplayUtil.setResizable(this, false);
         jLabel2.setForeground(com.mirth.connect.client.ui.UIConstants.HEADER_TITLE_TEXT_COLOR);
         jLabel5.setForeground(com.mirth.connect.client.ui.UIConstants.HEADER_TITLE_TEXT_COLOR);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setIconImage(com.mirth.connect.client.ui.UIConstants.MIRTH_FAVICON.getImage());
+        setIconImage(ApplicationIconProvider.getApplicationIcon().getImage());
         ImageIcon imageIcon = com.mirth.connect.client.ui.UIConstants.MIRTHCORP_LOGO; // load the image to a imageIcon
         Image image = imageIcon.getImage(); // transform it
         Image newimg = image.getScaledInstance(175, 30, java.awt.Image.SCALE_SMOOTH); // scale it the smooth way 
@@ -94,15 +94,6 @@ public class LoginPanel extends javax.swing.JFrame {
         errorTextArea.setDisabledTextColor(Color.RED);
     }
 
-    public static LoginPanel getInstance() {
-        synchronized (LoginPanel.class) {
-            if (instance == null) {
-                instance = new LoginPanel();
-            }
-            return instance;
-        }
-    }
-
     public void initialize(String mirthServer, String version, String user, String pass) {
         synchronized (this) {
             // Do not initialize another login window if one is already visible
@@ -113,7 +104,7 @@ public class LoginPanel extends javax.swing.JFrame {
             com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION = version;
 
             setTitle("BridgeLink " + version + " - Login");//Change to BridgeLink by Innovar Healthcare
-            setIconImage(com.mirth.connect.client.ui.UIConstants.MIRTH_FAVICON.getImage());
+            setIconImage(ApplicationIconProvider.getApplicationIcon().getImage());
 
             serverName.setText(mirthServer);
 
@@ -177,7 +168,7 @@ public class LoginPanel extends javax.swing.JFrame {
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setTitle("BridgeLink - Login");//Change to BridgeLink by Innovar Healthcare
-        setIconImage(com.mirth.connect.client.ui.UIConstants.MIRTH_FAVICON.getImage());
+        setIconImage(ApplicationIconProvider.getApplicationIcon().getImage());
 
         loginMain.setBackground(new java.awt.Color(255, 255, 255));
         loginMain.setName(""); // NOI18N
@@ -461,8 +452,8 @@ public class LoginPanel extends javax.swing.JFrame {
                     // If SUCCESS or SUCCESS_GRACE_PERIOD
                     if ((loginStatus != null) && ((loginStatus.getStatus() == LoginStatus.Status.SUCCESS) || (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD))) {
                         if (!handleSuccess(loginStatus)) {
-                            LoginPanel.getInstance().setVisible(false);
-                            LoginPanel.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
+                            setVisible(false);
+                            initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
                         }
                     } else {
                         // Assume failure unless overridden by a plugin
@@ -480,8 +471,8 @@ public class LoginPanel extends javax.swing.JFrame {
                                 if ((loginStatus != null) && ((loginStatus.getStatus() == LoginStatus.Status.SUCCESS) || (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD))) {
                                     errorOccurred = false;
                                     if (!handleSuccess(loginStatus)) {
-                                        LoginPanel.getInstance().setVisible(false);
-                                        LoginPanel.getInstance().initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
+                                        setVisible(false);
+                                        initialize(com.mirth.connect.client.ui.PlatformUI.SERVER_URL, com.mirth.connect.client.ui.PlatformUI.CLIENT_VERSION, "", "");
                                     }
                                 }
                             }
@@ -517,7 +508,7 @@ public class LoginPanel extends javax.swing.JFrame {
                     PublicServerSettings publicServerSettings = client.getPublicServerSettings();
                     
                     if (publicServerSettings.getLoginNotificationEnabled() == true) {
-                    	com.mirth.connect.client.ui.CustomBannerPanelDialog customBannerPanelDialog = new com.mirth.connect.client.ui.CustomBannerPanelDialog(LoginPanel.getInstance(), "Login Notification", publicServerSettings.getLoginNotificationMessage());
+                    	com.mirth.connect.client.ui.CustomBannerPanelDialog customBannerPanelDialog = new com.mirth.connect.client.ui.CustomBannerPanelDialog(LoginPanelProvider.getInstance(), "Login Notification", publicServerSettings.getLoginNotificationMessage());
                     	boolean isAccepted = customBannerPanelDialog.isAccepted();
                     	
                     	if (isAccepted == true) {
@@ -572,7 +563,7 @@ public class LoginPanel extends javax.swing.JFrame {
                 com.mirth.connect.client.ui.PlatformUI.USER_NAME = StringUtils.defaultString(loginStatus.getUpdatedUsername(), username.getText());
                 setStatus("Authenticated...");
                 new Mirth(client);
-                LoginPanel.getInstance().setVisible(false);
+                setVisible(false);
 
                 User currentUser = com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.getCurrentUser(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME);
                 Properties userPreferences = new Properties();

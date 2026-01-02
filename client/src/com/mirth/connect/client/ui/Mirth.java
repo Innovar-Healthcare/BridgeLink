@@ -62,7 +62,7 @@ public class Mirth {
         UIManager.put("Tree.closedIcon", UIConstants.CLOSED_ICON);
 
         userPreferences = Preferences.userNodeForPackage(Mirth.class);
-        LoginPanel.getInstance().setStatus("Loading components...");
+        LoginPanelProvider.getInstance().setStatus("Loading components...");
         PlatformUI.MIRTH_FRAME.setupFrame(mirthClient);
 
         boolean maximized;
@@ -122,7 +122,7 @@ public class Mirth {
      * @return quit
      */
     public static boolean quitMac() {
-        return (LoginPanel.getInstance().isVisible() || (PlatformUI.MIRTH_FRAME != null && PlatformUI.MIRTH_FRAME.logout(true)));
+        return (LoginPanelProvider.getInstance().isVisible() || (PlatformUI.MIRTH_FRAME != null && PlatformUI.MIRTH_FRAME.logout(true)));
     }
 
     /**
@@ -255,6 +255,12 @@ public class Mirth {
     /**
      * Application entry point. Sets up the login panel and its layout as well.
      * 
+     * Command line arguments:
+     * <server> [version] [username] [password] [-ssl [protocols] [ciphersuites]] [-bridgelink.icon.path <iconPath>]
+     * 
+     * System properties:
+     * -Dbridgelink.icon.path=<iconPath>
+     * 
      * @param args
      *            String[]
      */
@@ -265,6 +271,21 @@ public class Mirth {
         String password = "";
         String protocols = "";
         String cipherSuites = "";
+        String iconPath = "";
+
+        // Parse arguments, looking for -bridgelink.icon.path or -icon flag
+        for (int i = 0; i < args.length; i++) {
+            if (("-bridgelink.icon.path".equals(args[i]) || "-icon".equals(args[i])) && i + 1 < args.length) {
+                iconPath = args[i + 1];
+                ApplicationIconProvider.setCustomIconPath(iconPath);
+                // Remove the flag and its value from args for normal processing
+                String[] newArgs = new String[args.length - 2];
+                System.arraycopy(args, 0, newArgs, 0, i);
+                System.arraycopy(args, i + 2, newArgs, i, args.length - i - 2);
+                args = newArgs;
+                break;
+            }
+        }
 
         if (args.length > 0) {
             server = args[0];
@@ -311,6 +332,7 @@ public class Mirth {
             PlatformUI.HTTPS_CIPHER_SUITES = StringUtils.split(cipherSuites, ',');
         }
 
+
         start(server, version, username, password);
     }
 
@@ -325,7 +347,8 @@ public class Mirth {
             public void run() {
                 initUIManager();
                 PlatformUI.BACKGROUND_IMAGE = new ImageIcon(com.mirth.connect.client.ui.Frame.class.getResource("images/header_nologo.png"));
-                LoginPanel.getInstance().initialize(server, version, username, password);
+                LoginPanelProvider.registerCustomLoginPanelFactory("com.mirth.connect.client.ui.CustomLoginPanelProviderImpl");
+                LoginPanelProvider.getInstance().initialize(server, version, username, password);
             }
         });
     }
