@@ -715,13 +715,7 @@ public class DefaultExtensionController extends com.mirth.connect.server.control
         }
 
         if (entry.isDirectory()) {
-            /*
-             * assume directories are stored parents first then children.
-             * 
-             * TODO: this is not robust, just for demonstration purposes.
-             */
-            File directory = new File(installTempDir, entry.getName());
-            directory.mkdir();
+            destinationfile.mkdirs();
         } else {
             // otherwise, write the file out to the install temp dir
             InputStream zipInputStream = null;
@@ -729,7 +723,7 @@ public class DefaultExtensionController extends com.mirth.connect.server.control
             OutputStream outputStream = null;
             try {
                 zipInputStream = zipFile.getInputStream(entry);
-                fileOutputStream = new FileOutputStream(new File(installTempDir, entry.getName()));
+                fileOutputStream = new FileOutputStream(destinationfile);
                 outputStream = new BufferedOutputStream(fileOutputStream);
                 IOUtils.copy(zipInputStream, outputStream);
             } finally {
@@ -740,3 +734,4 @@ public class DefaultExtensionController extends com.mirth.connect.server.control
         }
     }
 }
+
