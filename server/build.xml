@@ -1028,7 +1028,7 @@
 
 			<manifest>
 				<attribute name="Main-Class" value="com.mirth.connect.server.launcher.MirthLauncher" />
-				<attribute name="Class-Path" value="server-lib/commons/commons-io-2.13.0.jar server-lib/commons/commons-configuration2-2.8.0.jar server-lib/commons/commons-lang3-3.13.0.jar server-lib/commons/commons-logging-1.2.jar server-lib/commons/commons-beanutils-1.9.4.jar server-lib/commons/commons-text-1.10.0.jar server-lib/commons/commons-collections-3.2.2.jar conf/" />
+				<attribute name="Class-Path" value="server-lib/commons/commons-io-2.13.0.jar server-lib/commons/commons-configuration2-2.10.1.jar server-lib/commons/commons-lang3-3.18.0.jar server-lib/commons/commons-logging-1.3.3.jar server-lib/commons/commons-beanutils-1.11.0.jar server-lib/commons/commons-text-1.12.0.jar server-lib/commons/commons-collections-3.2.2.jar server-lib/log4j/log4j-api-2.17.2.jar conf/" />
 			</manifest>
 		</jar>
 
@@ -1049,6 +1049,10 @@
 		<!-- modify jar manifests -->
 		<!-- don't modify bcprov, since it already has the manifest changes and is signed by BC -->
 		<echo message="[Thread Count: ${manifest_thread_count}] Modifying jar manifests to add Permissions: all-permissions; Codebase: *; Application-Name: Mirth Connect" />
+
+		<!-- sign jars for webstart -->
+		<echo message="[Thread Count: ${signjar_thread_count}] Signing jars for Java Web Start" />
+		<property file="${keystore_property_file}" />
 		<for param="jarFile" parallel="true" threadCount="${manifest_thread_count}">
 			<fileset dir="${setup.client.lib}" includes="**/*.jar" excludes="bcp*.jar,bcutil*.jar"/>
 			<fileset dir="${setup.extensions}" includes="**/*.jar" />
@@ -1061,23 +1065,19 @@
 				</apply>
 			</sequential>
 		</for>
-		<!-- sign jars for webstart -->
-		<echo message="[Thread Count: ${signjar_thread_count}] Signing jars for Java Web Start" />
-		<property file="${keystore_property_file}" />
-
-				<for param="jarFile" parallel="true" threadCount="${signjar_thread_count}">
-					<fileset dir="${setup.client.lib}" includes="**/*.jar" />
-					<fileset dir="${setup.extensions}" includes="**/*.jar" />
-					<sequential>
-						<retry retrycount="5" retrydelay="1000">
-							<signjar jar="@{jarFile}" alias="${key.alias}" keystore="${key.keystore}" storepass="${key.storepass}" keypass="${key.keypass}" storetype="${key.storetype}" tsaurl="http://timestamp.digicert.com" digestalg="SHA-256">
-								<!-- http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=7127374 -->
-								<sysproperty key="jsse.enableSNIExtension" value="false" />
-								<sysproperty key="https.protocols" value="TLSv1.2,TLSv1.1" />
-							</signjar>
-						</retry>
-					</sequential>
-				</for>
+		<for param="jarFile" parallel="true" threadCount="${signjar_thread_count}">
+			<fileset dir="${setup.client.lib}" includes="**/*.jar" />
+			<fileset dir="${setup.extensions}" includes="**/*.jar" />
+			<sequential>
+				<retry retrycount="5" retrydelay="1000">
+					<signjar jar="@{jarFile}" alias="${key.alias}" keystore="${key.keystore}" storepass="${key.storepass}" keypass="${key.keypass}" storetype="${key.storetype}" tsaurl="http://timestamp.digicert.com" digestalg="SHA-256">
+						<!-- http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=7127374 -->
+						<sysproperty key="jsse.enableSNIExtension" value="false" />
+						<sysproperty key="https.protocols" value="TLSv1.2,TLSv1.1" />
+					</signjar>
+				</retry>
+			</sequential>
+		</for>
 	</target>
 
 	<target name="create-extension-zips" depends="create-setup">

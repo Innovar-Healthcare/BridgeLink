@@ -10,7 +10,7 @@
 	</target>
 
 	<target name="dependency-check" description="Dependency-Check Analysis">
-		<property name="dependency-check.home" location="${lib.home}/dependency-check"/>
+		<property name="dependency-check.home" location="${basedir}/dependency-check-ant"/>
 		<path id="dependency-check.path">
 		   <pathelement location="${dependency-check.home}/dependency-check-ant.jar"/>
 		    <fileset dir="${dependency-check.home}/lib">
@@ -22,7 +22,9 @@
 		</taskdef>
 	    <dependency-check projectname="Connect Core"
 	                      reportoutputdirectory="${basedir}"
-	                      reportformat="HTML">
+	                      reportformat="HTML"
+	                      assemblyAnalyzerEnabled="false"
+	                      ossindexAnalyzerEnabled="false">
 	        <suppressionfile path="${dependency-check.home}/suppression.xml" />
 	        <multirootfileset basedirs="${basedir}/server/lib,${basedir}/donkey/lib,${basedir}/client/lib,${basedir}/command/lib,${basedir}/manager/lib">
 	            <include name="**/*.jar"/>
