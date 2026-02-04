@@ -163,7 +163,7 @@
     <classpathentry kind="lib" path="../../server/lib/javax.json-1.0.4.jar"/>
     <classpathentry kind="lib" path="../../server/lib/javax.json-api-1.0.jar"/>
     <classpathentry kind="lib" path="../../server/lib/javax.mail-1.5.0.jar"/>
-    <classpathentry kind="lib" path="../../server/lib/javax.servlet-api-3.1.0.jar"/>
+    <classpathentry kind="lib" path="../../server/lib/javax/javax.servlet-api-4.0.1.jar"/>
     <classpathentry kind="lib" path="../../server/lib/javax.ws.rs-api-2.0.1.jar"/>
     <classpathentry kind="lib" path="../../server/lib/istack-commons-runtime-3.0.6.jar"/>
     <classpathentry kind="lib" path="../../server/lib/txw2-2.4.0-b180725.0644.jar"/>

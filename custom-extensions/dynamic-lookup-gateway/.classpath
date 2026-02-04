@@ -20,7 +20,7 @@
 	<classpathentry kind="lib" path="../../server/lib/log4j/log4j-1.2-api-2.17.2.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/log4j/log4j-api-2.17.2.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/log4j/log4j-core-2.17.2.jar"/>
-	<classpathentry kind="lib" path="../../server/lib/javax/javax.servlet-api-3.1.0.jar"/>
+	<classpathentry kind="lib" path="../../server/lib/javax/javax.servlet-api-4.0.1.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/javax/javax.ws.rs-api-2.0.1.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/commons/httpclient-4.5.13.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/commons/httpcore-4.4.13.jar"/>

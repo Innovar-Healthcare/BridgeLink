@@ -60,32 +60,41 @@ import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpConnectionFactory;
 import org.eclipse.jetty.server.LowResourceMonitor;
-import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.SecureRequestCustomizer;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.SslConnectionFactory;
-import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.eclipse.jetty.server.handler.ContextHandler;
-import org.eclipse.jetty.server.handler.DefaultHandler;
-import org.eclipse.jetty.server.handler.HandlerList;
-import org.eclipse.jetty.server.handler.ResourceHandler;
-import org.eclipse.jetty.server.session.DatabaseAdaptor;
-import org.eclipse.jetty.server.session.DefaultSessionCacheFactory;
-import org.eclipse.jetty.server.session.JDBCSessionDataStore.SessionTableSchema;
-import org.eclipse.jetty.server.session.JDBCSessionDataStoreFactory;
-import org.eclipse.jetty.server.session.NullSessionCacheFactory;
-import org.eclipse.jetty.server.session.NullSessionDataStore;
-import org.eclipse.jetty.server.session.SessionCache;
-import org.eclipse.jetty.server.session.SessionDataStore;
-import org.eclipse.jetty.server.session.SessionDataStoreFactory;
-import org.eclipse.jetty.server.session.SessionHandler;
-import org.eclipse.jetty.servlet.FilterHolder;
-import org.eclipse.jetty.servlet.ServletContextHandler;
-import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
-import org.eclipse.jetty.webapp.Configuration;
-import org.eclipse.jetty.webapp.WebAppContext;
+
+// Jetty 12 EE8 imports (for javax.servlet compatibility)
+import org.eclipse.jetty.ee8.nested.AbstractHandler;
+import org.eclipse.jetty.ee8.nested.ContextHandler;
+import org.eclipse.jetty.ee8.nested.HandlerList;
+import org.eclipse.jetty.ee8.nested.Request;
+import org.eclipse.jetty.ee8.nested.ResourceHandler;
+import org.eclipse.jetty.ee8.nested.SessionHandler;
+import org.eclipse.jetty.ee8.servlet.DefaultServlet;
+import org.eclipse.jetty.ee8.servlet.FilterHolder;
+import org.eclipse.jetty.ee8.servlet.ServletContextHandler;
+import org.eclipse.jetty.ee8.servlet.ServletHolder;
+import org.eclipse.jetty.ee8.webapp.WebAppContext;
+import org.eclipse.jetty.ee8.annotations.AnnotationConfiguration;
+import org.eclipse.jetty.ee8.webapp.FragmentConfiguration;
+import org.eclipse.jetty.ee8.webapp.JettyWebXmlConfiguration;
+import org.eclipse.jetty.ee8.webapp.MetaInfConfiguration;
+import org.eclipse.jetty.ee8.webapp.WebInfConfiguration;
+import org.eclipse.jetty.ee8.webapp.WebXmlConfiguration;
+
+// Jetty 12 Session imports
+import org.eclipse.jetty.session.DatabaseAdaptor;
+import org.eclipse.jetty.session.DefaultSessionCacheFactory;
+import org.eclipse.jetty.session.JDBCSessionDataStore.SessionTableSchema;
+import org.eclipse.jetty.session.JDBCSessionDataStoreFactory;
+import org.eclipse.jetty.session.NullSessionCacheFactory;
+import org.eclipse.jetty.session.NullSessionDataStore;
+import org.eclipse.jetty.session.SessionCache;
+import org.eclipse.jetty.session.SessionDataStore;
+import org.eclipse.jetty.session.SessionDataStoreFactory;
 import org.glassfish.jersey.media.multipart.MultiPartFeature;
 import org.glassfish.jersey.server.ServerProperties;
 import org.glassfish.jersey.server.wadl.internal.generators.WadlGeneratorJAXBGrammarGenerator;
@@ -220,25 +229,43 @@ public class MirthWebServer extends Server {
         // Create the lib context
         ContextHandler libContextHandler = new ContextHandler();
         libContextHandler.setContextPath(contextPath + "/webstart/client-lib");
-        libContextHandler.setResourceBase(clientLibPath);
-        libContextHandler.setHandler(new ResourceHandler());
+        ResourceHandler libResourceHandler = new ResourceHandler();
+        libResourceHandler.setResourceBase(clientLibPath);
+        libContextHandler.setHandler(libResourceHandler);
         handlers.addHandler(libContextHandler);
 
         // Create the extensions context
         ContextHandler extensionsContextHandler = new ContextHandler();
         extensionsContextHandler.setContextPath(contextPath + "/webstart/extensions/libs");
         String extensionsPath = new File(ExtensionController.getExtensionsPath()).getPath();
-        extensionsContextHandler.setResourceBase(extensionsPath);
-        extensionsContextHandler.setHandler(new ResourceHandler());
+        ResourceHandler extensionsResourceHandler = new ResourceHandler();
+        extensionsResourceHandler.setResourceBase(extensionsPath);
+        extensionsContextHandler.setHandler(extensionsResourceHandler);
         handlers.addHandler(extensionsContextHandler);
 
-        // Create the public_html context
-        ContextHandler publicContextHandler = new ContextHandler();
-        publicContextHandler.setContextPath(contextPath);
+        // Create a combined public_html and webstart context
+        // In Jetty 12, we need a single context handler for the root path that handles both
+        // static files and webstart servlets
+        ServletContextHandler rootContextHandler = new ServletContextHandler();
+        rootContextHandler.setContextPath(contextPath);
+        
+        // Add method filter for webstart
+        rootContextHandler.addFilter(new FilterHolder(new MethodFilter()), "/webstart.jnlp", EnumSet.of(DispatcherType.REQUEST));
+        rootContextHandler.addFilter(new FilterHolder(new MethodFilter()), "/webstart", EnumSet.of(DispatcherType.REQUEST));
+        rootContextHandler.addFilter(new FilterHolder(new MethodFilter()), "/webstart/*", EnumSet.of(DispatcherType.REQUEST));
+        
+        // Add webstart servlets
+        rootContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart.jnlp");
+        rootContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart");
+        rootContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart/extensions/*");
+        
+        // Add default servlet for static files from public_html
         String publicPath = ControllerFactory.getFactory().createConfigurationController().getBaseDir() + File.separator + "public_html";
-        publicContextHandler.setResourceBase(publicPath);
-        publicContextHandler.setHandler(new ResourceHandler());
-        handlers.addHandler(publicContextHandler);
+        ServletHolder defaultServlet = new ServletHolder("default", DefaultServlet.class);
+        defaultServlet.setInitParameter("resourceBase", publicPath);
+        defaultServlet.setInitParameter("dirAllowed", "false");
+        rootContextHandler.addServlet(defaultServlet, "/");
+        handlers.addHandler(rootContextHandler);
 
         // Create Administrator Launcher installer contexts
         addLauncherInstallerContextHandlers(contextPath);
@@ -247,8 +274,8 @@ public class MirthWebServer extends Server {
         ContextHandler javadocsContextHandler = new ContextHandler();
         javadocsContextHandler.setContextPath(contextPath + "/javadocs");
         String javadocsPath = ControllerFactory.getFactory().createConfigurationController().getBaseDir() + File.separator + "docs" + File.separator + "javadocs";
-        javadocsContextHandler.setResourceBase(javadocsPath);
         ResourceHandler javadocsResourceHandler = new ResourceHandler();
+        javadocsResourceHandler.setResourceBase(javadocsPath);
         javadocsResourceHandler.setDirectoriesListed(true);
         javadocsContextHandler.setHandler(javadocsResourceHandler);
         handlers.addHandler(javadocsContextHandler);
@@ -277,10 +304,6 @@ public class MirthWebServer extends Server {
         File[] listOfFiles = new File(webappsDir).listFiles(filter);
 
         if (listOfFiles != null) {
-            // Since webapps may use JSP and JSTL, we need to enable the AnnotationConfiguration in order to correctly set up the JSP container.
-            Configuration.ClassList classlist = Configuration.ClassList.setServerDefault(this);
-            classlist.addBefore("org.eclipse.jetty.webapp.JettyWebXmlConfiguration", "org.eclipse.jetty.annotations.AnnotationConfiguration");
-
             for (File file : listOfFiles) {
                 logger.debug("webApp File Path: " + file.getAbsolutePath());
 
@@ -292,20 +315,20 @@ public class MirthWebServer extends Server {
                 DefaultSessionCacheFactory sessionCacheFactory = new DefaultSessionCacheFactory();
                 // Evict from the cache after the inactive period has elapsed, default value is 72 hours (3 days)
                 sessionCacheFactory.setEvictionPolicy(configurationController.getMaxInactiveSessionInterval());
-                SessionCache sessionCache = sessionCacheFactory.getSessionCache(sessionHandler);
+                SessionCache sessionCache = sessionCacheFactory.getSessionCache(sessionHandler.getSessionManager());
 
                 // Uses the same method as SessionHandler to determine the data store
                 SessionDataStore sessionDataStore = null;
                 SessionDataStoreFactory sessionDataStoreFactory = getBean(SessionDataStoreFactory.class);
                 if (sessionDataStoreFactory != null) {
-                    sessionDataStore = sessionDataStoreFactory.getSessionDataStore(sessionHandler);
+                    sessionDataStore = sessionDataStoreFactory.getSessionDataStore(sessionHandler.getSessionManager());
                 } else {
                     sessionDataStore = new NullSessionDataStore();
                 }
                 sessionCache.setSessionDataStore(sessionDataStore);
 
                 // Set the session cache directly on the handler so it doesn't use the server bean
-                sessionHandler.setSessionCache(sessionCache);
+                sessionHandler.getSessionManager().setSessionCache(sessionCache);
                 webapp.setSessionHandler(sessionHandler);
                 
                 webapp.setContextPath(contextPath + "/" + file.getName().substring(0, file.getName().length() - 4));
@@ -343,21 +366,28 @@ public class MirthWebServer extends Server {
         
         addSwaggerServlets(handlers, apiServletContextHandler, contextPath, baseAPI, apiAllowHTTP, null);
 
-        // Create the webstart servlet handler
-        ServletContextHandler servletContextHandler = new ServletContextHandler();
-        servletContextHandler.setContextPath(contextPath);
-        servletContextHandler.addFilter(new FilterHolder(new MethodFilter()), "/*", EnumSet.of(DispatcherType.REQUEST));
-        servletContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart.jnlp");
-        servletContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart");
-        servletContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart/extensions/*");
-        handlers.addHandler(servletContextHandler);
+        // In Jetty 12, we need to wrap the EE8 HandlerList in a core handler
+        // The handlers' core context handlers will be collected and set on the server
+        org.eclipse.jetty.server.handler.ContextHandlerCollection coreHandlers = new org.eclipse.jetty.server.handler.ContextHandlerCollection();
+        for (org.eclipse.jetty.ee8.nested.Handler handler : handlers.getHandlers()) {
+            logger.debug("Processing handler: " + handler.getClass().getName());
+            if (handler instanceof ContextHandler) {
+                ContextHandler contextHandler = (ContextHandler) handler;
+                logger.debug("Adding context handler with path: " + contextHandler.getContextPath());
+                // In Jetty 12 EE8, we must set the server on the handler before getting its core handler
+                contextHandler.setServer(this);
+                coreHandlers.addHandler(contextHandler.getCoreContextHandler());
+            } else {
+                logger.debug("Skipping handler (not a ContextHandler): " + handler.getClass().getName());
+            }
+        }
+        
+        // Add a default handler for 404s
+        org.eclipse.jetty.server.handler.DefaultHandler defaultHandler = new org.eclipse.jetty.server.handler.DefaultHandler();
+        defaultHandler.setServeFavIcon(false); // don't serve the Jetty favicon
 
-        // add the default handler for misc requests (favicon, etc.)
-        DefaultHandler defaultHandler = new DefaultHandler();
-        defaultHandler.setServeIcon(false); // don't serve the Jetty favicon
-        handlers.addHandler(defaultHandler);
-
-        setHandler(handlers);
+        // Use a Handler.Sequence to combine the context handlers with the default handler
+        setHandler(new org.eclipse.jetty.server.Handler.Sequence(coreHandlers, defaultHandler));
 
         if (usingHttp) {
             setConnectors(new Connector[] { connector, sslConnector });
@@ -393,16 +423,21 @@ public class MirthWebServer extends Server {
             IOUtils.closeQuietly(is);
         }
 
-        SslContextFactory contextFactory = new SslContextFactory.Server();
+        SslContextFactory.Server contextFactory = new SslContextFactory.Server();
         contextFactory.setKeyStore(keyStore);
         contextFactory.setCertAlias("mirthconnect");
         contextFactory.setKeyManagerPassword(mirthProperties.getString("keystore.keypass"));
         contextFactory.setEndpointIdentificationAlgorithm(null);
+        // Jetty 12: Disable SNI host checking to allow connections via localhost/IP
+        contextFactory.setSniRequired(false);
 
         HttpConfiguration config = new HttpConfiguration();
         config.setSecureScheme("https");
         config.setSecurePort(mirthProperties.getInt("https.port"));
-        config.addCustomizer(new SecureRequestCustomizer());
+        // Jetty 12: Configure SecureRequestCustomizer to disable SNI host check
+        SecureRequestCustomizer secureRequestCustomizer = new SecureRequestCustomizer();
+        secureRequestCustomizer.setSniHostCheck(false);
+        config.addCustomizer(secureRequestCustomizer);
         config.setSendServerVersion(false);
         config.setSendXPoweredBy(false);
 
@@ -420,8 +455,8 @@ public class MirthWebServer extends Server {
 
         LowResourceMonitor lowResourceMonitor = new LowResourceMonitor(this);
         lowResourceMonitor.setMonitoredConnectors(Collections.singleton((Connector) sslConnector));
-        // If the number of connections open reaches 200
-        lowResourceMonitor.setMaxConnections(200);
+        // If the number of connections open reaches 200, use the MaxConnectionsLowResourceCheck
+        lowResourceMonitor.addLowResourceCheck(lowResourceMonitor.new MaxConnectionsLowResourceCheck(200));
         // Then close connections after 200 seconds, which is the default MaxIdleTime value. This should affect existing connections as well.
         lowResourceMonitor.setLowResourcesIdleTimeout(200000);
 
@@ -514,8 +549,9 @@ public class MirthWebServer extends Server {
     private ContextHandler getSwaggerContextHandler(String contextPath, String baseAPI, boolean apiAllowHTTP, Version version) {
         ContextHandler swaggerContextHandler = new ContextHandler();
         swaggerContextHandler.setContextPath(contextPath + baseAPI + (version != null ? "/" + version.toString() : ""));
-        swaggerContextHandler.setResourceBase(ControllerFactory.getFactory().createConfigurationController().getBaseDir() + File.separator + "public_api_html");
-        swaggerContextHandler.setHandler(new ResourceHandler());
+        ResourceHandler swaggerResourceHandler = new ResourceHandler();
+        swaggerResourceHandler.setResourceBase(ControllerFactory.getFactory().createConfigurationController().getBaseDir() + File.separator + "public_api_html");
+        swaggerContextHandler.setHandler(swaggerResourceHandler);
         setConnectorNames(swaggerContextHandler, apiAllowHTTP);
         return swaggerContextHandler;
     }
@@ -757,14 +793,14 @@ public class MirthWebServer extends Server {
     private void addLauncherInstallerContextHandlers(String contextPath) {
         File installersDirectory = new File(ControllerFactory.getFactory().createConfigurationController().getBaseDir() + File.separator + "public_html" + File.separator + "installers");
 
-        Collection<File> installerFiles;
+        java.util.Collection<File> installerFiles;
         if (installersDirectory.exists() && installersDirectory.isDirectory()) {
             installerFiles = FileUtils.listFiles(installersDirectory, TrueFileFilter.TRUE, FalseFileFilter.FALSE);
         } else {
             installerFiles = new ArrayList<File>();
         }
 
-        MimeTypes mimeTypes = new MimeTypes();
+        MimeTypes.Mutable mimeTypes = new MimeTypes.Mutable();
         mimeTypes.addMimeMapping("dmg", "application/x-apple-diskimage");
         mimeTypes.addMimeMapping("sh", "text/x-sh");
         mimeTypes.addMimeMapping("exe", "application/octet-stream");
@@ -775,7 +811,7 @@ public class MirthWebServer extends Server {
         addLauncherInstallerContextHandler(contextPath, "windows-x64", "windows-x64", ".exe", installerFiles, mimeTypes);
     }
 
-    private void addLauncherInstallerContextHandler(String contextPath, String os, String fileSuffix, String fileExt, Collection<File> installers, MimeTypes mimeTypes) {
+    private void addLauncherInstallerContextHandler(String contextPath, String os, String fileSuffix, String fileExt, java.util.Collection<File> installers, MimeTypes mimeTypes) {
         File installerFile = null;
         for (File file : installers) {
             if (StringUtils.endsWithIgnoreCase(file.getName(), fileSuffix + fileExt)) {
