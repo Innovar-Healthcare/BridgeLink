@@ -31,6 +31,8 @@ import java.util.Set;
 import java.util.zip.GZIPOutputStream;
 
 import javax.servlet.DispatcherType;
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -57,6 +59,7 @@ import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.http.MimeTypes;
 import org.eclipse.jetty.server.ForwardedRequestCustomizer;
 import org.eclipse.jetty.server.Connector;
+import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpConnectionFactory;
 import org.eclipse.jetty.server.LowResourceMonitor;
@@ -64,6 +67,7 @@ import org.eclipse.jetty.server.SecureRequestCustomizer;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.SslConnectionFactory;
+import org.eclipse.jetty.server.handler.DefaultHandler;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 
 // Jetty 12 EE8 imports (for javax.servlet compatibility)
@@ -366,6 +370,35 @@ public class MirthWebServer extends Server {
         
         addSwaggerServlets(handlers, apiServletContextHandler, contextPath, baseAPI, apiAllowHTTP, null);
 
+       // Add a redirect handler at /api/version/* to forward to /api/*
+       // This allows old clients using /api/4.6.1/* to be redirected to the primary /api/* endpoint
+       final String finalContextPath = contextPath;
+       final String finalBaseAPI = baseAPI;
+       final String finalVersion = String.valueOf(Version.getLatest());
+       ServletContextHandler versionedRedirectHandler = new ServletContextHandler();
+       versionedRedirectHandler.setContextPath(finalContextPath + finalBaseAPI + "/" + finalVersion);
+       ServletHolder redirectServlet = new ServletHolder("redirect", new javax.servlet.http.HttpServlet() {
+           @Override
+           protected void service(javax.servlet.http.HttpServletRequest request, javax.servlet.http.HttpServletResponse response) throws javax.servlet.ServletException, java.io.IOException {
+               String pathInfo = request.getPathInfo();
+               // Don't redirect the root path (/)
+               if (pathInfo == null || pathInfo.isEmpty() || pathInfo.equals("/")) {
+                   // For root path, just return 404 or forward to unversioned endpoint
+                   String redirectPath = finalContextPath + finalBaseAPI + "/";
+                   response.sendRedirect(redirectPath);
+                   return;
+               }
+               // Redirect to unversioned endpoint
+               String redirectPath = finalContextPath + finalBaseAPI + pathInfo;
+               if (request.getQueryString() != null) {
+                   redirectPath += "?" + request.getQueryString();
+               }
+               response.sendRedirect(redirectPath);
+           }
+       });
+       versionedRedirectHandler.addServlet(redirectServlet, "/*");
+       handlers.addHandler(versionedRedirectHandler);
+
         // In Jetty 12, we need to wrap the EE8 HandlerList in a core handler
         // The handlers' core context handlers will be collected and set on the server
         org.eclipse.jetty.server.handler.ContextHandlerCollection coreHandlers = new org.eclipse.jetty.server.handler.ContextHandlerCollection();
@@ -491,6 +524,55 @@ public class MirthWebServer extends Server {
         apiServletContextHandler.setContextPath(contextPath + baseAPI + apiPath);
         apiServletContextHandler.addFilter(new FilterHolder(new ApiOriginFilter(mirthProperties)), "/*", EnumSet.of(DispatcherType.REQUEST));
         apiServletContextHandler.addFilter(new FilterHolder(new ClickjackingFilter(mirthProperties)), "/*", EnumSet.of(DispatcherType.REQUEST));
+        
+        // Swagger UI filter - must be BEFORE RequestedWithFilter so that static file requests
+        // (index.html, css, js) don't require the X-Requested-With header
+        final String swaggerUiBase = ControllerFactory.getFactory().createConfigurationController().getBaseDir() + File.separator + "public_api_html";
+        apiServletContextHandler.addFilter(new FilterHolder(new javax.servlet.Filter() {
+            @Override
+            public void init(javax.servlet.FilterConfig filterConfig) throws javax.servlet.ServletException {}
+            @Override
+            public void destroy() {}
+            @Override
+            public void doFilter(javax.servlet.ServletRequest request, javax.servlet.ServletResponse response, javax.servlet.FilterChain chain) throws java.io.IOException, javax.servlet.ServletException {
+                javax.servlet.http.HttpServletRequest httpRequest = (javax.servlet.http.HttpServletRequest) request;
+                javax.servlet.http.HttpServletResponse httpResponse = (javax.servlet.http.HttpServletResponse) response;
+                String pathInfo = httpRequest.getPathInfo();
+                
+                // Serve index.html for root /api/ request
+                if (pathInfo == null || pathInfo.equals("/") || pathInfo.isEmpty()) {
+                    java.io.File indexFile = new java.io.File(swaggerUiBase, "index.html");
+                    if (indexFile.exists()) {
+                        httpResponse.setContentType("text/html; charset=UTF-8");
+                        httpResponse.setStatus(javax.servlet.http.HttpServletResponse.SC_OK);
+                        java.nio.file.Files.copy(indexFile.toPath(), httpResponse.getOutputStream());
+                        return;
+                    }
+                }
+                
+                // Serve static files from public_api_html if they exist (css, js, images, etc.)
+                if (pathInfo != null && !pathInfo.equals("/")) {
+                    java.io.File staticFile = new java.io.File(swaggerUiBase, pathInfo);
+                    if (staticFile.exists() && staticFile.isFile() && staticFile.getCanonicalPath().startsWith(new java.io.File(swaggerUiBase).getCanonicalPath())) {
+                        String fileName = staticFile.getName();
+                        if (fileName.endsWith(".css")) httpResponse.setContentType("text/css");
+                        else if (fileName.endsWith(".js")) httpResponse.setContentType("application/javascript");
+                        else if (fileName.endsWith(".html")) httpResponse.setContentType("text/html");
+                        else if (fileName.endsWith(".png")) httpResponse.setContentType("image/png");
+                        else if (fileName.endsWith(".json")) httpResponse.setContentType("application/json");
+                        else if (fileName.endsWith(".map")) httpResponse.setContentType("application/json");
+                        else httpResponse.setContentType("application/octet-stream");
+                        httpResponse.setStatus(javax.servlet.http.HttpServletResponse.SC_OK);
+                        java.nio.file.Files.copy(staticFile.toPath(), httpResponse.getOutputStream());
+                        return;
+                    }
+                }
+                
+                // Not a static file - pass through to remaining filters and Jersey
+                chain.doFilter(request, response);
+            }
+        }), "/*", EnumSet.of(DispatcherType.REQUEST));
+        
         apiServletContextHandler.addFilter(new FilterHolder(new RequestedWithFilter(mirthProperties)), "/*", EnumSet.of(DispatcherType.REQUEST));
         apiServletContextHandler.addFilter(new FilterHolder(new MethodFilter()), "/*", EnumSet.of(DispatcherType.REQUEST));
         apiServletContextHandler.addFilter(new FilterHolder(new StrictTransportSecurityFilter(mirthProperties)), "/*", EnumSet.of(DispatcherType.REQUEST));
@@ -519,21 +601,21 @@ public class MirthWebServer extends Server {
         handlers.addHandler(apiServletContextHandler);
     }
     
-    private void addSwaggerServlets(HandlerList handlers, ServletContextHandler apiServletContextHandler, String contextPath, String baseAPI, boolean apiAllowHTTP, PropertiesConfiguration mirthProperties) {
+    private void addSwaggerServlets(HandlerList handlers, ServletContextHandler apiServletContextHandler, String contextPath, String baseAPI, boolean apiAllowHTTP, Version version) {
     	String apiPath = "";
-        Version apiVersion = Version.getLatest();
+        // Use provided version, or default to latest if not provided
+        Version apiVersion = (version != null) ? version : Version.getLatest();
+        logger.info("apiVersion:" + apiVersion);
 
         ApiProviders apiProviders = getApiProviders(apiVersion);
 
         // Add versioned Swagger bootstrap configuration servlet
-        ServletHolder swaggerVersionedServlet = new ServletHolder(new SwaggerServlet(contextPath + baseAPI + apiPath, null, apiVersion, apiProviders.servletInterfacePackages, apiProviders.servletInterfaces, apiAllowHTTP));
+        SwaggerServlet swaggerServlet = new SwaggerServlet(contextPath + baseAPI + apiPath, null, apiVersion, apiProviders.servletInterfacePackages, apiProviders.servletInterfaces, apiAllowHTTP);
+        ServletHolder swaggerVersionedServlet = new ServletHolder(swaggerServlet);
         swaggerVersionedServlet.setInitOrder(2);
         apiServletContextHandler.addServlet(swaggerVersionedServlet, contextPath + baseAPI + apiPath + "/openapi.json");
         apiServletContextHandler.addServlet(swaggerVersionedServlet, contextPath + baseAPI + apiPath + "/openapi.yaml");
 
-        // Add Swagger UI web page servlet
-        handlers.addHandler(getSwaggerContextHandler(contextPath, baseAPI, apiAllowHTTP, null));
-        
         // Add Swagger examples servlet
         ServletContextHandler swaggerExamplesServletContextHandler = new ServletContextHandler();
         swaggerExamplesServletContextHandler.setContextPath("/apiexamples");
@@ -541,20 +623,11 @@ public class MirthWebServer extends Server {
         swaggerExamplesServlet.setInitOrder(3);
         swaggerExamplesServletContextHandler.addServlet(swaggerExamplesServlet, "/*");
         
-        // Add API handler
-        handlers.addHandler(apiServletContextHandler);
+
         handlers.addHandler(swaggerExamplesServletContextHandler);
     }
 
-    private ContextHandler getSwaggerContextHandler(String contextPath, String baseAPI, boolean apiAllowHTTP, Version version) {
-        ContextHandler swaggerContextHandler = new ContextHandler();
-        swaggerContextHandler.setContextPath(contextPath + baseAPI + (version != null ? "/" + version.toString() : ""));
-        ResourceHandler swaggerResourceHandler = new ResourceHandler();
-        swaggerResourceHandler.setResourceBase(ControllerFactory.getFactory().createConfigurationController().getBaseDir() + File.separator + "public_api_html");
-        swaggerContextHandler.setHandler(swaggerResourceHandler);
-        setConnectorNames(swaggerContextHandler, apiAllowHTTP);
-        return swaggerContextHandler;
-    }
+
 
     private void setConnectorNames(ContextHandler contextHandler, boolean apiAllowHTTP) {
         List<String> connectorNames = new ArrayList<String>();
