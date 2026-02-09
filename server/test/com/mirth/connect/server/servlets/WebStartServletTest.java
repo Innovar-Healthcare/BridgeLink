@@ -17,7 +17,9 @@
 package com.mirth.connect.server.servlets;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -319,15 +321,304 @@ public class WebStartServletTest {
 		assertNull(response.getHeader("Content-Disposition"));
 	}
 
+	// ========== getLastModified ==========
+
+	@Test
+	public void testGetLastModifiedReturnsCurrentTime() {
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		long before = System.currentTimeMillis();
+		long lastModified = webStartServlet.getLastModified(request);
+		long after = System.currentTimeMillis();
+		assertTrue("getLastModified should return a value >= before", lastModified >= before);
+		assertTrue("getLastModified should return a value <= after", lastModified <= after);
+	}
+
+	// ========== Character encoding ==========
+
+	@Test
+	public void testDoGetSetsCharacterEncoding() throws Exception {
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRequestURI()).thenReturn("/webstart");
+		when(request.getServletPath()).thenReturn("/webstart");
+		when(request.getParameterNames()).thenReturn(Collections.emptyEnumeration());
+
+		TestHttpServletResponse response = new TestHttpServletResponse();
+		webStartServlet.doGet(request, response);
+
+		assertEquals("UTF-8", response.getCharacterEncoding());
+	}
+
+	// ========== Single param scenarios ==========
+
+	@Test
+	public void testDoGetCoreWithOnlyMaxHeapSize() throws Exception {
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRequestURI()).thenReturn("/webstart");
+		when(request.getServletPath()).thenReturn("/webstart");
+
+		Map<String, String[]> parameters = new HashMap<>();
+		parameters.put("maxHeapSize", new String[] { "2g" });
+		when(request.getParameterNames()).thenReturn(Collections.enumeration(parameters.keySet()));
+		when(request.getParameter("maxHeapSize")).thenReturn("2g");
+
+		TestHttpServletResponse response = new TestHttpServletResponse();
+		webStartServlet.doGet(request, response);
+
+		assertEquals("application/x-java-jnlp-file", response.getContentType());
+		assertEquals("attachment; filename = \"webstart.jnlp\"", response.getHeader("Content-Disposition"));
+	}
+
+	@Test
+	public void testDoGetCoreWithOnlyTimeParam() throws Exception {
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRequestURI()).thenReturn("/webstart");
+		when(request.getServletPath()).thenReturn("/webstart");
+
+		Map<String, String[]> parameters = new HashMap<>();
+		parameters.put("time", new String[] { "1000" });
+		when(request.getParameterNames()).thenReturn(Collections.enumeration(parameters.keySet()));
+		when(request.getParameter("time")).thenReturn("1000");
+
+		TestHttpServletResponse response = new TestHttpServletResponse();
+		webStartServlet.doGet(request, response);
+
+		assertEquals("application/x-java-jnlp-file", response.getContentType());
+		assertEquals("attachment; filename = \"webstart.jnlp\"", response.getHeader("Content-Disposition"));
+	}
+
+	// ========== maxHeapSize validation ==========
+
+	@Test
+	public void testDoGetCoreMaxHeapSizeAllValidSuffixes() throws Exception {
+		String[] validSuffixes = { "k", "K", "m", "M", "g", "G", "t", "T" };
+		for (String suffix : validSuffixes) {
+			HttpServletRequest request = mock(HttpServletRequest.class);
+			when(request.getRequestURI()).thenReturn("/webstart");
+			when(request.getServletPath()).thenReturn("/webstart");
+
+			Map<String, String[]> parameters = new HashMap<>();
+			parameters.put("maxHeapSize", new String[] { "512" + suffix });
+			when(request.getParameterNames()).thenReturn(Collections.enumeration(parameters.keySet()));
+			when(request.getParameter("maxHeapSize")).thenReturn("512" + suffix);
+
+			TestHttpServletResponse response = new TestHttpServletResponse();
+			webStartServlet.doGet(request, response);
+
+			assertEquals("Valid suffix '" + suffix + "' should be accepted",
+					"application/x-java-jnlp-file", response.getContentType());
+		}
+	}
+
+	@Test
+	public void testDoGetCoreMaxHeapSizeInvalidValues() throws Exception {
+		String[] invalidValues = { "512b", "512x", "abc", "m512", "", "<script>" };
+		for (String value : invalidValues) {
+			HttpServletRequest request = mock(HttpServletRequest.class);
+			when(request.getRequestURI()).thenReturn("/webstart");
+			when(request.getServletPath()).thenReturn("/webstart");
+
+			Map<String, String[]> parameters = new HashMap<>();
+			parameters.put("maxHeapSize", new String[] { value });
+			when(request.getParameterNames()).thenReturn(Collections.enumeration(parameters.keySet()));
+			when(request.getParameter("maxHeapSize")).thenReturn(value);
+
+			TestHttpServletResponse response = new TestHttpServletResponse();
+			webStartServlet.doGet(request, response);
+
+			assertEquals("Invalid value '" + value + "' should be rejected", "", response.getContentType());
+			assertNull("Invalid value '" + value + "' should not set Content-Disposition", response.getHeader("Content-Disposition"));
+		}
+	}
+
+	// ========== time validation ==========
+
+	@Test
+	public void testDoGetCoreTimeValidValues() throws Exception {
+		String[] validValues = { "0", "1", "123456789", "00100" };
+		for (String value : validValues) {
+			HttpServletRequest request = mock(HttpServletRequest.class);
+			when(request.getRequestURI()).thenReturn("/webstart");
+			when(request.getServletPath()).thenReturn("/webstart");
+
+			Map<String, String[]> parameters = new HashMap<>();
+			parameters.put("time", new String[] { value });
+			when(request.getParameterNames()).thenReturn(Collections.enumeration(parameters.keySet()));
+			when(request.getParameter("time")).thenReturn(value);
+
+			TestHttpServletResponse response = new TestHttpServletResponse();
+			webStartServlet.doGet(request, response);
+
+			assertEquals("Valid time '" + value + "' should be accepted",
+					"application/x-java-jnlp-file", response.getContentType());
+		}
+	}
+
+	@Test
+	public void testDoGetCoreTimeInvalidValues() throws Exception {
+		String[] invalidValues = { "abc", "12h", "12.5", "-1", "", "12 34" };
+		for (String value : invalidValues) {
+			HttpServletRequest request = mock(HttpServletRequest.class);
+			when(request.getRequestURI()).thenReturn("/webstart");
+			when(request.getServletPath()).thenReturn("/webstart");
+
+			Map<String, String[]> parameters = new HashMap<>();
+			parameters.put("time", new String[] { value });
+			when(request.getParameterNames()).thenReturn(Collections.enumeration(parameters.keySet()));
+			when(request.getParameter("time")).thenReturn(value);
+
+			TestHttpServletResponse response = new TestHttpServletResponse();
+			webStartServlet.doGet(request, response);
+
+			assertEquals("Invalid time '" + value + "' should be rejected", "", response.getContentType());
+			assertNull("Invalid time '" + value + "' should not set Content-Disposition", response.getHeader("Content-Disposition"));
+		}
+	}
+
+	// ========== Non-matching paths ==========
+
+	@Test
+	public void testDoGetNonMatchingPath() throws Exception {
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRequestURI()).thenReturn("/other");
+		when(request.getServletPath()).thenReturn("/other");
+		when(request.getParameterNames()).thenReturn(Collections.emptyEnumeration());
+
+		TestHttpServletResponse response = new TestHttpServletResponse();
+
+		try {
+			webStartServlet.doGet(request, response);
+		} catch (Exception e) {
+			// May throw ServletException wrapping NPE for null jnlpDocument
+		}
+
+		assertEquals("", response.getContentType());
+		assertNull(response.getHeader("Content-Disposition"));
+	}
+
+	@Test
+	public void testDoGetWebstartWithTrailingSlash() throws Exception {
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRequestURI()).thenReturn("/webstart/");
+		when(request.getServletPath()).thenReturn("/webstart/");
+		when(request.getParameterNames()).thenReturn(Collections.emptyEnumeration());
+
+		TestHttpServletResponse response = new TestHttpServletResponse();
+
+		try {
+			webStartServlet.doGet(request, response);
+		} catch (Exception e) {
+			// URI /webstart/ doesn't match /webstart exactly
+		}
+
+		assertEquals("", response.getContentType());
+		assertNull(response.getHeader("Content-Disposition"));
+	}
+
+	// ========== Extension path traversal ==========
+
+	@Test
+	public void testDoGetExtensionWithPathTraversal() throws Exception {
+		// Simulate container-normalized URI: container resolves "../" in requestURI
+		// but pathInfo retains the raw value, causing a mismatch in URI validation
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRequestURI()).thenReturn("/etc/passwd");
+		when(request.getServletPath()).thenReturn("/webstart/extensions");
+		when(request.getPathInfo()).thenReturn("/../../../etc/passwd");
+		when(request.getParameterNames()).thenReturn(Collections.emptyEnumeration());
+
+		TestHttpServletResponse response = new TestHttpServletResponse();
+		webStartServlet.doGet(request, response);
+
+		assertEquals("", response.getContentType());
+		assertNull(response.getHeader("Content-Disposition"));
+	}
+
+	@Test
+	public void testDoGetExtensionWithEncodedPathTraversal() throws Exception {
+		// Container may decode %2F to / in pathInfo but keep encoded form in requestURI
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRequestURI()).thenReturn("/webstart/extensions/..%2F..%2Fetc%2Fpasswd");
+		when(request.getServletPath()).thenReturn("/webstart/extensions");
+		when(request.getPathInfo()).thenReturn("/../../etc/passwd");
+		when(request.getParameterNames()).thenReturn(Collections.emptyEnumeration());
+
+		TestHttpServletResponse response = new TestHttpServletResponse();
+		webStartServlet.doGet(request, response);
+
+		assertEquals("", response.getContentType());
+		assertNull(response.getHeader("Content-Disposition"));
+	}
+
+	// ========== Script injection in params ==========
+
+	@Test
+	public void testDoGetCoreWithScriptInjectionParam() throws Exception {
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRequestURI()).thenReturn("/webstart");
+		when(request.getServletPath()).thenReturn("/webstart");
+
+		Map<String, String[]> parameters = new HashMap<>();
+		parameters.put("<script>alert(1)</script>", new String[] { "value" });
+		when(request.getParameterNames()).thenReturn(Collections.enumeration(parameters.keySet()));
+
+		TestHttpServletResponse response = new TestHttpServletResponse();
+		webStartServlet.doGet(request, response);
+
+		assertEquals("", response.getContentType());
+		assertNull(response.getHeader("Content-Disposition"));
+	}
+
+	// ========== Context path ==========
+
+	@Test
+	public void testDoGetCoreWithContextPath() throws Exception {
+		WebStartServlet contextServlet = new TestWebStartServletWithContextPath();
+
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRequestURI()).thenReturn("/myapp/webstart");
+		when(request.getServletPath()).thenReturn("/webstart");
+		when(request.getParameterNames()).thenReturn(Collections.emptyEnumeration());
+
+		TestHttpServletResponse response = new TestHttpServletResponse();
+		contextServlet.doGet(request, response);
+
+		assertEquals("application/x-java-jnlp-file", response.getContentType());
+		assertEquals("attachment; filename = \"webstart.jnlp\"", response.getHeader("Content-Disposition"));
+	}
+
+	@Test
+	public void testDoGetCoreWithContextPathMismatch() throws Exception {
+		WebStartServlet contextServlet = new TestWebStartServletWithContextPath();
+
+		// URI doesn't include context path - should not match
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRequestURI()).thenReturn("/webstart");
+		when(request.getServletPath()).thenReturn("/webstart");
+		when(request.getParameterNames()).thenReturn(Collections.emptyEnumeration());
+
+		TestHttpServletResponse response = new TestHttpServletResponse();
+
+		try {
+			contextServlet.doGet(request, response);
+		} catch (Exception e) {
+			// May throw for null jnlpDocument
+		}
+
+		assertEquals("", response.getContentType());
+		assertNull(response.getHeader("Content-Disposition"));
+	}
+
 	private static class TestHttpServletResponse implements HttpServletResponse {
 
 		private String contentType;
+		private String characterEncoding;
 		private StringWriter stringWriter;
 		private PrintWriter printWriter;
 		private Map<String, List<String>> headers;
 
 		public TestHttpServletResponse() {
 			contentType = "";
+			characterEncoding = null;
 			stringWriter = new StringWriter();
 			printWriter = new PrintWriter(stringWriter);
 			headers = new HashMap<>();
@@ -349,7 +640,7 @@ public class WebStartServletTest {
 
 		@Override
 		public String getCharacterEncoding() {
-			return null;
+			return characterEncoding;
 		}
 
 		@Override
@@ -394,7 +685,7 @@ public class WebStartServletTest {
 
 		@Override
 		public void setCharacterEncoding(String arg0) {
-
+			this.characterEncoding = arg0;
 		}
 
 		@Override
@@ -565,6 +856,34 @@ public class WebStartServletTest {
 		DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
 		dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
 		return dbf;
+	}
+
+	private static class TestWebStartServletWithContextPath extends com.mirth.connect.server.servlets.WebStartServlet {
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		protected PropertiesConfiguration getMirthProperties() throws FileNotFoundException, ConfigurationException {
+			PropertiesConfiguration mirthPropertiesConfiguration = new PropertiesConfiguration();
+			mirthPropertiesConfiguration.setProperty("http.contextpath", "/myapp");
+			mirthPropertiesConfiguration.setProperty("server.url", "");
+			mirthPropertiesConfiguration.setProperty("https.port", 8443);
+			mirthPropertiesConfiguration.setProperty("administrator.maxheapsize", "512m");
+			return mirthPropertiesConfiguration;
+		}
+
+		@Override
+		protected Document getAdministratorJnlp(HttpServletRequest request) throws Exception {
+			DocumentBuilderFactory factory = getSecureDocumentBuilderFactory();
+			return factory.newDocumentBuilder()
+					.parse(new ByteArrayInputStream(CORE_JNLP.getBytes()));
+		}
+
+		@Override
+		protected Document getExtensionJnlp(String extensionPath) throws Exception {
+			DocumentBuilderFactory factory = getSecureDocumentBuilderFactory();
+			return factory.newDocumentBuilder()
+					.parse(new ByteArrayInputStream(EXTENSION_JNLP.getBytes()));
+		}
 	}
 
 	private static String CORE_JNLP = "<jnlp codebase=\"https://localhost:8443\" version=\"4.5.2\">\n"

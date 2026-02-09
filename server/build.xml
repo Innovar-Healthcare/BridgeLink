@@ -1271,7 +1271,7 @@
 			 resource="org/jacoco/ant/antlib.xml"
 			 classpathref="jacoco.classpath"/>
 
-	<target name="test-run" depends="test-compile">
+	<target name="test-run" depends="test-compile" description="Run unit tests and generate code coverage">
 		<property name="junit-reports" value="junit-reports" />
 		<property name="junit-html" value="junit-html" />
 		<property name="code-coverage-reports" value="code-coverage-reports" />
@@ -1330,6 +1330,34 @@
 			</fileset>
 			<report format="frames" todir="${junit-html}" />
 		</junitreport>
+
+		<!-- Automatically generate JaCoCo HTML report after tests -->
+		<antcall target="jacoco-report"/>
+	</target>
+
+	<target name="jacoco-report" depends="init">
+		<property name="code-coverage-reports" value="code-coverage-reports" />
+		<property name="jacoco-html" value="jacoco-html" />
+		<delete dir="${jacoco-html}" />
+		<mkdir dir="${jacoco-html}" />
+		<jacoco:report xmlns:jacoco="antlib:org.jacoco.ant">
+			<executiondata>
+				<file file="${code-coverage-reports}/jacoco.exec" />
+			</executiondata>
+			<structure name="BridgeLink Server">
+				<classfiles>
+					<fileset dir="${classes}">
+						<include name="**/*.class" />
+					</fileset>
+				</classfiles>
+				<sourcefiles encoding="UTF-8">
+					<fileset dir="${src}" />
+				</sourcefiles>
+			</structure>
+			<html destdir="${jacoco-html}" />
+			<xml destfile="${code-coverage-reports}/jacoco-report.xml" />
+			<csv destfile="${code-coverage-reports}/jacoco-report.csv" />
+		</jacoco:report>
 	</target>
 
 	<target name="remove-classes" depends="init">
