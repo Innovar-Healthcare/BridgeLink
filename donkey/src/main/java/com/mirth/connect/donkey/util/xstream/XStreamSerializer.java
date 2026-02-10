@@ -70,7 +70,8 @@ public class XStreamSerializer implements Serializer {
                 "com.mirth.connect.connectors.**", "com.mirth.connect.model.**",
                 "com.mirth.connect.plugins.**", "com.mirth.connect.util.**",
                 "com.mirth.connect.userutil.**", "com.mirth.connect.donkey.model.**",
-                "com.mirth.connect.donkey.util.**", "com.mirth.connect.jsonbuilder.**",
+                "com.mirth.connect.donkey.util.**", "com.mirth.connect.donkey.test.**",
+                "com.mirth.connect.jsonbuilder.**",
                 "com.mirth.generator.model.**", "java.security.**",
                 "com.google.common.collect.Immutable**" });
 

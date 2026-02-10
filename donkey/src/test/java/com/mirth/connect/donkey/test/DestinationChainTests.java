@@ -27,6 +27,8 @@ import com.mirth.connect.donkey.model.message.ContentType;
 import com.mirth.connect.donkey.model.message.Response;
 import com.mirth.connect.donkey.model.message.Status;
 import com.mirth.connect.donkey.server.Donkey;
+import com.mirth.connect.donkey.server.DonkeyConfiguration;
+import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.StartException;
 import com.mirth.connect.donkey.server.channel.Channel;
 import com.mirth.connect.donkey.server.channel.DestinationChainProvider;
@@ -56,7 +58,13 @@ public class DestinationChainTests {
 
     @BeforeClass
     final public static void beforeClass() throws StartException {
-        Donkey.getInstance().startEngine(TestUtils.getDonkeyTestConfiguration());
+        Donkey donkey = Donkey.getInstance();
+        DonkeyConfiguration config = TestUtils.getDonkeyTestConfiguration();
+
+        // Initialize connection pools before starting the engine
+        DonkeyConnectionPools.getInstance().init(config.getDonkeyProperties());
+
+        donkey.startEngine(config);
     }
 
     @AfterClass

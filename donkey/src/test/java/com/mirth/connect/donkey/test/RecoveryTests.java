@@ -37,6 +37,8 @@ import com.mirth.connect.donkey.model.message.RawMessage;
 import com.mirth.connect.donkey.model.message.Response;
 import com.mirth.connect.donkey.model.message.Status;
 import com.mirth.connect.donkey.server.Donkey;
+import com.mirth.connect.donkey.server.DonkeyConfiguration;
+import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.StartException;
 import com.mirth.connect.donkey.server.channel.DispatchResult;
 import com.mirth.connect.donkey.server.channel.ResponseSelector;
@@ -68,7 +70,12 @@ public class RecoveryTests {
     @BeforeClass
     final public static void beforeClass() throws StartException {
         Donkey donkey = Donkey.getInstance();
-        donkey.startEngine(TestUtils.getDonkeyTestConfiguration());
+        DonkeyConfiguration config = TestUtils.getDonkeyTestConfiguration();
+
+        // Initialize connection pools before starting the engine
+        DonkeyConnectionPools.getInstance().init(config.getDonkeyProperties());
+
+        donkey.startEngine(config);
 
         daoFactory = new BufferedDaoFactory(new TimedDaoFactory(donkey.getDaoFactory(), daoTimer), new SerializerProvider() {
             @Override

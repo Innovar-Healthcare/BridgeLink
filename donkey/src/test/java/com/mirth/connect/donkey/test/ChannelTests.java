@@ -20,6 +20,7 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.List;
 
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -36,6 +37,8 @@ import com.mirth.connect.donkey.model.message.Message;
 import com.mirth.connect.donkey.model.message.MessageContent;
 import com.mirth.connect.donkey.model.message.RawMessage;
 import com.mirth.connect.donkey.server.Donkey;
+import com.mirth.connect.donkey.server.DonkeyConfiguration;
+import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.StartException;
 import com.mirth.connect.donkey.server.channel.Channel;
 import com.mirth.connect.donkey.server.channel.ChannelException;
@@ -65,12 +68,31 @@ public class ChannelTests {
     @BeforeClass
     final public static void beforeClass() throws StartException {
         Donkey donkey = Donkey.getInstance();
-        donkey.startEngine(TestUtils.getDonkeyTestConfiguration());
+        DonkeyConfiguration config = TestUtils.getDonkeyTestConfiguration();
+
+        // Initialize connection pools before starting the engine
+        DonkeyConnectionPools.getInstance().init(config.getDonkeyProperties());
+
+        donkey.startEngine(config);
     }
 
     @AfterClass
     final public static void afterClass() throws StartException {
         Donkey.getInstance().stopEngine();
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        // Clean up any channels that might still be running
+        // This prevents deadlocks between tests
+        try {
+            ChannelController.getInstance().removeChannel(channelId);
+        } catch (Exception e) {
+            // Ignore cleanup errors - channel may not exist
+        }
+
+        // Give background threads time to finish
+        Thread.sleep(100);
     }
 
     /*
@@ -376,8 +398,8 @@ public class ChannelTests {
         columns = TestUtils.getExistingMetaDataColumns(channelId);
         assertFalse(columns.contains(new MetaDataColumn("stringcolumn", MetaDataColumnType.STRING, null)));
 
-        // Alter the long column's name
-        channel.getMetaDataColumns().get(0).setName("longcolumn2");
+        // Alter the number column's name
+        channel.getMetaDataColumns().get(0).setName("numbercolumn2");
 
         channel.undeploy();
         channel.deploy();
@@ -387,16 +409,16 @@ public class ChannelTests {
         assertFalse(columns.contains(new MetaDataColumn("numbercolumn", MetaDataColumnType.NUMBER, null)));
         assertTrue(columns.contains(new MetaDataColumn("numbercolumn2", MetaDataColumnType.NUMBER, null)));
 
-        // Alter the double column's type
+        // Alter the boolean column's type
         channel.getMetaDataColumns().get(1).setType(MetaDataColumnType.TIMESTAMP);
 
         channel.undeploy();
         channel.deploy();
 
-        // Assert that the double column got dropped/added correctly as a timestamp column
+        // Assert that the boolean column got dropped/added correctly as a timestamp column
         columns = TestUtils.getExistingMetaDataColumns(channelId);
-        assertFalse(columns.contains(new MetaDataColumn("numbercolumn", MetaDataColumnType.NUMBER, null)));
-        assertTrue(columns.contains(new MetaDataColumn("numbercolumn", MetaDataColumnType.TIMESTAMP, null)));
+        assertFalse(columns.contains(new MetaDataColumn("booleancolumn", MetaDataColumnType.BOOLEAN, null)));
+        assertTrue(columns.contains(new MetaDataColumn("booleancolumn", MetaDataColumnType.TIMESTAMP, null)));
 
         // Alter the boolean column's name and type
         channel.getMetaDataColumns().get(2).setName("booleancolumn2");
@@ -423,7 +445,7 @@ public class ChannelTests {
 
         columnType = MetaDataColumnType.NUMBER;
         BigDecimal bigDecimalValue = (BigDecimal) columnType.castValue("1.0234567890123456789");
-        assertEquals(new BigDecimal(1.0234567890123456789), bigDecimalValue);
+        assertEquals(new BigDecimal("1.0234567890123456789"), bigDecimalValue);
 
         columnType = MetaDataColumnType.STRING;
         String stringValue = (String) columnType.castValue(" test !@# String 123 ");

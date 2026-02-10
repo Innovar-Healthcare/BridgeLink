@@ -61,6 +61,7 @@ import com.mirth.connect.donkey.model.message.Status;
 import com.mirth.connect.donkey.model.message.attachment.Attachment;
 import com.mirth.connect.donkey.server.Donkey;
 import com.mirth.connect.donkey.server.DonkeyConfiguration;
+import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.channel.Channel;
 import com.mirth.connect.donkey.server.channel.DestinationChainProvider;
 import com.mirth.connect.donkey.server.channel.DestinationConnector;
@@ -91,7 +92,7 @@ public class TestUtils {
     final public static String TEST_HL7_MESSAGE = "MSH|^~\\&|LABNET|Acme Labs|||20090601105700||ORU^R01|HMCDOOGAL-0088|D|2.2\rPID|1|8890088|8890088^^^72777||McDoogal^Hattie^||19350118|F||2106-3|100 Beach Drive^Apt. 5^Mission Viejo^CA^92691^US^H||(949) 555-0025|||||8890088^^^72|604422825\rPV1|1|R|C3E^C315^B||||2^HIBBARD^JULIUS^|5^ZIMMERMAN^JOE^|9^ZOIDBERG^JOHN^|CAR||||4|||2301^OBRIEN, KEVIN C|I|1783332658^1^1||||||||||||||||||||DISNEY CLINIC||N|||20090514205600\rORC|RE|928272608|056696716^LA||CM||||20090601105600||||  C3E|||^RESULT PERFORMED\rOBR|1|928272608|056696716^LA|1001520^K|||20090601101300|||MLH25|||HEMOLYZED/VP REDRAW|20090601102400||2301^OBRIEN, KEVIN C||||01123085310001100100152023509915823509915800000000101|0000915200932|20090601105600||LAB|F||^^^20090601084100^^ST~^^^^^ST\rOBX|1|NM|1001520^K||5.3|MMOL/L|3.5-5.5||||F|||20090601105600|IIM|IIM\r";
     final public static String TEST_HL7_ACK = "MSH|^~\\&|||LABNET|AcmeLabs|20090601105700||ACK|HMCDOOGAL-0088|D|2.2\rMSA|AA|HMCDOOGAL-0088\r";
 
-    final private static String DONKEY_CONFIGURATION_FILE = "donkey-testing.properties";
+    final private static String DONKEY_CONFIGURATION_FILE = "conf/donkey-testing.properties";
     final private static String PERFORMANCE_LOG_FILE = null;
 
     final public static String DEFAULT_CHANNEL_ID = "testchannel";
@@ -122,52 +123,61 @@ public class TestUtils {
         ChannelController.getInstance().initChannelStorage(channelId);
     }
 
-    public static TestChannel createDefaultChannel(String channelId, String serverId) throws SQLException {
+    public static com.mirth.connect.donkey.test.util.TestChannel createDefaultChannel(String channelId, String serverId) throws SQLException {
         initChannel(channelId);
 
-        TestChannel channel = new TestChannel();
+        com.mirth.connect.donkey.test.util.TestChannel channel = new com.mirth.connect.donkey.test.util.TestChannel();
 
         channel.setChannelId(channelId);
         channel.setServerId(serverId);
 
-        channel.setPreProcessor(new TestPreProcessor());
-        channel.setPostProcessor(new TestPostProcessor());
+        channel.setPreProcessor(new com.mirth.connect.donkey.test.util.TestPreProcessor());
+        channel.setPostProcessor(new com.mirth.connect.donkey.test.util.TestPostProcessor());
 
-        TestSourceConnector sourceConnector = (TestSourceConnector) TestUtils.createDefaultSourceConnector();
+        com.mirth.connect.donkey.test.util.TestSourceConnector sourceConnector = (com.mirth.connect.donkey.test.util.TestSourceConnector) TestUtils.createDefaultSourceConnector();
         sourceConnector.setChannelId(channel.getChannelId());
         sourceConnector.setChannel(channel);
         channel.setSourceConnector(sourceConnector);
         channel.setResponseSelector(new ResponseSelector(sourceConnector.getInboundDataType()));
         channel.getSourceConnector().setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
 
-        TestDestinationConnector destinationConnector = (TestDestinationConnector) TestUtils.createDefaultDestinationConnector();
-        destinationConnector.setChannelId(channelId);
-        destinationConnector.setMetaDataId(1);
-        destinationConnector.setResponseTransformerExecutor(TestUtils.createDefaultResponseTransformerExecutor());
+        com.mirth.connect.donkey.test.util.TestDestinationConnector destinationConnector = (com.mirth.connect.donkey.test.util.TestDestinationConnector) TestUtils.createDestinationConnector(
+            channel, channelId, serverId, new com.mirth.connect.donkey.test.util.TestConnectorProperties(),
+            DEFAULT_DESTINATION_NAME, new com.mirth.connect.donkey.test.util.TestDataType(),
+            new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestResponseTransformer(), 1);
+
+        destinationConnector.setMetaDataReplacer(sourceConnector.getMetaDataReplacer());
+        destinationConnector.setMetaDataColumns(channel.getMetaDataColumns());
 
         DestinationChainProvider chain = new DestinationChainProvider();
         chain.setChannelId(channelId);
-        destinationConnector.setMetaDataReplacer(sourceConnector.getMetaDataReplacer());
-        destinationConnector.setMetaDataColumns(channel.getMetaDataColumns());
         destinationConnector.setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
         chain.addDestination(1, destinationConnector);
         channel.addDestinationChainProvider(chain);
 
+        // Initialize the source queue
+        com.mirth.connect.donkey.server.queue.SourceQueue sourceQueue = new com.mirth.connect.donkey.server.queue.SourceQueue();
+        channel.setSourceQueue(sourceQueue);
+
+        // Initialize the channel process lock (default to 1 processing thread for tests)
+        com.mirth.connect.donkey.server.channel.ChannelProcessLock processLock = new com.mirth.connect.donkey.server.channel.DefaultChannelProcessLock(1);
+        channel.setProcessLock(processLock);
+
         return channel;
     }
 
-    public static TestChannel createDefaultChannel(String channelId, String serverId, int numChains, int numDestinationsPerChain) throws SQLException {
+    public static com.mirth.connect.donkey.test.util.TestChannel createDefaultChannel(String channelId, String serverId, int numChains, int numDestinationsPerChain) throws SQLException {
         return createDefaultChannel(channelId, serverId, true, numChains, numDestinationsPerChain, new StorageSettings());
     }
 
-    public static TestChannel createDefaultChannel(String channelId, String serverId, Boolean respondAfterProcessing, int numChains, int numDestinationsPerChain) throws SQLException {
+    public static com.mirth.connect.donkey.test.util.TestChannel createDefaultChannel(String channelId, String serverId, Boolean respondAfterProcessing, int numChains, int numDestinationsPerChain) throws SQLException {
         return createDefaultChannel(channelId, serverId, respondAfterProcessing, numChains, numDestinationsPerChain, new StorageSettings());
     }
 
-    private static TestChannel createDefaultChannel(String channelId, String serverId, Boolean respondAfterProcessing, int numChains, int numDestinationsPerChain, StorageSettings storageSettings) throws SQLException {
+    private static com.mirth.connect.donkey.test.util.TestChannel createDefaultChannel(String channelId, String serverId, Boolean respondAfterProcessing, int numChains, int numDestinationsPerChain, StorageSettings storageSettings) throws SQLException {
         initChannel(channelId);
 
-        TestChannel channel = new TestChannel();
+        com.mirth.connect.donkey.test.util.TestChannel channel = new com.mirth.connect.donkey.test.util.TestChannel();
 
         channel.setChannelId(channelId);
         channel.setServerId(serverId);
@@ -184,10 +194,10 @@ public class TestUtils {
             channel.setDaoFactory(new PassthruDaoFactory());
         }
 
-        channel.setPreProcessor(new TestPreProcessor());
-        channel.setPostProcessor(new TestPostProcessor());
+        channel.setPreProcessor(new com.mirth.connect.donkey.test.util.TestPreProcessor());
+        channel.setPostProcessor(new com.mirth.connect.donkey.test.util.TestPostProcessor());
 
-        TestSourceConnector sourceConnector = (TestSourceConnector) TestUtils.createDefaultSourceConnector();
+        com.mirth.connect.donkey.test.util.TestSourceConnector sourceConnector = (com.mirth.connect.donkey.test.util.TestSourceConnector) TestUtils.createDefaultSourceConnector();
         sourceConnector.setRespondAfterProcessing(respondAfterProcessing);
         sourceConnector.setChannelId(channel.getChannelId());
         sourceConnector.setChannel(channel);
@@ -195,13 +205,21 @@ public class TestUtils {
         channel.setSourceConnector(sourceConnector);
         channel.getSourceConnector().setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
 
+        // Initialize the source queue
+        com.mirth.connect.donkey.server.queue.SourceQueue sourceQueue = new com.mirth.connect.donkey.server.queue.SourceQueue();
+        channel.setSourceQueue(sourceQueue);
+
+        // Initialize the channel process lock (default to 1 processing thread for tests)
+        com.mirth.connect.donkey.server.channel.ChannelProcessLock processLock = new com.mirth.connect.donkey.server.channel.DefaultChannelProcessLock(1);
+        channel.setProcessLock(processLock);
+
         for (int i = 1; i <= numChains; i++) {
             DestinationChainProvider chain = new DestinationChainProvider();
             chain.setChannelId(channelId);
 
             for (int j = 1; j <= numDestinationsPerChain; j++) {
                 int metaDataId = (i - 1) * numDestinationsPerChain + j;
-                TestDestinationConnector destinationConnector = (TestDestinationConnector) TestUtils.createDestinationConnector(channel.getChannelId(), channel.getServerId(), new TestConnectorProperties(), TestUtils.DEFAULT_DESTINATION_NAME, new TestDataType(), new TestDataType(), new TestResponseTransformer(), metaDataId);
+                com.mirth.connect.donkey.test.util.TestDestinationConnector destinationConnector = (com.mirth.connect.donkey.test.util.TestDestinationConnector) TestUtils.createDestinationConnector(channel, channel.getChannelId(), channel.getServerId(), new com.mirth.connect.donkey.test.util.TestConnectorProperties(), TestUtils.DEFAULT_DESTINATION_NAME, new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestResponseTransformer(), metaDataId);
                 destinationConnector.setChannelId(channelId);
                 destinationConnector.setMetaDataReplacer(sourceConnector.getMetaDataReplacer());
                 destinationConnector.setMetaDataColumns(channel.getMetaDataColumns());
@@ -216,11 +234,11 @@ public class TestUtils {
     }
 
     public static SourceConnector createDefaultSourceConnector() {
-        return createSourceConnector(new TestConnectorProperties(), new TestDataType(), new TestDataType());
+        return createSourceConnector(new com.mirth.connect.donkey.test.util.TestConnectorProperties(), new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestDataType());
     }
 
     public static SourceConnector createSourceConnector(ConnectorProperties connectorProperties, DataType inboundDataType, DataType outboundDataType) {
-        SourceConnector sourceConnector = new TestSourceConnector();
+        SourceConnector sourceConnector = new com.mirth.connect.donkey.test.util.TestSourceConnector();
 
         sourceConnector.setConnectorProperties(connectorProperties);
         sourceConnector.setInboundDataType(inboundDataType);
@@ -231,20 +249,26 @@ public class TestUtils {
     }
 
     public static DestinationConnector createDefaultDestinationConnector() {
-        return createDestinationConnector(DEFAULT_CHANNEL_ID, DEFAULT_SERVER_ID, new TestConnectorProperties(), DEFAULT_DESTINATION_NAME, new TestDataType(), new TestDataType(), new TestResponseTransformer(), 1);
+        return createDestinationConnector(DEFAULT_CHANNEL_ID, DEFAULT_SERVER_ID, new com.mirth.connect.donkey.test.util.TestConnectorProperties(), DEFAULT_DESTINATION_NAME, new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestResponseTransformer(), 1);
     }
 
     public static DestinationConnector createDestinationConnector(String channelId, String serverId, ConnectorProperties connectorProperties, String name, DataType inboundDataType, DataType outboundDataType, ResponseTransformer responseTransformer, Integer metaDataId) {
-        DestinationConnector destinationConnector = new TestDestinationConnector();
-        initDestinationConnector(destinationConnector, channelId, serverId, connectorProperties, name, inboundDataType, outboundDataType, responseTransformer, metaDataId);
+        DestinationConnector destinationConnector = new com.mirth.connect.donkey.test.util.TestDestinationConnector();
+        initDestinationConnector(destinationConnector, null, channelId, serverId, connectorProperties, name, inboundDataType, outboundDataType, responseTransformer, metaDataId);
+        return destinationConnector;
+    }
+
+    public static DestinationConnector createDestinationConnector(Channel channel, String channelId, String serverId, ConnectorProperties connectorProperties, String name, DataType inboundDataType, DataType outboundDataType, ResponseTransformer responseTransformer, Integer metaDataId) {
+        DestinationConnector destinationConnector = new com.mirth.connect.donkey.test.util.TestDestinationConnector();
+        initDestinationConnector(destinationConnector, channel, channelId, serverId, connectorProperties, name, inboundDataType, outboundDataType, responseTransformer, metaDataId);
         return destinationConnector;
     }
 
     public static void initDefaultDestinationConnector(DestinationConnector destinationConnector, ConnectorProperties connectorProperties) {
-        initDestinationConnector(destinationConnector, DEFAULT_CHANNEL_ID, DEFAULT_SERVER_ID, connectorProperties, DEFAULT_DESTINATION_NAME, new TestDataType(), new TestDataType(), new TestResponseTransformer(), 1);
+        initDestinationConnector(destinationConnector, null, DEFAULT_CHANNEL_ID, DEFAULT_SERVER_ID, connectorProperties, DEFAULT_DESTINATION_NAME, new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestResponseTransformer(), 1);
     }
 
-    public static void initDestinationConnector(DestinationConnector destinationConnector, String channelId, String serverId, ConnectorProperties connectorProperties, String name, DataType inboundDataType, DataType outboundDataType, ResponseTransformer responseTransformer, Integer metaDataId) {
+    public static void initDestinationConnector(DestinationConnector destinationConnector, Channel channel, String channelId, String serverId, ConnectorProperties connectorProperties, String name, DataType inboundDataType, DataType outboundDataType, ResponseTransformer responseTransformer, Integer metaDataId) {
         destinationConnector.setChannelId(channelId);
         destinationConnector.setConnectorProperties(connectorProperties);
         destinationConnector.setDestinationName(name);
@@ -253,6 +277,11 @@ public class TestUtils {
         destinationConnector.setResponseTransformerExecutor(createDefaultResponseTransformerExecutor());
         destinationConnector.setMetaDataId(metaDataId);
 
+        // Set the channel before creating the queue (needed for getSerializer())
+        if (channel != null) {
+            destinationConnector.setChannel(channel);
+        }
+
         DestinationConnectorProperties destinationConnectorProperties = ((DestinationConnectorPropertiesInterface) connectorProperties).getDestinationConnectorProperties();
         DestinationQueue destinationConnectorQueue = new DestinationQueue(destinationConnectorProperties.getThreadAssignmentVariable(), destinationConnectorProperties.getThreadCount(), destinationConnectorProperties.isRegenerateTemplate(), destinationConnector.getSerializer(), destinationConnector.getMessageMaps());
         destinationConnectorQueue.setDataSource(new ConnectorMessageQueueDataSource(channelId, serverId, metaDataId, Status.QUEUED, false, getDaoFactory()));
@@ -260,14 +289,14 @@ public class TestUtils {
     }
 
     public static FilterTransformerExecutor createDefaultFilterTransformerExecutor() {
-        FilterTransformerExecutor filterTransformerExecutor = new FilterTransformerExecutor(new TestDataType(), new TestDataType());
-        filterTransformerExecutor.setFilterTransformer(new TestFilterTransformer());
+        FilterTransformerExecutor filterTransformerExecutor = new FilterTransformerExecutor(new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestDataType());
+        filterTransformerExecutor.setFilterTransformer(new com.mirth.connect.donkey.test.util.TestFilterTransformer());
         return filterTransformerExecutor;
     }
 
     public static ResponseTransformerExecutor createDefaultResponseTransformerExecutor() {
-        ResponseTransformerExecutor responseTransformerExecutor = new ResponseTransformerExecutor(new TestDataType(), new TestDataType());
-        responseTransformerExecutor.setResponseTransformer(new TestResponseTransformer());
+        ResponseTransformerExecutor responseTransformerExecutor = new ResponseTransformerExecutor(new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestDataType());
+        responseTransformerExecutor.setResponseTransformer(new com.mirth.connect.donkey.test.util.TestResponseTransformer());
         return responseTransformerExecutor;
     }
 
@@ -279,17 +308,12 @@ public class TestUtils {
 
     public static Connection getConnection() {
 //        System.out.println("getConnection() called from: " + getCallingMethod());
-        Properties properties = Donkey.getInstance().getConfiguration().getDonkeyProperties();
         Connection connection = null;
 
         try {
-            String driver = properties.getProperty("database.driver");
-
-            if (driver != null) {
-                Class.forName(driver);
-            }
-
-            connection = DriverManager.getConnection(properties.getProperty("database.url"), properties.getProperty("database.username"), properties.getProperty("database.password"));
+            // Use the connection pool instead of creating direct connections
+            // This prevents "too many clients already" errors from PostgreSQL
+            connection = DonkeyConnectionPools.getInstance().getConnectionPool().getConnection().getConnection();
             connection.setAutoCommit(false);
         } catch (Exception e) {
             throw new DonkeyDaoException("Failed to establish JDBC connection", e);
@@ -698,6 +722,11 @@ public class TestUtils {
     }
 
     public static void assertMessageContentDoesNotExist(MessageContent content) throws SQLException {
+        // If content is null, it doesn't exist - assertion passes
+        if (content == null) {
+            return;
+        }
+
         long localChannelId = ChannelController.getInstance().getLocalChannelId(content.getChannelId());
 
         Connection connection = null;
@@ -1315,7 +1344,7 @@ public class TestUtils {
     }
 
     public static void runChannelTest(String testMessage, final String testName, final Integer testSize, Integer testMillis, Integer warmupMillis, Channel[] channels) throws Exception {
-        TestSourceConnector[] sourceConnectors = new TestSourceConnector[channels.length];
+        com.mirth.connect.donkey.test.util.TestSourceConnector[] sourceConnectors = new com.mirth.connect.donkey.test.util.TestSourceConnector[channels.length];
         List<List<Long>> sentMessageIds = new ArrayList<List<Long>>();
         boolean isPostgres = getDatabaseType().equals("postgres");
 
@@ -1349,7 +1378,7 @@ public class TestUtils {
                 System.out.println("done");
             }
 
-            sourceConnectors[i] = (TestSourceConnector) channels[i].getSourceConnector();
+            sourceConnectors[i] = (com.mirth.connect.donkey.test.util.TestSourceConnector) channels[i].getSourceConnector();
             sentMessageIds.add(new ArrayList<Long>());
         }
 
@@ -1436,7 +1465,7 @@ public class TestUtils {
 
             for (DestinationChainProvider chain : channels[i].getDestinationChainProviders()) {
                 for (DestinationConnector destinationConnector : chain.getDestinationConnectors().values()) {
-                    List<Long> receivedMessageIds = ((TestDestinationConnector) destinationConnector).getMessageIds();
+                    List<Long> receivedMessageIds = ((com.mirth.connect.donkey.test.util.TestDestinationConnector) destinationConnector).getMessageIds();
 
                     // test that the number of messages processed by this destination connector
                     // is equal to the number of messages sent to the channel

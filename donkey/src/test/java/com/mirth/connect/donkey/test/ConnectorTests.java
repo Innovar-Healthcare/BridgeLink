@@ -20,6 +20,8 @@ import com.mirth.connect.donkey.model.channel.ConnectorProperties;
 import com.mirth.connect.donkey.model.channel.PollConnectorPropertiesInterface;
 import com.mirth.connect.donkey.model.channel.PollingType;
 import com.mirth.connect.donkey.server.Donkey;
+import com.mirth.connect.donkey.server.DonkeyConfiguration;
+import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.StartException;
 import com.mirth.connect.donkey.server.channel.DestinationChainProvider;
 import com.mirth.connect.donkey.server.channel.MetaDataReplacer;
@@ -37,7 +39,13 @@ import com.mirth.connect.donkey.test.util.TestUtils;
 public class ConnectorTests {
     @BeforeClass
     final public static void beforeClass() throws StartException {
-        Donkey.getInstance().startEngine(TestUtils.getDonkeyTestConfiguration());
+        Donkey donkey = Donkey.getInstance();
+        DonkeyConfiguration config = TestUtils.getDonkeyTestConfiguration();
+
+        // Initialize connection pools before starting the engine
+        DonkeyConnectionPools.getInstance().init(config.getDonkeyProperties());
+
+        donkey.startEngine(config);
     }
 
     @AfterClass
