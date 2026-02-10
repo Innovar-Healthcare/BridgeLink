@@ -16,11 +16,15 @@
 	
 	<target name="compile" depends="clean">
 		<mkdir dir="${classes}" />
-		
+
 		<javac srcdir="${src}" destdir="${classes}" debug="on" includeAntRuntime="false">
 			<classpath refid="classpath" />
 			<src path="${src}" />
 		</javac>
+		<!-- Copy database config XML files to classes directory for tests -->
+		<copy todir="${classes}">
+			<fileset dir="${dbconf}" includes="*.xml" />
+		</copy>
 	</target>
 	
 	<target name="create-setup" depends="init">
@@ -59,17 +63,27 @@
 		<path id="testclasspath">
 			<path refid="classpath" />
 			<fileset dir="${testlib}" includes="**/*.jar" />
-			<dirset dir="${classes}"/>
+			<pathelement location="${classes}"/>
 		</path>
 	</target>
 	
-	<target name="test-compile" depends="test-init">
+	<target name="test-compile" depends="compile, test-init">
 		<!-- compile the source -->
 		<mkdir dir="${test_classes}" />
-		
+
 		<javac srcdir="${test}" destdir="${test_classes}" debug="on" includeAntRuntime="false">
 			<classpath refid="testclasspath" />
 		</javac>
+
+		<!-- Copy database config XML files to test_classes directory for test execution -->
+		<copy todir="${test_classes}/donkeydbconf">
+			<fileset dir="${dbconf}" includes="*.xml" />
+		</copy>
+
+		<!-- Copy test configuration properties to test_classes directory -->
+		<copy todir="${test_classes}/conf">
+			<fileset dir="${basedir}/conf" includes="*.properties" />
+		</copy>
 	</target>
 
 	<path id="jacoco.classpath">
@@ -105,14 +119,21 @@
 				<jvmarg value="--add-opens=java.sql.rowset/com.sun.rowset.providers=ALL-UNNAMED"/>
 				<jvmarg value="--add-opens=java.sql.rowset/javax.sql.rowset=ALL-UNNAMED"/>
 				<jvmarg value="--add-opens=java.sql/java.sql=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.lang=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.lang.reflect=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.util=ALL-UNNAMED"/>
+
+
+
+
 				<classpath>
 					<path refid="testclasspath" />
-					<dirset dir="${test_classes}"/>
+					<pathelement location="${test_classes}"/>
 				</classpath>
 				<formatter type="xml" />
 				<batchtest todir="${junit-reports}">
 					<fileset dir="${test_classes}">
-						<include name="**/*Test.class" />
+						<include name="**/*Tests.class" />
 					</fileset>
 				</batchtest>
 			</junit>
