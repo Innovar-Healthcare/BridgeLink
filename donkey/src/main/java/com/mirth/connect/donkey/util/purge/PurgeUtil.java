@@ -90,7 +90,7 @@ public class PurgeUtil {
             return null;
         }
         String value = null;
-        if (NumberUtils.isNumber(data)) {
+        if (NumberUtils.isCreatable(data)) {
             value = data;
         } else if (data.isEmpty()) {
             value = "";

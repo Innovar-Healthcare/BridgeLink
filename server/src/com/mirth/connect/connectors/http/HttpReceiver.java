@@ -61,11 +61,11 @@ import org.eclipse.jetty.ee8.nested.ContextHandler;
 import org.eclipse.jetty.ee8.nested.HandlerCollection;
 import org.eclipse.jetty.ee8.nested.Request;
 import org.eclipse.jetty.ee8.nested.ServletConstraint;
-import org.eclipse.jetty.ee8.security.Authenticator.AuthConfiguration;
 import org.eclipse.jetty.ee8.security.ConstraintMapping;
 import org.eclipse.jetty.ee8.security.ConstraintSecurityHandler;
 import org.eclipse.jetty.ee8.security.ServerAuthException;
 import org.eclipse.jetty.ee8.security.UserAuthentication;
+import org.eclipse.jetty.ee8.security.Authenticator;
 import org.eclipse.jetty.security.UserPrincipal;
 import org.eclipse.jetty.security.internal.DefaultUserIdentity;
 
@@ -107,7 +107,7 @@ import com.mirth.connect.donkey.server.message.batch.SimpleResponseHandler;
 import com.mirth.connect.donkey.util.Base64Util;
 import com.mirth.connect.donkey.util.DonkeyElement.DonkeyElementException;
 import com.mirth.connect.plugins.httpauth.AuthenticationResult;
-import com.mirth.connect.plugins.httpauth.Authenticator;
+
 import com.mirth.connect.plugins.httpauth.AuthenticatorProvider;
 import com.mirth.connect.plugins.httpauth.AuthenticatorProviderFactory;
 import com.mirth.connect.plugins.httpauth.HttpAuthConnectorPluginProperties;
@@ -910,7 +910,7 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
     }
 
     private ConstraintSecurityHandler createSecurityHandler(org.eclipse.jetty.ee8.nested.Handler handler) throws Exception {
-        final Authenticator authenticator = authenticatorProvider.getAuthenticator();
+        final Authenticator authenticator = (Authenticator) authenticatorProvider.getAuthenticator();
 
         final String authMethod;
         switch (authProps.getAuthType()) {
@@ -980,7 +980,7 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                 RequestInfo requestInfo = new RequestInfo(remoteAddress, remotePort, localAddress, localPort, protocol, method, requestURI, headers, queryParameters, entityProvider, configuration.getRequestInformation(request));
 
                 try {
-                    AuthenticationResult result = authenticator.authenticate(requestInfo);
+                    AuthenticationResult result = ((com.mirth.connect.plugins.httpauth.Authenticator) authenticator).authenticate(requestInfo);
 
                     for (Entry<String, List<String>> entry : result.getResponseHeaders().entrySet()) {
                         if (StringUtils.isNotBlank(entry.getKey()) && entry.getValue() != null) {
