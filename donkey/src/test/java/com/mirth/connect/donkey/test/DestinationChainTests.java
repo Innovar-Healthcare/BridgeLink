@@ -121,8 +121,7 @@ public class DestinationChainTests {
 
             for (int j = 1; j <= numDestinationsPerChain; j++) {
                 int metaDataId = (i - 1) * numDestinationsPerChain + j;
-                TestDestinationConnector destinationConnector = (TestDestinationConnector) TestUtils.createDestinationConnector(channel.getChannelId(), channel.getServerId(), new TestConnectorProperties(), TestUtils.DEFAULT_DESTINATION_NAME, new TestDataType(), new TestDataType(), new TestResponseTransformer(), metaDataId);
-                destinationConnector.setChannelId(channel.getChannelId());
+                TestDestinationConnector destinationConnector = (TestDestinationConnector) TestUtils.createDestinationConnector(channel, channel.getChannelId(), channel.getServerId(), new TestConnectorProperties(), TestUtils.DEFAULT_DESTINATION_NAME, new TestDataType(), new TestDataType(), new TestResponseTransformer(), metaDataId);
 
                 destinationConnector.setMetaDataReplacer(sourceConnector.getMetaDataReplacer());
                 destinationConnector.setMetaDataColumns(channel.getMetaDataColumns());
@@ -137,6 +136,14 @@ public class DestinationChainTests {
 
             channel.addDestinationChainProvider(chain);
         }
+
+        // Initialize the source queue (required for deployment)
+        com.mirth.connect.donkey.server.queue.SourceQueue sourceQueue = new com.mirth.connect.donkey.server.queue.SourceQueue();
+        channel.setSourceQueue(sourceQueue);
+
+        // Initialize the channel process lock (default to 1 processing thread for tests)
+        com.mirth.connect.donkey.server.channel.ChannelProcessLock processLock = new com.mirth.connect.donkey.server.channel.DefaultChannelProcessLock(1);
+        channel.setProcessLock(processLock);
 
         channel.deploy();
         channel.start(null);

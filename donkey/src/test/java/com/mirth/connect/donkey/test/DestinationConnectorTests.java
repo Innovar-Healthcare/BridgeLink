@@ -107,8 +107,10 @@ public class DestinationConnectorTests {
         TestDispatcher destinationConnector = new TestDispatcher();
         TestDispatcherProperties connectorProperties = new TestDispatcherProperties();
         connectorProperties.getDestinationConnectorProperties().setQueueEnabled(true);
-        TestUtils.initDefaultDestinationConnector(destinationConnector, connectorProperties);
-        destinationConnector.setChannelId(channelId);
+        // Use initDestinationConnector with channel so queue is created properly
+        TestUtils.initDestinationConnector(destinationConnector, channel, channelId, serverId, connectorProperties,
+            TestUtils.DEFAULT_DESTINATION_NAME, new com.mirth.connect.donkey.test.util.TestDataType(),
+            new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestResponseTransformer(), 1);
 
         DestinationChainProvider chain = new DestinationChainProvider();
         chain.setChannelId(channelId);
@@ -175,8 +177,10 @@ public class DestinationConnectorTests {
         TestDispatcher destinationConnector = new TestDispatcher();
         TestDispatcherProperties connectorProperties = new TestDispatcherProperties();
         connectorProperties.getDestinationConnectorProperties().setQueueEnabled(true);
-        TestUtils.initDefaultDestinationConnector(destinationConnector, connectorProperties);
-        destinationConnector.setChannelId(channelId);
+        // Use initDestinationConnector with channel so queue is created properly
+        TestUtils.initDestinationConnector(destinationConnector, channel, channelId, serverId, connectorProperties,
+            TestUtils.DEFAULT_DESTINATION_NAME, new com.mirth.connect.donkey.test.util.TestDataType(),
+            new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestResponseTransformer(), 1);
 
         destinationConnector.setMetaDataReplacer(sourceConnector.getMetaDataReplacer());
         destinationConnector.setMetaDataColumns(channel.getMetaDataColumns());
@@ -186,6 +190,14 @@ public class DestinationConnectorTests {
         chain.setChannelId(channelId);
         chain.addDestination(1, destinationConnector);
         channel.addDestinationChainProvider(chain);
+
+        // Initialize the source queue (required for deployment)
+        com.mirth.connect.donkey.server.queue.SourceQueue sourceQueue = new com.mirth.connect.donkey.server.queue.SourceQueue();
+        channel.setSourceQueue(sourceQueue);
+
+        // Initialize the channel process lock (default to 1 processing thread for tests)
+        com.mirth.connect.donkey.server.channel.ChannelProcessLock processLock = new com.mirth.connect.donkey.server.channel.DefaultChannelProcessLock(1);
+        channel.setProcessLock(processLock);
 
         channel.deploy();
         channel.start(null);
@@ -308,8 +320,11 @@ public class DestinationConnectorTests {
             }
         }
 
-        TestUtils.initDefaultDestinationConnector(destinationConnector, connectorProperties);
-        destinationConnector.setChannelId(channelId);
+        // Use initDestinationConnector with channel so queue is created properly
+        TestUtils.initDestinationConnector(destinationConnector, channel, channelId, serverId, connectorProperties,
+            TestUtils.DEFAULT_DESTINATION_NAME, new com.mirth.connect.donkey.test.util.TestDataType(),
+            new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestResponseTransformer(), 1);
+
         destinationConnector.setMetaDataReplacer(sourceConnector.getMetaDataReplacer());
         destinationConnector.setMetaDataColumns(channel.getMetaDataColumns());
         destinationConnector.setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
@@ -318,6 +333,14 @@ public class DestinationConnectorTests {
         chain.setChannelId(channelId);
         chain.addDestination(1, destinationConnector);
         channel.addDestinationChainProvider(chain);
+
+        // Initialize the source queue (required for deployment)
+        com.mirth.connect.donkey.server.queue.SourceQueue sourceQueue = new com.mirth.connect.donkey.server.queue.SourceQueue();
+        channel.setSourceQueue(sourceQueue);
+
+        // Initialize the channel process lock (default to 1 processing thread for tests)
+        com.mirth.connect.donkey.server.channel.ChannelProcessLock processLock = new com.mirth.connect.donkey.server.channel.DefaultChannelProcessLock(1);
+        channel.setProcessLock(processLock);
 
         channel.deploy();
         channel.start(null);
@@ -404,8 +427,11 @@ public class DestinationConnectorTests {
         ((TestDispatcherProperties) connectorProperties).getDestinationConnectorProperties().setRegenerateTemplate(true);
 
         final DestinationConnector destinationConnector = new TestDispatcher();
-        TestUtils.initDefaultDestinationConnector(destinationConnector, connectorProperties);
-        destinationConnector.setChannelId(channelId);
+        // Use initDestinationConnector with channel so queue is created properly
+        TestUtils.initDestinationConnector((com.mirth.connect.donkey.server.channel.DestinationConnector)destinationConnector, channel, channelId, serverId, connectorProperties,
+            TestUtils.DEFAULT_DESTINATION_NAME, new com.mirth.connect.donkey.test.util.TestDataType(),
+            new com.mirth.connect.donkey.test.util.TestDataType(), new com.mirth.connect.donkey.test.util.TestResponseTransformer(), 1);
+
         ((TestDispatcher) destinationConnector).setReturnStatus(Status.SENT);
 
         class BlockingTestResponseTransformer extends TestResponseTransformer {
@@ -439,6 +465,14 @@ public class DestinationConnectorTests {
         if (ChannelController.getInstance().channelExists(channelId)) {
             ChannelController.getInstance().deleteAllMessages(channelId);
         }
+
+        // Initialize the source queue (required for deployment)
+        com.mirth.connect.donkey.server.queue.SourceQueue sourceQueue = new com.mirth.connect.donkey.server.queue.SourceQueue();
+        channel.setSourceQueue(sourceQueue);
+
+        // Initialize the channel process lock (default to 1 processing thread for tests)
+        com.mirth.connect.donkey.server.channel.ChannelProcessLock processLock = new com.mirth.connect.donkey.server.channel.DefaultChannelProcessLock(1);
+        channel.setProcessLock(processLock);
 
         channel.deploy();
         channel.start(null);

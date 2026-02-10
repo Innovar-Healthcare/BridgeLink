@@ -16,15 +16,28 @@ import org.apache.commons.lang3.builder.EqualsBuilder;
 import com.mirth.connect.donkey.model.channel.ConnectorProperties;
 import com.mirth.connect.donkey.model.channel.PollConnectorProperties;
 import com.mirth.connect.donkey.model.channel.PollConnectorPropertiesInterface;
+import com.mirth.connect.donkey.model.channel.SourceConnectorProperties;
+import com.mirth.connect.donkey.model.channel.SourceConnectorPropertiesInterface;
 import com.mirth.connect.donkey.util.DonkeyElement;
 
 @SuppressWarnings("serial")
-public class TestPollConnectorProperties extends ConnectorProperties implements PollConnectorPropertiesInterface {
+public class TestPollConnectorProperties extends ConnectorProperties implements PollConnectorPropertiesInterface, SourceConnectorPropertiesInterface {
     private PollConnectorProperties pollConnectorProperties = new PollConnectorProperties();
+    private SourceConnectorProperties sourceConnectorProperties = new SourceConnectorProperties();
 
     @Override
     public PollConnectorProperties getPollConnectorProperties() {
         return pollConnectorProperties;
+    }
+
+    @Override
+    public SourceConnectorProperties getSourceConnectorProperties() {
+        return sourceConnectorProperties;
+    }
+
+    @Override
+    public boolean canBatch() {
+        return false;
     }
 
     @Override

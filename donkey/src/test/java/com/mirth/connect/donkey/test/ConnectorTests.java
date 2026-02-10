@@ -11,6 +11,8 @@ package com.mirth.connect.donkey.test;
 
 import static org.junit.Assert.assertEquals;
 
+import com.mirth.connect.donkey.test.util.TestConnectorProperties;
+import com.mirth.connect.donkey.test.util.TestResponseTransformer;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -58,10 +60,9 @@ public class ConnectorTests {
      * waits 3250 ms, asserts that: - 7 messages are processed by the channel
      */
     @Test
-    @Ignore
     public final void testPollConnector() throws Exception {
         final int pollingFrequency = 500;
-        final int sleepMillis = 3250;
+        final int sleepMillis = 3600; // Increased to ensure 7 complete poll cycles (7 * 500ms = 3500ms + buffer)
         final int expectedMessageCount = 7;
 
         String channelId = TestUtils.DEFAULT_CHANNEL_ID;
@@ -92,10 +93,21 @@ public class ConnectorTests {
         sourceConnector.setChannel(channel);
         channel.setSourceConnector(sourceConnector);
         channel.getSourceConnector().setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
+
+        // Initialize ResponseSelector before accessing it
+        channel.setResponseSelector(new com.mirth.connect.donkey.server.channel.ResponseSelector(sourceConnector.getInboundDataType()));
         channel.getResponseSelector().setRespondFromName(TestUtils.DEFAULT_RESPOND_FROM_NAME);
 
-        TestDestinationConnector destinationConnector = (TestDestinationConnector) TestUtils.createDefaultDestinationConnector();
-        destinationConnector.setChannelId(channelId);
+        // Create destination connector with channel reference to avoid NullPointerException in getSerializer()
+        TestDestinationConnector destinationConnector = (TestDestinationConnector) TestUtils.createDestinationConnector(
+            channel, channelId, serverId,
+            new com.mirth.connect.donkey.test.util.TestConnectorProperties(),
+            TestUtils.DEFAULT_DESTINATION_NAME,
+            new com.mirth.connect.donkey.test.util.TestDataType(),
+            new com.mirth.connect.donkey.test.util.TestDataType(),
+            new com.mirth.connect.donkey.test.util.TestResponseTransformer(),
+            1
+        );
 
         DestinationChainProvider chain = new DestinationChainProvider();
         chain.setChannelId(channelId);
@@ -104,6 +116,14 @@ public class ConnectorTests {
         destinationConnector.setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
         chain.addDestination(1, destinationConnector);
         channel.addDestinationChainProvider(chain);
+
+        // Initialize the source queue (required for deployment)
+        com.mirth.connect.donkey.server.queue.SourceQueue sourceQueue = new com.mirth.connect.donkey.server.queue.SourceQueue();
+        channel.setSourceQueue(sourceQueue);
+
+        // Initialize the channel process lock (default to 1 processing thread for tests)
+        com.mirth.connect.donkey.server.channel.ChannelProcessLock processLock = new com.mirth.connect.donkey.server.channel.DefaultChannelProcessLock(1);
+        channel.setProcessLock(processLock);
 
         channel.deploy();
         channel.start(null);

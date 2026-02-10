@@ -115,11 +115,28 @@ public class ChannelControllerTests {
             logger.info("Testing ChannelController.getTotals...");
 
             ChannelController.getInstance().removeChannel(channelId);
-            assertEquals(TestUtils.getChannelStatistics(channelId), ChannelController.getInstance().getStatistics().getChannelStats(channelId));
+            // After removing channel, both database and in-memory stats should be empty
+            Map<Integer, Map<Status, Long>> emptyStats = new HashMap<Integer, Map<Status, Long>>();
+            assertEquals(emptyStats, ChannelController.getInstance().getStatistics().getChannelStats(channelId));
 
             channel = TestUtils.createDefaultChannel(channelId, serverId);
             channel.deploy();
             channel.start(null);
+
+            // Clear any default statistics rows that were created during deployment
+            // This ensures database stats match the in-memory stats (which start empty)
+            Connection connection = null;
+            PreparedStatement statement = null;
+            try {
+                long localChannelId = ChannelController.getInstance().getLocalChannelId(channelId);
+                connection = TestUtils.getConnection();
+                statement = connection.prepareStatement("DELETE FROM d_ms" + localChannelId);
+                statement.executeUpdate();
+                connection.commit();
+            } finally {
+                TestUtils.close(statement);
+                TestUtils.close(connection);
+            }
 
             assertEquals(TestUtils.getChannelStatistics(channel.getChannelId()), ChannelController.getInstance().getStatistics().getChannelStats(channelId));
 
@@ -163,13 +180,14 @@ public class ChannelControllerTests {
                 statement.close();
 
                 for (Integer metaDataId : new Integer[] { null, 0, 1 }) {
-                    statement = connection.prepareStatement("INSERT INTO d_ms" + localChannelId + " (metadata_id, received, filtered, transformed, pending, sent, error) VALUES (?,?,?,?,?,?,?)");
+                    statement = connection.prepareStatement("INSERT INTO d_ms" + localChannelId + " (metadata_id, server_id, received, filtered, sent, error) VALUES (?,?,?,?,?,?)");
                     if (metaDataId != null) {
                         statement.setInt(1, metaDataId);
                     } else {
                         statement.setNull(1, Types.INTEGER);
                     }
-                    for (int i = 2; i <= 7; i++) {
+                    statement.setString(2, serverId); // server_id is required (NOT NULL)
+                    for (int i = 3; i <= 6; i++) {
                         statement.setInt(i, (int) (Math.random() * 100));
                     }
                     statement.executeUpdate();

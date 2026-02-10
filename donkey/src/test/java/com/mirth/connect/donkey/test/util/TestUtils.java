@@ -280,12 +280,13 @@ public class TestUtils {
         // Set the channel before creating the queue (needed for getSerializer())
         if (channel != null) {
             destinationConnector.setChannel(channel);
-        }
 
-        DestinationConnectorProperties destinationConnectorProperties = ((DestinationConnectorPropertiesInterface) connectorProperties).getDestinationConnectorProperties();
-        DestinationQueue destinationConnectorQueue = new DestinationQueue(destinationConnectorProperties.getThreadAssignmentVariable(), destinationConnectorProperties.getThreadCount(), destinationConnectorProperties.isRegenerateTemplate(), destinationConnector.getSerializer(), destinationConnector.getMessageMaps());
-        destinationConnectorQueue.setDataSource(new ConnectorMessageQueueDataSource(channelId, serverId, metaDataId, Status.QUEUED, false, getDaoFactory()));
-        destinationConnector.setQueue(destinationConnectorQueue);
+            // Only create the queue if we have a channel (getSerializer() requires it)
+            DestinationConnectorProperties destinationConnectorProperties = ((DestinationConnectorPropertiesInterface) connectorProperties).getDestinationConnectorProperties();
+            DestinationQueue destinationConnectorQueue = new DestinationQueue(destinationConnectorProperties.getThreadAssignmentVariable(), destinationConnectorProperties.getThreadCount(), destinationConnectorProperties.isRegenerateTemplate(), destinationConnector.getSerializer(), destinationConnector.getMessageMaps());
+            destinationConnectorQueue.setDataSource(new ConnectorMessageQueueDataSource(channelId, serverId, metaDataId, Status.QUEUED, false, getDaoFactory()));
+            destinationConnector.setQueue(destinationConnectorQueue);
+        }
     }
 
     public static FilterTransformerExecutor createDefaultFilterTransformerExecutor() {
