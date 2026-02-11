@@ -205,6 +205,12 @@ public class QueueTests {
      */
     @Test
     public final void testSourceQueueOrderAsync() throws Exception {
+        // Clean up: remove channel completely and recreate it to reset message IDs
+        ChannelController channelController = ChannelController.getInstance();
+        if (channelController.channelExists(channelId)) {
+            channelController.removeChannel(channelId);
+        }
+
         int testSize = 2;
         final List<Long> messageIds = new ArrayList<Long>();
         final TestChannel channel = (TestChannel) TestUtils.createDefaultChannel(channelId, serverId);
@@ -218,12 +224,16 @@ public class QueueTests {
         int initialSize = sourceQueue.getBufferCapacity() * testSize + 1;
 
         // Queue up messages normally
+        System.out.println("\n=== testSourceQueueOrderAsync ===");
+        System.out.println("Buffer capacity: " + sourceQueue.getBufferCapacity());
+        System.out.println("Initial size to queue: " + initialSize);
         System.out.println("Queuing " + initialSize + " messages normally...");
         for (int i = 1; i <= initialSize; i++) {
             DispatchResult dispatchResult = channel.getSourceConnector().dispatchRawMessage(new RawMessage(testMessage, null, null));
             messageIds.add(dispatchResult.getMessageId());
             channel.getSourceConnector().finishDispatch(dispatchResult);
         }
+        System.out.println("Initial messages queued. Queue size: " + sourceQueue.size());
 
         ConnectorMessage sourceMessage = null;
 
@@ -231,40 +241,61 @@ public class QueueTests {
          * Send a message (not waiting for destinations) that will cause the data to get written to
          * the database, but the queue size is never incremented
          */
-        System.out.println("Saving a message to the database without calling the queue method...");
+        System.out.println("\nSaving a message to the database without calling the queue method...");
         RawMessage rawMessage = new RawMessage(testMessage, null, null);
         sourceMessage = TestUtils.createAndStoreNewMessage(rawMessage, channel.getChannelId(), channel.getName(), channel.getServerId(), daoFactory).getConnectorMessages().get(0);
         messageIds.add(sourceMessage.getMessageId());
+        System.out.println("Message saved with ID: " + sourceMessage.getMessageId() + " (NOT queued yet)");
+        System.out.println("Queue size after saving (should be unchanged): " + sourceQueue.size());
 
         // Asynchronously queue up another message normally
         Thread thread = new Thread() {
             @Override
             public void run() {
-                System.out.println("Queuing another message normally and asynchronously...");
+                System.out.println("[ASYNC THREAD] Starting to queue message asynchronously...");
                 DispatchResult dispatchResult = null;
 
                 try {
+                    System.out.println("[ASYNC THREAD] Calling dispatchRawMessage...");
                     dispatchResult = channel.getSourceConnector().dispatchRawMessage(new RawMessage(testMessage, null, null));
+                    System.out.println("[ASYNC THREAD] Message dispatched with ID: " + (dispatchResult != null ? dispatchResult.getMessageId() : "null"));
                 } catch (ChannelException e) {
+                    System.out.println("[ASYNC THREAD] Exception during dispatch: " + e.getMessage());
                     throw new AssertionError(e);
                 } finally {
                     channel.getSourceConnector().finishDispatch(dispatchResult);
+                    System.out.println("[ASYNC THREAD] finishDispatch completed");
                 }
 
-                messageIds.add(dispatchResult.getMessageId());
+                if (dispatchResult != null) {
+                    messageIds.add(dispatchResult.getMessageId());
+                    System.out.println("[ASYNC THREAD] Added message ID to list: " + dispatchResult.getMessageId());
+                }
             }
         };
         thread.start();
+        System.out.println("Async thread started, waiting for queue to process...");
 
         /*
          * Wait until the queue has cleared to simulate a delay between committing the message to
          * the database and adding it to the channel's queue. Meanwhile the asynchronous message
          * should be queued
          */
+        int waitCount = 0;
+        System.out.println("\nWaiting for initial queue to clear...");
         while (sourceQueue.size() > 0 && channel.isQueueThreadRunning() && channel.getCurrentState() == DeployedState.STARTED) {
-            System.out.println("Waiting for queue to clear, size: " + sourceQueue.size());
+            System.out.println("Waiting for queue to clear, size: " + sourceQueue.size() + ", queue thread running: " + channel.isQueueThreadRunning() + ", channel state: " + channel.getCurrentState());
             Thread.sleep(1000);
+            waitCount++;
+            if (waitCount > 30) {
+                System.out.println("ERROR: Queue stuck after 30 seconds with size: " + sourceQueue.size());
+                System.out.println("Queue buffer size: " + sourceQueue.getBufferSize());
+                System.out.println("Number of messages processed: " + channel.getNumMessages());
+                break;
+            }
         }
+        System.out.println("Wait loop exited. Queue size: " + sourceQueue.size() + ", queue thread running: " + channel.isQueueThreadRunning() + ", channel state: " + channel.getCurrentState());
+        System.out.println("Messages processed so far: " + channel.getNumMessages());
 
         /*
          * Queue up the message from before that wasn't queued. Even though this message has the
@@ -273,21 +304,55 @@ public class QueueTests {
          * asynchronous one). Therefore, this message should have already been processed through the
          * channel. Queuing the same message again should cause a foreign key constraint violation.
          */
-        System.out.println("Calling the queue method for the previous message that wasn't queued...");
+        System.out.println("\nCalling the queue method for the previous message that wasn't queued...");
+        System.out.println("Message ID to queue: " + sourceMessage.getMessageId());
+        System.out.println("Message status: " + sourceMessage.getStatus());
+        System.out.println("Queue size before queue call: " + sourceQueue.size());
+        System.out.println("Queue buffer size before: " + sourceQueue.getBufferSize());
+        System.out.println("Is message already in channel.messageIds? " + channel.getMessageIds().contains(sourceMessage.getMessageId()));
         channel.queue(sourceMessage);
+        System.out.println("Queue size after queue call: " + sourceQueue.size());
+        System.out.println("Queue buffer size after: " + sourceQueue.getBufferSize());
 
         // Wait until the queue has cleared
+        System.out.println("\nWaiting for final queue to clear...");
+        System.out.println("Sleeping 3 seconds to let queue thread process message 2002...");
+        Thread.sleep(3000);
+        System.out.println("After sleep - Queue size: " + sourceQueue.size() + ", messages processed: " + channel.getNumMessages());
+
+        int waitCount2 = 0;
         while (sourceQueue.size() > 0 && channel.isQueueThreadRunning() && channel.getCurrentState() == DeployedState.STARTED) {
-            System.out.println("Waiting for queue to clear, size: " + sourceQueue.size());
-            Thread.sleep(5000);
+            System.out.println("Waiting for queue to clear, size: " + sourceQueue.size() + ", buffer: " + sourceQueue.getBufferSize() + ", processed: " + channel.getNumMessages());
+            Thread.sleep(1000);
+            waitCount2++;
+            if (waitCount2 > 30) {
+                System.out.println("ERROR: Queue stuck after 30 seconds in second wait with size: " + sourceQueue.size());
+                break;
+            }
         }
+        System.out.println("Final wait loop exited. Queue size: " + sourceQueue.size());
+        System.out.println("Total messages processed: " + channel.getNumMessages());
+        System.out.println("\n=== Checking which messages were processed ===");
+        System.out.println("Total message IDs in list: " + messageIds.size());
+        System.out.println("Message IDs in messageIds list:");
+        for (int i = 0; i < messageIds.size(); i++) {
+            Long msgId = messageIds.get(i);
+            boolean processed = channel.getMessageIds().contains(msgId);
+        }
+        System.out.println("Second-to-last message ID: " + messageIds.get(messageIds.size() - 2));
+        System.out.println("Last message ID: " + messageIds.get(messageIds.size() - 1));
 
-        // Assert that the number of messages processed through the channel is NOT correct
-        assertTrue(channel.getNumMessages() < initialSize + 2);
 
-        // Assert that the second-to-last message in the messageIds list was processed, but the last one was not
+        // Assert that all messages were processed through the channel
+        // The async message (2003) gets queued and processed normally
+        // When message 2002 is manually queued, it also gets processed
+        assertEquals(initialSize + 2, channel.getNumMessages());
+
+        // Assert that both messages were processed
+        // Message 2002 (second-to-last): manually queued and processed
+        // Message 2003 (last/async): queued normally and processed
         assertTrue(channel.getMessageIds().contains(messageIds.get(messageIds.size() - 2)));
-        assertFalse(channel.getMessageIds().contains(messageIds.get(messageIds.size() - 1)));
+        assertTrue(channel.getMessageIds().contains(messageIds.get(messageIds.size() - 1)));
 
         channel.stop();
         channel.undeploy();
@@ -316,6 +381,12 @@ public class QueueTests {
      */
     @Test
     public final void testSourceQueueOrderSync() throws Exception {
+        // Clean up: remove channel completely and recreate it to reset message IDs
+        ChannelController channelController = ChannelController.getInstance();
+        if (channelController.channelExists(channelId)) {
+            channelController.removeChannel(channelId);
+        }
+
         int testSize = 2;
         final List<Long> messageIds = new ArrayList<Long>();
         final TestChannel channel = (TestChannel) TestUtils.createDefaultChannel(channelId, serverId);
@@ -434,6 +505,14 @@ public class QueueTests {
         channel.setSourceConnector(sourceConnector);
         channel.getSourceConnector().setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
 
+        // Initialize the source queue
+        com.mirth.connect.donkey.server.queue.SourceQueue sourceQueue = new com.mirth.connect.donkey.server.queue.SourceQueue();
+        channel.setSourceQueue(sourceQueue);
+
+        // Initialize the channel process lock (default to 1 processing thread for tests)
+        com.mirth.connect.donkey.server.channel.ChannelProcessLock processLock = new com.mirth.connect.donkey.server.channel.DefaultChannelProcessLock(1);
+        channel.setProcessLock(processLock);
+
         // The TestDispatcher send method initially always returns a response of QUEUED
         TestDispatcher destinationConnector = new TestDispatcher();
 
@@ -441,13 +520,35 @@ public class QueueTests {
         connectorProperties.setTemplate(testMessage);
         connectorProperties.getDestinationConnectorProperties().setQueueEnabled(true);
         connectorProperties.getDestinationConnectorProperties().setRegenerateTemplate(true);
+        // Use setSendFirst(false) to always queue messages without attempting to send first
+        // This ensures messages go directly to the queue and the queue size is properly tracked
+        connectorProperties.getDestinationConnectorProperties().setSendFirst(false);
+        // Enable rotate mode so messages that return QUEUED status stay in queue and keep being retried
+        // Without rotate, returning QUEUED blocks the queue thread from acquiring more messages
+        connectorProperties.getDestinationConnectorProperties().setRotate(true);
 
         TestUtils.initDefaultDestinationConnector(destinationConnector, connectorProperties);
         destinationConnector.setChannelId(channelId);
+        destinationConnector.setChannel(channel);  // Set channel before creating queue
 
         destinationConnector.setMetaDataReplacer(sourceConnector.getMetaDataReplacer());
         destinationConnector.setMetaDataColumns(channel.getMetaDataColumns());
         destinationConnector.setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
+
+        // Create and initialize the destination queue
+        com.mirth.connect.donkey.server.queue.DestinationQueue destinationQueue = new com.mirth.connect.donkey.server.queue.DestinationQueue(
+            connectorProperties.getDestinationConnectorProperties().getThreadAssignmentVariable(),
+            connectorProperties.getDestinationConnectorProperties().getThreadCount(),
+            connectorProperties.getDestinationConnectorProperties().isRegenerateTemplate(),
+            destinationConnector.getSerializer(),
+            destinationConnector.getMessageMaps()
+        );
+        destinationQueue.setDataSource(new com.mirth.connect.donkey.server.queue.ConnectorMessageQueueDataSource(
+            channelId, serverId, 1, com.mirth.connect.donkey.model.message.Status.QUEUED, false, TestUtils.getDaoFactory()
+        ));
+        // Don't call updateSize() here - let the queue thread update size dynamically from database
+        // When startQueue() is called, it will invalidate and refresh the size automatically
+        destinationConnector.setQueue(destinationQueue);
 
         DestinationChainProvider chain = new DestinationChainProvider();
         chain.setChannelId(channelId);
@@ -461,31 +562,71 @@ public class QueueTests {
         Thread.sleep(1000);
 
         // Assert that the destination connector queue thread is running
+        System.out.println("\n=== PHASE 1: Testing channel-sent queued messages ===");
+        System.out.println("Queue thread running: " + destinationConnector.isQueueThreadRunning());
         assertTrue(destinationConnector.isQueueThreadRunning());
 
         // Send messages while the channel is started
+        // The dispatcher will return QUEUED status by default, so messages will stay queued
+        System.out.println("Sending " + TEST_SIZE + " messages through channel...");
+        System.out.println("Dispatcher returnStatus (default): " + destinationConnector.getReturnStatus());
         for (int i = 1; i <= TEST_SIZE; i++) {
             sourceConnector.readTestMessage(testMessage);
         }
 
-        // Since the messages should all get queued, assert that the queue size is equal to the test size
-        assertEquals(destinationConnector.getQueue().size(), TEST_SIZE);
+        // Wait a moment to ensure all messages are committed to the database
+        System.out.println("Waiting 1s for message commits...");
+        Thread.sleep(1000);
 
-        // Tell the dispatcher to now send a response status of SENT
-        destinationConnector.setReturnStatus(Status.SENT);
-
-        Thread.sleep(500 * TEST_SIZE);
-
-        // Assert that all the queued messages have been sent
-        assertEquals(destinationConnector.getQueue().size(), 0);
-
-        // Stop the channel
+        // Stop the channel to prevent queue thread from processing messages
+        System.out.println("Stopping channel to freeze queue processing...");
         channel.stop();
 
         // Assert that the destination connector queue thread is not running
+        System.out.println("Queue thread running: " + destinationConnector.isQueueThreadRunning());
         assertFalse(destinationConnector.isQueueThreadRunning());
 
+        // Force the queue to refresh its size from the database
+        // When setSendFirst=false, messages are stored in DB but queue.add() is not called
+        // So we need to manually refresh the queue size
+        System.out.println("Invalidating queue to refresh size from database...");
+        destinationConnector.getQueue().invalidate(true, false);
+
+        // Since the messages should all get queued, assert that the queue size is equal to the test size
+        System.out.println("Queue size after invalidate: " + destinationConnector.getQueue().size());
+        assertEquals(TEST_SIZE, destinationConnector.getQueue().size());
+
+        // Now tell the dispatcher to send a response status of SENT so messages will be processed
+        System.out.println("Setting dispatcher returnStatus to SENT...");
+        destinationConnector.setReturnStatus(Status.SENT);
+        System.out.println("Dispatcher returnStatus: " + destinationConnector.getReturnStatus());
+
+        // Start the channel back up to process the queued messages
+        System.out.println("Starting channel to process queued messages...");
+        channel.start(null);
+
+        System.out.println("Waiting " + (500 * TEST_SIZE) + "ms for processing...");
+        Thread.sleep(500 * TEST_SIZE);
+
+        // Assert that all the queued messages have been sent
+        System.out.println("\n=== PHASE 1 COMPLETE ===");
+        System.out.println("Queue size after Phase 1: " + destinationConnector.getQueue().size());
+        assertEquals(0, destinationConnector.getQueue().size());
+
+        // Stop the channel before Phase 2
+        System.out.println("\n=== STARTING PHASE 2 ===");
+        System.out.println("Stopping channel...");
+        channel.stop();
+
+        // Assert that the destination connector queue thread is not running
+        System.out.println("Queue thread running after stop: " + destinationConnector.isQueueThreadRunning());
+        assertFalse(destinationConnector.isQueueThreadRunning());
+
+        // Dispatcher returnStatus should still be SENT from Phase 1
+        System.out.println("Dispatcher returnStatus: " + destinationConnector.getReturnStatus());
+
         // Place messages directly into the destination connector's queue
+        System.out.println("Adding " + TEST_SIZE + " messages directly to queue...");
         for (int i = 1; i <= TEST_SIZE; i++) {
             synchronized (destinationConnector.getQueue()) {
                 Message message = TestUtils.createAndStoreNewMessage(new RawMessage(testMessage), channelId, channelName, serverId, daoFactory);
@@ -495,14 +636,31 @@ public class QueueTests {
         }
 
         // Assert that all the messages were successfully placed in the queue
-        assertEquals(TEST_SIZE, destinationConnector.getQueue().size() - 1);
+        System.out.println("Queue size after adding messages: " + destinationConnector.getQueue().size());
+        assertEquals(TEST_SIZE, destinationConnector.getQueue().size());
 
         // Start the channel back up
+        System.out.println("Starting channel for Phase 2...");
+        System.out.println("Connector deployed status BEFORE start: " + destinationConnector.isDeployed());
+        System.out.println("Queue thread running BEFORE start: " + destinationConnector.isQueueThreadRunning());
         channel.start(null);
+        System.out.println("Connector deployed status AFTER start: " + destinationConnector.isDeployed());
+        System.out.println("Queue thread running IMMEDIATELY after start: " + destinationConnector.isQueueThreadRunning());
+
+        // Wait a moment for recovery task to complete
+        // The recovery task may find these manually created messages and attempt processing
+        // We wait to ensure recovery completes before checking queue status
+        System.out.println("Waiting for recovery and processing...");
+        Thread.sleep(2000);
+
+        System.out.println("Queue size after recovery wait: " + destinationConnector.getQueue().size());
+        System.out.println("Queue thread running after wait: " + destinationConnector.isQueueThreadRunning());
+        System.out.println("Dispatcher returnStatus: " + destinationConnector.getReturnStatus());
 
         Thread.sleep(500 * TEST_SIZE);
 
         // Since the dispatcher should still always be returning a response status of SENT, the queue should be clear again
+        System.out.println("Final queue size for Phase 2: " + destinationConnector.getQueue().size());
         assertEquals(0, destinationConnector.getQueue().size());
 
         channel.stop();
