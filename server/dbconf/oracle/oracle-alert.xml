@@ -19,7 +19,7 @@
 		FROM DUAL
 	</select>
 
-	<select id="getAlert" parameterType="java.lang.String" resultMap="alert">
+	<select id="getAlert" parameterType="java.lang.Integer" resultMap="alert">
 		SELECT ID, NAME, ALERT
 		FROM ALERT
 		<where>
@@ -43,7 +43,7 @@
 		WHERE ID = #{id}
 	</insert>
 
-	<delete id="deleteAlert" parameterType="java.lang.String">
+	<delete id="deleteAlert" parameterType="java.lang.Integer">
 		DELETE FROM ALERT
 		<where>
 			<if test="value != null">

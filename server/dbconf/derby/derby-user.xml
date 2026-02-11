@@ -52,19 +52,19 @@
 		FETCH FIRST ROW ONLY
 	</select>
 
-	<delete id="prunePasswords" parameterType="java.util.Map">
+	<delete id="prunePasswords" parameterType="map">
 		DELETE FROM PERSON_PASSWORD
 		WHERE PERSON_ID = #{id}
 		AND (PASSWORD_DATE <![CDATA[ <= ]]> #{pruneDate} OR PASSWORD_DATE IS NULL)
 	</delete>
 
-	<insert id="insertUser" parameterType="java.util.Map">
+	<insert id="insertUser" parameterType="map">
 		INSERT INTO
 		PERSON (USERNAME, FIRSTNAME, LASTNAME, ORGANIZATION, INDUSTRY, EMAIL, PHONENUMBER, DESCRIPTION, LOGGED_IN, LAST_LOGIN, ROLE, COUNTRY, STATETERRITORY,USERCONSENT)
 		VALUES (#{username}, #{firstName,jdbcType=VARCHAR}, #{lastName,jdbcType=VARCHAR}, #{organization,jdbcType=VARCHAR}, #{industry,jdbcType=VARCHAR}, #{email,jdbcType=VARCHAR}, #{phoneNumber,jdbcType=VARCHAR}, #{description,jdbcType=VARCHAR}, 0, NULL, #{role,jdbcType=VARCHAR}, #{country,jdbcType=VARCHAR}, #{stateTerritory,jdbcType=VARCHAR}, #{userConsent,jdbcType=BOOLEAN})
 	</insert>
 
-	<update id="updateUser" parameterType="java.util.Map">
+	<update id="updateUser" parameterType="map">
 		UPDATE PERSON
 		SET USERNAME = #{username},
 			FIRSTNAME = #{firstName,jdbcType=VARCHAR},
@@ -81,7 +81,7 @@
 		WHERE ID = #{id}
 	</update>
 
-	<insert id="updateUserPassword" parameterType="java.util.Map">
+	<insert id="updateUserPassword" parameterType="map">
 		INSERT INTO
 		PERSON_PASSWORD (PERSON_ID, PASSWORD, PASSWORD_DATE)
 		VALUES (#{id}, #{password}, #{passwordDate})
@@ -94,7 +94,7 @@
       	</where>
 	</delete>
 
-	<update id="startGracePeriod" parameterType="java.util.Map">
+	<update id="startGracePeriod" parameterType="map">
 		UPDATE PERSON
 		SET GRACE_PERIOD_START = #{gracePeriodStart}
 		WHERE ID = #{id}
@@ -122,7 +122,7 @@
 
 	<!-- Login/Logout Procedures -->
 
-	<update id="loginUser" parameterType="java.util.Map">
+	<update id="loginUser" parameterType="map">
 		UPDATE PERSON
 		SET LOGGED_IN = 1,
 		LAST_LOGIN = #{lastLogin}
@@ -154,7 +154,7 @@
 		{call SYSCS_UTIL.SYSCS_COMPRESS_TABLE('APP', 'PERSON', 0)}
 	</select>
 
-	<select id='selectPreferencesForUser' parameterType='java.lang.String' resultType='KeyValuePair'>
+	<select id='selectPreferencesForUser' parameterType='java.lang.Integer' resultType='KeyValuePair'>
 		SELECT NAME AS "key", VALUE AS "value"
 		FROM PERSON_PREFERENCE
 		WHERE PERSON_ID = #{value}
