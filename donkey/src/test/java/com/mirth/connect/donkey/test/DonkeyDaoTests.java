@@ -1893,6 +1893,10 @@ public class DonkeyDaoTests {
             channel.getSourceConnector().finishDispatch(dispatchResult);
         }
 
+        // Wait for background statistics updater thread to persist to database
+        // Default update interval is 1000ms, so wait 1500ms to be safe
+        Thread.sleep(1500);
+
         try {
             logger.info("Testing DonkeyDao.getChannelStatistics...");
 
@@ -1901,6 +1905,10 @@ public class DonkeyDaoTests {
 
             for (int i = 1; i <= TEST_SIZE; i++) {
                 ((TestSourceConnector) channel.getSourceConnector()).readTestMessage(testMessage);
+
+                // Wait for background statistics updater thread to persist to database
+                // Default update interval is 1000ms, so wait 1500ms to be safe
+                Thread.sleep(1500);
 
                 // Assert that the statistics are correct
                 assertEquals(TestUtils.getChannelStatistics(channel.getChannelId()), ChannelController.getInstance().getStatistics().getChannelStats(channel.getChannelId()));

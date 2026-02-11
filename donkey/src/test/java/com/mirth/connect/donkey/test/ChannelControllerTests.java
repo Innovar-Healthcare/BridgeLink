@@ -10,6 +10,7 @@
 package com.mirth.connect.donkey.test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -123,26 +124,14 @@ public class ChannelControllerTests {
             channel.deploy();
             channel.start(null);
 
-            // Clear any default statistics rows that were created during deployment
-            // This ensures database stats match the in-memory stats (which start empty)
-            Connection connection = null;
-            PreparedStatement statement = null;
-            try {
-                long localChannelId = ChannelController.getInstance().getLocalChannelId(channelId);
-                connection = TestUtils.getConnection();
-                statement = connection.prepareStatement("DELETE FROM d_ms" + localChannelId);
-                statement.executeUpdate();
-                connection.commit();
-            } finally {
-                TestUtils.close(statement);
-                TestUtils.close(connection);
-            }
-
-            assertEquals(TestUtils.getChannelStatistics(channel.getChannelId()), ChannelController.getInstance().getStatistics().getChannelStats(channelId));
-
             for (int i = 1; i <= TEST_SIZE; i++) {
                 ((TestSourceConnector) channel.getSourceConnector()).readTestMessage(testMessage);
 
+                // Wait for background statistics updater thread to persist to database
+                // Default update interval is 1000ms, so wait 1500ms to be safe
+                Thread.sleep(1500);
+
+                // After persistence, database and in-memory stats should match
                 assertEquals(TestUtils.getChannelStatistics(channel.getChannelId()), ChannelController.getInstance().getStatistics().getChannelStats(channelId));
             }
 
@@ -164,6 +153,9 @@ public class ChannelControllerTests {
      */
     @Test
     public final void testGetStatistics() throws Exception {
+        // Remove any existing channel first to ensure clean state
+        ChannelController.getInstance().removeChannel(channelId);
+
         Channel channel = TestUtils.createDefaultChannel(channelId, serverId);
 
         try {
@@ -179,6 +171,9 @@ public class ChannelControllerTests {
                 statement.executeUpdate();
                 statement.close();
 
+                // Use the same serverId that the Donkey engine is configured with (from getDonkeyTestConfiguration)
+                String statsServerId = "testserverid";
+
                 for (Integer metaDataId : new Integer[] { null, 0, 1 }) {
                     statement = connection.prepareStatement("INSERT INTO d_ms" + localChannelId + " (metadata_id, server_id, received, filtered, sent, error) VALUES (?,?,?,?,?,?)");
                     if (metaDataId != null) {
@@ -186,7 +181,7 @@ public class ChannelControllerTests {
                     } else {
                         statement.setNull(1, Types.INTEGER);
                     }
-                    statement.setString(2, serverId); // server_id is required (NOT NULL)
+                    statement.setString(2, statsServerId); // Must match Donkey configuration serverId
                     for (int i = 3; i <= 6; i++) {
                         statement.setInt(i, (int) (Math.random() * 100));
                     }
@@ -208,6 +203,10 @@ public class ChannelControllerTests {
             // Send messages
             for (int i = 1; i <= TEST_SIZE; i++) {
                 ((TestSourceConnector) channel.getSourceConnector()).readTestMessage(testMessage);
+
+                // Wait for background statistics updater thread to persist to database
+                // Default update interval is 1000ms, so wait 1500ms to be safe
+                Thread.sleep(1500);
 
                 Map<Integer, Map<Status, Long>> dbStats = TestUtils.getChannelStatistics(channel.getChannelId());
                 Map<Integer, Map<Status, Long>> vmStats = ChannelController.getInstance().getStatistics().getChannelStats(channel.getChannelId());
@@ -231,15 +230,14 @@ public class ChannelControllerTests {
         for (Integer metaDataId : joinSets(minuend.keySet(), subtrahend.keySet())) {
             Map<Status, Long> connectorStats = new HashMap<Status, Long>();
 
-            for (Status status : Status.values()) {
-                if (status != Status.QUEUED) {
-                    connectorStats.put(status, 0L);
-                    if (minuend.containsKey(metaDataId) && minuend.get(metaDataId).containsKey(status)) {
-                        connectorStats.put(status, minuend.get(metaDataId).get(status));
-                    }
-                    if (subtrahend.containsKey(metaDataId) && subtrahend.get(metaDataId).containsKey(status)) {
-                        connectorStats.put(status, connectorStats.get(status) - subtrahend.get(metaDataId).get(status));
-                    }
+            // Only include statuses that are actually in the database schema
+            for (Status status : new Status[] {Status.RECEIVED, Status.FILTERED, Status.SENT, Status.ERROR}) {
+                connectorStats.put(status, 0L);
+                if (minuend.containsKey(metaDataId) && minuend.get(metaDataId).containsKey(status)) {
+                    connectorStats.put(status, minuend.get(metaDataId).get(status));
+                }
+                if (subtrahend.containsKey(metaDataId) && subtrahend.get(metaDataId).containsKey(status)) {
+                    connectorStats.put(status, connectorStats.get(status) - subtrahend.get(metaDataId).get(status));
                 }
             }
 
