@@ -75,8 +75,8 @@
 			<classpath refid="testclasspath" />
 		</javac>
 
-		<!-- Copy database config XML files to test_classes directory for test execution -->
-		<copy todir="${test_classes}/donkeydbconf">
+		<!-- Copy database config XML files to test_classes directory root for test execution -->
+		<copy todir="${test_classes}">
 			<fileset dir="${dbconf}" includes="*.xml" />
 		</copy>
 
@@ -102,14 +102,16 @@
 			 resource="org/jacoco/ant/antlib.xml"
 			 classpathref="jacoco.classpath"/>
 	
-	<target name="test-run" depends="test-compile">
+	<target name="test-run" depends="test-compile" description="Run unit tests and generate code coverage">
 		<property name="junit-reports" value="junit-reports" />
+		<property name="junit-html" value="junit-html" />
 		<property name="code-coverage-reports" value="code-coverage-reports" />
 		<mkdir dir="${junit-reports}" />
+		<mkdir dir="${junit-html}" />
 		<mkdir dir="${code-coverage-reports}" />
-		
+
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
-			<junit haltonfailure="false" fork="true" forkmode="once">
+			<junit haltonfailure="false" fork="true" forkmode="once" dir="${basedir}">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 				<jvmarg value="--add-opens=java.base/sun.misc=ALL-UNNAMED"/>
@@ -134,15 +136,226 @@
 				<batchtest todir="${junit-reports}">
 					<fileset dir="${test_classes}">
 						<include name="**/*Tests.class" />
+						<include name="**/*Test.class" />
+						<exclude name="**/*$*.class" />
 					</fileset>
 				</batchtest>
 			</junit>
 		</jacoco:coverage>
+
+		<!-- Generate HTML report from JUnit XML output -->
+		<junitreport todir="${junit-reports}">
+			<fileset dir="${junit-reports}">
+				<include name="TEST-*.xml"/>
+			</fileset>
+			<report format="frames" todir="${junit-html}" />
+		</junitreport>
+
+		<!-- Automatically generate JaCoCo HTML report after tests -->
+		<antcall target="jacoco-report"/>
+	</target>
+
+	<target name="jacoco-report" depends="init" description="Generate JaCoCo code coverage reports">
+		<property name="code-coverage-reports" value="code-coverage-reports" />
+		<property name="jacoco-html" value="jacoco-html" />
+		<delete dir="${jacoco-html}" />
+		<mkdir dir="${jacoco-html}" />
+		<jacoco:report xmlns:jacoco="antlib:org.jacoco.ant">
+			<executiondata>
+				<file file="${code-coverage-reports}/jacoco.exec" />
+			</executiondata>
+			<structure name="BridgeLink Donkey">
+				<classfiles>
+					<fileset dir="${classes}">
+						<include name="**/*.class" />
+					</fileset>
+				</classfiles>
+				<sourcefiles encoding="UTF-8">
+					<fileset dir="${src}" />
+				</sourcefiles>
+			</structure>
+			<html destdir="${jacoco-html}" />
+			<xml destfile="${code-coverage-reports}/jacoco-report.xml" />
+			<csv destfile="${code-coverage-reports}/jacoco-report.csv" />
+		</jacoco:report>
 	</target>
 	
 	<target name="remove-classes" depends="init">
 		<!-- delete the compiled classes folder -->
 		<delete dir="${classes}" />
 		<delete dir="${test_classes}" />
+	</target>
+
+	<!-- ========================================================================= -->
+	<!-- Multi-Database Testing Targets                                            -->
+	<!-- ========================================================================= -->
+
+	<target name="test-run-db" depends="test-compile" description="Run tests against a specific database">
+		<!-- Usage: ant test-run-db -Ddb.type=postgres -->
+		<fail unless="db.type" message="Database type not specified. Use -Ddb.type=[derby|postgres|mysql|oracle|sqlserver]"/>
+
+		<property name="db.junit-reports" value="junit-reports-${db.type}" />
+		<property name="db.junit-html" value="junit-html-${db.type}" />
+		<property name="db.code-coverage-reports" value="code-coverage-reports-${db.type}" />
+		<property name="db.jacoco-html" value="jacoco-html-${db.type}" />
+
+		<mkdir dir="${db.junit-reports}" />
+		<mkdir dir="${db.junit-html}" />
+		<mkdir dir="${db.code-coverage-reports}" />
+
+		<echo message="========================================"/>
+		<echo message="Running tests against: ${db.type}"/>
+		<echo message="========================================"/>
+
+		<jacoco:coverage destfile="${db.code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader">
+			<junit haltonfailure="false" fork="true" forkmode="once" dir="${basedir}">
+				<jvmarg value="-Xms128m" />
+				<jvmarg value="-Xmx2048m" />
+				<jvmarg value="--add-opens=java.base/sun.misc=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/com.sun.rowset=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/com.sun.rowset.internal=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/com.sun.rowset.providers=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/javax.sql.rowset=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql/java.sql=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.lang=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.lang.reflect=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.util=ALL-UNNAMED"/>
+
+				<!-- Point to database-specific properties file -->
+				<sysproperty key="donkey.test.config" value="${basedir}/conf/donkey-testing-${db.type}.properties"/>
+
+				<classpath>
+					<path refid="testclasspath" />
+					<pathelement location="${test_classes}"/>
+				</classpath>
+				<formatter type="xml" />
+				<batchtest todir="${db.junit-reports}">
+					<fileset dir="${test_classes}">
+						<include name="**/*Tests.class" />
+						<include name="**/*Test.class" />
+						<exclude name="**/*$*.class" />
+					</fileset>
+				</batchtest>
+			</junit>
+		</jacoco:coverage>
+
+		<!-- Generate HTML report from JUnit XML output -->
+		<junitreport todir="${db.junit-reports}">
+			<fileset dir="${db.junit-reports}">
+				<include name="TEST-*.xml"/>
+			</fileset>
+			<report format="frames" todir="${db.junit-html}">
+				<param name="TITLE" expression="${db.type} - Unit Test Results"/>
+			</report>
+		</junitreport>
+
+		<!-- Generate JaCoCo HTML report -->
+		<delete dir="${db.jacoco-html}" />
+		<mkdir dir="${db.jacoco-html}" />
+		<jacoco:report xmlns:jacoco="antlib:org.jacoco.ant">
+			<executiondata>
+				<file file="${db.code-coverage-reports}/jacoco.exec" />
+			</executiondata>
+			<structure name="BridgeLink Donkey - ${db.type}">
+				<classfiles>
+					<fileset dir="${classes}">
+						<include name="**/*.class" />
+					</fileset>
+				</classfiles>
+				<sourcefiles encoding="UTF-8">
+					<fileset dir="${src}" />
+				</sourcefiles>
+			</structure>
+			<html destdir="${db.jacoco-html}" />
+			<xml destfile="${db.code-coverage-reports}/jacoco-report.xml" />
+			<csv destfile="${db.code-coverage-reports}/jacoco-report.csv" />
+		</jacoco:report>
+
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="Tests completed for: ${db.type}"/>
+		<echo message="JUnit Report: ${db.junit-html}/index.html"/>
+		<echo message="Coverage Report: ${db.jacoco-html}/index.html"/>
+		<echo message="========================================"/>
+	</target>
+
+	<target name="test-run-all-databases" depends="clean-test-reports, test-compile" description="Run tests against all database types">
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="Running tests against all databases"/>
+		<echo message="========================================"/>
+		<echo message=""/>
+
+		<!-- Derby (embedded - no Docker needed) -->
+		<antcall target="test-run-db">
+			<param name="db.type" value="derby"/>
+		</antcall>
+
+		<!-- PostgreSQL -->
+		<antcall target="test-run-db">
+			<param name="db.type" value="postgres"/>
+		</antcall>
+
+		<!-- MySQL -->
+		<antcall target="test-run-db">
+			<param name="db.type" value="mysql"/>
+		</antcall>
+
+		<!-- SQL Server -->
+		<antcall target="test-run-db">
+			<param name="db.type" value="sqlserver"/>
+		</antcall>
+
+		<!-- Oracle -->
+		<antcall target="test-run-db">
+			<param name="db.type" value="oracle"/>
+		</antcall>
+
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="All database tests completed!"/>
+		<echo message="========================================"/>
+		<echo message="Reports generated in:"/>
+		<echo message="  - junit-html-derby/index.html"/>
+		<echo message="  - junit-html-postgres/index.html"/>
+		<echo message="  - junit-html-mysql/index.html"/>
+		<echo message="  - junit-html-sqlserver/index.html"/>
+		<echo message="  - junit-html-oracle/index.html"/>
+		<echo message="========================================"/>
+	</target>
+
+	<target name="clean-test-reports" description="Clean all test reports for all databases">
+		<delete dir="junit-reports" />
+		<delete dir="junit-html" />
+		<delete dir="code-coverage-reports" />
+		<delete dir="jacoco-html" />
+
+		<delete dir="junit-reports-derby" />
+		<delete dir="junit-html-derby" />
+		<delete dir="code-coverage-reports-derby" />
+		<delete dir="jacoco-html-derby" />
+
+		<delete dir="junit-reports-postgres" />
+		<delete dir="junit-html-postgres" />
+		<delete dir="code-coverage-reports-postgres" />
+		<delete dir="jacoco-html-postgres" />
+
+		<delete dir="junit-reports-mysql" />
+		<delete dir="junit-html-mysql" />
+		<delete dir="code-coverage-reports-mysql" />
+		<delete dir="jacoco-html-mysql" />
+
+		<delete dir="junit-reports-sqlserver" />
+		<delete dir="junit-html-sqlserver" />
+		<delete dir="code-coverage-reports-sqlserver" />
+		<delete dir="jacoco-html-sqlserver" />
+
+		<delete dir="junit-reports-oracle" />
+		<delete dir="junit-html-oracle" />
+		<delete dir="code-coverage-reports-oracle" />
+		<delete dir="jacoco-html-oracle" />
+
+		<echo message="All test reports cleaned"/>
 	</target>
 </project>

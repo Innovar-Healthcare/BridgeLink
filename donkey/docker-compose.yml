@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: donkey-test-postgres
+    environment:
+      POSTGRES_DB: mirthdb
+      POSTGRES_USER: mirthdb
+      POSTGRES_PASSWORD: mirthdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mirthdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: donkey-test-mysql
+    environment:
+      MYSQL_DATABASE: mirthdb
+      MYSQL_USER: mirthdb
+      MYSQL_PASSWORD: mirthdb
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "mirthdb", "-pmirthdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # SQL Server Database
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: donkey-test-sqlserver
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: MirthDB123!
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P MirthDB123! -Q 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Oracle Database (XE - Express Edition)
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: donkey-test-oracle
+    environment:
+      ORACLE_PASSWORD: mirthdb
+      APP_USER: mirthdb
+      APP_USER_PASSWORD: mirthdb
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  postgres_data:
+  mysql_data:
+  sqlserver_data:
+  oracle_data:
