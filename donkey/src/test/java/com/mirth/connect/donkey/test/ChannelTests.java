@@ -17,9 +17,11 @@ import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 
+import com.mirth.connect.donkey.server.channel.Channel;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -36,11 +38,11 @@ import com.mirth.connect.donkey.model.message.ContentType;
 import com.mirth.connect.donkey.model.message.Message;
 import com.mirth.connect.donkey.model.message.MessageContent;
 import com.mirth.connect.donkey.model.message.RawMessage;
+import com.mirth.connect.donkey.model.message.attachment.Attachment;
 import com.mirth.connect.donkey.server.Donkey;
 import com.mirth.connect.donkey.server.DonkeyConfiguration;
 import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.StartException;
-import com.mirth.connect.donkey.server.channel.Channel;
 import com.mirth.connect.donkey.server.channel.ChannelException;
 import com.mirth.connect.donkey.server.channel.DestinationChainProvider;
 import com.mirth.connect.donkey.server.channel.DestinationConnector;
@@ -739,4 +741,66 @@ public class ChannelTests {
             TestUtils.assertMessageContentDoesNotExist(destinationMessage.getProcessedResponse());
         }
     }
+
+    @Test
+    public void testRawMessageWithAttachments() throws Exception {
+        TestChannel channel = (TestChannel) TestUtils.createDefaultChannel(channelId, serverId);
+        SourceConnector sourceConnector = channel.getSourceConnector();
+
+        channel.deploy();
+        channel.start(null);
+
+        // Test with no attachments
+        RawMessage rawMessage = new RawMessage(testMessage);
+        DispatchResult dispatchResult = sourceConnector.dispatchRawMessage(rawMessage);
+        sourceConnector.finishDispatch(dispatchResult);
+
+        // Verify the message was processed successfully
+        assertNotNull(dispatchResult);
+        assertNotNull(dispatchResult.getProcessedMessage());
+
+        // Test with attachments
+        List<Attachment> attachments = new ArrayList<Attachment>();
+        Attachment attachment1 = new Attachment("1", "test content 1".getBytes(), "text/plain");
+        attachments.add(attachment1);
+        Attachment attachment2 = new Attachment("2", "test content 2".getBytes(), "text/plain");
+        attachments.add(attachment2);
+        rawMessage = new RawMessage(testMessage, null, null, attachments);
+
+        dispatchResult = sourceConnector.dispatchRawMessage(rawMessage);
+        sourceConnector.finishDispatch(dispatchResult);
+
+        // Verify the message was processed and attachments were cleared after processing
+        assertNotNull(dispatchResult);
+        assertNotNull(dispatchResult.getProcessedMessage());
+        assertNull(rawMessage.getAttachments());
+
+        // Test with attachments, storage settings off
+        channel.stop();
+        channel.undeploy();
+
+        channel = (TestChannel) TestUtils.createDefaultChannel(channelId, serverId);
+        channel.getStorageSettings().setStoreAttachments(false);
+        sourceConnector = channel.getSourceConnector();
+
+        channel.deploy();
+        channel.start(null);
+
+        attachments = new ArrayList<Attachment>();
+        attachment1 = new Attachment("1", "test content 1".getBytes(), "text/plain");
+        attachments.add(attachment1);
+        rawMessage = new RawMessage(testMessage, null, null, attachments);
+
+        dispatchResult = sourceConnector.dispatchRawMessage(rawMessage);
+        sourceConnector.finishDispatch(dispatchResult);
+
+        // Verify the message was processed even with attachments storage disabled
+        assertNotNull(dispatchResult);
+        assertNotNull(dispatchResult.getProcessedMessage());
+        assertNull(rawMessage.getAttachments());
+
+        channel.stop();
+        channel.undeploy();
+    }
+
 }
