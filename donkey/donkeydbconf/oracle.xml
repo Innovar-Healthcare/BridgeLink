@@ -2,7 +2,7 @@
 
 <queries>
 	<query id="createMessageTable">
-		CREATE TABLE D_M${localChannelId} (
+		CREATE TABLE d_m${localChannelId} (
 	        ID NUMBER(19) NOT NULL,
 	        SERVER_ID NVARCHAR2(36) NOT NULL,
 	        RECEIVED_DATE TIMESTAMP WITH LOCAL TIME ZONE DEFAULT NULL,
@@ -10,16 +10,16 @@
 	        ORIGINAL_ID NUMBER(19),
 	        IMPORT_ID NUMBER(19),
 	        IMPORT_CHANNEL_ID NVARCHAR2(36),
-	        CONSTRAINT D_M${localChannelId}_PKEY PRIMARY KEY(ID)
+	        CONSTRAINT d_m${localChannelId}_PKEY PRIMARY KEY(ID)
 	    )
 	</query>
 	
 	<query id="createMessageTableIndex1">
-		CREATE INDEX D_M${localChannelId}_INDEX1 ON D_M${localChannelId}(ID, SERVER_ID)
+		CREATE INDEX d_m${localChannelId}_INDEX1 ON d_m${localChannelId}(ID, SERVER_ID)
 	</query>
 
 	<query id="createConnectorMessageTable">
-		CREATE TABLE D_MM${localChannelId} (
+		CREATE TABLE d_mm${localChannelId} (
 	        ID NUMBER(10) NOT NULL,
 	        MESSAGE_ID NUMBER(19) NOT NULL,
 	        SERVER_ID NVARCHAR2(36) NOT NULL,
@@ -32,55 +32,55 @@
 	        ERROR_CODE NUMBER(10) DEFAULT 0 NOT NULL,
 	        CHAIN_ID NUMBER(10) NOT NULL,
 	        ORDER_ID NUMBER(10) NOT NULL,
-	        CONSTRAINT D_MM${localChannelId}_PKEY PRIMARY KEY(MESSAGE_ID, ID),
-	        CONSTRAINT D_MM${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID) REFERENCES D_M${localChannelId}(ID) ON DELETE CASCADE
+	        CONSTRAINT d_mm${localChannelId}_PKEY PRIMARY KEY(MESSAGE_ID, ID),
+	        CONSTRAINT d_mm${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID) REFERENCES d_m${localChannelId}(ID) ON DELETE CASCADE
         )
 	</query>
 	
 	<query id="createConnectorMessageTableIndex1">
-		CREATE INDEX D_MM${localChannelId}_INDEX1 ON D_MM${localChannelId}(MESSAGE_ID, ID, STATUS)
+		CREATE INDEX d_mm${localChannelId}_INDEX1 ON d_mm${localChannelId}(MESSAGE_ID, ID, STATUS)
 	</query>
 	
 	<query id="createConnectorMessageTableIndex2">
-		CREATE INDEX D_MM${localChannelId}_INDEX2 ON D_MM${localChannelId}(MESSAGE_ID, SERVER_ID, ID)
+		CREATE INDEX d_mm${localChannelId}_INDEX2 ON d_mm${localChannelId}(MESSAGE_ID, SERVER_ID, ID)
 	</query>
 	
 	<query id="createConnectorMessageTableIndex3">
-		CREATE INDEX D_MM${localChannelId}_INDEX3 ON D_MM${localChannelId}(ID, STATUS, SERVER_ID)
+		CREATE INDEX d_mm${localChannelId}_INDEX3 ON d_mm${localChannelId}(ID, STATUS, SERVER_ID)
 	</query>
 	
 	<query id="createConnectorMessageTableIndex4">
-		CREATE INDEX D_MM${localChannelId}_FKI ON D_MM${localChannelId}(MESSAGE_ID)
+		CREATE INDEX d_mm${localChannelId}_FKI ON d_mm${localChannelId}(MESSAGE_ID)
 	</query>
 	
 	<query id="createMessageContentTable">
-		CREATE TABLE D_MC${localChannelId} (
+		CREATE TABLE d_mc${localChannelId} (
 	        METADATA_ID NUMBER(10) NOT NULL,
 	        MESSAGE_ID NUMBER(19) NOT NULL,
 	        CONTENT_TYPE NUMBER(10) NOT NULL,
 	        CONTENT NCLOB,
 	        IS_ENCRYPTED CHAR(1) DEFAULT '0' CHECK (IS_ENCRYPTED IN ('0','1')) NOT NULL,
 	        DATA_TYPE NVARCHAR2(255),
-	        CONSTRAINT D_MC${localChannelId}_PKEY PRIMARY KEY(MESSAGE_ID, METADATA_ID, CONTENT_TYPE),
-	        CONSTRAINT D_MC${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID, METADATA_ID) REFERENCES D_MM${localChannelId}(MESSAGE_ID, ID) ON DELETE CASCADE
+	        CONSTRAINT d_mc${localChannelId}_PKEY PRIMARY KEY(MESSAGE_ID, METADATA_ID, CONTENT_TYPE),
+	        CONSTRAINT d_mc${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID, METADATA_ID) REFERENCES d_mm${localChannelId}(MESSAGE_ID, ID) ON DELETE CASCADE
         )
 	</query>
 	
 	<query id="createMessageContentTableIndex1">
-		CREATE INDEX D_MC${localChannelId}_FKI ON D_MC${localChannelId}(MESSAGE_ID, METADATA_ID)
+		CREATE INDEX d_mc${localChannelId}_FKI ON d_mc${localChannelId}(MESSAGE_ID, METADATA_ID)
 	</query>
 
 	<query id="createMessageCustomMetaDataTable">
-		CREATE TABLE D_MCM${localChannelId} (
+		CREATE TABLE d_mcm${localChannelId} (
 	        METADATA_ID NUMBER(10) NOT NULL,
 	        MESSAGE_ID NUMBER(19) NOT NULL,
-	        CONSTRAINT D_MCM${localChannelId}_PKEY PRIMARY KEY(MESSAGE_ID, METADATA_ID),
-	        CONSTRAINT D_MCM${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID, METADATA_ID) REFERENCES D_MM${localChannelId}(MESSAGE_ID, ID) ON DELETE CASCADE
+	        CONSTRAINT d_mcm${localChannelId}_PKEY PRIMARY KEY(MESSAGE_ID, METADATA_ID),
+	        CONSTRAINT d_mcm${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID, METADATA_ID) REFERENCES d_mm${localChannelId}(MESSAGE_ID, ID) ON DELETE CASCADE
         )
 	</query>
 	
 	<query id="createMessageAttachmentTable">
-		CREATE TABLE D_MA${localChannelId} (
+		CREATE TABLE d_ma${localChannelId} (
 	        ID NVARCHAR2(255) NOT NULL,
 	        MESSAGE_ID NUMBER(19) NOT NULL,
 	        TYPE NVARCHAR2(40),
@@ -88,20 +88,20 @@
 	        ATTACHMENT_SIZE NUMBER(10) NOT NULL,
 	        CONTENT BLOB,
 	        ENCRYPTION_HEADER NCLOB,
-	        CONSTRAINT D_MA${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID) REFERENCES D_M${localChannelId}(ID) ON DELETE CASCADE
+	        CONSTRAINT d_ma${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID) REFERENCES d_m${localChannelId}(ID) ON DELETE CASCADE
         )
 	</query>
 	
 	<query id="createMessageAttachmentTableIndex1">
-		CREATE INDEX D_MA${localChannelId}_INDEX1 ON D_MA${localChannelId}(ID)
+		CREATE INDEX d_ma${localChannelId}_INDEX1 ON d_ma${localChannelId}(ID)
 	</query>
 	
 	<query id="createMessageAttachmentTableIndex2">
-		CREATE INDEX D_MA${localChannelId}_FKI ON D_MA${localChannelId}(MESSAGE_ID)
+		CREATE INDEX d_ma${localChannelId}_FKI ON d_ma${localChannelId}(MESSAGE_ID)
 	</query>
 	
 	<query id="createMessageStatisticsTable">
-		CREATE TABLE D_MS${localChannelId} (
+		CREATE TABLE d_ms${localChannelId} (
 	        METADATA_ID NUMBER(10),
 	        SERVER_ID NVARCHAR2(36) NOT NULL,
 	        RECEIVED NUMBER(19) DEFAULT 0 NOT NULL,
@@ -116,11 +116,11 @@
 	</query>
 	
 	<query id="createMessageStatisticsTableIndex1">
-		CREATE INDEX D_MS${localChannelId}_INDEX1 ON D_MS${localChannelId}(METADATA_ID, SERVER_ID)
+		CREATE INDEX d_ms${localChannelId}_INDEX1 ON d_ms${localChannelId}(METADATA_ID, SERVER_ID)
 	</query>
 	
 	<query id="createMessageSequence">
-		CREATE SEQUENCE D_MSQ${localChannelId} START WITH 1 INCREMENT BY 1 NOCACHE
+		CREATE SEQUENCE d_msq${localChannelId} START WITH 1 INCREMENT BY 1 NOCACHE
 	</query>
 	
 	<query id="createChannelsTable">
@@ -133,31 +133,31 @@
 	</query>
 	
 	<query id="dropMessageTable">
-		DROP TABLE D_M${localChannelId}
+		DROP TABLE d_m${localChannelId}
 	</query>
 	
 	<query id="dropMessageMetadataTable">
-		DROP TABLE D_MM${localChannelId}
+		DROP TABLE d_mm${localChannelId}
 	</query>
 	
 	<query id="dropMessageContentTable">
-		DROP TABLE D_MC${localChannelId}
+		DROP TABLE d_mc${localChannelId}
 	</query>
 	
 	<query id="dropCustomMetadataTable">
-		DROP TABLE D_MCM${localChannelId}
+		DROP TABLE d_mcm${localChannelId}
 	</query>
 	
 	<query id="dropAttachmentsTable">
-		DROP TABLE D_MA${localChannelId}
+		DROP TABLE d_ma${localChannelId}
 	</query>
 	
 	<query id="dropStatisticsTable">
-		DROP TABLE D_MS${localChannelId}
+		DROP TABLE d_ms${localChannelId}
 	</query>
 	
 	<query id="dropMessageSequence">
-		DROP SEQUENCE D_MSQ${localChannelId}
+		DROP SEQUENCE d_msq${localChannelId}
 	</query>
 	
 	<query id="deleteChannel">
@@ -165,92 +165,92 @@
 	</query>
 	
 	<query id="getNextMessageId">
-		SELECT D_MSQ${localChannelId}.NEXTVAL FROM DUAL
+		SELECT d_msq${localChannelId}.NEXTVAL FROM DUAL
 	</query>
 	
 	<query id="addMetaDataColumnString">
-		ALTER TABLE D_MCM${localChannelId} ADD ("${columnName}" VARCHAR2(255 CHAR))
+		ALTER TABLE d_mcm${localChannelId} ADD ("${columnName}" VARCHAR2(255 CHAR))
 	</query>
 	
 	<query id="addMetaDataColumnNumber">
-		ALTER TABLE D_MCM${localChannelId} ADD ("${columnName}" NUMBER(31, 15))
+		ALTER TABLE d_mcm${localChannelId} ADD ("${columnName}" NUMBER(31, 15))
 	</query>
 	
 	<query id="addMetaDataColumnBoolean">
-		ALTER TABLE D_MCM${localChannelId} ADD ("${columnName}" CHAR(1))
+		ALTER TABLE d_mcm${localChannelId} ADD ("${columnName}" CHAR(1))
 	</query>
 	
 	<query id="addMetaDataColumnTimestamp">
-		ALTER TABLE D_MCM${localChannelId} ADD ("${columnName}" TIMESTAMP DEFAULT NULL)
+		ALTER TABLE d_mcm${localChannelId} ADD ("${columnName}" TIMESTAMP DEFAULT NULL)
 	</query>
 	
 	<query id="markAsProcessed">
-		UPDATE D_M${localChannelId} SET PROCESSED = 1
+		UPDATE d_m${localChannelId} SET PROCESSED = 1
 		WHERE ID = ?
 	</query>
 	
 	<query id="resetMessage">
-		UPDATE D_M${localChannelId} SET PROCESSED = 0, IMPORT_ID = NULL, IMPORT_CHANNEL_ID = NULL
+		UPDATE d_m${localChannelId} SET PROCESSED = 0, IMPORT_ID = NULL, IMPORT_CHANNEL_ID = NULL
 		WHERE ID = ?
 	</query>
 	
 	<query id="dropConstraintConnectorMessageTable">
-		ALTER TABLE D_MM${localChannelId} DROP CONSTRAINT D_MM${localChannelId}_FKEY
+		ALTER TABLE d_mm${localChannelId} DROP CONSTRAINT d_mm${localChannelId}_FKEY
 	</query>
 
 	<query id="addConstraintConnectorMessageTable">
-		ALTER TABLE D_MM${localChannelId} ADD CONSTRAINT D_MM${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID) REFERENCES D_M${localChannelId}(ID) ON DELETE CASCADE
+		ALTER TABLE d_mm${localChannelId} ADD CONSTRAINT d_mm${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID) REFERENCES d_m${localChannelId}(ID) ON DELETE CASCADE
 	</query>
 	
 	<query id="dropConstraintAttachmentTable">
-		ALTER TABLE D_MA${localChannelId} DROP CONSTRAINT D_MA${localChannelId}_FKEY
+		ALTER TABLE d_ma${localChannelId} DROP CONSTRAINT d_ma${localChannelId}_FKEY
 	</query>
 
 	<query id="addConstraintAttachmentTable">
-		ALTER TABLE D_MA${localChannelId} ADD CONSTRAINT D_MA${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID) REFERENCES D_M${localChannelId}(ID) ON DELETE CASCADE
+		ALTER TABLE d_ma${localChannelId} ADD CONSTRAINT d_ma${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID) REFERENCES d_m${localChannelId}(ID) ON DELETE CASCADE
 	</query>
 	
 	<query id="dropConstraintMessageContentTable">
-		ALTER TABLE D_MC${localChannelId} DROP CONSTRAINT D_MC${localChannelId}_FKEY
+		ALTER TABLE d_mc${localChannelId} DROP CONSTRAINT d_mc${localChannelId}_FKEY
 	</query>
 	
 	<query id="addConstraintMessageContentTable">
-		ALTER TABLE D_MC${localChannelId} ADD CONSTRAINT D_MC${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID, METADATA_ID) REFERENCES D_MM${localChannelId}(MESSAGE_ID, ID) ON DELETE CASCADE
+		ALTER TABLE d_mc${localChannelId} ADD CONSTRAINT d_mc${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID, METADATA_ID) REFERENCES d_mm${localChannelId}(MESSAGE_ID, ID) ON DELETE CASCADE
 	</query>
 	
 	<query id="dropConstraintMessageCustomMetaDataTable">
-		ALTER TABLE D_MCM${localChannelId} DROP CONSTRAINT D_MCM${localChannelId}_FKEY		
+		ALTER TABLE d_mcm${localChannelId} DROP CONSTRAINT d_mcm${localChannelId}_FKEY		
 	</query>
 	
 	<query id="addConstraintMessageCustomMetaDataTable">
-		ALTER TABLE D_MCM${localChannelId} ADD CONSTRAINT D_MCM${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID, METADATA_ID) REFERENCES D_MM${localChannelId}(MESSAGE_ID, ID) ON DELETE CASCADE
+		ALTER TABLE d_mcm${localChannelId} ADD CONSTRAINT d_mcm${localChannelId}_FKEY FOREIGN KEY(MESSAGE_ID, METADATA_ID) REFERENCES d_mm${localChannelId}(MESSAGE_ID, ID) ON DELETE CASCADE
 	</query>
 	
 	<query id="deleteAllMessages">
-        TRUNCATE TABLE D_M${localChannelId}
+        TRUNCATE TABLE d_m${localChannelId}
 	</query>
 	
 	<query id="deleteAllMessagesCascadeConnectorMessage">
-		TRUNCATE TABLE D_MM${localChannelId}
+		TRUNCATE TABLE d_mm${localChannelId}
 	</query>
 	
 	<query id="deleteAllMessagesCascadeContent">
-		TRUNCATE TABLE D_MC${localChannelId}
+		TRUNCATE TABLE d_mc${localChannelId}
 	</query>
 	
 	<query id="deleteAllMessagesCascadeMetadata">
-		TRUNCATE TABLE D_MCM${localChannelId}
+		TRUNCATE TABLE d_mcm${localChannelId}
 	</query>
 	
 	<query id="deleteAllMessagesCascadeAttachments">
-		TRUNCATE TABLE D_MA${localChannelId}
+		TRUNCATE TABLE d_ma${localChannelId}
 	</query>
 	
 	<query id="getConnectorMessagesByMetaDataIdAndStatusWithLimit">
 		SELECT A.* FROM (SELECT B.*, ROWNUM B_ROWNUM FROM (
 
 		SELECT *
-		FROM D_MM${localChannelId}
+		FROM d_mm${localChannelId}
 		WHERE ID = ? AND STATUS = ? AND SERVER_ID = ?
 		ORDER BY MESSAGE_ID
 
@@ -261,7 +261,7 @@
 		SELECT A.* FROM (SELECT B.*, ROWNUM B_ROWNUM FROM (
 
 		SELECT *
-		FROM D_MM${localChannelId}
+		FROM d_mm${localChannelId}
 		WHERE ID = ? AND STATUS = ?
 		ORDER BY MESSAGE_ID
 
@@ -272,7 +272,7 @@
 		SELECT A.* FROM (SELECT B.*, ROWNUM B_ROWNUM FROM (
 	
 		SELECT *
-		FROM D_MM${localChannelId}
+		FROM d_mm${localChannelId}
 		WHERE ID = ? AND STATUS = ? AND SERVER_ID = ?
 		AND MESSAGE_ID <![CDATA[ >= ]]> ? AND MESSAGE_ID <![CDATA[ <= ]]> ?
 		ORDER BY MESSAGE_ID
@@ -284,7 +284,7 @@
 		SELECT A.* FROM (SELECT B.*, ROWNUM B_ROWNUM FROM (
 	
 		SELECT *
-		FROM D_MM${localChannelId}
+		FROM d_mm${localChannelId}
 		WHERE ID = ? AND STATUS = ?
 		AND MESSAGE_ID <![CDATA[ >= ]]> ? AND MESSAGE_ID <![CDATA[ <= ]]> ?
 		ORDER BY MESSAGE_ID
@@ -294,8 +294,8 @@
 	
 	<query id="getConnectorMessageStatusesCheckProcessed">
 		SELECT MM.ID, MM.STATUS
-		FROM D_M${localChannelId} M
-		JOIN D_MM${localChannelId} MM ON MM.MESSAGE_ID = M.ID
+		FROM d_m${localChannelId} M
+		JOIN d_mm${localChannelId} MM ON MM.MESSAGE_ID = M.ID
 		WHERE M.ID = ? AND M.PROCESSED = 1
 	</query>
 	
@@ -303,8 +303,8 @@
 		SELECT A.* FROM  (
 	
 		SELECT M.*
-		FROM D_M${localChannelId} M
-		JOIN D_MM${localChannelId} MM ON MM.MESSAGE_ID = M.ID AND MM.ID = 0
+		FROM d_m${localChannelId} M
+		JOIN d_mm${localChannelId} MM ON MM.MESSAGE_ID = M.ID AND MM.ID = 0
 		WHERE M.ID <![CDATA[ >= ]]> ? AND M.PROCESSED = 0 AND MM.SERVER_ID = ? AND MM.STATUS != 'R'
 		ORDER BY M.ID
 		
@@ -315,7 +315,7 @@
 		SELECT A.* FROM  (
 		
 		SELECT DISTINCT MESSAGE_ID
-		FROM D_MM${localChannelId}
+		FROM d_mm${localChannelId}
 		WHERE MESSAGE_ID <![CDATA[ >= ]]> ? AND ID > 0 AND STATUS = 'P' AND SERVER_ID = ?
 		ORDER BY MESSAGE_ID
 		

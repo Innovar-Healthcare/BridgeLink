@@ -25,6 +25,7 @@ import com.mirth.connect.donkey.server.channel.Channel;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.mirth.connect.donkey.model.channel.DeployedState;
@@ -68,27 +69,39 @@ public class ChannelTests {
     private static String testMessage = TestUtils.TEST_HL7_MESSAGE;
 
     @BeforeClass
-    final public static void beforeClass() throws StartException {
+    final public static void beforeClass() throws Exception {
         Donkey donkey = Donkey.getInstance();
         DonkeyConfiguration config = TestUtils.getDonkeyTestConfiguration();
+
+        // Close any leaked connection pools from a previously-run test class
+        TestUtils.shutdownConnectionPools();
 
         // Initialize connection pools before starting the engine
         DonkeyConnectionPools.getInstance().init(config.getDonkeyProperties());
 
         donkey.startEngine(config);
+
+        // Clean up any orphaned channel tables from previous test runs
+        System.out.println("=== DONKEY STARTUP: Calling removeAllChannelTables()...");
+        TestUtils.removeAllChannelTables();
+        System.out.println("=== DONKEY STARTUP: Orphaned tables cleanup completed");
     }
 
     @AfterClass
     final public static void afterClass() throws StartException {
         Donkey.getInstance().stopEngine();
+        TestUtils.shutdownConnectionPools();
     }
 
     @After
     public void tearDown() throws Exception {
-        // Clean up any channels that might still be running
-        // This prevents deadlocks between tests
+        // Clean up message data between tests without dropping tables (DML only).
+        // Avoiding DDL (DROP/CREATE TABLE) prevents MySQL "Table definition has changed"
+        // errors caused by metadata cache staleness when running tests in batch.
         try {
-            ChannelController.getInstance().removeChannel(channelId);
+            if (ChannelController.getInstance().channelExists(channelId)) {
+                ChannelController.getInstance().deleteAllMessages(channelId);
+            }
         } catch (Exception e) {
             // Ignore cleanup errors - channel may not exist
         }
@@ -486,6 +499,7 @@ public class ChannelTests {
 
         // Assert that the message was run through the pre-processor
         assertTrue(((TestPreProcessor) channel.getPreProcessor()).isProcessed());
+
 
         // Assert that the processed raw content was stored
         TestUtils.assertMessageContentExists(sourceMessage.getProcessedRaw());

@@ -192,9 +192,9 @@ public class PollConnectorJobTests {
     public void testJobExecution_NormalCompletion() throws Exception {
         System.out.println("\n[Test] Job Execution - Normal Completion");
 
-        CountDownJobTest.reset();
+        CountDownJob.reset();
 
-        JobDetail job = JobBuilder.newJob(CountDownJobTest.class)
+        JobDetail job = JobBuilder.newJob(CountDownJob.class)
             .withIdentity("countDownJob", "test")
             .build();
 
@@ -207,10 +207,10 @@ public class PollConnectorJobTests {
         scheduler.start();
 
         // Wait for job to complete
-        boolean completed = CountDownJobTest.waitForCompletion(5, TimeUnit.SECONDS);
+        boolean completed = CountDownJob.waitForCompletion(5, TimeUnit.SECONDS);
         assertTrue("Job should complete", completed);
 
-        int executions = CountDownJobTest.getExecutionCount();
+        int executions = CountDownJob.getExecutionCount();
         assertEquals("Job should execute exactly once", 1, executions);
 
         System.out.println("  ✓ Job executed successfully: " + executions + " time(s)");
@@ -220,9 +220,9 @@ public class PollConnectorJobTests {
     public void testJobExecution_RepeatedExecution() throws Exception {
         System.out.println("\n[Test] Job Execution - Repeated Execution");
 
-        CountDownJobTest.reset();
+        CountDownJob.reset();
 
-        JobDetail job = JobBuilder.newJob(CountDownJobTest.class)
+        JobDetail job = JobBuilder.newJob(CountDownJob.class)
             .withIdentity("repeatingJob", "test")
             .build();
 
@@ -241,7 +241,7 @@ public class PollConnectorJobTests {
         // Wait for all executions
         Thread.sleep(1000);
 
-        int executions = CountDownJobTest.getExecutionCount();
+        int executions = CountDownJob.getExecutionCount();
         assertTrue("Job should execute multiple times", executions >= 2);
 
         System.out.println("  ✓ Job executed " + executions + " times");
@@ -326,7 +326,7 @@ public class PollConnectorJobTests {
     /**
      * Simple job that counts executions
      */
-    public static class CountDownJobTest implements Job {
+    public static class CountDownJob implements Job {
         private static final AtomicInteger executionCount = new AtomicInteger(0);
         private static volatile CountDownLatch completed = new CountDownLatch(1);
 

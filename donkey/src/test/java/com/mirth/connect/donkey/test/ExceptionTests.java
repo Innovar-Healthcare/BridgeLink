@@ -62,6 +62,8 @@ public class ExceptionTests {
         Donkey donkey = Donkey.getInstance();
         DonkeyConfiguration config = TestUtils.getDonkeyTestConfiguration();
 
+        // Close any leaked connection pools from a previously-run test class
+        TestUtils.shutdownConnectionPools();
         // Initialize connection pools before starting the engine
         DonkeyConnectionPools.getInstance().init(config.getDonkeyProperties());
 
@@ -71,6 +73,7 @@ public class ExceptionTests {
     @AfterClass
     final public static void afterClass() throws StartException {
         Donkey.getInstance().stopEngine();
+        TestUtils.shutdownConnectionPools();
     }
 
     /*

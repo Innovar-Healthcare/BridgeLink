@@ -1,9 +1,10 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database (ARM64 compatible)
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
+    platform: linux/arm64
     container_name: donkey-test-postgres
     environment:
       POSTGRES_DB: mirthdb
@@ -19,9 +20,10 @@ services:
       timeout: 5s
       retries: 5
 
-  # MySQL Database
+  # MySQL Database (ARM64 compatible)
   mysql:
     image: mysql:8.0
+    platform: linux/arm64
     container_name: donkey-test-mysql
     environment:
       MYSQL_DATABASE: mirthdb
@@ -39,28 +41,30 @@ services:
       timeout: 5s
       retries: 5
 
-  # SQL Server Database
+  # SQL Server Database (ARM64 compatible - using Azure SQL Edge)
   sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    platform: linux/arm64
     container_name: donkey-test-sqlserver
     environment:
-      ACCEPT_EULA: Y
-      SA_PASSWORD: MirthDB123!
+      ACCEPT_EULA: 1
+      MSSQL_SA_PASSWORD: MirthDB123!
       MSSQL_PID: Developer
     ports:
       - "1433:1433"
     volumes:
       - sqlserver_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P MirthDB123! -Q 'SELECT 1'"]
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/localhost/1433' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
 
-  # Oracle Database (XE - Express Edition)
+  # Oracle Database (ARM64 compatible - XE Express Edition)
   oracle:
-    image: gvenzl/oracle-xe:21-slim
+    image: gvenzl/oracle-free:23-slim
+    platform: linux/arm64
     container_name: donkey-test-oracle
     environment:
       ORACLE_PASSWORD: mirthdb

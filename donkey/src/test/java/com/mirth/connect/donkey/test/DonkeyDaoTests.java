@@ -79,14 +79,22 @@ public class DonkeyDaoTests {
     private Logger logger = LogManager.getLogger(this.getClass());
 
     @BeforeClass
-    final public static void beforeClass() throws StartException {
+    final public static void beforeClass() throws Exception {
         Donkey donkey = Donkey.getInstance();
         DonkeyConfiguration config = TestUtils.getDonkeyTestConfiguration();
+
+        // Close any leaked connection pools from a previously-run test class
+        TestUtils.shutdownConnectionPools();
 
         // Initialize connection pools before starting the engine
         DonkeyConnectionPools.getInstance().init(config.getDonkeyProperties());
 
         donkey.startEngine(config);
+
+        // Clean up any orphaned channel tables and Oracle sequences from previous test runs
+        System.out.println("=== DONKEY STARTUP: Calling removeAllChannelTables()...");
+        TestUtils.removeAllChannelTables();
+        System.out.println("=== DONKEY STARTUP: Orphaned tables cleanup completed");
 
         if (donkey.getDaoFactory() instanceof JdbcDaoFactory) {
             ((JdbcDaoFactory) donkey.getDaoFactory()).setStatsServerId(serverId);
@@ -100,12 +108,17 @@ public class DonkeyDaoTests {
         }, donkey.getStatisticsUpdater());
         donkey.setDaoFactory(daoFactory);
 
-        ChannelController.getInstance().initChannelStorage(channelId);
+        // Use initChannel() instead of just initChannelStorage() to ensure
+        // the channel's tables AND sequence are created after removeAllChannelTables()
+        // dropped everything. Without this, testRemoveChannel fails on Oracle with
+        // ORA-02289 because d_msq1 sequence doesn't exist.
+        TestUtils.initChannel(channelId);
     }
 
     @AfterClass
     final public static void afterClass() throws StartException {
         Donkey.getInstance().stopEngine();
+        TestUtils.shutdownConnectionPools();
     }
 
     @Before
@@ -115,10 +128,13 @@ public class DonkeyDaoTests {
 
     @After
     public void tearDown() throws Exception {
-        // Clean up any channels that might still be running
-        // This prevents statistics from leaking between tests
+        // Clean up message data between tests without dropping tables (DML only).
+        // Avoiding DDL (DROP/CREATE TABLE) prevents MySQL "Table definition has changed"
+        // errors caused by metadata cache staleness when running tests in batch.
         try {
-            ChannelController.getInstance().removeChannel(channelId);
+            if (ChannelController.getInstance().channelExists(channelId)) {
+                ChannelController.getInstance().deleteAllMessages(channelId);
+            }
         } catch (Exception e) {
             // Ignore cleanup errors - channel may not exist
         }
@@ -794,6 +810,8 @@ public class DonkeyDaoTests {
             // Bypass the source connector so we can retrieve the Message object
             Message message = channel.process(sourceMessage, true);
 
+            Thread.sleep(2000); // Sleep to ensure that the received_date timestamps are different for each message
+
             // Assert that each message was successfully created
             TestUtils.assertMessageExists(message, true);
             messages.add(message);
@@ -1083,6 +1101,57 @@ public class DonkeyDaoTests {
     public final void testRemoveChannel() throws Exception {
         Map<String, Long> localChannelIds = new HashMap<String, Long>();
         logger.info("Testing DonkeyDao.removeChannel...");
+
+        // On Oracle, drop any orphaned sequences from previous test runs (MIRTH-2851).
+        // dao.createChannel() calls raw CREATE SEQUENCE without checking existence,
+        // so we must ensure no conflicting sequences exist before creating channels.
+        // Only drop sequences NOT associated with channels in d_channels, since
+        // dao.removeChannel() will handle dropping those sequences itself.
+        if (TestUtils.getDatabaseType().equals("oracle")) {
+            Connection seqConn = null;
+            java.sql.Statement seqStmt = null;
+            ResultSet seqRs = null;
+            try {
+                seqConn = TestUtils.getConnection();
+                seqStmt = seqConn.createStatement();
+
+                // Get the set of localChannelIds currently registered in d_channels
+                Set<String> registeredIds = new HashSet<>();
+                seqRs = seqStmt.executeQuery("SELECT LOCAL_CHANNEL_ID FROM D_CHANNELS");
+                while (seqRs.next()) {
+                    registeredIds.add(String.valueOf(seqRs.getLong("LOCAL_CHANNEL_ID")));
+                }
+                TestUtils.close(seqRs);
+                seqRs = null;
+
+                // Find orphaned sequences (exist in Oracle but have no channel in d_channels)
+                seqRs = seqStmt.executeQuery("SELECT SEQUENCE_NAME FROM USER_SEQUENCES");
+                List<String> sequencesToDrop = new ArrayList<>();
+                while (seqRs.next()) {
+                    String seqName = seqRs.getString("SEQUENCE_NAME").toLowerCase();
+                    if (seqName.matches("d_msq\\d+")) {
+                        String idSuffix = seqName.substring(5); // extract numeric suffix after "d_msq"
+                        if (!registeredIds.contains(idSuffix)) {
+                            sequencesToDrop.add(seqName);
+                        }
+                    }
+                }
+                TestUtils.close(seqRs);
+                seqRs = null;
+                for (String seqName : sequencesToDrop) {
+                    try {
+                        seqStmt.executeUpdate("DROP SEQUENCE " + seqName);
+                        logger.debug("Dropped orphaned Oracle sequence: " + seqName);
+                    } catch (Exception e) {
+                        logger.warn("Failed to drop sequence " + seqName + ": " + e.getMessage());
+                    }
+                }
+            } finally {
+                TestUtils.close(seqRs);
+                TestUtils.close(seqStmt);
+                TestUtils.close(seqConn);
+            }
+        }
 
         DonkeyDao dao = null;
 
@@ -1872,9 +1941,12 @@ public class DonkeyDaoTests {
     public final void testGetChannelStatistics() throws Exception {
         // TODO also test getChannelTotalStatistics here
 
-        // Re-initialize channel storage (may have been removed by previous test's tearDown)
-        ChannelController.getInstance().removeChannel(channelId);
-        ChannelController.getInstance().initChannelStorage(channelId);
+        // Ensure clean state: delete any leftover messages (DML only, no DDL)
+        if (ChannelController.getInstance().channelExists(channelId)) {
+            ChannelController.getInstance().deleteAllMessages(channelId);
+        } else {
+            ChannelController.getInstance().initChannelStorage(channelId);
+        }
 
         Channel channel = TestUtils.createDefaultChannel(channelId, serverId);
         channel.deploy();
