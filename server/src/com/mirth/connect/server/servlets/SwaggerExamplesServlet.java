@@ -1165,7 +1165,7 @@ public class SwaggerExamplesServlet extends HttpServlet {
 	}
 	
 	private PasswordRequirements getPasswordRequirementsExample() {
-	    return new PasswordRequirements(8, 1, 1, 1, 1, 3, 0, 0, 0, 0, 3);
+	    return new PasswordRequirements(8, 1, 1, 1, 1, 3, 0, 0, 0, 0, 3, false);
 	}
 	
 	private List<String> getPasswordRequirementListExample() {

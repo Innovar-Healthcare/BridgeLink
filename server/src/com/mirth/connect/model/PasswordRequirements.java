@@ -29,6 +29,7 @@ public class PasswordRequirements implements Serializable {
     private int gracePeriod;
     private int reusePeriod;
     private int reuseLimit;
+    private boolean allowUsernameEnumeration;
 
     public PasswordRequirements() {
         this.minLength = 0;
@@ -42,9 +43,17 @@ public class PasswordRequirements implements Serializable {
         this.gracePeriod = 0;
         this.reusePeriod = 0;
         this.reuseLimit = 0;
+        this.allowUsernameEnumeration = false;
+    }
+    /**
+     * @deprecated Use {@link #PasswordRequirements(int, int, int, int, int, int, int, int, int, int, int, boolean)} instead.
+     */
+    @Deprecated
+    public PasswordRequirements(int minLength, int minUpper, int minLower, int minNumeric, int minSpecial, int retryLimit, int lockoutPeriod, int expiration, int gracePeriod, int reusePeriod, int reuseLimit) {
+        this(minLength, minUpper, minLower, minNumeric, minSpecial, retryLimit, lockoutPeriod, expiration, gracePeriod, reusePeriod, reuseLimit, false);
     }
 
-    public PasswordRequirements(int minLength, int minUpper, int minLower, int minNumeric, int minSpecial, int retryLimit, int lockoutPeriod, int expiration, int gracePeriod, int reusePeriod, int reuseLimit) {
+    public PasswordRequirements(int minLength, int minUpper, int minLower, int minNumeric, int minSpecial, int retryLimit, int lockoutPeriod, int expiration, int gracePeriod, int reusePeriod, int reuseLimit, boolean allowUsernameEnumeration) {
         this.minLength = minLength;
         this.minUpper = minUpper;
         this.minLower = minLower;
@@ -56,6 +65,7 @@ public class PasswordRequirements implements Serializable {
         this.gracePeriod = gracePeriod;
         this.reusePeriod = reusePeriod;
         this.reuseLimit = reuseLimit;
+        this.allowUsernameEnumeration = allowUsernameEnumeration;
     }
 
     public int getMinLength() {
@@ -144,5 +154,14 @@ public class PasswordRequirements implements Serializable {
 
     public void setReuseLimit(int reuseLimit) {
         this.reuseLimit = reuseLimit;
+    }
+
+
+    public boolean getAllowUsernameEnumeration() {
+        return allowUsernameEnumeration;
+    }
+
+    public void setAllowUsernameEnumeration(boolean allowUsernameEnumeration) {
+        this.allowUsernameEnumeration = allowUsernameEnumeration;
     }
 }

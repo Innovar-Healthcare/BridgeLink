@@ -57,6 +57,7 @@ public class PasswordRequirementsChecker implements Serializable {
     private static final String PASSWORD_LOCKOUT_PERIOD = "password.lockoutperiod";
     private static final String PASSWORD_REUSE_PERIOD = "password.reuseperiod";
     private static final String PASSWORD_REUSE_LIMIT = "password.reuselimit";
+    private static final String PASSWORD_ALLOW_USERNAME_ENUMERATION = "password.allowusernameenumeration";
 
     private static PasswordRequirementsChecker instance = null;
 
@@ -88,7 +89,7 @@ public class PasswordRequirementsChecker implements Serializable {
         passwordRequirements.setLockoutPeriod(securityProperties.getInt(PASSWORD_LOCKOUT_PERIOD, 0));
         passwordRequirements.setReusePeriod(securityProperties.getInt(PASSWORD_REUSE_PERIOD, 0));
         passwordRequirements.setReuseLimit(securityProperties.getInt(PASSWORD_REUSE_LIMIT, 0));
-
+        passwordRequirements.setAllowUsernameEnumeration(securityProperties.getBoolean(PASSWORD_ALLOW_USERNAME_ENUMERATION, false));
         return passwordRequirements;
     }
 
