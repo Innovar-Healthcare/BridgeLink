@@ -65,7 +65,10 @@ public class ConnectorTests {
     @Test
     public final void testPollConnector() throws Exception {
         final int pollingFrequency = 500;
-        final int sleepMillis = 3600; // Increased to ensure 7 complete poll cycles (7 * 500ms = 3500ms + buffer)
+        // Polls fire at t=0, 500, 1000, 1500, 2000, 2500, 3000ms (7 total).
+        // 3400ms gives enough buffer for the 7th poll to complete on slow DBs (PostgreSQL)
+        // while stopping before the 8th poll fires at t=3500ms.
+        final int sleepMillis = 3400;
         final int expectedMessageCount = 7;
 
         String channelId = TestUtils.DEFAULT_CHANNEL_ID;

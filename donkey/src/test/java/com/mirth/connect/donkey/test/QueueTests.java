@@ -628,31 +628,23 @@ public class QueueTests {
         // Dispatcher returnStatus should still be SENT from Phase 1
         System.out.println("Dispatcher returnStatus: " + destinationConnector.getReturnStatus());
 
-        // Place messages directly into the destination connector's queue
-        System.out.println("Adding " + TEST_SIZE + " messages directly to queue...");
+        // Create unprocessed source messages that the RecoveryTask will pick up on channel start.
+        // Only source connector messages (metaDataId=0, STATUS=RECEIVED) are created here.
+        // The RecoveryTask will find them via getConnectorMessages (status=RECEIVED) and call
+        // channel.process() which naturally creates the destination connector messages.
+        System.out.println("Creating " + TEST_SIZE + " unprocessed source messages for recovery...");
         for (int i = 1; i <= TEST_SIZE; i++) {
-            synchronized (destinationConnector.getQueue()) {
-                Message message = TestUtils.createAndStoreNewMessage(new RawMessage(testMessage), channelId, channelName, serverId, daoFactory);
-                ConnectorMessage destinationMessage = TestUtils.createAndStoreDestinationConnectorMessage(daoFactory, channelId, channelName, serverId, message.getMessageId(), destinationConnector.getMetaDataId(), testMessage, Status.QUEUED);
-                destinationConnector.getQueue().add(destinationMessage);
-            }
+            TestUtils.createAndStoreNewMessage(new RawMessage(testMessage), channelId, channelName, serverId, daoFactory);
         }
 
-        // Assert that all the messages were successfully placed in the queue
-        System.out.println("Queue size after adding messages: " + destinationConnector.getQueue().size());
-        assertEquals(TEST_SIZE, destinationConnector.getQueue().size());
-
-        // Start the channel back up
+        // Start the channel - the RecoveryTask will recover the unprocessed messages
         System.out.println("Starting channel for Phase 2...");
-        System.out.println("Connector deployed status BEFORE start: " + destinationConnector.isDeployed());
-        System.out.println("Queue thread running BEFORE start: " + destinationConnector.isQueueThreadRunning());
         channel.start(null);
         System.out.println("Connector deployed status AFTER start: " + destinationConnector.isDeployed());
         System.out.println("Queue thread running IMMEDIATELY after start: " + destinationConnector.isQueueThreadRunning());
 
-        // Wait a moment for recovery task to complete
-        // The recovery task may find these manually created messages and attempt processing
-        // We wait to ensure recovery completes before checking queue status
+        // Wait for the RecoveryTask to find and process the unprocessed source messages,
+        // and for the queue thread to drain any queued destination messages
         System.out.println("Waiting for recovery and processing...");
         Thread.sleep(2000);
 

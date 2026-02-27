@@ -407,6 +407,9 @@ public class TestUtils {
             // This prevents "too many clients already" errors from PostgreSQL
             connection = DonkeyConnectionPools.getInstance().getConnectionPool().getConnection().getConnection();
             connection.setAutoCommit(false);
+            // Rollback any pending transaction from previous pool usage to ensure
+            // a fresh snapshot (needed for MySQL's REPEATABLE READ isolation level)
+            connection.rollback();
         } catch (Exception e) {
             throw new DonkeyDaoException("Failed to establish JDBC connection", e);
         }
@@ -968,7 +971,14 @@ public class TestUtils {
 
                 if (!name.toUpperCase().equals("METADATA_ID") && !name.toUpperCase().equals("MESSAGE_ID")) {
                     int type = columns.getInt("DATA_TYPE");
+                    int columnSize = columns.getInt("COLUMN_SIZE");
                     MetaDataColumnType metaDataColumnType = MetaDataColumnType.fromSqlType(type);
+
+                    // Oracle stores boolean as NUMBER(1); detect by checking precision
+                    if (metaDataColumnType == MetaDataColumnType.NUMBER && columnSize == 1
+                            && (type == java.sql.Types.NUMERIC || type == java.sql.Types.DECIMAL)) {
+                        metaDataColumnType = MetaDataColumnType.BOOLEAN;
+                    }
 
                     if (metaDataColumnType == null) {
                         logger.error("Unsupported sql type: " + typeToString(type));
