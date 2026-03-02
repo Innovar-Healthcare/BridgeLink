@@ -173,12 +173,49 @@
 			<format property="test.timestamp" pattern="yyyy-MM-dd HH:mm:ss z"/>
 		</tstamp>
 		<property file="${basedir}/conf/donkey-testing.properties" prefix="dbinfo"/>
+
+		<!-- Query database for version info -->
+		<condition property="db.version.query" value="SELECT version()">
+			<equals arg1="${dbinfo.database}" arg2="postgres"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT version()">
+			<equals arg1="${dbinfo.database}" arg2="mysql"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT banner FROM v$version WHERE ROWNUM &lt;= 1">
+			<equals arg1="${dbinfo.database}" arg2="oracle"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT @@VERSION">
+			<equals arg1="${dbinfo.database}" arg2="sqlserver"/>
+		</condition>
+		<condition property="db.version.query" value="VALUES 'Apache Derby (embedded)'">
+			<equals arg1="${dbinfo.database}" arg2="derby"/>
+		</condition>
+		<sql driver="${dbinfo.database.driver}"
+			 url="${dbinfo.database.url}"
+			 userid="${dbinfo.database.username}"
+			 password="${dbinfo.database.password}"
+			 print="true"
+			 showheaders="false"
+			 showtrailers="false"
+			 output="${basedir}/db-version-temp.txt"
+			 onerror="continue">
+			<classpath refid="testclasspath"/>
+			${db.version.query}
+		</sql>
+		<exec executable="bash" outputproperty="db.version" failonerror="false">
+			<arg value="-c"/>
+			<arg value="V=$$(head -1 '${basedir}/db-version-temp.txt' 2>/dev/null | xargs); [ -n &quot;$$V&quot; ] &amp;&amp; echo &quot;$$V&quot; || echo 'Unknown'"/>
+		</exec>
+		<property name="db.version" value="Unknown"/>
+		<delete file="${basedir}/db-version-temp.txt" quiet="true"/>
+
 		<replace file="${junit-html}/overview-summary.html">
 			<replacetoken><![CDATA[<hr size="1">]]></replacetoken>
 			<replacevalue><![CDATA[<div style="background-color:#f4f4f4; border:1px solid #cccccc; padding:10px; margin:10px 0; font-family:monospace; font-size:12px;">
 			<b>Test Timestamp:</b> @TEST_TIMESTAMP@<br/>
 			<b>Test Duration:</b> @TEST_DURATION@<br/>
 			<b>Database Type:</b> @DB_TYPE@<br/>
+			<b>Database Version:</b> @DB_VERSION@<br/>
 			<b>JDBC URL:</b> @DB_URL@<br/>
 			<b>JDBC Driver:</b> @DB_DRIVER@<br/>
 			<b>Username:</b> @DB_USERNAME@<br/>
@@ -188,6 +225,7 @@
 		<replace file="${junit-html}/overview-summary.html" token="@TEST_TIMESTAMP@" value="${test.timestamp}"/>
 		<replace file="${junit-html}/overview-summary.html" token="@TEST_DURATION@" value="${test.duration.formatted}"/>
 		<replace file="${junit-html}/overview-summary.html" token="@DB_TYPE@" value="${dbinfo.database}"/>
+		<replace file="${junit-html}/overview-summary.html" token="@DB_VERSION@" value="${db.version}"/>
 		<replace file="${junit-html}/overview-summary.html" token="@DB_URL@" value="${dbinfo.database.url}"/>
 		<replace file="${junit-html}/overview-summary.html" token="@DB_DRIVER@" value="${dbinfo.database.driver}"/>
 		<replace file="${junit-html}/overview-summary.html" token="@DB_USERNAME@" value="${dbinfo.database.username}"/>
@@ -436,12 +474,49 @@
 			<format property="test.timestamp" pattern="yyyy-MM-dd HH:mm:ss z"/>
 		</tstamp>
 		<property file="${basedir}/conf/donkey-testing-${db.type}.properties" prefix="dbinfo"/>
+
+		<!-- Query database for version info -->
+		<condition property="db.version.query" value="SELECT version()">
+			<equals arg1="${db.type}" arg2="postgres"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT version()">
+			<equals arg1="${db.type}" arg2="mysql"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT banner FROM v$version WHERE ROWNUM &lt;= 1">
+			<equals arg1="${db.type}" arg2="oracle"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT @@VERSION">
+			<equals arg1="${db.type}" arg2="sqlserver"/>
+		</condition>
+		<condition property="db.version.query" value="VALUES 'Apache Derby (embedded)'">
+			<equals arg1="${db.type}" arg2="derby"/>
+		</condition>
+		<sql driver="${dbinfo.database.driver}"
+			 url="${dbinfo.database.url}"
+			 userid="${dbinfo.database.username}"
+			 password="${dbinfo.database.password}"
+			 print="true"
+			 showheaders="false"
+			 showtrailers="false"
+			 output="${basedir}/db-version-temp.txt"
+			 onerror="continue">
+			<classpath refid="testclasspath"/>
+			${db.version.query}
+		</sql>
+		<exec executable="bash" outputproperty="db.version" failonerror="false">
+			<arg value="-c"/>
+			<arg value="V=$$(head -1 '${basedir}/db-version-temp.txt' 2>/dev/null | xargs); [ -n &quot;$$V&quot; ] &amp;&amp; echo &quot;$$V&quot; || echo 'Unknown'"/>
+		</exec>
+		<property name="db.version" value="Unknown"/>
+		<delete file="${basedir}/db-version-temp.txt" quiet="true"/>
+
 		<replace file="${db.junit-html}/overview-summary.html">
 			<replacetoken><![CDATA[<hr size="1">]]></replacetoken>
 			<replacevalue><![CDATA[<div style="background-color:#f4f4f4; border:1px solid #cccccc; padding:10px; margin:10px 0; font-family:monospace; font-size:12px;">
 			<b>Test Timestamp:</b> @TEST_TIMESTAMP@<br/>
 			<b>Test Duration:</b> @TEST_DURATION@<br/>
 			<b>Database Type:</b> @DB_TYPE@<br/>
+			<b>Database Version:</b> @DB_VERSION@<br/>
 			<b>JDBC URL:</b> @DB_URL@<br/>
 			<b>JDBC Driver:</b> @DB_DRIVER@<br/>
 			<b>Username:</b> @DB_USERNAME@<br/>
@@ -451,6 +526,7 @@
 		<replace file="${db.junit-html}/overview-summary.html" token="@TEST_TIMESTAMP@" value="${test.timestamp}"/>
 		<replace file="${db.junit-html}/overview-summary.html" token="@TEST_DURATION@" value="${test.duration.formatted}"/>
 		<replace file="${db.junit-html}/overview-summary.html" token="@DB_TYPE@" value="${dbinfo.database}"/>
+		<replace file="${db.junit-html}/overview-summary.html" token="@DB_VERSION@" value="${db.version}"/>
 		<replace file="${db.junit-html}/overview-summary.html" token="@DB_URL@" value="${dbinfo.database.url}"/>
 		<replace file="${db.junit-html}/overview-summary.html" token="@DB_DRIVER@" value="${dbinfo.database.driver}"/>
 		<replace file="${db.junit-html}/overview-summary.html" token="@DB_USERNAME@" value="${dbinfo.database.username}"/>
@@ -570,9 +646,9 @@
 		<antcall target="test-run-db-only">
 			<param name="db.type" value="sqlserver"/>
 		</antcall>
-<!--		<antcall target="docker-cleanup-db">-->
-<!--			<param name="db.type" value="sqlserver"/>-->
-<!--		</antcall>-->
+		<antcall target="docker-cleanup-db">
+			<param name="db.type" value="sqlserver"/>
+		</antcall>
 	</target>
 
 	<target name="test-run-oracle-db" depends="test-compile" description="Run tests against Oracle database">

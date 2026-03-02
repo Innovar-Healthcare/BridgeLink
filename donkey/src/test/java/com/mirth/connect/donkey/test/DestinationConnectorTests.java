@@ -508,8 +508,9 @@ public class DestinationConnectorTests {
             };
             thread.start();
 
-            Thread.sleep(100);
-            // Assert that the response content was stored
+            // Poll for the message status to be updated to PENDING.
+            // The processing thread must complete several DB operations before the status
+            // reaches PENDING, which can take longer on external databases like Oracle.
             Connection connection = null;
             PreparedStatement statement = null;
             ResultSet result = null;
@@ -517,23 +518,26 @@ public class DestinationConnectorTests {
             try {
                 connection = TestUtils.getConnection();
                 long localChannelId = ChannelController.getInstance().getLocalChannelId(channelId);
-                statement = connection.prepareStatement("SELECT * FROM d_mc" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
-                statement.setLong(1, tempClass.messageId);
-                statement.setInt(2, 1);
-                statement.setInt(3, ContentType.SENT.getContentTypeCode());
-                result = statement.executeQuery();
-                result.close();
-                statement.close();
 
-                // Assert that the message status was updated to PENDING
-                statement = connection.prepareStatement("SELECT * FROM d_mm" + localChannelId + " WHERE message_id = ? AND id = ? AND status = ?");
-                statement.setLong(1, tempClass.messageId);
-                statement.setInt(2, 1);
-                statement.setString(3, String.valueOf(Status.PENDING.getStatusCode()));
-                result = statement.executeQuery();
-                assertTrue(result.next());
-                result.close();
-                statement.close();
+                // Wait for the PENDING status to appear with a timeout
+                boolean foundPending = false;
+                long pollTimeout = 10000;
+                long pollStart = System.currentTimeMillis();
+                while (!foundPending && (System.currentTimeMillis() - pollStart) < pollTimeout) {
+                    Thread.sleep(100);
+                    if (tempClass.messageId == 0) {
+                        continue;
+                    }
+                    statement = connection.prepareStatement("SELECT * FROM d_mm" + localChannelId + " WHERE message_id = ? AND id = ? AND status = ?");
+                    statement.setLong(1, tempClass.messageId);
+                    statement.setInt(2, 1);
+                    statement.setString(3, String.valueOf(Status.PENDING.getStatusCode()));
+                    result = statement.executeQuery();
+                    foundPending = result.next();
+                    result.close();
+                    statement.close();
+                }
+                assertTrue("Expected message status to be PENDING within timeout", foundPending);
 
                 responseTransformer.waiting = false;
                 thread.join();
