@@ -47,7 +47,8 @@ public class DefaultHttpConfiguration implements HttpConfiguration {
         org.eclipse.jetty.server.HttpConfiguration httpConfig = new org.eclipse.jetty.server.HttpConfiguration();
         httpConfig.setSendServerVersion(false);
         httpConfig.setSendXPoweredBy(false);
-        
+        httpConfig.setRequestHeaderSize(connector.getRequestHeaderSize());
+
         ServerConnector listener = new ServerConnector(connector.getServer(), new HttpConnectionFactory(httpConfig));
         listener.setHost(connector.getHost());
         listener.setPort(connector.getPort());
