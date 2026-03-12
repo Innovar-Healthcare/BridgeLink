@@ -38,6 +38,11 @@ public class SmtpDispatcherProperties extends ConnectorProperties implements Des
     private boolean authentication;
     private String username;
     private String password;
+    private String authType; // "NONE", "BASIC", or "OAUTH"
+    private String oAuthClientId;
+    private String oAuthClientSecret;
+    private String oAuthTokenEndpointUrl;
+    private String oAuthScope;
     private String to;
     private String from;
     private String cc;
@@ -67,6 +72,11 @@ public class SmtpDispatcherProperties extends ConnectorProperties implements Des
         this.authentication = false;
         this.username = "";
         this.password = "";
+        this.authType = "NONE";
+        this.oAuthClientId = "";
+        this.oAuthClientSecret = "";
+        this.oAuthTokenEndpointUrl = "";
+        this.oAuthScope = "https://outlook.office365.com/.default";
         this.to = "";
         this.from = "";
         this.cc = "";
@@ -98,6 +108,11 @@ public class SmtpDispatcherProperties extends ConnectorProperties implements Des
         authentication = props.isAuthentication();
         username = props.getUsername();
         password = props.getPassword();
+        authType = props.getAuthType();
+        oAuthClientId = props.getOAuthClientId();
+        oAuthClientSecret = props.getOAuthClientSecret();
+        oAuthTokenEndpointUrl = props.getOAuthTokenEndpointUrl();
+        oAuthScope = props.getOAuthScope();
         to = props.getTo();
         from = props.getFrom();
         cc = props.getCc();
@@ -197,6 +212,46 @@ public class SmtpDispatcherProperties extends ConnectorProperties implements Des
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getAuthType() {
+        return authType;
+    }
+
+    public void setAuthType(String authType) {
+        this.authType = authType;
+    }
+
+    public String getOAuthClientId() {
+        return oAuthClientId;
+    }
+
+    public void setOAuthClientId(String oAuthClientId) {
+        this.oAuthClientId = oAuthClientId;
+    }
+
+    public String getOAuthClientSecret() {
+        return oAuthClientSecret;
+    }
+
+    public void setOAuthClientSecret(String oAuthClientSecret) {
+        this.oAuthClientSecret = oAuthClientSecret;
+    }
+
+    public String getOAuthTokenEndpointUrl() {
+        return oAuthTokenEndpointUrl;
+    }
+
+    public void setOAuthTokenEndpointUrl(String oAuthTokenEndpointUrl) {
+        this.oAuthTokenEndpointUrl = oAuthTokenEndpointUrl;
+    }
+
+    public String getOAuthScope() {
+        return oAuthScope;
+    }
+
+    public void setOAuthScope(String oAuthScope) {
+        this.oAuthScope = oAuthScope;
     }
 
     public String getTo() {
@@ -442,6 +497,20 @@ public class SmtpDispatcherProperties extends ConnectorProperties implements Des
     @Override public void migrate3_11_0(DonkeyElement element) {}
     @Override public void migrate3_11_1(DonkeyElement element) {} 
     @Override public void migrate3_12_0(DonkeyElement element) {}// @formatter:on
+
+    @Override
+    public void migrate26_3_0(DonkeyElement element) {
+        DonkeyElement authEl = element.getChildElement("authentication");
+        if (authEl != null && "true".equals(authEl.getTextContent())) {
+            element.addChildElementIfNotExists("authType", "BASIC");
+        } else {
+            element.addChildElementIfNotExists("authType", "NONE");
+        }
+        element.addChildElementIfNotExists("oAuthClientId", "");
+        element.addChildElementIfNotExists("oAuthClientSecret", "");
+        element.addChildElementIfNotExists("oAuthTokenEndpointUrl", "");
+        element.addChildElementIfNotExists("oAuthScope", "https://outlook.office365.com/.default");
+    }
 
     @Override
     public Map<String, Object> getPurgedProperties() {

@@ -9,16 +9,22 @@
 
 package com.mirth.connect.server.util;
 
+import java.util.Properties;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.mail.Email;
 import org.apache.commons.mail.EmailException;
 import org.apache.commons.mail.SimpleEmail;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.mirth.connect.server.controllers.ConfigurationController;
 import com.mirth.connect.server.controllers.ControllerFactory;
 import com.mirth.connect.util.MirthSSLUtil;
 
 public class ServerSMTPConnection {
+    private static final Logger logger = LogManager.getLogger(ServerSMTPConnection.class);
+
     private String host;
     private String port;
     private boolean useAuthentication;
@@ -27,6 +33,13 @@ public class ServerSMTPConnection {
     private String password;
     private String from;
     private int socketTimeout = 5000;
+
+    // OAuth fields — populated only when authType is "OAUTH"
+    private String authType;
+    private String oAuthClientId;
+    private String oAuthClientSecret;
+    private String oAuthTokenEndpointUrl;
+    private String oAuthScope;
 
     public ServerSMTPConnection(String host, String port, int socketTimeout, boolean useAuthentication, String secure, String username, String password, String from) {
         this.host = host;
@@ -37,10 +50,31 @@ public class ServerSMTPConnection {
         this.username = username;
         this.password = password;
         this.from = from;
+        this.authType = useAuthentication ? "BASIC" : "NONE";
     }
 
     public ServerSMTPConnection(String host, String port, boolean useAuthentication, String secure, String username, String password, String from) {
         this(host, port, 5000, useAuthentication, secure, username, password, from);
+    }
+
+    /**
+     * OAuth-capable constructor. Use this when {@code authType} is {@code "OAUTH"}.
+     */
+    public ServerSMTPConnection(String host, String port, int socketTimeout, String authType, String secure,
+            String username, String oAuthClientId, String oAuthClientSecret,
+            String oAuthTokenEndpointUrl, String oAuthScope, String from) {
+        this.host = host;
+        this.port = port;
+        this.socketTimeout = socketTimeout;
+        this.authType = authType;
+        this.secure = secure;
+        this.username = username;
+        this.useAuthentication = "BASIC".equals(authType);
+        this.oAuthClientId = oAuthClientId;
+        this.oAuthClientSecret = oAuthClientSecret;
+        this.oAuthTokenEndpointUrl = oAuthTokenEndpointUrl;
+        this.oAuthScope = oAuthScope;
+        this.from = from;
     }
 
     public String getHost() {
@@ -119,7 +153,17 @@ public class ServerSMTPConnection {
         email.setSmtpPort(Integer.parseInt(port));
         email.setSocketConnectionTimeout(socketTimeout);
 
-        if (useAuthentication) {
+        if ("OAUTH".equals(authType)) {
+            OAuthTokenManager tokenManager = new OAuthTokenManager(oAuthTokenEndpointUrl, oAuthClientId, oAuthClientSecret, oAuthScope);
+            try {
+                String accessToken = tokenManager.getAccessToken();
+                email.setAuthentication(username, accessToken);
+            } catch (Exception e) {
+                throw new EmailException("Failed to obtain OAuth access token for SMTP authentication: " + e.getMessage(), e);
+            } finally {
+                tokenManager.shutdown();
+            }
+        } else if (useAuthentication) {
             email.setAuthentication(username, password);
         }
 
@@ -132,8 +176,13 @@ public class ServerSMTPConnection {
 
         // These have to be set after the authenticator, so that a new mail session isn't created
         ConfigurationController configurationController = ControllerFactory.getFactory().createConfigurationController();
-        email.getMailSession().getProperties().setProperty("mail.smtp.ssl.protocols", StringUtils.join(MirthSSLUtil.getEnabledHttpsProtocols(configurationController.getHttpsClientProtocols()), ' '));
-        email.getMailSession().getProperties().setProperty("mail.smtp.ssl.ciphersuites", StringUtils.join(MirthSSLUtil.getEnabledHttpsCipherSuites(configurationController.getHttpsCipherSuites()), ' '));
+        Properties mailProperties = email.getMailSession().getProperties();
+        mailProperties.setProperty("mail.smtp.ssl.protocols", StringUtils.join(MirthSSLUtil.getEnabledHttpsProtocols(configurationController.getHttpsClientProtocols()), ' '));
+        mailProperties.setProperty("mail.smtp.ssl.ciphersuites", StringUtils.join(MirthSSLUtil.getEnabledHttpsCipherSuites(configurationController.getHttpsCipherSuites()), ' '));
+        if ("OAUTH".equals(authType)) {
+            mailProperties.setProperty("mail.smtp.auth.mechanisms", "XOAUTH2");
+            mailProperties.setProperty("mail.smtp.sasl.enable", "true");
+        }
 
         for (String to : StringUtils.split(toList, ",")) {
             email.addTo(to);

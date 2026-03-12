@@ -48,6 +48,11 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
     private static final String SMTP_AUTH = "smtp.auth";
     private static final String SMTP_USERNAME = "smtp.username";
     private static final String SMTP_PASSWORD = "smtp.password";
+    private static final String SMTP_AUTH_TYPE = "smtp.auth.type";
+    private static final String SMTP_OAUTH_CLIENT_ID = "smtp.oauth.client.id";
+    private static final String SMTP_OAUTH_CLIENT_SECRET = "smtp.oauth.client.secret";
+    private static final String SMTP_OAUTH_TOKEN_ENDPOINT_URL = "smtp.oauth.token.endpoint.url";
+    private static final String SMTP_OAUTH_SCOPE = "smtp.oauth.scope";
     protected static final String LOGIN_NOTIFICATION_ENABLED = "loginnotification.enabled";
     protected static final String LOGIN_NOTIFICATION_MESSAGE = "loginnotification.message";
     protected static final String ADMINISTRATOR_AUTO_LOGOUT_INTERVAL_ENABLED = "administratorautologoutinterval.enabled";
@@ -70,6 +75,11 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
     private Boolean smtpAuth;
     private String smtpUsername;
     private String smtpPassword;
+    private String smtpAuthType; // "NONE", "BASIC", or "OAUTH"
+    private String smtpOAuthClientId;
+    private String smtpOAuthClientSecret;
+    private String smtpOAuthTokenEndpointUrl;
+    private String smtpOAuthScope;
     
     // Login Notification
     private Boolean loginNotificationEnabled;
@@ -129,6 +139,21 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
         if (getSmtpPassword() != null) {
             properties.put(SMTP_PASSWORD, getSmtpPassword());
         }
+        if (getSmtpAuthType() != null) {
+            properties.put(SMTP_AUTH_TYPE, getSmtpAuthType());
+        }
+        if (getSmtpOAuthClientId() != null) {
+            properties.put(SMTP_OAUTH_CLIENT_ID, getSmtpOAuthClientId());
+        }
+        if (getSmtpOAuthClientSecret() != null) {
+            properties.put(SMTP_OAUTH_CLIENT_SECRET, getSmtpOAuthClientSecret());
+        }
+        if (getSmtpOAuthTokenEndpointUrl() != null) {
+            properties.put(SMTP_OAUTH_TOKEN_ENDPOINT_URL, getSmtpOAuthTokenEndpointUrl());
+        }
+        if (getSmtpOAuthScope() != null) {
+            properties.put(SMTP_OAUTH_SCOPE, getSmtpOAuthScope());
+        }
         if (getLoginNotificationEnabled() != null) {
             properties.put(LOGIN_NOTIFICATION_ENABLED, BooleanUtils.toIntegerObject(getLoginNotificationEnabled()).toString());
         }
@@ -159,6 +184,12 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
         setSmtpAuth(intToBooleanObject(properties.getProperty(SMTP_AUTH)));
         setSmtpUsername(properties.getProperty(SMTP_USERNAME));
         setSmtpPassword(properties.getProperty(SMTP_PASSWORD));
+        setSmtpAuthType(properties.getProperty(SMTP_AUTH_TYPE));
+        reconcileSmtpAuth();
+        setSmtpOAuthClientId(properties.getProperty(SMTP_OAUTH_CLIENT_ID));
+        setSmtpOAuthClientSecret(properties.getProperty(SMTP_OAUTH_CLIENT_SECRET));
+        setSmtpOAuthTokenEndpointUrl(properties.getProperty(SMTP_OAUTH_TOKEN_ENDPOINT_URL));
+        setSmtpOAuthScope(properties.getProperty(SMTP_OAUTH_SCOPE));
         setLoginNotificationEnabled(intToBooleanObject(properties.getProperty(LOGIN_NOTIFICATION_ENABLED, DEFAULT_LOGIN_NOTIFICATION_ENABLED_VALUE)));
         setLoginNotificationMessage(properties.getProperty(LOGIN_NOTIFICATION_MESSAGE, DEFAULT_LOGIN_NOTIFICATION_MESSAGE_VALUE));
         setAdministratorAutoLogoutIntervalEnabled(intToBooleanObject(properties.getProperty(ADMINISTRATOR_AUTO_LOGOUT_INTERVAL_ENABLED, DEFAULT_ADMINISTRATOR_AUTO_LOGOUT_INTERVAL_ENABLED_VALUE)));
@@ -275,6 +306,54 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
 
     public void setSmtpPassword(String smtpPassword) {
         this.smtpPassword = smtpPassword;
+    }
+
+    public String getSmtpAuthType() {
+        return smtpAuthType;
+    }
+
+    public void setSmtpAuthType(String smtpAuthType) {
+        this.smtpAuthType = smtpAuthType;
+    }
+
+    private void reconcileSmtpAuth() {
+        if ("BASIC".equals(smtpAuthType) || "OAUTH".equals(smtpAuthType)) {
+            setSmtpAuth(true);
+        } else if ("NONE".equals(smtpAuthType)) {
+            setSmtpAuth(false);
+        }
+    }
+
+    public String getSmtpOAuthClientId() {
+        return smtpOAuthClientId;
+    }
+
+    public void setSmtpOAuthClientId(String smtpOAuthClientId) {
+        this.smtpOAuthClientId = smtpOAuthClientId;
+    }
+
+    public String getSmtpOAuthClientSecret() {
+        return smtpOAuthClientSecret;
+    }
+
+    public void setSmtpOAuthClientSecret(String smtpOAuthClientSecret) {
+        this.smtpOAuthClientSecret = smtpOAuthClientSecret;
+    }
+
+    public String getSmtpOAuthTokenEndpointUrl() {
+        return smtpOAuthTokenEndpointUrl;
+    }
+
+    public void setSmtpOAuthTokenEndpointUrl(String smtpOAuthTokenEndpointUrl) {
+        this.smtpOAuthTokenEndpointUrl = smtpOAuthTokenEndpointUrl;
+    }
+
+    public String getSmtpOAuthScope() {
+        return smtpOAuthScope;
+    }
+
+    public void setSmtpOAuthScope(String smtpOAuthScope) {
+        this.smtpOAuthScope = smtpOAuthScope;
     }
 
     public Boolean getLoginNotificationEnabled() {

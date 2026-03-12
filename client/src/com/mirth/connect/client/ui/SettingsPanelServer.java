@@ -322,13 +322,20 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
             secureConnectionNoneRadio.setSelected(true);
         }
 
-        if (serverSettings.getSmtpAuth() != null && serverSettings.getSmtpAuth()) {
-            requireAuthenticationYesRadio.setSelected(true);
-            requireAuthenticationYesRadioActionPerformed(null);
-        } else {
-            requireAuthenticationNoRadio.setSelected(true);
-            requireAuthenticationNoRadioActionPerformed(null);
+        String smtpAuthType = serverSettings.getSmtpAuthType();
+        // Upgrade: if smtpAuthType not set (pre-OAuth server), derive from legacy smtpAuth boolean
+        if (smtpAuthType == null) {
+            smtpAuthType = Boolean.TRUE.equals(serverSettings.getSmtpAuth()) ? "BASIC" : "NONE";
         }
+        if ("OAUTH".equals(smtpAuthType)) {
+            smtpAuthTypeOAuthRadio.setSelected(true);
+        } else if ("BASIC".equals(smtpAuthType)) {
+            smtpAuthTypeBasicRadio.setSelected(true);
+        } else {
+            smtpAuthTypeNoneRadio.setSelected(true);
+        }
+        passwordField.setText(serverSettings.getSmtpPassword() != null ? serverSettings.getSmtpPassword() : "");
+        updateSmtpAuthFields();
 
         if (serverSettings.getClearGlobalMap() != null && !serverSettings.getClearGlobalMap()) {
             clearGlobalMapNoRadio.setSelected(true);
@@ -353,18 +360,12 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
         defaultMetaDataTypeCheckBox.setSelected(this.defaultMetaDataColumns.contains(DefaultMetaData.TYPE_COLUMN));
         defaultMetaDataVersionCheckBox.setSelected(this.defaultMetaDataColumns.contains(DefaultMetaData.VERSION_COLUMN));
 
-        if (serverSettings.getSmtpUsername() != null) {
-            usernameField.setText(serverSettings.getSmtpUsername());
-        } else {
-            usernameField.setText("");
-        }
+        usernameField.setText(serverSettings.getSmtpUsername() != null ? serverSettings.getSmtpUsername() : "");
+        oAuthClientIdField.setText(serverSettings.getSmtpOAuthClientId() != null ? serverSettings.getSmtpOAuthClientId() : "");
+        oAuthClientSecretField.setText(serverSettings.getSmtpOAuthClientSecret() != null ? serverSettings.getSmtpOAuthClientSecret() : "");
+        oAuthTokenUrlField.setText(serverSettings.getSmtpOAuthTokenEndpointUrl() != null ? serverSettings.getSmtpOAuthTokenEndpointUrl() : "");
+        oAuthScopeField.setText(serverSettings.getSmtpOAuthScope() != null ? serverSettings.getSmtpOAuthScope() : "");
 
-        if (serverSettings.getSmtpPassword() != null) {
-            passwordField.setText(serverSettings.getSmtpPassword());
-        } else {
-            passwordField.setText("");
-        }
-        
         if (serverSettings.getLoginNotificationEnabled()) {
         	requireNotificationYesRadio.setSelected(true);
             notificationLabel.setEnabled(true);
@@ -469,16 +470,36 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
             serverSettings.setSmtpSecure("none");
         }
 
-        if (requireAuthenticationYesRadio.isSelected()) {
+        if (smtpAuthTypeOAuthRadio.isSelected()) {
+            serverSettings.setSmtpAuthType("OAUTH");
+            serverSettings.setSmtpAuth(true);
+            serverSettings.setSmtpUsername(usernameField.getText());
+            serverSettings.setSmtpOAuthClientId(oAuthClientIdField.getText());
+            String newSecret = new String(oAuthClientSecretField.getPassword());
+            if (!newSecret.isEmpty()) {
+                serverSettings.setSmtpOAuthClientSecret(newSecret);
+            }
+            serverSettings.setSmtpOAuthTokenEndpointUrl(oAuthTokenUrlField.getText());
+            serverSettings.setSmtpOAuthScope(oAuthScopeField.getText());
+        } else if (smtpAuthTypeBasicRadio.isSelected()) {
+            serverSettings.setSmtpAuthType("BASIC");
             serverSettings.setSmtpAuth(true);
             serverSettings.setSmtpUsername(usernameField.getText());
             serverSettings.setSmtpPassword(new String(passwordField.getPassword()));
+            serverSettings.setSmtpOAuthClientId("");
+            serverSettings.setSmtpOAuthClientSecret("");
+            serverSettings.setSmtpOAuthTokenEndpointUrl("");
+            serverSettings.setSmtpOAuthScope("");
         } else {
+            serverSettings.setSmtpAuthType("NONE");
             serverSettings.setSmtpAuth(false);
             serverSettings.setSmtpUsername("");
             serverSettings.setSmtpPassword("");
+            serverSettings.setSmtpOAuthClientId("");
+            serverSettings.setSmtpOAuthClientSecret("");
+            serverSettings.setSmtpOAuthTokenEndpointUrl("");
+            serverSettings.setSmtpOAuthScope("");
         }
-
         if (requireNotificationYesRadio.isSelected()) {
             serverSettings.setLoginNotificationEnabled(true);
         } else {
@@ -682,6 +703,9 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
         defaultFromAddressField.setBackground(null);
         usernameField.setBackground(null);
         passwordField.setBackground(null);
+        oAuthClientIdField.setBackground(null);
+        oAuthClientSecretField.setBackground(null);
+        oAuthTokenUrlField.setBackground(null);
     }
 
     private void initComponents() {
@@ -852,37 +876,64 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
         secureConnectionSSLRadio.setToolTipText("Toggles STARTTLS and SSL connections for global SMTP settings.");
         secureConnectionButtonGroup.add(secureConnectionSSLRadio);
 
-        requireAuthenticationLabel = new JLabel("Require Authentication:");
-        requireAuthenticationButtonGroup = new ButtonGroup();
+        smtpAuthTypeLabel = new JLabel("Auth Type:");
+        smtpAuthTypeButtonGroup = new ButtonGroup();
 
-        requireAuthenticationYesRadio = new MirthRadioButton("Yes");
-        requireAuthenticationYesRadio.setBackground(getBackground());
-        requireAuthenticationYesRadio.setSelected(true);
-        requireAuthenticationYesRadio.setToolTipText("Toggles authentication for global SMTP settings.");
-        requireAuthenticationYesRadio.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent evt) {
-                requireAuthenticationYesRadioActionPerformed(evt);
-            }
-        });
-        requireAuthenticationButtonGroup.add(requireAuthenticationYesRadio);
+        smtpAuthTypeNoneRadio = new MirthRadioButton("None");
+        smtpAuthTypeNoneRadio.setBackground(getBackground());
+        smtpAuthTypeNoneRadio.setSelected(true);
+        smtpAuthTypeNoneRadio.setToolTipText("No authentication for global SMTP settings.");
+        smtpAuthTypeNoneRadio.addActionListener(evt -> updateSmtpAuthFields());
+        smtpAuthTypeButtonGroup.add(smtpAuthTypeNoneRadio);
 
-        requireAuthenticationNoRadio = new MirthRadioButton("No");
-        requireAuthenticationNoRadio.setBackground(getBackground());
-        requireAuthenticationNoRadio.setToolTipText("Toggles authentication for global SMTP settings.");
-        requireAuthenticationNoRadio.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent evt) {
-                requireAuthenticationNoRadioActionPerformed(evt);
-            }
-        });
-        requireAuthenticationButtonGroup.add(requireAuthenticationNoRadio);
+        smtpAuthTypeBasicRadio = new MirthRadioButton("Basic");
+        smtpAuthTypeBasicRadio.setBackground(getBackground());
+        smtpAuthTypeBasicRadio.setToolTipText("Use Basic (username/password) authentication for global SMTP settings.");
+        smtpAuthTypeBasicRadio.addActionListener(evt -> updateSmtpAuthFields());
+        smtpAuthTypeButtonGroup.add(smtpAuthTypeBasicRadio);
+
+        smtpAuthTypeOAuthRadio = new MirthRadioButton("OAuth 2.0");
+        smtpAuthTypeOAuthRadio.setBackground(getBackground());
+        smtpAuthTypeOAuthRadio.setToolTipText("Use OAuth 2.0 Client Credentials authentication for global SMTP settings.");
+        smtpAuthTypeOAuthRadio.addActionListener(evt -> updateSmtpAuthFields());
+        smtpAuthTypeButtonGroup.add(smtpAuthTypeOAuthRadio);
+
 
         usernameLabel = new JLabel("Username:");
+        usernameLabel.setEnabled(false);
         usernameField = new MirthTextField();
+        usernameField.setEnabled(false);
         usernameField.setToolTipText("Username for global SMTP settings.");
 
         passwordLabel = new JLabel("Password:");
+        passwordLabel.setEnabled(false);
         passwordField = new MirthPasswordField();
+        passwordField.setEnabled(false);
         passwordField.setToolTipText("Password for global SMTP settings.");
+
+        oAuthClientIdLabel = new JLabel("Client ID:");
+        oAuthClientIdLabel.setEnabled(false);
+        oAuthClientIdField = new MirthTextField();
+        oAuthClientIdField.setEnabled(false);
+        oAuthClientIdField.setToolTipText("OAuth 2.0 application (client) ID for global SMTP settings.");
+
+        oAuthClientSecretLabel = new JLabel("Client Secret:");
+        oAuthClientSecretLabel.setEnabled(false);
+        oAuthClientSecretField = new MirthPasswordField();
+        oAuthClientSecretField.setEnabled(false);
+        oAuthClientSecretField.setToolTipText("OAuth 2.0 client secret for global SMTP settings.");
+
+        oAuthTokenUrlLabel = new JLabel("Token URL:");
+        oAuthTokenUrlLabel.setEnabled(false);
+        oAuthTokenUrlField = new MirthTextField();
+        oAuthTokenUrlField.setEnabled(false);
+        oAuthTokenUrlField.setToolTipText("OAuth 2.0 token endpoint URL for global SMTP settings.");
+
+        oAuthScopeLabel = new JLabel("Scope:");
+        oAuthScopeLabel.setEnabled(false);
+        oAuthScopeField = new MirthTextField();
+        oAuthScopeField.setEnabled(false);
+        oAuthScopeField.setToolTipText("OAuth 2.0 scope for global SMTP settings (e.g. https://outlook.office365.com/.default).");
         
         notificationPanel = new JPanel();
         notificationPanel.setBackground(getBackground());
@@ -950,7 +1001,7 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
         channelPanel.add(defaultMetaDataVersionCheckBox);
         add(channelPanel, "newline, growx");
 
-        emailPanel.setLayout(new MigLayout("insets 12, novisualpadding, hidemode 3, fill, gap 6", "[]12[][grow]", "[][][][][][][][][grow]"));
+        emailPanel.setLayout(new MigLayout("insets 12, novisualpadding, hidemode 3, fill, gap 6", "[]12[][grow]", ""));
         emailPanel.add(smtpHostLabel, "right");
         emailPanel.add(smtpHostField, "w 117!, split 2");
         emailPanel.add(testEmailButton);
@@ -964,13 +1015,22 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
         emailPanel.add(secureConnectionNoneRadio, "split 3");
         emailPanel.add(secureConnectionTLSRadio);
         emailPanel.add(secureConnectionSSLRadio);
-        emailPanel.add(requireAuthenticationLabel, "newline, right");
-        emailPanel.add(requireAuthenticationYesRadio, "split 2");
-        emailPanel.add(requireAuthenticationNoRadio);
+        emailPanel.add(smtpAuthTypeLabel, "newline, right");
+        emailPanel.add(smtpAuthTypeNoneRadio, "split 3");
+        emailPanel.add(smtpAuthTypeBasicRadio);
+        emailPanel.add(smtpAuthTypeOAuthRadio);
         emailPanel.add(usernameLabel, "newline, right");
         emailPanel.add(usernameField, "w 117!");
         emailPanel.add(passwordLabel, "newline, right");
         emailPanel.add(passwordField, "w 117!");
+        emailPanel.add(oAuthClientIdLabel, "newline, right");
+        emailPanel.add(oAuthClientIdField, "w 200!");
+        emailPanel.add(oAuthClientSecretLabel, "newline, right");
+        emailPanel.add(oAuthClientSecretField, "w 200!");
+        emailPanel.add(oAuthTokenUrlLabel, "newline, right");
+        emailPanel.add(oAuthTokenUrlField, "w 300!");
+        emailPanel.add(oAuthScopeLabel, "newline, right");
+        emailPanel.add(oAuthScopeField, "w 300!");
         add(emailPanel, "newline, growx");
         
         notificationPanel.setLayout(new MigLayout("insets 12, novisualpadding, hidemode 3, fill, gap 6", "[]12[][grow]", ""));
@@ -981,24 +1041,31 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
         notificationPanel.add(notificationScrollPane, "grow, sx, push, h 100%");
         add(notificationPanel, "newline, growx");
 
+        updateSmtpAuthFields();
     }
 
     private void provideUsageStatsMoreInfoLabelMouseClicked(MouseEvent evt) {
         BareBonesBrowserLaunch.openURL(com.mirth.connect.client.ui.UIConstants.PRIVACY_URL);
     }
 
-    private void requireAuthenticationNoRadioActionPerformed(ActionEvent evt) {
-        usernameField.setEnabled(false);
-        passwordField.setEnabled(false);
-        usernameLabel.setEnabled(false);
-        passwordLabel.setEnabled(false);
-    }
+    private void updateSmtpAuthFields() {
+        boolean isBasic = smtpAuthTypeBasicRadio.isSelected();
+        boolean isOAuth = smtpAuthTypeOAuthRadio.isSelected();
 
-    private void requireAuthenticationYesRadioActionPerformed(ActionEvent evt) {
-        usernameField.setEnabled(true);
-        passwordField.setEnabled(true);
-        usernameLabel.setEnabled(true);
-        passwordLabel.setEnabled(true);
+        usernameLabel.setEnabled(isBasic || isOAuth);
+        usernameField.setEnabled(isBasic || isOAuth);
+
+        passwordLabel.setEnabled(isBasic);
+        passwordField.setEnabled(isBasic);
+
+        oAuthClientIdLabel.setEnabled(isOAuth);
+        oAuthClientIdField.setEnabled(isOAuth);
+        oAuthClientSecretLabel.setEnabled(isOAuth);
+        oAuthClientSecretField.setEnabled(isOAuth);
+        oAuthTokenUrlLabel.setEnabled(isOAuth);
+        oAuthTokenUrlField.setEnabled(isOAuth);
+        oAuthScopeLabel.setEnabled(isOAuth);
+        oAuthScopeField.setEnabled(isOAuth);
     }
 
     private void requireNotificationNoRadioActionPerformed(ActionEvent evt) {
@@ -1046,15 +1113,33 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
             invalidFields.append("\"Default From Address\" is required\n");
         }
 
-        if (serverSettings.getSmtpAuth()) {
+        String smtpAuthType = serverSettings.getSmtpAuthType();
+        if ("BASIC".equals(smtpAuthType) || "OAUTH".equals(smtpAuthType)) {
             if (StringUtils.isBlank(serverSettings.getSmtpUsername())) {
                 usernameField.setBackground(com.mirth.connect.client.ui.UIConstants.INVALID_COLOR);
                 invalidFields.append("\"Username\" is required\n");
             }
+        }
 
+        if ("BASIC".equals(smtpAuthType)) {
             if (StringUtils.isBlank(serverSettings.getSmtpPassword())) {
                 passwordField.setBackground(com.mirth.connect.client.ui.UIConstants.INVALID_COLOR);
                 invalidFields.append("\"Password\" is required\n");
+            }
+        }
+
+        if ("OAUTH".equals(smtpAuthType)) {
+            if (StringUtils.isBlank(serverSettings.getSmtpOAuthClientId())) {
+                oAuthClientIdField.setBackground(UIConstants.INVALID_COLOR);
+                invalidFields.append("\"OAuth Client ID\" is required\n");
+            }
+            if (StringUtils.isBlank(serverSettings.getSmtpOAuthClientSecret())) {
+                oAuthClientSecretField.setBackground(UIConstants.INVALID_COLOR);
+                invalidFields.append("\"OAuth Client Secret\" is required\n");
+            }
+            if (StringUtils.isBlank(serverSettings.getSmtpOAuthTokenEndpointUrl())) {
+                oAuthTokenUrlField.setBackground(UIConstants.INVALID_COLOR);
+                invalidFields.append("\"OAuth Token URL\" is required\n");
             }
         }
 
@@ -1075,15 +1160,20 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
             }
 
             final Properties properties = new Properties();
-            properties.put("port", serverSettings.getSmtpPort());
-            properties.put("encryption", serverSettings.getSmtpSecure());
-            properties.put("host", serverSettings.getSmtpHost());
-            properties.put("timeout", serverSettings.getSmtpTimeout());
+            properties.put("port", serverSettings.getSmtpPort() != null ? serverSettings.getSmtpPort() : "");
+            properties.put("encryption", serverSettings.getSmtpSecure() != null ? serverSettings.getSmtpSecure() : "");
+            properties.put("host", serverSettings.getSmtpHost() != null ? serverSettings.getSmtpHost() : "");
+            properties.put("timeout", serverSettings.getSmtpTimeout() != null ? serverSettings.getSmtpTimeout() : "");
             properties.put("authentication", String.valueOf(serverSettings.getSmtpAuth()));
-            properties.put("username", serverSettings.getSmtpUsername());
-            properties.put("password", serverSettings.getSmtpPassword());
+            properties.put("authType", serverSettings.getSmtpAuthType() != null ? serverSettings.getSmtpAuthType() : "NONE");
+            properties.put("username", serverSettings.getSmtpUsername() != null ? serverSettings.getSmtpUsername() : "");
+            properties.put("password", serverSettings.getSmtpPassword() != null ? serverSettings.getSmtpPassword() : "");
+            properties.put("oAuthClientId", serverSettings.getSmtpOAuthClientId() != null ? serverSettings.getSmtpOAuthClientId() : "");
+            properties.put("oAuthClientSecret", serverSettings.getSmtpOAuthClientSecret() != null ? serverSettings.getSmtpOAuthClientSecret() : "");
+            properties.put("oAuthTokenEndpointUrl", serverSettings.getSmtpOAuthTokenEndpointUrl() != null ? serverSettings.getSmtpOAuthTokenEndpointUrl() : "");
+            properties.put("oAuthScope", serverSettings.getSmtpOAuthScope() != null ? serverSettings.getSmtpOAuthScope() : "");
             properties.put("toAddress", sendToEmail);
-            properties.put("fromAddress", serverSettings.getSmtpFrom());
+            properties.put("fromAddress", serverSettings.getSmtpFrom() != null ? serverSettings.getSmtpFrom() : "");
 
             final String workingId = com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.startWorking("Sending test email...");
 
@@ -1166,14 +1256,23 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
     private MirthRadioButton secureConnectionNoneRadio;
     private MirthRadioButton secureConnectionSSLRadio;
     private MirthRadioButton secureConnectionTLSRadio;
-    private JLabel requireAuthenticationLabel;
-    private ButtonGroup requireAuthenticationButtonGroup;
-    private MirthRadioButton requireAuthenticationYesRadio;
-    private MirthRadioButton requireAuthenticationNoRadio;
+    private JLabel smtpAuthTypeLabel;
+    private ButtonGroup smtpAuthTypeButtonGroup;
+    private MirthRadioButton smtpAuthTypeNoneRadio;
+    private MirthRadioButton smtpAuthTypeBasicRadio;
+    private MirthRadioButton smtpAuthTypeOAuthRadio;
     private JLabel usernameLabel;
     private MirthTextField usernameField;
     private JLabel passwordLabel;
     private MirthPasswordField passwordField;
+    private JLabel oAuthClientIdLabel;
+    private MirthTextField oAuthClientIdField;
+    private JLabel oAuthClientSecretLabel;
+    private MirthPasswordField oAuthClientSecretField;
+    private JLabel oAuthTokenUrlLabel;
+    private MirthTextField oAuthTokenUrlField;
+    private JLabel oAuthScopeLabel;
+    private MirthTextField oAuthScopeField;
     
     private JPanel notificationPanel;
     private JLabel requireNotificationLabel;
