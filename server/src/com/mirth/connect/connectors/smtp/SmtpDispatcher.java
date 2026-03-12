@@ -25,6 +25,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.mirth.connect.donkey.model.channel.ConnectorProperties;
 import com.mirth.connect.donkey.model.event.ConnectionStatusEventType;
+import com.mirth.connect.server.util.OAuthTokenManager;
 import com.mirth.connect.donkey.model.event.ErrorEventType;
 import com.mirth.connect.donkey.model.message.ConnectorMessage;
 import com.mirth.connect.donkey.model.message.Response;
@@ -50,6 +51,7 @@ public class SmtpDispatcher extends DestinationConnector {
 
     private SmtpConfiguration configuration = null;
     private String charsetEncoding;
+    private OAuthTokenManager oAuthTokenManager;
 
     @Override
     public void onDeploy() throws ConnectorTaskException {
@@ -71,10 +73,20 @@ public class SmtpDispatcher extends DestinationConnector {
 
         // TODO remove hardcoded HL7v2 reference?
         this.charsetEncoding = CharsetUtils.getEncoding(getConnectorProperties().getCharsetEncoding(), System.getProperty("ca.uhn.hl7v2.llp.charset"));
+
+        if ("OAUTH".equals(getConnectorProperties().getAuthType())) {
+            SmtpDispatcherProperties props = getConnectorProperties();
+            oAuthTokenManager = new OAuthTokenManager(props.getOAuthTokenEndpointUrl(), props.getOAuthClientId(), props.getOAuthClientSecret(), props.getOAuthScope());
+        }
     }
 
     @Override
-    public void onUndeploy() throws ConnectorTaskException {}
+    public void onUndeploy() throws ConnectorTaskException {
+        if (oAuthTokenManager != null) {
+            oAuthTokenManager.shutdown();
+            oAuthTokenManager = null;
+        }
+    }
 
     @Override
     public void onStart() throws ConnectorTaskException {}
@@ -96,7 +108,11 @@ public class SmtpDispatcher extends DestinationConnector {
         smtpDispatcherProperties.setLocalPort(replacer.replaceValues(smtpDispatcherProperties.getLocalPort(), connectorMessage));
         smtpDispatcherProperties.setTimeout(replacer.replaceValues(smtpDispatcherProperties.getTimeout(), connectorMessage));
 
-        if (smtpDispatcherProperties.isAuthentication()) {
+        String authType = smtpDispatcherProperties.getAuthType();
+        if ("OAUTH".equals(authType)) {
+            // Username may be templated; OAuth credentials (client_secret, token URL) are static — do not replace (FR-4.4)
+            smtpDispatcherProperties.setUsername(replacer.replaceValues(smtpDispatcherProperties.getUsername(), connectorMessage));
+        } else if ("BASIC".equals(authType) || smtpDispatcherProperties.isAuthentication()) {
             smtpDispatcherProperties.setUsername(replacer.replaceValues(smtpDispatcherProperties.getUsername(), connectorMessage));
             smtpDispatcherProperties.setPassword(replacer.replaceValues(smtpDispatcherProperties.getPassword(), connectorMessage));
         }
@@ -163,12 +179,19 @@ public class SmtpDispatcher extends DestinationConnector {
             // This has to be set before the authenticator because a session shouldn't be created yet
             configuration.configureEncryption(connectorProperties, email);
 
-            if (smtpDispatcherProperties.isAuthentication()) {
+            String authType = smtpDispatcherProperties.getAuthType();
+            if ("OAUTH".equals(authType)) {
+                String accessToken = oAuthTokenManager.getAccessToken();
+                email.setAuthentication(smtpDispatcherProperties.getUsername(), accessToken);
+            } else if ("BASIC".equals(authType) || smtpDispatcherProperties.isAuthentication()) {
                 email.setAuthentication(smtpDispatcherProperties.getUsername(), smtpDispatcherProperties.getPassword());
             }
 
             Properties mailProperties = email.getMailSession().getProperties();
             // These have to be set after the authenticator, so that a new mail session isn't created
+            if ("OAUTH".equals(authType)) {
+                mailProperties.setProperty("mail.smtp.auth.mechanisms", "XOAUTH2");
+            }
             configuration.configureMailProperties(mailProperties);
 
             if (smtpDispatcherProperties.isOverrideLocalBinding()) {

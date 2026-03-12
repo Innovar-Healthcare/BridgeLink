@@ -3,7 +3,7 @@
     <name>Lookup Table Management System</name>
     <author>Daniel Svanstedt, Thai Tran</author>
     <pluginVersion>2.1.0</pluginVersion>
-    <mirthVersion>4.5.3, 4.5.4, 4.5.5, 4.6.0, 4.6.1</mirthVersion>
+    <mirthVersion>4.5.3, 4.5.4, 4.5.5, 4.6.0, 4.6.1, 26.3.0</mirthVersion>
     <url>https://www.innovarhealthcare.com</url>
     <description>This plugin provides a centralized repository for key-value pairs used across channel</description>
     <clientClasses>
