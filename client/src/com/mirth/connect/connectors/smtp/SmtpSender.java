@@ -758,22 +758,34 @@ public class SmtpSender extends ConnectorSettingsPanel {
         useAuthenticationButtonGroup.add(useAuthenticationOAuth);
 
         usernameLabel = new JLabel("Username:");
+        usernameLabel.setEnabled(false);
         usernameField = new MirthTextField();
+        usernameField.setEnabled(false);
 
         passwordLabel = new JLabel("Password:");
+        passwordLabel.setEnabled(false);
         passwordField = new MirthPasswordField();
+        passwordField.setEnabled(false);
 
         oAuthClientIdLabel = new JLabel("Client ID:");
+        oAuthClientIdLabel.setEnabled(false);
         oAuthClientIdField = new MirthTextField();
+        oAuthClientIdField.setEnabled(false);
 
         oAuthClientSecretLabel = new JLabel("Client Secret:");
+        oAuthClientSecretLabel.setEnabled(false);
         oAuthClientSecretField = new MirthPasswordField();
+        oAuthClientSecretField.setEnabled(false);
 
         oAuthTokenUrlLabel = new JLabel("Token URL:");
+        oAuthTokenUrlLabel.setEnabled(false);
         oAuthTokenUrlField = new MirthTextField();
+        oAuthTokenUrlField.setEnabled(false);
 
         oAuthScopeLabel = new JLabel("Scope:");
+        oAuthScopeLabel.setEnabled(false);
         oAuthScopeField = new MirthTextField();
+        oAuthScopeField.setEnabled(false);
 
         toLabel = new JLabel("To:");
         toField = new MirthTextField();
@@ -934,7 +946,7 @@ public class SmtpSender extends ConnectorSettingsPanel {
     }
 
     private void initLayout() {
-        setLayout(new MigLayout("insets 0 8 0 8, novisualpadding, hidemode 3, gap 12 6", "[][]6[]", "[][]4[]4[][][]4[]4[]4[][][][][][]4[]4[][][]"));
+        setLayout(new MigLayout("insets 0 8 0 8, novisualpadding, gap 12 6", "[][]6[]", "[][]4[]4[][][]4[]4[]4[][][][][][]4[]4[][][]"));
 
         add(smtpHostLabel, "right");
         add(smtpHostField, "w 200!, sx, split 2");
@@ -1028,18 +1040,18 @@ public class SmtpSender extends ConnectorSettingsPanel {
         boolean isBasic = "BASIC".equals(authType);
         boolean isOAuth = "OAUTH".equals(authType);
 
-        usernameLabel.setVisible(isBasic || isOAuth);
-        usernameField.setVisible(isBasic || isOAuth);
-        passwordLabel.setVisible(isBasic);
-        passwordField.setVisible(isBasic);
-        oAuthClientIdLabel.setVisible(isOAuth);
-        oAuthClientIdField.setVisible(isOAuth);
-        oAuthClientSecretLabel.setVisible(isOAuth);
-        oAuthClientSecretField.setVisible(isOAuth);
-        oAuthTokenUrlLabel.setVisible(isOAuth);
-        oAuthTokenUrlField.setVisible(isOAuth);
-        oAuthScopeLabel.setVisible(isOAuth);
-        oAuthScopeField.setVisible(isOAuth);
+        usernameLabel.setEnabled(isBasic || isOAuth);
+        usernameField.setEnabled(isBasic || isOAuth);
+        passwordLabel.setEnabled(isBasic);
+        passwordField.setEnabled(isBasic);
+        oAuthClientIdLabel.setEnabled(isOAuth);
+        oAuthClientIdField.setEnabled(isOAuth);
+        oAuthClientSecretLabel.setEnabled(isOAuth);
+        oAuthClientSecretField.setEnabled(isOAuth);
+        oAuthTokenUrlLabel.setEnabled(isOAuth);
+        oAuthTokenUrlField.setEnabled(isOAuth);
+        oAuthScopeLabel.setEnabled(isOAuth);
+        oAuthScopeField.setEnabled(isOAuth);
     }
 
     private void sendTestEmailButtonActionPerformed() {
