@@ -229,13 +229,23 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
 
     @POST
     @Path("/_testEmail")
+    @Consumes({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
     @Operation(summary = "Sends a test e-mail.")
+    @ApiResponse(content = {
+            @Content(mediaType = MediaType.APPLICATION_XML, examples = {
+                    @ExampleObject(name = "connection_test_response_smtp", ref = "../apiexamples/connection_test_response_smtp_xml") }),
+            @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
+                    @ExampleObject(name = "connection_test_response_smtp", ref = "../apiexamples/connection_test_response_smtp_json") }) })
     @MirthOperation(name = "sendTestEmail", display = "Send Test Email", permission = Permissions.SERVER_SEND_TEST_EMAIL)
-    public ConnectionTestResponse sendTestEmail(@Param("properties") @RequestBody(description = "Contains all properties needed to send the e-mail. Properties include: port, encryption, host, timeout, authentication, username, password, toAddress, fromAddress", required = true, content = {
-            @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = Properties.class), examples = {
-                    @ExampleObject(name = "propertiesObject", ref = "../apiexamples/properties_xml") }),
-            @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Properties.class), examples = {
-                    @ExampleObject(name = "propertiesObject", ref = "../apiexamples/properties_json") }) }) Properties properties) throws ClientException;
+    public ConnectionTestResponse sendTestEmail(@Param("properties") @RequestBody(description = "Contains all properties needed to send the e-mail. Provide as a newline-delimited key=value string.", required = true, content = {
+            @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class), examples = {
+                    @ExampleObject(name = "send_test_email_oauth", summary = "OAuth 2.0", ref = "../apiexamples/send_test_email_oauth_xml"),
+                    @ExampleObject(name = "send_test_email_basic", summary = "Basic Auth", ref = "../apiexamples/send_test_email_basic_xml"),
+                    @ExampleObject(name = "send_test_email_none", summary = "No Auth", ref = "../apiexamples/send_test_email_none_xml") }),
+            @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class), examples = {
+                    @ExampleObject(name = "send_test_email_oauth", summary = "OAuth 2.0", ref = "../apiexamples/send_test_email_oauth_json"),
+                    @ExampleObject(name = "send_test_email_basic", summary = "Basic Auth", ref = "../apiexamples/send_test_email_basic_json"),
+                    @ExampleObject(name = "send_test_email_none", summary = "No Auth", ref = "../apiexamples/send_test_email_none_json") }) }) Properties properties) throws ClientException;
 
     @GET
     @Path("/updateSettings")
