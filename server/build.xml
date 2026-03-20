@@ -1046,38 +1046,48 @@
 
 		<taskdef resource="net/sf/antcontrib/antlib.xml" classpathref="classpath" />
 
-		<!-- modify jar manifests -->
-		<!-- don't modify bcprov, since it already has the manifest changes and is signed by BC -->
-		<echo message="[Thread Count: ${manifest_thread_count}] Modifying jar manifests to add Permissions: all-permissions; Codebase: *; Application-Name: Mirth Connect" />
+		<!-- modify jar manifests and sign jars for webstart -->
+		<!-- Skip both steps when -Dskip.signing=true (official release: Windows EC2 signs instead) -->
+		<if>
+			<not><isset property="skip.signing"/></not>
+			<then>
+				<!-- modify jar manifests -->
+				<!-- don't modify bcprov, since it already has the manifest changes and is signed by BC -->
+				<echo message="[Thread Count: ${manifest_thread_count}] Modifying jar manifests to add Permissions: all-permissions; Codebase: *; Application-Name: Mirth Connect" />
+				<for param="jarFile" parallel="true" threadCount="${manifest_thread_count}">
+					<fileset dir="${setup.client.lib}" includes="**/*.jar" excludes="bcp*.jar,bcutil*.jar"/>
+					<fileset dir="${setup.extensions}" includes="**/*.jar" />
+					<sequential>
+						<apply executable="jar">
+							<arg value="umf" />
+							<arg line="custom_manifest.mf" />
+							<srcfile />
+							<fileset file="@{jarFile}"/>
+						</apply>
+					</sequential>
+				</for>
 
-		<!-- sign jars for webstart -->
-		<echo message="[Thread Count: ${signjar_thread_count}] Signing jars for Java Web Start" />
-		<property file="${keystore_property_file}" />
-		<for param="jarFile" parallel="true" threadCount="${manifest_thread_count}">
-			<fileset dir="${setup.client.lib}" includes="**/*.jar" excludes="bcp*.jar,bcutil*.jar"/>
-			<fileset dir="${setup.extensions}" includes="**/*.jar" />
-			<sequential>
-				<apply executable="jar">
-					<arg value="umf" />
-					<arg line="custom_manifest.mf" />
-					<srcfile />
-					<fileset file="@{jarFile}"/>
-				</apply>
-			</sequential>
-		</for>
-		<for param="jarFile" parallel="true" threadCount="${signjar_thread_count}">
-			<fileset dir="${setup.client.lib}" includes="**/*.jar" />
-			<fileset dir="${setup.extensions}" includes="**/*.jar" />
-			<sequential>
-				<retry retrycount="5" retrydelay="1000">
-					<signjar jar="@{jarFile}" alias="${key.alias}" keystore="${key.keystore}" storepass="${key.storepass}" keypass="${key.keypass}" storetype="${key.storetype}" tsaurl="http://timestamp.digicert.com" digestalg="SHA-256">
-						<!-- http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=7127374 -->
-						<sysproperty key="jsse.enableSNIExtension" value="false" />
-						<sysproperty key="https.protocols" value="TLSv1.2,TLSv1.1" />
-					</signjar>
-				</retry>
-			</sequential>
-		</for>
+				<!-- sign jars for webstart -->
+				<echo message="[Thread Count: ${signjar_thread_count}] Signing jars for Java Web Start" />
+				<property file="${keystore_property_file}" />
+				<for param="jarFile" parallel="true" threadCount="${signjar_thread_count}">
+					<fileset dir="${setup.client.lib}" includes="**/*.jar" />
+					<fileset dir="${setup.extensions}" includes="**/*.jar" />
+					<sequential>
+						<retry retrycount="5" retrydelay="1000">
+							<signjar jar="@{jarFile}" alias="${key.alias}" keystore="${key.keystore}" storepass="${key.storepass}" keypass="${key.keypass}" storetype="${key.storetype}" tsaurl="http://timestamp.digicert.com" digestalg="SHA-256">
+								<!-- http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=7127374 -->
+								<sysproperty key="jsse.enableSNIExtension" value="false" />
+								<sysproperty key="https.protocols" value="TLSv1.2,TLSv1.1" />
+							</signjar>
+						</retry>
+					</sequential>
+				</for>
+			</then>
+			<else>
+				<echo message="[skip.signing=true] Skipping JAR signing — Windows EC2 will sign with DigiCert Keylocker" />
+			</else>
+		</if>
 	</target>
 
 	<target name="create-extension-zips" depends="create-setup">
@@ -1250,6 +1260,12 @@
 				<include name="**/*.xml" />
 			</fileset>
 		</copy>
+
+		<!-- Copy SqlMapConfig.xml from dbconf to root of test_classes for MyBatis -->
+		<copy file="${dbconf}/SqlMapConfig.xml" todir="${test_classes}" />
+
+		<!-- Copy log4j.properties from test/resources to root of test_classes for logging -->
+		<copy file="${test}/resources/log4j.properties" todir="${test_classes}" failonerror="false" />
 
 		<jar destfile="${test.dist}/${tests.jar}" basedir="${test_classes}">
 			<include name="**/*" />
