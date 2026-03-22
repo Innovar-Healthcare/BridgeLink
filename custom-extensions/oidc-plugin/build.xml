@@ -1,16 +1,15 @@
-<project name="message-trends" default="build">
+<project name="oidc" default="build">
 
     <!-- Configuration -->
     <property name="manifest_thread_count" value="4" />
     <property name="signjar_thread_count" value="4" />
 
     <property file="build.properties" />
-    <property file="../../server/keystore.properties" />
+    <property file="certificate/keystore.properties" />
 
     <!-- Clean build output -->
     <target name="clean">
         <delete dir="${build.dir}"/>
-        <delete dir="${server.setup.extensions}/${plugin.name}"/>
     </target>
 
     <!-- Compile all sources -->
@@ -24,6 +23,7 @@
             <classpath>
                 <fileset dir="${server.lib}" includes="**/*.jar"/>
                 <fileset dir="${client.lib}" includes="**/*.jar"/>
+            	<fileset dir="${plugin.lib}" includes="**/*.jar"/>
             </classpath>
         </javac>
 
@@ -97,7 +97,7 @@
                         <!-- Inject Permissions/Codebase/Application-Name -->
                         <apply executable="jar">
                             <arg value="umf" />
-                            <arg value="../../server/custom_manifest.mf" />
+                            <arg value="custom_manifest.mf" />
                             <srcfile />
                             <fileset file="@{jarFile}"/>
                         </apply>
@@ -112,7 +112,7 @@
                         <retry retrycount="5" retrydelay="1000">
                             <signjar jar="@{jarFile}"
                                      alias="${key.alias}"
-                                     keystore="../../server/keystore.jks"
+                                     keystore="certificate/keystore.jks"
                                      storepass="${key.storepass}"
                                      keypass="${key.keypass}"
                                      storetype="${key.storetype}"
@@ -131,17 +131,6 @@
         </if>
     </target>
 
-    <!-- Copy built plugin to Mirth's setup/extensions directory -->
-    <target name="install-to-server-setup">
-        <!-- Copy plugin JARs and libs -->
-        <mkdir dir="${server.setup.extensions}/${plugin.name}"/>
-        <copy todir="${server.setup.extensions}/${plugin.name}">
-            <fileset dir="${dist.dir}" includes="**/*"/>
-        </copy>
-
-        <echo message="Installed plugin to ${server.setup.extensions}/${plugin.name}" />
-    </target>
-
     <target name="build" depends="clean, jar">
         <!-- Copy plugin.xml -->
         <copy file="plugin.xml" todir="${dist.dir}"/>
@@ -151,79 +140,15 @@
             <fileset dir="${plugin.lib}" includes="**/*.jar"/>
         </copy>
 
-        <!-- Copy mapper folder from server resources to dist -->
-        <copy todir="${dist.dir}/mapper">
-            <fileset dir="${server.resources.dir}/mapper" includes="**/*"/>
-        </copy>
-
         <!-- Path and Sign all JARs in dist -->
         <antcall target="patch-and-sign-jars"/>
 
-        <!-- Now install the full plugin to the server setup extensions folder -->
-        <antcall target="install-to-server-setup"/>
-
         <!-- Package everything in dist/ into a zip file -->
-        <zip destfile="${dist.dir}/${plugin.name}.zip" basedir="${dist.dir}">
-            <exclude name="${plugin.name}.zip"/> <!-- Avoid zipping the zip itself -->
-        </zip>
-
+    	<zip destfile="${package_install.dir}/${plugin.package.name}.zip" encoding="UTF-8" level="9" zip64Mode="never">
+    	    <zipfileset dir="${dist.dir}" prefix="${plugin.path}/"></zipfileset>
+    	</zip>
+    	
         <echo message="Built, signed, installed, and zipped ${plugin.name}"/>
     </target>
 	
-	<target name="eclipse-classpath">
-	    <!-- Collect per-root so we can emit relative paths -->
-	    <path id="server.jars">
-	        <fileset dir="${server.lib}" includes="**/*.jar"/>
-	    </path>
-	    <path id="client.jars">
-	        <fileset dir="${client.lib}" includes="**/*.jar"/>
-	    </path>
-	    <path id="plugin.jars">
-	        <fileset dir="${plugin.lib}" includes="**/*.jar"/>
-	    </path>
-
-	    <!-- Emit entries with paths relative to the project (these props are already relative: ../../...) -->
-	    <pathconvert pathsep="${line.separator}" property="server.jar.entries" refid="server.jars">
-	        <mapper type="regexp"
-	                from="^.*[\\/](.+)$"
-	                to="    &lt;classpathentry kind=&quot;lib&quot; path=&quot;${server.lib}/\1&quot;/&gt;"/>
-	    </pathconvert>
-
-	    <pathconvert pathsep="${line.separator}" property="client.jar.entries" refid="client.jars">
-	        <mapper type="regexp"
-	                from="^.*[\\/](.+)$"
-	                to="    &lt;classpathentry kind=&quot;lib&quot; path=&quot;${client.lib}/\1&quot;/&gt;"/>
-	    </pathconvert>
-
-	    <pathconvert pathsep="${line.separator}" property="plugin.jar.entries" refid="plugin.jars">
-	        <mapper type="regexp"
-	                from="^.*[\\/](.+)$"
-	                to="    &lt;classpathentry kind=&quot;lib&quot; path=&quot;${plugin.lib}/\1&quot;/&gt;"/>
-	    </pathconvert>
-
-	    <echo file=".classpath"><![CDATA[<?xml version="1.0" encoding="UTF-8"?>
-	<classpath>
-	    <!-- Source folders (match Ant) -->
-    	<classpathentry kind="src" path="shared/src/main/java"/>
-		<classpathentry kind="src" path="server/src/main/java"/>
-		<classpathentry kind="src" path="client/src/main/java"/>
-
-	    <!-- Output -->
-	    <classpathentry kind="output" path="build/classes"/>
-
-	    <!-- JRE -->
-	    <classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-
-	    <!-- Mirth class folders -->
-	    <classpathentry kind="lib" path="${server.classes.dir}"/>
-	    <classpathentry kind="lib" path="${client.classes.dir}"/>
-
-	${server.jar.entries}
-	${client.jar.entries}
-	${plugin.jar.entries}
-	</classpath>
-	]]></echo>
-	</target>
-
-
 </project>

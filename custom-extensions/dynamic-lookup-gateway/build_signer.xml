@@ -1,4 +1,4 @@
-<project name="message-trends" default="build">
+<project name="dynamic-lookup-gateway" default="build">
 
     <!-- Configuration -->
     <property name="manifest_thread_count" value="4" />
@@ -24,6 +24,7 @@
             <classpath>
                 <fileset dir="${server.lib}" includes="**/*.jar"/>
                 <fileset dir="${client.lib}" includes="**/*.jar"/>
+                <fileset dir="${plugin.lib}" includes="**/*.jar"/>
             </classpath>
         </javac>
 
@@ -56,6 +57,9 @@
     <target name="copy-resources" if="server.resources.present">
         <copy todir="${classes.dir}/server">
             <fileset dir="${server.resources.dir}" includes="**/*"/>
+        </copy>
+        <copy todir="${classes.dir}/client">
+            <fileset dir="${client.resources.dir}" includes="**/*"/>
         </copy>
     </target>
 
@@ -105,30 +109,34 @@
                 </for>
 
                 <echo message="Signing plugin JARs..."/>
+                <echo message="[Thread Count: ${signjar_thread_count}] Signing jars for Java Web Start" />
 
-                <for param="jarFile" parallel="true" threadCount="${signjar_thread_count}">
-                    <fileset dir="${dist.dir}" includes="**/*.jar"/>
-                    <sequential>
-                        <retry retrycount="5" retrydelay="1000">
-                            <signjar jar="@{jarFile}"
-                                     alias="${key.alias}"
-                                     keystore="../../server/keystore.jks"
-                                     storepass="${key.storepass}"
-                                     keypass="${key.keypass}"
-                                     storetype="${key.storetype}"
-                                     tsaurl="http://timestamp.digicert.com"
-                                     digestalg="SHA-256">
-                                <sysproperty key="jsse.enableSNIExtension" value="false"/>
-                                <sysproperty key="https.protocols" value="TLSv1.2,TLSv1.1"/>
-                            </signjar>
-                        </retry>
-                    </sequential>
-                </for>
+                <exec executable="bash" failonerror="true">
+                    <arg value="${basedir}/sign_jars.sh" />
+                </exec>
             </then>
             <else>
                 <echo message="[skip.signing=true] Skipping JAR signing — Windows EC2 will sign with DigiCert Keylocker" />
             </else>
         </if>
+<!--        <for param="jarFile" parallel="true" threadCount="${signjar_thread_count}">-->
+<!--            <fileset dir="${dist.dir}" includes="**/*.jar"/>-->
+<!--            <sequential>-->
+<!--                <retry retrycount="5" retrydelay="1000">-->
+<!--                    <signjar jar="@{jarFile}"-->
+<!--                             alias="${key.alias}"-->
+<!--                             keystore="../../server/keystore.jks"-->
+<!--                             storepass="${key.storepass}"-->
+<!--                             keypass="${key.keypass}"-->
+<!--                             storetype="${key.storetype}"-->
+<!--                             tsaurl="http://timestamp.digicert.com"-->
+<!--                             digestalg="SHA-256">-->
+<!--                        <sysproperty key="jsse.enableSNIExtension" value="false"/>-->
+<!--                        <sysproperty key="https.protocols" value="TLSv1.2,TLSv1.1"/>-->
+<!--                    </signjar>-->
+<!--                </retry>-->
+<!--            </sequential>-->
+<!--        </for>-->
     </target>
 
     <!-- Copy built plugin to Mirth's setup/extensions directory -->
@@ -139,7 +147,13 @@
             <fileset dir="${dist.dir}" includes="**/*"/>
         </copy>
 
+        <!-- Copy plugin configuration to server/conf -->
+        <copy file="dynamic-lookup.properties"
+              tofile="${server.setup.conf}/dynamic-lookup.properties"
+              overwrite="true"/>
+
         <echo message="Installed plugin to ${server.setup.extensions}/${plugin.name}" />
+        <echo message="Installed dynamic-lookup.properties to ${server.setup.conf}" />
     </target>
 
     <target name="build" depends="clean, jar">
@@ -169,61 +183,5 @@
 
         <echo message="Built, signed, installed, and zipped ${plugin.name}"/>
     </target>
-	
-	<target name="eclipse-classpath">
-	    <!-- Collect per-root so we can emit relative paths -->
-	    <path id="server.jars">
-	        <fileset dir="${server.lib}" includes="**/*.jar"/>
-	    </path>
-	    <path id="client.jars">
-	        <fileset dir="${client.lib}" includes="**/*.jar"/>
-	    </path>
-	    <path id="plugin.jars">
-	        <fileset dir="${plugin.lib}" includes="**/*.jar"/>
-	    </path>
-
-	    <!-- Emit entries with paths relative to the project (these props are already relative: ../../...) -->
-	    <pathconvert pathsep="${line.separator}" property="server.jar.entries" refid="server.jars">
-	        <mapper type="regexp"
-	                from="^.*[\\/](.+)$"
-	                to="    &lt;classpathentry kind=&quot;lib&quot; path=&quot;${server.lib}/\1&quot;/&gt;"/>
-	    </pathconvert>
-
-	    <pathconvert pathsep="${line.separator}" property="client.jar.entries" refid="client.jars">
-	        <mapper type="regexp"
-	                from="^.*[\\/](.+)$"
-	                to="    &lt;classpathentry kind=&quot;lib&quot; path=&quot;${client.lib}/\1&quot;/&gt;"/>
-	    </pathconvert>
-
-	    <pathconvert pathsep="${line.separator}" property="plugin.jar.entries" refid="plugin.jars">
-	        <mapper type="regexp"
-	                from="^.*[\\/](.+)$"
-	                to="    &lt;classpathentry kind=&quot;lib&quot; path=&quot;${plugin.lib}/\1&quot;/&gt;"/>
-	    </pathconvert>
-
-	    <echo file=".classpath"><![CDATA[<?xml version="1.0" encoding="UTF-8"?>
-	<classpath>
-	    <!-- Source folders (match Ant) -->
-    	<classpathentry kind="src" path="shared/src/main/java"/>
-		<classpathentry kind="src" path="server/src/main/java"/>
-		<classpathentry kind="src" path="client/src/main/java"/>
-
-	    <!-- Output -->
-	    <classpathentry kind="output" path="build/classes"/>
-
-	    <!-- JRE -->
-	    <classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-
-	    <!-- Mirth class folders -->
-	    <classpathentry kind="lib" path="${server.classes.dir}"/>
-	    <classpathentry kind="lib" path="${client.classes.dir}"/>
-
-	${server.jar.entries}
-	${client.jar.entries}
-	${plugin.jar.entries}
-	</classpath>
-	]]></echo>
-	</target>
-
 
 </project>
