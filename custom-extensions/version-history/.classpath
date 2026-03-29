@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+    <!-- Source folders -->
+    <classpathentry kind="src" path="shared/src/main/java"/>
+    <classpathentry kind="src" path="server/src/main/java"/>
+    <classpathentry kind="src" path="client/src/main/java"/>
+
+    <!-- Output folder -->
+    <classpathentry kind="output" path="build/classes"/>
+
+    <!-- JRE -->
+    <classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+
+    <!-- Mirth class folders -->
+    <classpathentry kind="lib" path="../../server/classes"/>
+    <classpathentry kind="lib" path="../../client/classes"/>
+    <classpathentry kind="lib" path="../../donkey/classes"/>
+
+    <!-- Mirth dependencies -->
+    <classpathentry kind="lib" path="../../server/lib/log4j/log4j-1.2-api-2.25.3.jar"/>
+    <classpathentry kind="lib" path="../../server/lib/log4j/log4j-api-2.25.3.jar"/>
+    <classpathentry kind="lib" path="../../server/lib/log4j/log4j-core-2.25.3.jar"/>
+    <classpathentry kind="lib" path="../../server/lib/javax/javax.servlet-api-4.0.1.jar"/>
+    <classpathentry kind="lib" path="../../server/lib/javax/javax.ws.rs-api-2.0.1.jar"/>
+    <classpathentry kind="lib" path="../../server/lib/swagger/swagger-annotations-2.0.10.jar"/>
+    <classpathentry kind="lib" path="../../server/lib/jersey/jersey-media-multipart-2.22.1.jar"/>
+    <classpathentry kind="lib" path="../../client/lib/miglayout-core-4.2.jar"/>
+    <classpathentry kind="lib" path="../../client/lib/miglayout-swing-4.2.jar"/>
+    <classpathentry kind="lib" path="../../client/lib/jackson-annotations-2.14.3.jar"/>
+    <classpathentry kind="lib" path="../../client/lib/jackson-core-2.14.3.jar"/>
+    <classpathentry kind="lib" path="../../client/lib/jackson-databind-2.14.3.jar"/>
+    <classpathentry kind="lib" path="../../client/lib/commons-lang3-3.18.0.jar"/>
+    <classpathentry kind="lib" path="../../client/lib/commons-io-2.13.0.jar"/>
+    <classpathentry kind="lib" path="../../client/lib/swingx-core-1.6.2.jar"/>
+
+    <classpathentry kind="lib" path="../../server/lib/jsch-0.2.18.jar"/>
+
+    <!-- Version History specific dependencies -->
+    <classpathentry kind="lib" path="libs/java-diff-utils-4.12.jar"/>
+    <classpathentry kind="lib" path="libs/org.eclipse.jgit-5.13.5.202508271544-r.jar"/>
+    <classpathentry kind="lib" path="libs/org.eclipse.jgit.ssh.jsch-5.13.5.202508271544-r.jar"/>
+
+</classpath>

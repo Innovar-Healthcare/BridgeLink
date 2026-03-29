@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<pluginMetaData path="version-history">
+    <name>Version History Plugin</name>
+    <author>Innovar Healthcare</author>
+    <pluginVersion>3.0.0</pluginVersion>
+    <mirthVersion>26.3.0</mirthVersion>
+    <url>https://www.innovarhealthcare.com</url>
+    <description>Innovar Healthcare Version History Plugin</description>
+    <clientClasses>
+        <string>com.innovarhealthcare.channelHistory.client.plugin.VersionHistorySettingPlugin</string>
+        <string>com.innovarhealthcare.channelHistory.client.plugin.ChannelHistoryTabPlugin</string>
+        <string>com.innovarhealthcare.channelHistory.client.plugin.VersionHistoryTaskPlugin</string>
+    </clientClasses>
+    <serverClasses>
+        <string>com.innovarhealthcare.channelHistory.server.plugin.VersionHistoryPlugin</string>
+        <string>com.innovarhealthcare.channelHistory.server.plugin.CodeTemplateVersionPlugin</string>
+        <string>com.innovarhealthcare.channelHistory.server.plugin.ChannelVersionPlugin</string>
+    </serverClasses>
+    <library path="version-history-server.jar" type="SERVER"/>
+    <library path="version-history-shared.jar" type="SHARED"/>
+    <library path="version-history-client.jar" type="CLIENT"/>
+    <library path="libs/java-diff-utils-4.12.jar" type="CLIENT"/>
+    <library path="libs/org.eclipse.jgit-5.13.5.202508271544-r.jar" type="SERVER"/>
+    <library path="libs/org.eclipse.jgit.ssh.jsch-5.13.5.202508271544-r.jar" type="SERVER"/>
+    <apiProvider name="com.innovarhealthcare.channelHistory.shared.interfaces.VersionHistoryServletInterface" type="SERVLET_INTERFACE"/>
+    <apiProvider name="com.innovarhealthcare.channelHistory.server.servlet.VersionHistoryPluginServlet" type="SERVER_CLASS"/>
+</pluginMetaData>
