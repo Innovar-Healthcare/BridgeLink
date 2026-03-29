@@ -93,6 +93,18 @@
        <if>
            <not><isset property="skip.signing"/></not>
            <then>
+            <!-- Strip lib signatures ONLY when signing -->
+                <echo message="Stripping existing signatures from lib JARs..."/>
+                <apply executable="zip" failonerror="false" parallel="false">
+                    <arg value="-d"/>
+                    <srcfile/>
+                    <arg value="META-INF/*.SF"/>
+                    <arg value="META-INF/*.RSA"/>
+                    <arg value="META-INF/*.DSA"/>
+                    <arg value="META-INF/*.EC"/>
+                    <fileset dir="${dist.dir}/libs" includes="*.jar"/>
+                </apply>
+
                <echo message="Patching JAR manifests before signing..." />
 
                <for param="jarFile" parallel="true" threadCount="${manifest_thread_count}">
@@ -145,14 +157,6 @@
        <echo message="Installed plugin to ${server.setup.extensions}/${plugin.name}" />
    </target>
 
-   <!-- Strip existing signatures from lib JARs to avoid SecurityException on load -->
-   <target name="strip-lib-signatures">
-       <exec executable="bash" failonerror="false">
-           <arg value="-c"/>
-           <arg value="for f in ${dist.dir}/libs/*.jar; do zip -d &quot;$f&quot; 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 2>/dev/null; done"/>
-       </exec>
-   </target>
-
    <target name="build" depends="clean, jar">
        <!-- Copy plugin.xml -->
        <copy file="plugin.xml" todir="${dist.dir}"/>
@@ -161,9 +165,6 @@
        <copy todir="${dist.dir}/libs">
            <fileset dir="${plugin.lib}" includes="**/*.jar"/>
        </copy>
-
-       <!-- Strip signatures from lib JARs BEFORE signing step -->
-       <antcall target="strip-lib-signatures"/>
 
        <!-- Path and Sign all JARs in dist -->
        <antcall target="patch-and-sign-jars"/>
