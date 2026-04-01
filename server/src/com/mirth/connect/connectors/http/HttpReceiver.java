@@ -916,7 +916,7 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
     }
 
     private ConstraintSecurityHandler createSecurityHandler(org.eclipse.jetty.ee8.nested.Handler handler) throws Exception {
-        final Authenticator authenticator = (Authenticator) authenticatorProvider.getAuthenticator();
+        final com.mirth.connect.plugins.httpauth.Authenticator authenticator = authenticatorProvider.getAuthenticator();
 
         final String authMethod;
         switch (authProps.getAuthType()) {
@@ -986,7 +986,7 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                 RequestInfo requestInfo = new RequestInfo(remoteAddress, remotePort, localAddress, localPort, protocol, method, requestURI, headers, queryParameters, entityProvider, configuration.getRequestInformation(request));
 
                 try {
-                    AuthenticationResult result = ((com.mirth.connect.plugins.httpauth.Authenticator) authenticator).authenticate(requestInfo);
+                    AuthenticationResult result = authenticator.authenticate(requestInfo);
 
                     for (Entry<String, List<String>> entry : result.getResponseHeaders().entrySet()) {
                         if (StringUtils.isNotBlank(entry.getKey()) && entry.getValue() != null) {

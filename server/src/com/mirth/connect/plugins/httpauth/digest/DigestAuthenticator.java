@@ -319,7 +319,9 @@ public class DigestAuthenticator extends Authenticator {
         responseDirectives.put(REALM, properties.getRealm());
         responseDirectives.put(DOMAIN, contextPath);
         responseDirectives.put(NONCE, nonce.getValue());
-        responseDirectives.put(ALGORITHM, StringUtils.join(properties.getAlgorithms(), ','));
+        if (!properties.getAlgorithms().isEmpty()) {
+            responseDirectives.put(ALGORITHM, properties.getAlgorithms().iterator().next().toString());
+        }
         if (CollectionUtils.isNotEmpty(properties.getQopModes())) {
             responseDirectives.put(QOP, StringUtils.join(properties.getQopModes(), ','));
         }
