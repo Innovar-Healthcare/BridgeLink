@@ -447,8 +447,15 @@ public class ManagerController {
     	return "";
     }
 
+    public String getLogPath() {
+        return log4jProperties != null ? log4jProperties.getString(com.mirth.connect.manager.ManagerConstants.PROPERTY_LOGS) : null;
+    }
+
     public List<String> getLogFiles(String path) {
         ArrayList<String> files = new ArrayList<String>();
+        if (path == null) {
+            return files;
+        }
         File dir = new File(path);
 
         String[] children = dir.list();

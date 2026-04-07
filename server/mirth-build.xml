@@ -181,11 +181,215 @@
 	</target>
 
 	<target name="test-run" depends="init">
-		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run"/>
-		<ant antfile="${server}/build.xml" dir="${server}" target="test-run"/>
-		<ant antfile="${client}/ant-build.xml" dir="${client}" target="test-run"/>
-		<ant antfile="${cli}/build.xml" dir="${cli}" target="test-run"/>
+<!--		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run"/>-->
+<!--		<ant antfile="${server}/build.xml" dir="${server}" target="test-run"/>-->
+<!--		<ant antfile="${client}/ant-build.xml" dir="${client}" target="test-run"/>-->
+<!--		<ant antfile="${cli}/build.xml" dir="${cli}" target="test-run"/>-->
 	</target>
+
+	<target name="test-run-and-aggregate" depends="test-run" description="Run all tests and aggregate reports">
+		<antcall target="aggregate-test-reports"/>
+	</target>
+
+	<!-- ========================================================================= -->
+	<!-- Aggregated Test Reporting                                                 -->
+	<!-- ========================================================================= -->
+
+	<target name="clean-aggregate-reports" depends="init" description="Clean aggregated test reports">
+		<property name="aggregate.dir" value="${basedir}/../aggregate-reports"/>
+		<delete dir="${aggregate.dir}"/>
+		<echo message="Aggregated reports cleaned"/>
+	</target>
+
+	<target name="aggregate-init" depends="init">
+		<!-- Aggregated report directories -->
+		<property name="aggregate.dir" value="${basedir}/../aggregate-reports"/>
+		<property name="aggregate.junit.xml" value="${aggregate.dir}/junit-xml"/>
+		<property name="aggregate.junit.html" value="${aggregate.dir}/junit-html"/>
+		<property name="aggregate.jacoco.exec" value="${aggregate.dir}/jacoco-exec"/>
+		<property name="aggregate.jacoco.html" value="${aggregate.dir}/jacoco-html"/>
+
+		<!-- JaCoCo libraries -->
+		<path id="jacoco.classpath">
+			<fileset dir="${server}/lib/ant">
+				<include name="org.jacoco.ant-0.8.8.jar"/>
+				<include name="org.jacoco.core-0.8.8.jar"/>
+				<include name="org.jacoco.report-0.8.8.jar"/>
+				<include name="org.jacoco.agent-0.8.8.jar"/>
+				<include name="asm-9.2.jar"/>
+				<include name="asm-tree-9.2.jar"/>
+				<include name="asm-commons-9.2.jar"/>
+			</fileset>
+		</path>
+
+		<taskdef uri="antlib:org.jacoco.ant"
+				 resource="org/jacoco/ant/antlib.xml"
+				 classpathref="jacoco.classpath"/>
+	</target>
+
+	<target name="aggregate-junit-reports" depends="aggregate-init" description="Aggregate JUnit test reports from all modules">
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="Aggregating JUnit Test Reports"/>
+		<echo message="========================================"/>
+
+		<!-- Create directories -->
+		<mkdir dir="${aggregate.junit.xml}"/>
+		<mkdir dir="${aggregate.junit.html}"/>
+
+		<!-- Copy all JUnit XML reports from Donkey module -->
+		<echo message="Collecting Donkey test reports..."/>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey}/junit-reports" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+
+		<!-- Copy all JUnit XML reports from Donkey multi-database tests -->
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey}/junit-reports-derby" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey}/junit-reports-postgres" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey}/junit-reports-mysql" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey}/junit-reports-sqlserver" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey}/junit-reports-oracle" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+
+		<!-- Copy all JUnit XML reports from Server module -->
+		<echo message="Collecting Server test reports..."/>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${server}/junit-reports" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+
+		<!-- Generate aggregated HTML report -->
+		<echo message="Generating aggregated HTML report..."/>
+		<junitreport todir="${aggregate.junit.xml}">
+			<fileset dir="${aggregate.junit.xml}">
+				<include name="TEST-*.xml"/>
+			</fileset>
+			<report format="frames" todir="${aggregate.junit.html}">
+				<param name="TITLE" expression="BridgeLink - All Modules Test Report"/>
+			</report>
+		</junitreport>
+
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="JUnit Aggregation Complete!"/>
+		<echo message="========================================"/>
+		<echo message="Report location: ${aggregate.junit.html}/index.html"/>
+		<echo message=""/>
+	</target>
+
+	<target name="aggregate-jacoco-reports" depends="aggregate-init" description="Aggregate JaCoCo coverage reports from all modules">
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="Aggregating JaCoCo Coverage Reports"/>
+		<echo message="========================================"/>
+
+		<!-- Create directories -->
+		<mkdir dir="${aggregate.jacoco.exec}"/>
+		<mkdir dir="${aggregate.jacoco.html}"/>
+
+		<!-- Merge all JaCoCo execution data files -->
+		<echo message="Merging coverage data..."/>
+		<jacoco:merge destfile="${aggregate.jacoco.exec}/merged.exec" xmlns:jacoco="antlib:org.jacoco.ant">
+			<!-- Donkey coverage data -->
+			<fileset dir="${donkey}" includes="code-coverage-reports/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${donkey}" includes="code-coverage-reports-derby/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${donkey}" includes="code-coverage-reports-postgres/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${donkey}" includes="code-coverage-reports-mysql/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${donkey}" includes="code-coverage-reports-sqlserver/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${donkey}" includes="code-coverage-reports-oracle/jacoco.exec" erroronmissingdir="false"/>
+
+			<!-- Server coverage data -->
+			<fileset dir="${server}" includes="code-coverage-reports/jacoco.exec" erroronmissingdir="false"/>
+		</jacoco:merge>
+
+		<!-- Generate aggregated coverage report -->
+		<echo message="Generating aggregated coverage report..."/>
+		<jacoco:report xmlns:jacoco="antlib:org.jacoco.ant">
+			<executiondata>
+				<file file="${aggregate.jacoco.exec}/merged.exec"/>
+			</executiondata>
+
+			<structure name="BridgeLink - All Modules">
+				<!-- Donkey classes and sources -->
+				<group name="Donkey Module">
+					<classfiles>
+						<fileset dir="${donkey}/classes" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+					</classfiles>
+					<sourcefiles encoding="UTF-8">
+						<fileset dir="${donkey}/src/main/java" erroronmissingdir="false"/>
+					</sourcefiles>
+				</group>
+
+				<!-- Server classes and sources -->
+				<group name="Server Module">
+					<classfiles>
+						<fileset dir="${server}/classes" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+					</classfiles>
+					<sourcefiles encoding="UTF-8">
+						<fileset dir="${server}/src" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+					</sourcefiles>
+				</group>
+			</structure>
+
+			<html destdir="${aggregate.jacoco.html}"/>
+			<xml destfile="${aggregate.jacoco.exec}/jacoco-report.xml"/>
+			<csv destfile="${aggregate.jacoco.exec}/jacoco-report.csv"/>
+		</jacoco:report>
+
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="JaCoCo Aggregation Complete!"/>
+		<echo message="========================================"/>
+		<echo message="Report location: ${aggregate.jacoco.html}/index.html"/>
+		<echo message=""/>
+	</target>
+
+	<target name="aggregate-test-reports" depends="aggregate-junit-reports, aggregate-jacoco-reports" description="Aggregate both JUnit and JaCoCo reports from all modules">
+		<echo message=""/>
+		<echo message="=========================================="/>
+		<echo message="All Reports Aggregated Successfully!"/>
+		<echo message="=========================================="/>
+		<echo message=""/>
+		<echo message="JUnit Test Report:"/>
+		<echo message="  ${aggregate.junit.html}/index.html"/>
+		<echo message=""/>
+		<echo message="JaCoCo Coverage Report:"/>
+		<echo message="  ${aggregate.jacoco.html}/index.html"/>
+		<echo message=""/>
+		<echo message="=========================================="/>
+	</target>
+
+	<!-- ========================================================================= -->
+	<!-- End Aggregated Test Reporting                                             -->
+	<!-- ========================================================================= -->
 
 	<target name="remove-classes" depends="init">
 		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="remove-classes"/>

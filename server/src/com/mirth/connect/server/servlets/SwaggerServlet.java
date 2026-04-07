@@ -39,6 +39,7 @@ public class SwaggerServlet extends HttpServlet {
 	private Set<Class<?>> resourceClasses;
 	private boolean allowHTTP;
 	private Logger logger = LogManager.getLogger(this.getClass());
+	private OpenAPI openAPI;
 
 	public SwaggerServlet(String basePath, Version version, Version apiVersion, Set<String> resourcePackages,
 			Set<Class<?>> resourceClasses, boolean allowHTTP) {
@@ -54,19 +55,19 @@ public class SwaggerServlet extends HttpServlet {
 	public void init(ServletConfig config) throws ServletException {
 		super.init(config);
 
-		OpenAPI oas = new OpenAPI();
+		openAPI = new OpenAPI();
 		
 		List<Server> servers = new ArrayList<Server>();
 		servers.add(new Server().url(basePath));
-		oas.servers(servers);
+		openAPI.servers(servers);
 		
 		Info info = new Info().title("BridgeLink Client API")
 				.description("Swagger documentation for the BridgeLink Client API.")
 				.version(apiVersion.toString());
 
-		oas.info(info);
+		openAPI.info(info);
 		SwaggerConfiguration oasConfig = new SwaggerConfiguration()
-				.openAPI(oas)
+				.openAPI(openAPI)
 				.resourceClasses(resourceClasses.stream().map(Class::getName).collect(Collectors.toSet()));
 
 		try {

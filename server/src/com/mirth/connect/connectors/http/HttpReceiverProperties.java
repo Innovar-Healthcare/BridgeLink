@@ -42,6 +42,7 @@ public class HttpReceiverProperties extends ConnectorProperties implements Liste
     private String charset;
     private String contextPath;
     private String timeout;
+    private String requestHeaderSize;
     private List<HttpStaticResource> staticResources;
 
     public HttpReceiverProperties() {
@@ -60,6 +61,7 @@ public class HttpReceiverProperties extends ConnectorProperties implements Liste
         this.charset = "UTF-8";
         this.contextPath = "";
         this.timeout = "30000";
+        this.requestHeaderSize = "8192";
         this.staticResources = new ArrayList<HttpStaticResource>();
         this.responseHeadersVariable = "";
         this.useResponseHeadersVariable = false;
@@ -177,6 +179,14 @@ public class HttpReceiverProperties extends ConnectorProperties implements Liste
         this.timeout = timeout;
     }
 
+    public String getRequestHeaderSize() {
+        return requestHeaderSize == null ? "8192" : requestHeaderSize;
+    }
+
+    public void setRequestHeaderSize(String requestHeaderSize) {
+        this.requestHeaderSize = requestHeaderSize;
+    }
+
     public List<HttpStaticResource> getStaticResources() {
         return staticResources;
     }
@@ -287,6 +297,7 @@ public class HttpReceiverProperties extends ConnectorProperties implements Liste
         purgedProperties.put("responseHeaderChars", responseHeaders.size());
         purgedProperties.put("charset", charset);
         purgedProperties.put("timeout", PurgeUtil.getNumericValue(timeout));
+        purgedProperties.put("requestHeaderSize", PurgeUtil.getNumericValue(requestHeaderSize));
         return purgedProperties;
     }
 }

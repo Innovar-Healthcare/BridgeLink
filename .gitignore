@@ -3,6 +3,8 @@
 
 .idea
 **/*.iml
+.vscode/
+.claude/
 donkey/donkey-src
 donkey/donkey-test
 .sonar

@@ -12,8 +12,8 @@
       <result property='invocationCount' column='INVOCATION_COUNT'/>  
    </resultMap>
    <select id='getDebugUsageStatistics'
-           parameterType='java.lang.String'
-           resultMap='get-debug-usage-result'>
+	   parameterType='java.lang.Integer'
+	   resultMap='get-debug-usage-result'>
 		SELECT ID, 
 			SERVER_ID,
 			DUPP_COUNT,
@@ -66,7 +66,7 @@
 		WHERE SERVER_ID = #{serverId}
 	</update>
 	
-	<delete id='deleteDebugUsageStatistics' parameterType='java.lang.String'>
+	<delete id='deleteDebugUsageStatistics' parameterType='java.lang.Integer'>
 		DELETE FROM DEBUGGER_USAGE
 		WHERE SERVER_ID = #{serverId}
 	</delete>

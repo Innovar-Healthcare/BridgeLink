@@ -28,12 +28,15 @@ import com.mirth.connect.donkey.model.message.RawMessage;
 import com.mirth.connect.donkey.model.message.Status;
 import com.mirth.connect.donkey.server.ConnectorTaskException;
 import com.mirth.connect.donkey.server.Donkey;
+import com.mirth.connect.donkey.server.DonkeyConfiguration;
+import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.StartException;
 import com.mirth.connect.donkey.server.channel.DestinationChainProvider;
 import com.mirth.connect.donkey.server.channel.MetaDataReplacer;
 import com.mirth.connect.donkey.server.channel.ResponseSelector;
 import com.mirth.connect.donkey.server.channel.SourceConnector;
 import com.mirth.connect.donkey.server.controllers.ChannelController;
+import com.mirth.connect.donkey.server.queue.SourceQueue;
 import com.mirth.connect.donkey.test.util.TestChannel;
 import com.mirth.connect.donkey.test.util.TestConnectorProperties;
 import com.mirth.connect.donkey.test.util.TestDataType;
@@ -56,12 +59,21 @@ public class ExceptionTests {
 
     @BeforeClass
     final public static void beforeClass() throws StartException {
-        Donkey.getInstance().startEngine(TestUtils.getDonkeyTestConfiguration());
+        Donkey donkey = Donkey.getInstance();
+        DonkeyConfiguration config = TestUtils.getDonkeyTestConfiguration();
+
+        // Close any leaked connection pools from a previously-run test class
+        TestUtils.shutdownConnectionPools();
+        // Initialize connection pools before starting the engine
+        DonkeyConnectionPools.getInstance().init(config.getDonkeyProperties());
+
+        donkey.startEngine(config);
     }
 
     @AfterClass
     final public static void afterClass() throws StartException {
         Donkey.getInstance().stopEngine();
+        TestUtils.shutdownConnectionPools();
     }
 
     /*
@@ -73,16 +85,10 @@ public class ExceptionTests {
      */
     @Test
     final public void testChannelPause() throws Exception {
-        ChannelController.getInstance().getLocalChannelId(channelId);
+        // Create a default channel first
+        TestChannel channel = (TestChannel) TestUtils.createDefaultChannel(channelId, serverId);
 
-        TestChannel channel = new TestChannel();
-
-        channel.setChannelId(channelId);
-        channel.setServerId(serverId);
-
-        channel.setPreProcessor(new TestPreProcessor());
-        channel.setPostProcessor(new TestPostProcessor());
-
+        // Replace the source connector with a custom one that throws exception on stop
         SourceConnector sourceConnector = new TestSourceConnector() {
             @Override
             public void onStop() throws ConnectorTaskException {
@@ -94,24 +100,14 @@ public class ExceptionTests {
         sourceConnector.setInboundDataType(new TestDataType());
         sourceConnector.setOutboundDataType(new TestDataType());
         sourceConnector.setMetaDataReplacer(new MetaDataReplacer());
-
         sourceConnector.setChannelId(channel.getChannelId());
         sourceConnector.setChannel(channel);
+        sourceConnector.setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
+
+        // Replace the source connector in the channel
         channel.setSourceConnector(sourceConnector);
         channel.setResponseSelector(new ResponseSelector(sourceConnector.getInboundDataType()));
-        channel.getSourceConnector().setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
         channel.getResponseSelector().setRespondFromName(TestUtils.DEFAULT_RESPOND_FROM_NAME);
-
-        TestDestinationConnector destinationConnector = (TestDestinationConnector) TestUtils.createDefaultDestinationConnector();
-        destinationConnector.setChannelId(channel.getChannelId());
-
-        DestinationChainProvider chain = new DestinationChainProvider();
-        chain.setChannelId(channel.getChannelId());
-        destinationConnector.setMetaDataReplacer(sourceConnector.getMetaDataReplacer());
-        destinationConnector.setMetaDataColumns(channel.getMetaDataColumns());
-        destinationConnector.setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
-        chain.addDestination(1, destinationConnector);
-        channel.addDestinationChainProvider(chain);
 
         try {
             channel.deploy();
@@ -127,7 +123,7 @@ public class ExceptionTests {
             assertNotNull(e);
 
             // Assert that the source connector is now stopped
-            assertFalse(channel.getSourceConnector().getCurrentState().equals(DeployedState.STOPPED));
+            assertEquals(DeployedState.STOPPED, channel.getSourceConnector().getCurrentState());
 
             // Assert that pausing the channel while the source connector is stopped will throw an exception
             e = null;

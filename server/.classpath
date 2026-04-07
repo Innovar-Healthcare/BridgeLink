@@ -15,8 +15,8 @@
 	<classpathentry kind="lib" path="lib/commons/commons-beanutils-1.9.3.jar"/>
 	<classpathentry kind="lib" path="lib/commons/commons-cli-1.2.jar"/>
 	<classpathentry kind="lib" path="lib/commons/commons-codec-1.10.jar"/>
-	<classpathentry kind="lib" path="lib/commons/commons-collections-3.2.1.jar"/>
-	<classpathentry kind="lib" path="lib/commons/commons-configuration-1.7.jar"/>
+	<classpathentry kind="lib" path="lib/commons/commons-collections-3.2.2.jar"/>
+	<classpathentry kind="lib" path="lib/commons/commons-configuration2-2.10.1.jar"/>
 	<classpathentry kind="lib" path="lib/commons/commons-dbcp2-2.0.1.jar"/>
 	<classpathentry kind="lib" path="lib/commons/commons-dbutils-1.4.jar"/>
 	<classpathentry kind="lib" path="lib/commons/commons-digester-2.0.jar"/>
@@ -103,45 +103,53 @@
 	<classpathentry kind="lib" path="lib/jersey/jersey-container-jetty-servlet-2.22.1.jar"/>
 	<classpathentry kind="lib" path="lib/swagger/ext/jackson-dataformat-yaml-2.9.1.jar"/>
 	<classpathentry kind="lib" path="lib/jersey/jersey-media-multipart-2.22.1.jar"/>
-	<classpathentry kind="lib" path="lib/commons/httpclient-4.5.3.jar"/>
-	<classpathentry kind="lib" path="lib/commons/httpcore-4.4.6.jar"/>
-	<classpathentry kind="lib" path="lib/commons/httpmime-4.5.3.jar"/>
+	<classpathentry kind="lib" path="lib/commons/httpclient-4.5.13.jar"/>
+	<classpathentry kind="lib" path="lib/commons/httpcore-4.4.13.jar"/>
+	<classpathentry kind="lib" path="lib/commons/httpmime-4.5.13.jar"/>
 	<classpathentry kind="lib" path="lib/jersey/jersey-proxy-client-2.22.1.jar"/>
 	<classpathentry kind="lib" path="lib/commons/commons-collections4-4.0.jar"/>
 	<classpathentry kind="lib" path="lib/swagger/ext/reflections-0.9.10.jar"/>
 	<classpathentry kind="lib" path="lib/jersey/jersey-guava-2.22.1.jar"/>
 	<classpathentry kind="lib" path="lib/javassist-3.19.0-GA.jar"/>
 	<classpathentry kind="lib" path="lib/jersey/ext/mimepull-1.9.6.jar"/>
-	<classpathentry kind="lib" path="lib/javax/javax.servlet-api-3.1.0.jar"/>
+	<classpathentry kind="lib" path="lib/javax/javax.servlet-api-4.0.1.jar"/>
 	<classpathentry kind="lib" path="lib/jetty/jetty-schemas-3.1.jar"/>
 	<classpathentry kind="lib" path="lib/javax/javax.annotation-api-1.2.jar"/>
 	<classpathentry kind="lib" path="lib/javax/javax.inject-2.4.0-b31.jar"/>
 	<classpathentry kind="lib" path="lib/javax/javax.json-1.0.4.jar"/>
 	<classpathentry kind="lib" path="lib/javax/javax.json-api-1.0.jar"/>
-	<classpathentry kind="lib" path="lib/javax/javax.mail-1.5.0.jar"/>
+	<classpathentry kind="lib" path="lib/javax/javax.mail-1.6.2.jar"/>
 	<classpathentry kind="lib" path="lib/javax/javax.ws.rs-api-2.0.1.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-annotations-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-continuation-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-http-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-io-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-plus-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-rewrite-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-security-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-server-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-servlet-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-util-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-webapp-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jetty-xml-9.4.9.v20180320.jar"/>
-	<classpathentry kind="lib" path="lib/jetty/jsp/org.eclipse.jetty.apache-jsp-9.4.9.v20180320.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/jetty-ee-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/jetty-http-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/jetty-io-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/jetty-jndi-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/jetty-plus-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/jetty-security-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/jetty-server-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/jetty-servlet-api-4.0.6.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/jetty-session-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/jetty-util-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/jetty-xml-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/ee8/jetty-ee8-annotations-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/ee8/jetty-ee8-apache-jsp-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/ee8/jetty-ee8-jndi-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/ee8/jetty-ee8-nested-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/ee8/jetty-ee8-plus-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/ee8/jetty-ee8-security-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/ee8/jetty-ee8-servlet-12.0.32.jar"/>
+	<classpathentry kind="lib" path="lib/jetty/ee8/jetty-ee8-webapp-12.0.32.jar"/>
 	<classpathentry kind="lib" path="lib/jetty/jsp/org.apache.taglibs.taglibs-standard-impl-1.2.5.jar"/>
 	<classpathentry kind="lib" path="lib/jetty/jsp/org.apache.taglibs.taglibs-standard-spec-1.2.5.jar"/>
 	<classpathentry kind="lib" path="lib/jetty/jsp/org.mortbay.jasper.apache-el-8.5.24.2.jar"/>
 	<classpathentry kind="lib" path="lib/jetty/jsp/org.mortbay.jasper.apache-jsp-8.5.24.2.jar"/>
 	<classpathentry kind="lib" path="lib/jetty/jsp/org.eclipse.jdt.ecj-3.12.3.jar"/>
-	<classpathentry kind="lib" path="testlib/byte-buddy-1.8.8.jar"/>
-	<classpathentry kind="lib" path="testlib/byte-buddy-agent-1.8.8.jar"/>
-	<classpathentry kind="lib" path="testlib/junit-4.8.1.jar"/>
-	<classpathentry kind="lib" path="testlib/mockito-core-2.7.9.jar"/>
+	<classpathentry kind="lib" path="testlib/byte-buddy-1.14.13.jar"/>
+	<classpathentry kind="lib" path="testlib/byte-buddy-agent-1.14.13.jar"/>
+	<classpathentry kind="lib" path="testlib/hamcrest-2.2.jar"/>
+	<classpathentry kind="lib" path="testlib/junit-4.13.1.jar"/>
+	<classpathentry kind="lib" path="testlib/mockito-core-5.1.1.jar"/>
+	<classpathentry kind="lib" path="testlib/mockito-inline-5.1.1.jar"/>
 	<classpathentry kind="lib" path="testlib/objenesis-2.5.1.jar"/>
 	<classpathentry kind="lib" path="lib/guice-4.1.0.jar"/>
 	<classpathentry kind="lib" path="lib/extensions/file/aws-java-sdk-core-1.11.194.jar"/>

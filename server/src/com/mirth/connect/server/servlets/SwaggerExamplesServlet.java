@@ -347,6 +347,12 @@ public class SwaggerExamplesServlet extends HttpServlet {
             requestedObject = getServerSettingsExample();
         } else if (exampleRequested.equals("public_server_settings")) {
             requestedObject = getPublicServerSettingsExample();
+        } else if (exampleRequested.equals("send_test_email_oauth")) {
+            requestedObject = getSendTestEmailOAuthExample();
+        } else if (exampleRequested.equals("send_test_email_basic")) {
+            requestedObject = getSendTestEmailBasicExample();
+        } else if (exampleRequested.equals("send_test_email_none")) {
+            requestedObject = getSendTestEmailNoneExample();
         } else if (exampleRequested.equals("smtp_dispatcher_properties")) {
             requestedObject = getSmtpDispatcherPropertiesExample("none");
         } else if (exampleRequested.equals("smtp_dispatcher_properties_ssl")) {
@@ -1165,7 +1171,7 @@ public class SwaggerExamplesServlet extends HttpServlet {
 	}
 	
 	private PasswordRequirements getPasswordRequirementsExample() {
-	    return new PasswordRequirements(8, 1, 1, 1, 1, 3, 0, 0, 0, 0, 3);
+	    return new PasswordRequirements(8, 1, 1, 1, 1, 3, 0, 0, 0, 0, 3, false);
 	}
 	
 	private List<String> getPasswordRequirementListExample() {
@@ -1423,5 +1429,52 @@ public class SwaggerExamplesServlet extends HttpServlet {
 	    List<User> users = new ArrayList<>();
 	    users.add(getUserExample());
 	    return users;
+	}
+
+	private Properties getSendTestEmailOAuthExample() {
+	    Properties p = new Properties();
+	    p.setProperty("host", "smtp.office365.com");
+	    p.setProperty("port", "587");
+	    p.setProperty("encryption", "tls");
+	    p.setProperty("timeout", "5000");
+	    p.setProperty("authentication", "true");
+	    p.setProperty("authType", "OAUTH");
+	    p.setProperty("username", "user@yourtenant.onmicrosoft.com");
+	    p.setProperty("password", "");
+	    p.setProperty("oAuthClientId", "your-client-id");
+	    p.setProperty("oAuthClientSecret", "your-client-secret");
+	    p.setProperty("oAuthTokenEndpointUrl", "https://login.microsoftonline.com/YOUR_TENANT_ID/oauth2/v2.0/token");
+	    p.setProperty("oAuthScope", "https://outlook.office365.com/.default");
+	    p.setProperty("fromAddress", "noreply@yourtenant.onmicrosoft.com");
+	    p.setProperty("toAddress", "recipient@example.com");
+	    return p;
+	}
+
+	private Properties getSendTestEmailBasicExample() {
+	    Properties p = new Properties();
+	    p.setProperty("host", "smtp.example.com");
+	    p.setProperty("port", "587");
+	    p.setProperty("encryption", "tls");
+	    p.setProperty("timeout", "10000");
+	    p.setProperty("authentication", "true");
+	    p.setProperty("authType", "BASIC");
+	    p.setProperty("username", "user@example.com");
+	    p.setProperty("password", "your-password");
+	    p.setProperty("fromAddress", "user@example.com");
+	    p.setProperty("toAddress", "recipient@example.com");
+	    return p;
+	}
+
+	private Properties getSendTestEmailNoneExample() {
+	    Properties p = new Properties();
+	    p.setProperty("host", "smtp.example.com");
+	    p.setProperty("port", "25");
+	    p.setProperty("encryption", "none");
+	    p.setProperty("timeout", "10000");
+	    p.setProperty("authentication", "false");
+	    p.setProperty("authType", "NONE");
+	    p.setProperty("fromAddress", "sender@example.com");
+	    p.setProperty("toAddress", "recipient@example.com");
+	    return p;
 	}
 }

@@ -17,11 +17,15 @@ import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 
+import com.mirth.connect.donkey.server.channel.Channel;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.mirth.connect.donkey.model.channel.DeployedState;
@@ -35,9 +39,11 @@ import com.mirth.connect.donkey.model.message.ContentType;
 import com.mirth.connect.donkey.model.message.Message;
 import com.mirth.connect.donkey.model.message.MessageContent;
 import com.mirth.connect.donkey.model.message.RawMessage;
+import com.mirth.connect.donkey.model.message.attachment.Attachment;
 import com.mirth.connect.donkey.server.Donkey;
+import com.mirth.connect.donkey.server.DonkeyConfiguration;
+import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.StartException;
-import com.mirth.connect.donkey.server.channel.Channel;
 import com.mirth.connect.donkey.server.channel.ChannelException;
 import com.mirth.connect.donkey.server.channel.DestinationChainProvider;
 import com.mirth.connect.donkey.server.channel.DestinationConnector;
@@ -63,14 +69,45 @@ public class ChannelTests {
     private static String testMessage = TestUtils.TEST_HL7_MESSAGE;
 
     @BeforeClass
-    final public static void beforeClass() throws StartException {
+    final public static void beforeClass() throws Exception {
         Donkey donkey = Donkey.getInstance();
-        donkey.startEngine(TestUtils.getDonkeyTestConfiguration());
+        DonkeyConfiguration config = TestUtils.getDonkeyTestConfiguration();
+
+        // Close any leaked connection pools from a previously-run test class
+        TestUtils.shutdownConnectionPools();
+
+        // Initialize connection pools before starting the engine
+        DonkeyConnectionPools.getInstance().init(config.getDonkeyProperties());
+
+        donkey.startEngine(config);
+
+        // Clean up any orphaned channel tables from previous test runs
+        System.out.println("=== DONKEY STARTUP: Calling removeAllChannelTables()...");
+        TestUtils.removeAllChannelTables();
+        System.out.println("=== DONKEY STARTUP: Orphaned tables cleanup completed");
     }
 
     @AfterClass
     final public static void afterClass() throws StartException {
         Donkey.getInstance().stopEngine();
+        TestUtils.shutdownConnectionPools();
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        // Clean up message data between tests without dropping tables (DML only).
+        // Avoiding DDL (DROP/CREATE TABLE) prevents MySQL "Table definition has changed"
+        // errors caused by metadata cache staleness when running tests in batch.
+        try {
+            if (ChannelController.getInstance().channelExists(channelId)) {
+                ChannelController.getInstance().deleteAllMessages(channelId);
+            }
+        } catch (Exception e) {
+            // Ignore cleanup errors - channel may not exist
+        }
+
+        // Give background threads time to finish
+        Thread.sleep(100);
     }
 
     /*
@@ -376,8 +413,8 @@ public class ChannelTests {
         columns = TestUtils.getExistingMetaDataColumns(channelId);
         assertFalse(columns.contains(new MetaDataColumn("stringcolumn", MetaDataColumnType.STRING, null)));
 
-        // Alter the long column's name
-        channel.getMetaDataColumns().get(0).setName("longcolumn2");
+        // Alter the number column's name
+        channel.getMetaDataColumns().get(0).setName("numbercolumn2");
 
         channel.undeploy();
         channel.deploy();
@@ -387,16 +424,16 @@ public class ChannelTests {
         assertFalse(columns.contains(new MetaDataColumn("numbercolumn", MetaDataColumnType.NUMBER, null)));
         assertTrue(columns.contains(new MetaDataColumn("numbercolumn2", MetaDataColumnType.NUMBER, null)));
 
-        // Alter the double column's type
+        // Alter the boolean column's type
         channel.getMetaDataColumns().get(1).setType(MetaDataColumnType.TIMESTAMP);
 
         channel.undeploy();
         channel.deploy();
 
-        // Assert that the double column got dropped/added correctly as a timestamp column
+        // Assert that the boolean column got dropped/added correctly as a timestamp column
         columns = TestUtils.getExistingMetaDataColumns(channelId);
-        assertFalse(columns.contains(new MetaDataColumn("numbercolumn", MetaDataColumnType.NUMBER, null)));
-        assertTrue(columns.contains(new MetaDataColumn("numbercolumn", MetaDataColumnType.TIMESTAMP, null)));
+        assertFalse(columns.contains(new MetaDataColumn("booleancolumn", MetaDataColumnType.BOOLEAN, null)));
+        assertTrue(columns.contains(new MetaDataColumn("booleancolumn", MetaDataColumnType.TIMESTAMP, null)));
 
         // Alter the boolean column's name and type
         channel.getMetaDataColumns().get(2).setName("booleancolumn2");
@@ -423,7 +460,7 @@ public class ChannelTests {
 
         columnType = MetaDataColumnType.NUMBER;
         BigDecimal bigDecimalValue = (BigDecimal) columnType.castValue("1.0234567890123456789");
-        assertEquals(new BigDecimal(1.0234567890123456789), bigDecimalValue);
+        assertEquals(new BigDecimal("1.0234567890123456789"), bigDecimalValue);
 
         columnType = MetaDataColumnType.STRING;
         String stringValue = (String) columnType.castValue(" test !@# String 123 ");
@@ -462,6 +499,7 @@ public class ChannelTests {
 
         // Assert that the message was run through the pre-processor
         assertTrue(((TestPreProcessor) channel.getPreProcessor()).isProcessed());
+
 
         // Assert that the processed raw content was stored
         TestUtils.assertMessageContentExists(sourceMessage.getProcessedRaw());
@@ -717,4 +755,66 @@ public class ChannelTests {
             TestUtils.assertMessageContentDoesNotExist(destinationMessage.getProcessedResponse());
         }
     }
+
+    @Test
+    public void testRawMessageWithAttachments() throws Exception {
+        TestChannel channel = (TestChannel) TestUtils.createDefaultChannel(channelId, serverId);
+        SourceConnector sourceConnector = channel.getSourceConnector();
+
+        channel.deploy();
+        channel.start(null);
+
+        // Test with no attachments
+        RawMessage rawMessage = new RawMessage(testMessage);
+        DispatchResult dispatchResult = sourceConnector.dispatchRawMessage(rawMessage);
+        sourceConnector.finishDispatch(dispatchResult);
+
+        // Verify the message was processed successfully
+        assertNotNull(dispatchResult);
+        assertNotNull(dispatchResult.getProcessedMessage());
+
+        // Test with attachments
+        List<Attachment> attachments = new ArrayList<Attachment>();
+        Attachment attachment1 = new Attachment("1", "test content 1".getBytes(), "text/plain");
+        attachments.add(attachment1);
+        Attachment attachment2 = new Attachment("2", "test content 2".getBytes(), "text/plain");
+        attachments.add(attachment2);
+        rawMessage = new RawMessage(testMessage, null, null, attachments);
+
+        dispatchResult = sourceConnector.dispatchRawMessage(rawMessage);
+        sourceConnector.finishDispatch(dispatchResult);
+
+        // Verify the message was processed and attachments were cleared after processing
+        assertNotNull(dispatchResult);
+        assertNotNull(dispatchResult.getProcessedMessage());
+        assertNull(rawMessage.getAttachments());
+
+        // Test with attachments, storage settings off
+        channel.stop();
+        channel.undeploy();
+
+        channel = (TestChannel) TestUtils.createDefaultChannel(channelId, serverId);
+        channel.getStorageSettings().setStoreAttachments(false);
+        sourceConnector = channel.getSourceConnector();
+
+        channel.deploy();
+        channel.start(null);
+
+        attachments = new ArrayList<Attachment>();
+        attachment1 = new Attachment("1", "test content 1".getBytes(), "text/plain");
+        attachments.add(attachment1);
+        rawMessage = new RawMessage(testMessage, null, null, attachments);
+
+        dispatchResult = sourceConnector.dispatchRawMessage(rawMessage);
+        sourceConnector.finishDispatch(dispatchResult);
+
+        // Verify the message was processed even with attachments storage disabled
+        assertNotNull(dispatchResult);
+        assertNotNull(dispatchResult.getProcessedMessage());
+        assertNull(rawMessage.getAttachments());
+
+        channel.stop();
+        channel.undeploy();
+    }
+
 }

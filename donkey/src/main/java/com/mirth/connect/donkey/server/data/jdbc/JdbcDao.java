@@ -133,6 +133,15 @@ public class JdbcDao implements DonkeyDao {
         this.quoteChar = quoteChar;
     }
 
+    /**
+     * Sets a boolean value on a prepared statement. Subclasses can override this to adapt to
+     * database-specific type handling (e.g. Oracle CHAR(1) columns require setInt instead of
+     * setBoolean with ojdbc11+).
+     */
+    protected void setDbBoolean(PreparedStatement statement, int parameterIndex, boolean value) throws SQLException {
+        statement.setBoolean(parameterIndex, value);
+    }
+
     @Override
     public void insertMessage(Message message) {
         logger.debug(message.getChannelId() + "/" + message.getMessageId() + ": inserting message");
@@ -143,7 +152,7 @@ public class JdbcDao implements DonkeyDao {
             statement.setLong(1, message.getMessageId());
             statement.setString(2, message.getServerId());
             statement.setTimestamp(3, new Timestamp(message.getReceivedDate().getTimeInMillis()));
-            statement.setBoolean(4, message.isProcessed());
+            setDbBoolean(statement, 4, message.isProcessed());
 
             Long originalId = message.getOriginalId();
 
@@ -288,7 +297,7 @@ public class JdbcDao implements DonkeyDao {
             statement.setInt(3, contentType.getContentTypeCode());
             statement.setString(4, content);
             statement.setString(5, dataType);
-            statement.setBoolean(6, encrypted);
+            setDbBoolean(statement, 6, encrypted);
 
             statement.executeUpdate();
             statement.clearParameters();
@@ -317,7 +326,7 @@ public class JdbcDao implements DonkeyDao {
             }
 
             statement.setString(2, dataType);
-            statement.setBoolean(3, encrypted);
+            setDbBoolean(statement, 3, encrypted);
             statement.setInt(4, metaDataId);
             statement.setLong(5, messageId);
             statement.setInt(6, contentType.getContentTypeCode());
@@ -336,7 +345,7 @@ public class JdbcDao implements DonkeyDao {
                 statement.setInt(3, contentType.getContentTypeCode());
                 statement.setString(4, content);
                 statement.setString(5, dataType);
-                statement.setBoolean(6, encrypted);
+                setDbBoolean(statement, 6, encrypted);
 
                 statement.executeUpdate();
                 statement.clearParameters();

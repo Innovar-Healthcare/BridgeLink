@@ -76,10 +76,18 @@ public class TestDispatcher extends DestinationConnector {
     }
 
     @Override
-    public void onStart() throws ConnectorTaskException {}
+    public void onStart() throws ConnectorTaskException {
+        startQueue();
+    }
 
     @Override
-    public void onStop() throws ConnectorTaskException {}
+    public void onStop() throws ConnectorTaskException {
+        try {
+            stopQueue();
+        } catch (InterruptedException e) {
+            throw new ConnectorTaskException("Failed to stop queue", e);
+        }
+    }
 
     @Override
     public void onHalt() throws ConnectorTaskException {}

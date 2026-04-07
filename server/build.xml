@@ -1028,7 +1028,7 @@
 
 			<manifest>
 				<attribute name="Main-Class" value="com.mirth.connect.server.launcher.MirthLauncher" />
-				<attribute name="Class-Path" value="server-lib/commons/commons-io-2.13.0.jar server-lib/commons/commons-configuration2-2.8.0.jar server-lib/commons/commons-lang3-3.13.0.jar server-lib/commons/commons-logging-1.2.jar server-lib/commons/commons-beanutils-1.9.4.jar server-lib/commons/commons-text-1.10.0.jar server-lib/commons/commons-collections-3.2.2.jar conf/" />
+				<attribute name="Class-Path" value="server-lib/commons/commons-io-2.13.0.jar server-lib/commons/commons-configuration2-2.10.1.jar server-lib/commons/commons-lang3-3.18.0.jar server-lib/commons/commons-logging-1.3.3.jar server-lib/commons/commons-beanutils-1.11.0.jar server-lib/commons/commons-text-1.12.0.jar server-lib/commons/commons-collections-3.2.2.jar server-lib/log4j/log4j-api-2.25.3.jar server-lib/log4j/log4j-core-2.25.3.jar server-lib/log4j/log4j-jcl-2.25.3.jar server-lib/log4j/log4j-1.2-api-2.25.3.jar conf/" />
 			</manifest>
 		</jar>
 
@@ -1046,25 +1046,30 @@
 
 		<taskdef resource="net/sf/antcontrib/antlib.xml" classpathref="classpath" />
 
-		<!-- modify jar manifests -->
-		<!-- don't modify bcprov, since it already has the manifest changes and is signed by BC -->
-		<echo message="[Thread Count: ${manifest_thread_count}] Modifying jar manifests to add Permissions: all-permissions; Codebase: *; Application-Name: Mirth Connect" />
-		<for param="jarFile" parallel="true" threadCount="${manifest_thread_count}">
-			<fileset dir="${setup.client.lib}" includes="**/*.jar" excludes="bcp*.jar,bcutil*.jar"/>
-			<fileset dir="${setup.extensions}" includes="**/*.jar" />
-			<sequential>
-				<apply executable="jar">
-					<arg value="umf" />
-					<arg line="custom_manifest.mf" />
-					<srcfile />
-					<fileset file="@{jarFile}"/>
-				</apply>
-			</sequential>
-		</for>
-		<!-- sign jars for webstart -->
-		<echo message="[Thread Count: ${signjar_thread_count}] Signing jars for Java Web Start" />
-		<property file="${keystore_property_file}" />
+		<!-- modify jar manifests and sign jars for webstart -->
+		<!-- Skip both steps when -Dskip.signing=true (official release: Windows EC2 signs instead) -->
+		<if>
+			<not><isset property="skip.signing"/></not>
+			<then>
+				<!-- modify jar manifests -->
+				<!-- don't modify bcprov, since it already has the manifest changes and is signed by BC -->
+				<echo message="[Thread Count: ${manifest_thread_count}] Modifying jar manifests to add Permissions: all-permissions; Codebase: *; Application-Name: Mirth Connect" />
+				<for param="jarFile" parallel="true" threadCount="${manifest_thread_count}">
+					<fileset dir="${setup.client.lib}" includes="**/*.jar" excludes="bcp*.jar,bcutil*.jar"/>
+					<fileset dir="${setup.extensions}" includes="**/*.jar" />
+					<sequential>
+						<apply executable="jar">
+							<arg value="umf" />
+							<arg line="custom_manifest.mf" />
+							<srcfile />
+							<fileset file="@{jarFile}"/>
+						</apply>
+					</sequential>
+				</for>
 
+				<!-- sign jars for webstart -->
+				<echo message="[Thread Count: ${signjar_thread_count}] Signing jars for Java Web Start" />
+				<property file="${keystore_property_file}" />
 				<for param="jarFile" parallel="true" threadCount="${signjar_thread_count}">
 					<fileset dir="${setup.client.lib}" includes="**/*.jar" />
 					<fileset dir="${setup.extensions}" includes="**/*.jar" />
@@ -1078,6 +1083,11 @@
 						</retry>
 					</sequential>
 				</for>
+			</then>
+			<else>
+				<echo message="[skip.signing=true] Skipping JAR signing — Windows EC2 will sign with DigiCert Keylocker" />
+			</else>
+		</if>
 	</target>
 
 	<target name="create-extension-zips" depends="create-setup">
@@ -1153,8 +1163,9 @@
 				<pathelement location="classes" />
 				<pathelement location="${setup.conf}" />
 				<fileset dir="${lib}">
-					<include name="log4j/log4j-api-2.17.2.jar" />
-					<include name="log4j/log4j-core-2.17.2.jar" />
+					<include name="log4j/log4j-api-2.25.3.jar" />
+					<include name="log4j/log4j-core-2.25.3.jar" />
+					<include name="log4j/log4j-jcl-2.25.3.jar" />
 					<include name="database/derby-10.10.2.0.jar" />
 					<include name="database/derbytools-10.10.2.0.jar" />
 					<include name="commons/commons-io-2.13.0.jar" />
@@ -1250,6 +1261,12 @@
 			</fileset>
 		</copy>
 
+		<!-- Copy SqlMapConfig.xml from dbconf to root of test_classes for MyBatis -->
+		<copy file="${dbconf}/SqlMapConfig.xml" todir="${test_classes}" />
+
+		<!-- Copy log4j.properties from test/resources to root of test_classes for logging -->
+		<copy file="${test}/resources/log4j.properties" todir="${test_classes}" failonerror="false" />
+
 		<jar destfile="${test.dist}/${tests.jar}" basedir="${test_classes}">
 			<include name="**/*" />
 		</jar>
@@ -1271,7 +1288,7 @@
 			 resource="org/jacoco/ant/antlib.xml"
 			 classpathref="jacoco.classpath"/>
 
-	<target name="test-run" depends="test-compile">
+	<target name="test-run" depends="test-compile" description="Run unit tests and generate code coverage">
 		<property name="junit-reports" value="junit-reports" />
 		<property name="junit-html" value="junit-html" />
 		<property name="code-coverage-reports" value="code-coverage-reports" />
@@ -1330,6 +1347,34 @@
 			</fileset>
 			<report format="frames" todir="${junit-html}" />
 		</junitreport>
+
+		<!-- Automatically generate JaCoCo HTML report after tests -->
+		<antcall target="jacoco-report"/>
+	</target>
+
+	<target name="jacoco-report" depends="init">
+		<property name="code-coverage-reports" value="code-coverage-reports" />
+		<property name="jacoco-html" value="jacoco-html" />
+		<delete dir="${jacoco-html}" />
+		<mkdir dir="${jacoco-html}" />
+		<jacoco:report xmlns:jacoco="antlib:org.jacoco.ant">
+			<executiondata>
+				<file file="${code-coverage-reports}/jacoco.exec" />
+			</executiondata>
+			<structure name="BridgeLink Server">
+				<classfiles>
+					<fileset dir="${classes}">
+						<include name="**/*.class" />
+					</fileset>
+				</classfiles>
+				<sourcefiles encoding="UTF-8">
+					<fileset dir="${src}" />
+				</sourcefiles>
+			</structure>
+			<html destdir="${jacoco-html}" />
+			<xml destfile="${code-coverage-reports}/jacoco-report.xml" />
+			<csv destfile="${code-coverage-reports}/jacoco-report.csv" />
+		</jacoco:report>
 	</target>
 
 	<target name="remove-classes" depends="init">

@@ -1,0 +1,187 @@
+<project name="dynamic-lookup-gateway" default="build">
+
+    <!-- Configuration -->
+    <property name="manifest_thread_count" value="4" />
+    <property name="signjar_thread_count" value="4" />
+
+    <property file="build.properties" />
+    <property file="../../server/keystore.properties" />
+
+    <!-- Clean build output -->
+    <target name="clean">
+        <delete dir="${build.dir}"/>
+        <delete dir="${server.setup.extensions}/${plugin.name}"/>
+    </target>
+
+    <!-- Compile all sources -->
+    <target name="compile">
+        <mkdir dir="${classes.dir}/shared"/>
+        <mkdir dir="${classes.dir}/server"/>
+        <mkdir dir="${classes.dir}/client"/>
+
+        <!-- Compile shared -->
+        <javac srcdir="shared" destdir="${classes.dir}/shared" includeantruntime="false">
+            <classpath>
+                <fileset dir="${server.lib}" includes="**/*.jar"/>
+                <fileset dir="${client.lib}" includes="**/*.jar"/>
+                <fileset dir="${plugin.lib}" includes="**/*.jar"/>
+            </classpath>
+        </javac>
+
+        <!-- Compile server -->
+        <javac srcdir="server" destdir="${classes.dir}/server" includeantruntime="false">
+            <classpath>
+                <pathelement path="${classes.dir}/shared"/>
+                <pathelement path="${server.classes.dir}"/>
+
+                <fileset dir="${server.lib}" includes="**/*.jar"/>
+                <fileset dir="${plugin.lib}" includes="**/*.jar"/>
+            </classpath>
+        </javac>
+
+        <!-- Compile client -->
+        <javac srcdir="client" destdir="${classes.dir}/client" includeantruntime="false">
+            <classpath>
+                <pathelement path="${classes.dir}/shared"/>
+                <pathelement path="${client.classes.dir}"/>
+
+                <fileset dir="${client.lib}" includes="**/*.jar"/>
+                <fileset dir="${plugin.lib}" includes="**/*.jar"/>
+            </classpath>
+        </javac>
+    </target>
+
+    <!-- Conditionally copy server resources -->
+    <available file="${server.resources.dir}" type="dir" property="server.resources.present"/>
+
+    <target name="copy-resources" if="server.resources.present">
+        <copy todir="${classes.dir}/server">
+            <fileset dir="${server.resources.dir}" includes="**/*"/>
+        </copy>
+        <copy todir="${classes.dir}/client">
+            <fileset dir="${client.resources.dir}" includes="**/*"/>
+        </copy>
+    </target>
+
+    <!-- Package JARs -->
+    <target name="jar" depends="compile, copy-resources">
+        <mkdir dir="${dist.dir}"/>
+
+        <jar destfile="${dist.dir}/${plugin.name}-shared.jar">
+            <fileset dir="${classes.dir}/shared" includes="**/*"/>
+        </jar>
+
+        <jar destfile="${dist.dir}/${plugin.name}-server.jar">
+            <fileset dir="${classes.dir}/server" includes="**/*"/>
+        </jar>
+
+        <jar destfile="${dist.dir}/${plugin.name}-client.jar">
+            <fileset dir="${classes.dir}/client" includes="**/*"/>
+        </jar>
+    </target>
+
+    <!-- Sign all JAR files in dist -->
+    <target name="patch-and-sign-jars">
+        <!-- Load Ant-Contrib for <for>, <if>, and <retry> -->
+        <taskdef resource="net/sf/antcontrib/antlib.xml">
+            <classpath>
+                <fileset dir="${server.lib}/ant" includes="ant-contrib*.jar"/>
+            </classpath>
+        </taskdef>
+
+        <!-- Skip both steps when -Dskip.signing=true (official release: Windows EC2 signs instead) -->
+        <if>
+            <not><isset property="skip.signing"/></not>
+            <then>
+                <echo message="Patching JAR manifests before signing..." />
+
+                <for param="jarFile" parallel="true" threadCount="${manifest_thread_count}">
+                    <fileset dir="${dist.dir}" includes="**/*.jar"/>
+                    <sequential>
+                        <!-- Inject Permissions/Codebase/Application-Name -->
+                        <apply executable="jar">
+                            <arg value="umf" />
+                            <arg value="../../server/custom_manifest.mf" />
+                            <srcfile />
+                            <fileset file="@{jarFile}"/>
+                        </apply>
+                    </sequential>
+                </for>
+
+                <echo message="Signing plugin JARs..."/>
+                <echo message="[Thread Count: ${signjar_thread_count}] Signing jars for Java Web Start" />
+
+                <exec executable="bash" failonerror="true">
+                    <arg value="${basedir}/sign_jars.sh" />
+                </exec>
+            </then>
+            <else>
+                <echo message="[skip.signing=true] Skipping JAR signing — Windows EC2 will sign with DigiCert Keylocker" />
+            </else>
+        </if>
+<!--        <for param="jarFile" parallel="true" threadCount="${signjar_thread_count}">-->
+<!--            <fileset dir="${dist.dir}" includes="**/*.jar"/>-->
+<!--            <sequential>-->
+<!--                <retry retrycount="5" retrydelay="1000">-->
+<!--                    <signjar jar="@{jarFile}"-->
+<!--                             alias="${key.alias}"-->
+<!--                             keystore="../../server/keystore.jks"-->
+<!--                             storepass="${key.storepass}"-->
+<!--                             keypass="${key.keypass}"-->
+<!--                             storetype="${key.storetype}"-->
+<!--                             tsaurl="http://timestamp.digicert.com"-->
+<!--                             digestalg="SHA-256">-->
+<!--                        <sysproperty key="jsse.enableSNIExtension" value="false"/>-->
+<!--                        <sysproperty key="https.protocols" value="TLSv1.2,TLSv1.1"/>-->
+<!--                    </signjar>-->
+<!--                </retry>-->
+<!--            </sequential>-->
+<!--        </for>-->
+    </target>
+
+    <!-- Copy built plugin to Mirth's setup/extensions directory -->
+    <target name="install-to-server-setup">
+        <!-- Copy plugin JARs and libs -->
+        <mkdir dir="${server.setup.extensions}/${plugin.name}"/>
+        <copy todir="${server.setup.extensions}/${plugin.name}">
+            <fileset dir="${dist.dir}" includes="**/*"/>
+        </copy>
+
+        <!-- Copy plugin configuration to server/conf -->
+        <copy file="dynamic-lookup.properties"
+              tofile="${server.setup.conf}/dynamic-lookup.properties"
+              overwrite="true"/>
+
+        <echo message="Installed plugin to ${server.setup.extensions}/${plugin.name}" />
+        <echo message="Installed dynamic-lookup.properties to ${server.setup.conf}" />
+    </target>
+
+    <target name="build" depends="clean, jar">
+        <!-- Copy plugin.xml -->
+        <copy file="plugin.xml" todir="${dist.dir}"/>
+
+        <!-- Copy plugin-specific JARs -->
+        <copy todir="${dist.dir}/libs">
+            <fileset dir="${plugin.lib}" includes="**/*.jar"/>
+        </copy>
+
+        <!-- Copy mapper folder from server resources to dist -->
+        <copy todir="${dist.dir}/mapper">
+            <fileset dir="${server.resources.dir}/mapper" includes="**/*"/>
+        </copy>
+
+        <!-- Path and Sign all JARs in dist -->
+        <antcall target="patch-and-sign-jars"/>
+
+        <!-- Now install the full plugin to the server setup extensions folder -->
+        <antcall target="install-to-server-setup"/>
+
+        <!-- Package everything in dist/ into a zip file -->
+        <zip destfile="${dist.dir}/${plugin.name}.zip" basedir="${dist.dir}">
+            <exclude name="${plugin.name}.zip"/> <!-- Avoid zipping the zip itself -->
+        </zip>
+
+        <echo message="Built, signed, installed, and zipped ${plugin.name}"/>
+    </target>
+
+</project>

@@ -43,7 +43,7 @@ import com.mirth.connect.server.util.StatementLock;
 public class DefaultUserController extends UserController {
     public static final String VACUUM_LOCK_PERSON_STATEMENT_ID = "User.vacuumPersonTable";
     public static final String VACUUM_LOCK_PREFERENCES_STATEMENT_ID = "User.vacuumPersonPreferencesTable";
-
+    private static final String INCORRECT_CREDENTIALS_MESSAGE = "Incorrect username or password.";
     private Logger logger = LogManager.getLogger(this.getClass());
     private ExtensionController extensionController = null;
 
@@ -292,6 +292,7 @@ public class DefaultUserController extends UserController {
             boolean authorized = false;
             Credentials credentials = null;
             LoginRequirementsChecker loginRequirementsChecker = null;
+            PasswordRequirements passwordRequirements = ControllerFactory.getFactory().createConfigurationController().getPasswordRequirements();
 
             // Retrieve the matching User
             User validUser = getUser(null, username);
@@ -300,7 +301,11 @@ public class DefaultUserController extends UserController {
                 Digester digester = ControllerFactory.getFactory().createConfigurationController().getDigester();
                 loginRequirementsChecker = new LoginRequirementsChecker(validUser);
                 if (loginRequirementsChecker.isUserLockedOut()) {
-                    return new LoginStatus(LoginStatus.Status.FAIL_LOCKED_OUT, "User account \"" + username + "\" has been locked. You may attempt to login again in " + loginRequirementsChecker.getPrintableStrikeTimeRemaining() + ".");
+                    if (passwordRequirements.getAllowUsernameEnumeration()) {
+                        return new LoginStatus(LoginStatus.Status.FAIL_LOCKED_OUT, "User account \"" + username + "\" has been locked. You may attempt to login again in " + loginRequirementsChecker.getPrintableStrikeTimeRemaining() + ".");
+                    } else {
+                        return new LoginStatus(LoginStatus.Status.FAIL, INCORRECT_CREDENTIALS_MESSAGE);
+                    }
                 }
 
                 loginRequirementsChecker.resetExpiredStrikes();
@@ -320,7 +325,6 @@ public class DefaultUserController extends UserController {
                 }
             }
 
-            PasswordRequirements passwordRequirements = ControllerFactory.getFactory().createConfigurationController().getPasswordRequirements();
             LoginStatus loginStatus = null;
 
             if (authorized) {
@@ -383,17 +387,16 @@ public class DefaultUserController extends UserController {
                 }
             } else {
                 LoginStatus.Status status = LoginStatus.Status.FAIL;
-                String failMessage = "Incorrect username or password.";
+                String failMessage = INCORRECT_CREDENTIALS_MESSAGE;
 
                 if (loginRequirementsChecker != null) {
                     loginRequirementsChecker.incrementStrikes();
 
                     if (loginRequirementsChecker.isLockoutEnabled()) {
-                        if (loginRequirementsChecker.isUserLockedOut()) {
-                            status = LoginStatus.Status.FAIL_LOCKED_OUT;
-                            failMessage += " User account \"" + username + "\" has been locked. You may attempt to login again in " + loginRequirementsChecker.getPrintableStrikeTimeRemaining() + ".";
+                        if (passwordRequirements.getAllowUsernameEnumeration()) {
+                            return new LoginStatus(LoginStatus.Status.FAIL_LOCKED_OUT, "User account \"" + username + "\" has been locked. You may attempt to login again in " + loginRequirementsChecker.getPrintableStrikeTimeRemaining() + ".");
                         } else {
-                            failMessage += " " + loginRequirementsChecker.getAttemptsRemaining() + " login attempt(s) remaining for \"" + username + "\" until the account is locked for " + loginRequirementsChecker.getPrintableLockoutPeriod() + ".";
+                            return new LoginStatus(LoginStatus.Status.FAIL, INCORRECT_CREDENTIALS_MESSAGE);
                         }
                     }
                 }

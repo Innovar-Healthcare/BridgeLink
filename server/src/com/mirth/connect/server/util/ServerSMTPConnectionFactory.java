@@ -18,7 +18,33 @@ public class ServerSMTPConnectionFactory {
         try {
             TemplateValueReplacer replacer = new TemplateValueReplacer();
             ServerSettings settings = ControllerFactory.getFactory().createConfigurationController().getServerSettings();
-            return new ServerSMTPConnection(replacer.replaceValues(settings.getSmtpHost()), replacer.replaceValues(settings.getSmtpPort()), Integer.parseInt(replacer.replaceValues(settings.getSmtpTimeout())), settings.getSmtpAuth(), settings.getSmtpSecure(), replacer.replaceValues(settings.getSmtpUsername()), replacer.replaceValues(settings.getSmtpPassword()), replacer.replaceValues(settings.getSmtpFrom()));
+            String authType = settings.getSmtpAuthType();
+            int timeout = Integer.parseInt(replacer.replaceValues(settings.getSmtpTimeout()));
+
+            if ("OAUTH".equals(authType)) {
+                return new ServerSMTPConnection(
+                        replacer.replaceValues(settings.getSmtpHost()),
+                        replacer.replaceValues(settings.getSmtpPort()),
+                        timeout,
+                        authType,
+                        settings.getSmtpSecure(),
+                        replacer.replaceValues(settings.getSmtpUsername()),
+                        settings.getSmtpOAuthClientId(),
+                        settings.getSmtpOAuthClientSecret(),
+                        settings.getSmtpOAuthTokenEndpointUrl(),
+                        settings.getSmtpOAuthScope(),
+                        replacer.replaceValues(settings.getSmtpFrom()));
+            }
+
+            return new ServerSMTPConnection(
+                    replacer.replaceValues(settings.getSmtpHost()),
+                    replacer.replaceValues(settings.getSmtpPort()),
+                    timeout,
+                    settings.getSmtpAuth(),
+                    settings.getSmtpSecure(),
+                    replacer.replaceValues(settings.getSmtpUsername()),
+                    replacer.replaceValues(settings.getSmtpPassword()),
+                    replacer.replaceValues(settings.getSmtpFrom()));
         } catch (Exception e) {
             if (e instanceof ControllerException) {
                 throw (ControllerException) e;

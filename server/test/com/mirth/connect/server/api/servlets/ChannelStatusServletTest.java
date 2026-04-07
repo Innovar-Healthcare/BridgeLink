@@ -13,10 +13,14 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -39,6 +43,7 @@ import com.mirth.connect.model.ChannelTag;
 import com.mirth.connect.model.DashboardChannelInfo;
 import com.mirth.connect.model.DashboardStatus;
 import com.mirth.connect.server.api.ServletTestBase;
+import com.mirth.connect.server.channel.ErrorTaskHandler;
 import com.mirth.connect.server.controllers.EngineController;
 
 public class ChannelStatusServletTest extends ServletTestBase {
@@ -233,5 +238,114 @@ public class ChannelStatusServletTest extends ServletTestBase {
         connectorInfo2.put(DISALLOWED_CHANNEL_ID, new ArrayList<Integer>());
         redactedConnectorInfo = servlet.redactConnectorInfo(connectorInfo2);
         assertEquals(connectorInfo, redactedConnectorInfo);
+    }
+
+    // ========== New tests: start/stop/halt/pause/resume channels ==========
+
+    @Test
+    public void testStartChannels() throws Throwable {
+        doNothing().when(engineController).startChannels(any(), any());
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        Set<String> channelIds = new HashSet<>();
+        channelIds.add(CHANNEL_ID1);
+        channelIds.add(CHANNEL_ID2);
+        servlet.startChannels(channelIds, false);
+        verify(engineController).startChannels(any(), any(ErrorTaskHandler.class));
+    }
+
+    @Test
+    public void testStopChannels() throws Throwable {
+        doNothing().when(engineController).stopChannels(any(), any());
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        Set<String> channelIds = new HashSet<>();
+        channelIds.add(CHANNEL_ID1);
+        servlet.stopChannels(channelIds, false);
+        verify(engineController).stopChannels(any(), any(ErrorTaskHandler.class));
+    }
+
+    @Test
+    public void testHaltChannels() throws Throwable {
+        doNothing().when(engineController).haltChannels(any(), any());
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        Set<String> channelIds = new HashSet<>();
+        channelIds.add(CHANNEL_ID1);
+        servlet.haltChannels(channelIds, false);
+        verify(engineController).haltChannels(any(), any(ErrorTaskHandler.class));
+    }
+
+    @Test
+    public void testPauseChannels() throws Throwable {
+        doNothing().when(engineController).pauseChannels(any(), any());
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        Set<String> channelIds = new HashSet<>();
+        channelIds.add(CHANNEL_ID1);
+        servlet.pauseChannels(channelIds, false);
+        verify(engineController).pauseChannels(any(), any(ErrorTaskHandler.class));
+    }
+
+    @Test
+    public void testResumeChannels() throws Throwable {
+        doNothing().when(engineController).resumeChannels(any(), any());
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        Set<String> channelIds = new HashSet<>();
+        channelIds.add(CHANNEL_ID1);
+        servlet.resumeChannels(channelIds, false);
+        verify(engineController).resumeChannels(any(), any(ErrorTaskHandler.class));
+    }
+
+    // ========== New tests: start/stop connectors ==========
+
+    @Test
+    public void testStartConnectors() throws Throwable {
+        doNothing().when(engineController).startConnector(any(), any());
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        Map<String, List<Integer>> connectorInfo = new HashMap<>();
+        connectorInfo.put(CHANNEL_ID1, Collections.singletonList(1));
+        servlet.startConnectors(connectorInfo, false);
+        verify(engineController).startConnector(any(), any(ErrorTaskHandler.class));
+    }
+
+    @Test
+    public void testStopConnectors() throws Throwable {
+        doNothing().when(engineController).stopConnector(any(), any());
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        Map<String, List<Integer>> connectorInfo = new HashMap<>();
+        connectorInfo.put(CHANNEL_ID1, Collections.singletonList(1));
+        servlet.stopConnectors(connectorInfo, false);
+        verify(engineController).stopConnector(any(), any(ErrorTaskHandler.class));
+    }
+
+    // ========== New tests: getChannelStatusListPost delegates ==========
+
+    @Test
+    public void testGetChannelStatusListPostDelegates() throws Exception {
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        List<DashboardStatus> statusList = servlet.getChannelStatusListPost(null, null, true);
+        assertEquals(5, statusList.size());
+    }
+
+    // ========== New tests: getDashboardChannelInfo with no filter ==========
+
+    @Test
+    public void testGetDashboardChannelInfoNoFilter() throws Exception {
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        DashboardChannelInfo info = servlet.getDashboardChannelInfo(10, null);
+        assertEquals(3, info.getDeployedChannelCount());
+    }
+
+    @Test
+    public void testGetDashboardChannelInfoEmptyFilter() throws Exception {
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        DashboardChannelInfo info = servlet.getDashboardChannelInfo(10, "");
+        assertEquals(3, info.getDeployedChannelCount());
+    }
+
+    @Test
+    public void testGetDashboardChannelInfoSmallFetchSize() throws Exception {
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        DashboardChannelInfo info = servlet.getDashboardChannelInfo(1, null);
+        assertEquals(3, info.getDeployedChannelCount());
+        // With fetchSize of 1, we should have remaining channel IDs
+        assertEquals(2, info.getRemainingChannelIds().size());
     }
 }

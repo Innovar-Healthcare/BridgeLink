@@ -104,11 +104,16 @@ public class DigestAuthenticator extends Authenticator {
              * This splits up the Authorization header into name-value pairs and puts them into the
              * directives map.
              */
-            QuotedStringTokenizer tokenizer = new QuotedStringTokenizer(authHeader, "=, ", true, false);
+            // Jetty 12: QuotedStringTokenizer is now an interface with builder pattern
+            QuotedStringTokenizer tokenizer = QuotedStringTokenizer.builder()
+                .delimiters("=, ")
+                .returnDelimiters()
+                .build();
+            Iterator<String> tokens = tokenizer.tokenize(authHeader);
             String directive = null;
             String lastToken = null;
-            while (tokenizer.hasMoreTokens()) {
-                String token = tokenizer.nextToken();
+            while (tokens.hasNext()) {
+                String token = tokens.next();
                 char c;
                 if (token.length() == 1 && ((c = token.charAt(0)) == '=' || c == ',' || c == ' ')) {
                     if (c == '=') {
@@ -314,7 +319,9 @@ public class DigestAuthenticator extends Authenticator {
         responseDirectives.put(REALM, properties.getRealm());
         responseDirectives.put(DOMAIN, contextPath);
         responseDirectives.put(NONCE, nonce.getValue());
-        responseDirectives.put(ALGORITHM, StringUtils.join(properties.getAlgorithms(), ','));
+        if (!properties.getAlgorithms().isEmpty()) {
+            responseDirectives.put(ALGORITHM, properties.getAlgorithms().iterator().next().toString());
+        }
         if (CollectionUtils.isNotEmpty(properties.getQopModes())) {
             responseDirectives.put(QOP, StringUtils.join(properties.getQopModes(), ','));
         }

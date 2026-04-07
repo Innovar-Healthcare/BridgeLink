@@ -23,6 +23,8 @@ import org.junit.Test;
 
 import com.mirth.connect.donkey.model.message.RawMessage;
 import com.mirth.connect.donkey.server.Donkey;
+import com.mirth.connect.donkey.server.DonkeyConfiguration;
+import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.StartException;
 import com.mirth.connect.donkey.server.channel.Channel;
 import com.mirth.connect.donkey.server.channel.DestinationChainProvider;
@@ -56,7 +58,14 @@ public class PerformanceTests {
         testMessage = FileUtils.readFileToString(new File(TEST_MESSAGE));
 
         Donkey donkey = Donkey.getInstance();
-        donkey.startEngine(TestUtils.getDonkeyTestConfiguration());
+        DonkeyConfiguration config = TestUtils.getDonkeyTestConfiguration();
+
+        // Close any leaked connection pools from a previously-run test class
+        TestUtils.shutdownConnectionPools();
+        // Initialize connection pools before starting the engine
+        DonkeyConnectionPools.getInstance().init(config.getDonkeyProperties());
+
+        donkey.startEngine(config);
 
         if (daoTimer != null) {
             donkey.setDaoFactory(new TimedDaoFactory(donkey.getDaoFactory(), daoTimer));
@@ -66,6 +75,7 @@ public class PerformanceTests {
     @AfterClass
     final public static void afterClass() throws StartException {
         Donkey.getInstance().stopEngine();
+        TestUtils.shutdownConnectionPools();
     }
 
     @Before
@@ -125,11 +135,33 @@ public class PerformanceTests {
 
             TestChannelWriter channelWriter = new TestChannelWriter(destChannel);
             channelWriter.setChannelId(channelId);
+            channelWriter.setChannel(sourceChannels[i]);
             channelWriter.setConnectorProperties(new TestConnectorProperties());
             channelWriter.setDestinationName("destination");
             channelWriter.setInboundDataType(new TestDataType());
             channelWriter.setOutboundDataType(new TestDataType());
             channelWriter.setFilterTransformerExecutor(TestUtils.createDefaultFilterTransformerExecutor());
+            channelWriter.setMetaDataId(1);
+            channelWriter.setMetaDataReplacer(sourceChannels[i].getSourceConnector().getMetaDataReplacer());
+            channelWriter.setMetaDataColumns(sourceChannels[i].getMetaDataColumns());
+            channelWriter.setResponseTransformerExecutor(TestUtils.createDefaultResponseTransformerExecutor());
+
+            // Initialize the destination queue
+            com.mirth.connect.donkey.model.channel.DestinationConnectorProperties destProps =
+                ((com.mirth.connect.donkey.model.channel.DestinationConnectorPropertiesInterface) channelWriter.getConnectorProperties())
+                .getDestinationConnectorProperties();
+            com.mirth.connect.donkey.server.queue.DestinationQueue queue =
+                new com.mirth.connect.donkey.server.queue.DestinationQueue(
+                    destProps.getThreadAssignmentVariable(),
+                    destProps.getThreadCount(),
+                    destProps.isRegenerateTemplate(),
+                    channelWriter.getSerializer(),
+                    channelWriter.getMessageMaps());
+            queue.setDataSource(new com.mirth.connect.donkey.server.queue.ConnectorMessageQueueDataSource(
+                channelId, serverId, 1, com.mirth.connect.donkey.model.message.Status.QUEUED, false,
+                TestUtils.getDaoFactory()));
+            channelWriter.setQueue(queue);
+
             chain.addDestination(1, channelWriter);
 
             sourceChannels[i].deploy();

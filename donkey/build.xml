@@ -16,11 +16,15 @@
 	
 	<target name="compile" depends="clean">
 		<mkdir dir="${classes}" />
-		
+
 		<javac srcdir="${src}" destdir="${classes}" debug="on" includeAntRuntime="false">
 			<classpath refid="classpath" />
 			<src path="${src}" />
 		</javac>
+		<!-- Copy database config XML files to classes directory for tests -->
+		<copy todir="${classes}">
+			<fileset dir="${dbconf}" includes="*.xml" />
+		</copy>
 	</target>
 	
 	<target name="create-setup" depends="init">
@@ -53,23 +57,36 @@
 	
 	<target name="build" depends="build-model, build-server, create-setup" />
 	
-	<target name="test-init" depends="init">
-		<delete dir="${test_classes}" />
-		
+	<target name="test-classpath-init" depends="init">
+		<!-- Set up test classpath without deleting anything -->
 		<path id="testclasspath">
 			<path refid="classpath" />
 			<fileset dir="${testlib}" includes="**/*.jar" />
-			<dirset dir="${classes}"/>
+			<pathelement location="${classes}"/>
 		</path>
 	</target>
-	
-	<target name="test-compile" depends="test-init">
+
+	<target name="test-init" depends="test-classpath-init">
+		<delete dir="${test_classes}" />
+	</target>
+
+	<target name="test-compile" depends="compile, test-init">
 		<!-- compile the source -->
 		<mkdir dir="${test_classes}" />
-		
+
 		<javac srcdir="${test}" destdir="${test_classes}" debug="on" includeAntRuntime="false">
 			<classpath refid="testclasspath" />
 		</javac>
+
+		<!-- Copy database config XML files to test_classes directory root for test execution -->
+		<copy todir="${test_classes}">
+			<fileset dir="${dbconf}" includes="*.xml" />
+		</copy>
+
+		<!-- Copy test configuration properties to test_classes directory -->
+		<copy todir="${test_classes}/conf">
+			<fileset dir="${basedir}/conf" includes="*.properties" />
+		</copy>
 	</target>
 
 	<path id="jacoco.classpath">
@@ -88,14 +105,21 @@
 			 resource="org/jacoco/ant/antlib.xml"
 			 classpathref="jacoco.classpath"/>
 	
-	<target name="test-run" depends="test-compile">
+	<target name="test-run" depends="test-compile" description="Run unit tests and generate code coverage">
 		<property name="junit-reports" value="junit-reports" />
+		<property name="junit-html" value="junit-html" />
 		<property name="code-coverage-reports" value="code-coverage-reports" />
 		<mkdir dir="${junit-reports}" />
+		<mkdir dir="${junit-html}" />
 		<mkdir dir="${code-coverage-reports}" />
-		
+
+		<!-- Record test start time for duration calculation -->
+		<exec executable="date" outputproperty="test.start.epoch">
+			<arg value="+%s"/>
+		</exec>
+
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
-			<junit haltonfailure="false" fork="true" forkmode="once">
+			<junit haltonfailure="false" fork="true" forkmode="once" dir="${basedir}">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 				<jvmarg value="--add-opens=java.base/sun.misc=ALL-UNNAMED"/>
@@ -105,23 +129,600 @@
 				<jvmarg value="--add-opens=java.sql.rowset/com.sun.rowset.providers=ALL-UNNAMED"/>
 				<jvmarg value="--add-opens=java.sql.rowset/javax.sql.rowset=ALL-UNNAMED"/>
 				<jvmarg value="--add-opens=java.sql/java.sql=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.lang=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.lang.reflect=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.util=ALL-UNNAMED"/>
+
+
+
+
 				<classpath>
 					<path refid="testclasspath" />
-					<dirset dir="${test_classes}"/>
+					<pathelement location="${test_classes}"/>
 				</classpath>
 				<formatter type="xml" />
 				<batchtest todir="${junit-reports}">
 					<fileset dir="${test_classes}">
+						<include name="**/*Tests.class" />
 						<include name="**/*Test.class" />
+						<exclude name="**/*$*.class" />
 					</fileset>
 				</batchtest>
 			</junit>
 		</jacoco:coverage>
+
+		<!-- Record test end time and calculate duration -->
+		<exec executable="date" outputproperty="test.end.epoch">
+			<arg value="+%s"/>
+		</exec>
+		<exec executable="bash" outputproperty="test.duration.formatted">
+			<arg value="-c"/>
+			<arg value="elapsed=$$((${test.end.epoch} - ${test.start.epoch})); mins=$$((elapsed / 60)); secs=$$((elapsed % 60)); echo $${mins}m $${secs}s"/>
+		</exec>
+
+		<!-- Generate HTML report from JUnit XML output -->
+		<junitreport todir="${junit-reports}">
+			<fileset dir="${junit-reports}">
+				<include name="TEST-*.xml"/>
+			</fileset>
+			<report format="frames" todir="${junit-html}" />
+		</junitreport>
+
+		<!-- Add timestamp, duration, and database connection info to the JUnit HTML report -->
+		<tstamp>
+			<format property="test.timestamp" pattern="yyyy-MM-dd HH:mm:ss z"/>
+		</tstamp>
+		<property file="${basedir}/conf/donkey-testing.properties" prefix="dbinfo"/>
+
+		<!-- Query database for version info -->
+		<condition property="db.version.query" value="SELECT version()">
+			<equals arg1="${dbinfo.database}" arg2="postgres"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT version()">
+			<equals arg1="${dbinfo.database}" arg2="mysql"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT banner FROM v$version WHERE ROWNUM &lt;= 1">
+			<equals arg1="${dbinfo.database}" arg2="oracle"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT @@VERSION">
+			<equals arg1="${dbinfo.database}" arg2="sqlserver"/>
+		</condition>
+		<condition property="db.version.query" value="VALUES 'Apache Derby (embedded)'">
+			<equals arg1="${dbinfo.database}" arg2="derby"/>
+		</condition>
+		<sql driver="${dbinfo.database.driver}"
+			 url="${dbinfo.database.url}"
+			 userid="${dbinfo.database.username}"
+			 password="${dbinfo.database.password}"
+			 print="true"
+			 showheaders="false"
+			 showtrailers="false"
+			 output="${basedir}/db-version-temp.txt"
+			 onerror="continue">
+			<classpath refid="testclasspath"/>
+			${db.version.query}
+		</sql>
+		<exec executable="bash" outputproperty="db.version" failonerror="false">
+			<arg value="-c"/>
+			<arg value="V=$$(head -1 '${basedir}/db-version-temp.txt' 2>/dev/null | xargs); [ -n &quot;$$V&quot; ] &amp;&amp; echo &quot;$$V&quot; || echo 'Unknown'"/>
+		</exec>
+		<property name="db.version" value="Unknown"/>
+		<delete file="${basedir}/db-version-temp.txt" quiet="true"/>
+
+		<replace file="${junit-html}/overview-summary.html">
+			<replacetoken><![CDATA[<hr size="1">]]></replacetoken>
+			<replacevalue><![CDATA[<div style="background-color:#f4f4f4; border:1px solid #cccccc; padding:10px; margin:10px 0; font-family:monospace; font-size:12px;">
+			<b>Test Timestamp:</b> @TEST_TIMESTAMP@<br/>
+			<b>Test Duration:</b> @TEST_DURATION@<br/>
+			<b>Database Type:</b> @DB_TYPE@<br/>
+			<b>Database Version:</b> @DB_VERSION@<br/>
+			<b>JDBC URL:</b> @DB_URL@<br/>
+			<b>JDBC Driver:</b> @DB_DRIVER@<br/>
+			<b>Username:</b> @DB_USERNAME@<br/>
+		</div>
+		<hr size="1">]]></replacevalue>
+		</replace>
+		<replace file="${junit-html}/overview-summary.html" token="@TEST_TIMESTAMP@" value="${test.timestamp}"/>
+		<replace file="${junit-html}/overview-summary.html" token="@TEST_DURATION@" value="${test.duration.formatted}"/>
+		<replace file="${junit-html}/overview-summary.html" token="@DB_TYPE@" value="${dbinfo.database}"/>
+		<replace file="${junit-html}/overview-summary.html" token="@DB_VERSION@" value="${db.version}"/>
+		<replace file="${junit-html}/overview-summary.html" token="@DB_URL@" value="${dbinfo.database.url}"/>
+		<replace file="${junit-html}/overview-summary.html" token="@DB_DRIVER@" value="${dbinfo.database.driver}"/>
+		<replace file="${junit-html}/overview-summary.html" token="@DB_USERNAME@" value="${dbinfo.database.username}"/>
+
+		<!-- Automatically generate JaCoCo HTML report after tests -->
+		<antcall target="jacoco-report"/>
+	</target>
+
+	<target name="jacoco-report" depends="init" description="Generate JaCoCo code coverage reports">
+		<property name="code-coverage-reports" value="code-coverage-reports" />
+		<property name="jacoco-html" value="jacoco-html" />
+		<delete dir="${jacoco-html}" />
+		<mkdir dir="${jacoco-html}" />
+		<jacoco:report xmlns:jacoco="antlib:org.jacoco.ant">
+			<executiondata>
+				<file file="${code-coverage-reports}/jacoco.exec" />
+			</executiondata>
+			<structure name="BridgeLink Donkey">
+				<classfiles>
+					<fileset dir="${classes}">
+						<include name="**/*.class" />
+					</fileset>
+				</classfiles>
+				<sourcefiles encoding="UTF-8">
+					<fileset dir="${src}" />
+				</sourcefiles>
+			</structure>
+			<html destdir="${jacoco-html}" />
+			<xml destfile="${code-coverage-reports}/jacoco-report.xml" />
+			<csv destfile="${code-coverage-reports}/jacoco-report.csv" />
+		</jacoco:report>
 	</target>
 	
 	<target name="remove-classes" depends="init">
 		<!-- delete the compiled classes folder -->
 		<delete dir="${classes}" />
 		<delete dir="${test_classes}" />
+	</target>
+
+	<!-- ========================================================================= -->
+	<!-- Multi-Database Testing Targets                                            -->
+	<!-- ========================================================================= -->
+
+	<target name="docker-check-derby">
+		<!-- Check if we should skip Docker (for Derby) -->
+		<condition property="is.derby">
+			<equals arg1="${db.type}" arg2="derby" casesensitive="false"/>
+		</condition>
+		<condition property="not.derby">
+			<not>
+				<equals arg1="${db.type}" arg2="derby" casesensitive="false"/>
+			</not>
+		</condition>
+	</target>
+
+	<target name="docker-start-db" depends="docker-check-derby" description="Start a specific database container using docker-compose">
+		<!-- Usage: ant docker-start-db -Ddb.type=postgres -->
+		<fail unless="db.type" message="Database type not specified. Use -Ddb.type=[postgres|mysql|oracle|sqlserver]"/>
+
+		<antcall target="docker-start-db-skip"/>
+		<antcall target="docker-start-db-exec"/>
+	</target>
+
+	<target name="docker-start-db-skip" if="is.derby">
+		<echo message="Derby is embedded - no Docker container needed"/>
+	</target>
+
+	<target name="docker-start-db-exec" if="not.derby">
+		<echo message="Starting ${db.type} database container..."/>
+		<exec executable="docker-compose" dir="${basedir}" failonerror="true">
+			<arg value="up"/>
+			<arg value="-d"/>
+			<arg value="${db.type}"/>
+		</exec>
+
+		<echo message="Waiting for ${db.type} to be healthy..."/>
+
+		<!-- Wait for container to be healthy (max 2 minutes) -->
+		<exec executable="bash" dir="${basedir}" failonerror="true">
+			<arg value="-c"/>
+			<arg value="for i in {1..24}; do STATUS=$(docker inspect --format='{{.State.Health.Status}}' donkey-test-${db.type} 2>/dev/null || echo 'starting'); echo &quot;Health check attempt $i: $STATUS&quot;; if [ &quot;$STATUS&quot; = &quot;healthy&quot; ]; then exit 0; fi; sleep 5; done; echo &quot;ERROR: Database did not become healthy in time&quot;; exit 1"/>
+		</exec>
+
+		<echo message="${db.type} database container is ready and healthy"/>
+
+		<!-- Create mirthdb database for SQL Server (not auto-created like postgres/mysql/oracle) -->
+		<condition property="is.sqlserver">
+			<equals arg1="${db.type}" arg2="sqlserver" casesensitive="false"/>
+		</condition>
+		<antcall target="sqlserver-create-db"/>
+	</target>
+
+	<target name="sqlserver-create-db" if="is.sqlserver">
+		<echo message="Creating mirthdb database on SQL Server (if not exists)..."/>
+		<sql driver="com.microsoft.sqlserver.jdbc.SQLServerDriver"
+			 url="jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=false;trustServerCertificate=true"
+			 userid="sa" password="MirthDB123!"
+			 onerror="continue"
+			 autocommit="true">
+			<classpath>
+				<fileset dir="${lib}" includes="**/*.jar"/>
+			</classpath>
+			CREATE DATABASE mirthdb
+		</sql>
+		<echo message="mirthdb database is ready"/>
+	</target>
+
+	<target name="docker-stop-db" depends="docker-check-derby" description="Stop a specific database container">
+		<!-- Usage: ant docker-stop-db -Ddb.type=postgres -->
+		<fail unless="db.type" message="Database type not specified. Use -Ddb.type=[postgres|mysql|oracle|sqlserver]"/>
+
+		<antcall target="docker-stop-db-exec"/>
+	</target>
+
+	<target name="docker-stop-db-exec" if="not.derby">
+		<echo message="Stopping ${db.type} database container..."/>
+		<exec executable="docker-compose" dir="${basedir}" failonerror="false">
+			<arg value="stop"/>
+			<arg value="${db.type}"/>
+		</exec>
+	</target>
+
+	<target name="docker-cleanup-db" depends="docker-check-derby" description="Stop and remove a specific database container and its volumes">
+		<!-- Usage: ant docker-cleanup-db -Ddb.type=postgres -->
+		<fail unless="db.type" message="Database type not specified. Use -Ddb.type=[postgres|mysql|oracle|sqlserver]"/>
+
+		<antcall target="docker-cleanup-db-exec"/>
+	</target>
+
+	<target name="docker-cleanup-db-exec" if="not.derby">
+		<echo message="Cleaning up ${db.type} database container and volumes..."/>
+		<exec executable="docker-compose" dir="${basedir}" failonerror="false">
+			<arg value="down"/>
+			<arg value="-v"/>
+			<arg value="${db.type}"/>
+		</exec>
+	</target>
+
+	<target name="docker-start-all-dbs" description="Start all database containers">
+		<echo message="Starting all database containers (postgres, mysql, sqlserver, oracle)..."/>
+		<exec executable="docker-compose" dir="${basedir}" failonerror="true">
+			<arg value="up"/>
+			<arg value="-d"/>
+		</exec>
+		<echo message="Waiting for all databases to be healthy..."/>
+		<sleep seconds="30"/>
+		<exec executable="docker-compose" dir="${basedir}" failonerror="false">
+			<arg value="ps"/>
+		</exec>
+		<echo message="All database containers are ready"/>
+	</target>
+
+	<target name="docker-stop-all-dbs" description="Stop all database containers">
+		<echo message="Stopping all database containers..."/>
+		<exec executable="docker-compose" dir="${basedir}" failonerror="false">
+			<arg value="stop"/>
+		</exec>
+	</target>
+
+	<target name="docker-cleanup-all-dbs" description="Stop and remove all database containers and volumes">
+		<echo message="Cleaning up all database containers and volumes..."/>
+		<exec executable="docker-compose" dir="${basedir}" failonerror="false">
+			<arg value="down"/>
+			<arg value="-v"/>
+		</exec>
+	</target>
+
+	<target name="test-run-db-only" depends="test-classpath-init" description="Run tests against a specific database (assumes database is already running)">
+		<!-- Internal target - runs tests without starting/stopping database -->
+		<!-- NOTE: This target depends on test-classpath-init (for classpath) but NOT test-compile. Caller is responsible for ensuring tests are compiled. -->
+		<!-- Usage: ant test-run-db-only -Ddb.type=postgres -->
+		<fail unless="db.type" message="Database type not specified. Use -Ddb.type=[derby|postgres|mysql|oracle|sqlserver]"/>
+
+		<property name="db.junit-reports" value="junit-reports-${db.type}" />
+		<property name="db.junit-html" value="junit-html-${db.type}" />
+		<property name="db.code-coverage-reports" value="code-coverage-reports-${db.type}" />
+		<property name="db.jacoco-html" value="jacoco-html-${db.type}" />
+
+		<mkdir dir="${db.junit-reports}" />
+		<mkdir dir="${db.junit-html}" />
+		<mkdir dir="${db.code-coverage-reports}" />
+
+		<echo message="========================================"/>
+		<echo message="Running tests against: ${db.type}"/>
+		<echo message="========================================"/>
+
+		<!-- Record test start time for duration calculation -->
+		<exec executable="date" outputproperty="test.start.epoch">
+			<arg value="+%s"/>
+		</exec>
+
+		<jacoco:coverage destfile="${db.code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader">
+			<junit haltonfailure="false" fork="true" forkmode="perBatch" dir="${basedir}">
+				<jvmarg value="-Xms128m" />
+				<jvmarg value="-Xmx2048m" />
+				<jvmarg value="--add-opens=java.base/sun.misc=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/com.sun.rowset=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/com.sun.rowset.internal=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/com.sun.rowset.providers=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql.rowset/javax.sql.rowset=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.sql/java.sql=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.lang=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.lang.reflect=ALL-UNNAMED"/>
+				<jvmarg value="--add-opens=java.base/java.util=ALL-UNNAMED"/>
+
+				<!-- Point to database-specific properties file -->
+				<sysproperty key="donkey.test.config" value="${basedir}/conf/donkey-testing-${db.type}.properties"/>
+
+				<classpath>
+					<path refid="testclasspath" />
+					<pathelement location="${test_classes}"/>
+				</classpath>
+				<formatter type="xml" />
+				<batchtest todir="${db.junit-reports}">
+					<fileset dir="${test_classes}">
+						<include name="**/*Tests.class" />
+						<include name="**/*Test.class" />
+						<exclude name="**/*$*.class" />
+					</fileset>
+				</batchtest>
+			</junit>
+		</jacoco:coverage>
+
+		<!-- Record test end time and calculate duration -->
+		<exec executable="date" outputproperty="test.end.epoch">
+			<arg value="+%s"/>
+		</exec>
+		<exec executable="bash" outputproperty="test.duration.formatted">
+			<arg value="-c"/>
+			<arg value="elapsed=$$((${test.end.epoch} - ${test.start.epoch})); mins=$$((elapsed / 60)); secs=$$((elapsed % 60)); echo $${mins}m $${secs}s"/>
+		</exec>
+
+		<!-- Generate HTML report from JUnit XML output -->
+		<junitreport todir="${db.junit-reports}">
+			<fileset dir="${db.junit-reports}">
+				<include name="TEST-*.xml"/>
+			</fileset>
+			<report format="frames" todir="${db.junit-html}">
+				<param name="TITLE" expression="${db.type} - Unit Test Results"/>
+			</report>
+		</junitreport>
+
+		<!-- Add timestamp, duration, and database connection info to the JUnit HTML report -->
+		<tstamp>
+			<format property="test.timestamp" pattern="yyyy-MM-dd HH:mm:ss z"/>
+		</tstamp>
+		<property file="${basedir}/conf/donkey-testing-${db.type}.properties" prefix="dbinfo"/>
+
+		<!-- Query database for version info -->
+		<condition property="db.version.query" value="SELECT version()">
+			<equals arg1="${db.type}" arg2="postgres"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT version()">
+			<equals arg1="${db.type}" arg2="mysql"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT banner FROM v$version WHERE ROWNUM &lt;= 1">
+			<equals arg1="${db.type}" arg2="oracle"/>
+		</condition>
+		<condition property="db.version.query" value="SELECT @@VERSION">
+			<equals arg1="${db.type}" arg2="sqlserver"/>
+		</condition>
+		<condition property="db.version.query" value="VALUES 'Apache Derby (embedded)'">
+			<equals arg1="${db.type}" arg2="derby"/>
+		</condition>
+		<sql driver="${dbinfo.database.driver}"
+			 url="${dbinfo.database.url}"
+			 userid="${dbinfo.database.username}"
+			 password="${dbinfo.database.password}"
+			 print="true"
+			 showheaders="false"
+			 showtrailers="false"
+			 output="${basedir}/db-version-temp.txt"
+			 onerror="continue">
+			<classpath refid="testclasspath"/>
+			${db.version.query}
+		</sql>
+		<exec executable="bash" outputproperty="db.version" failonerror="false">
+			<arg value="-c"/>
+			<arg value="V=$$(head -1 '${basedir}/db-version-temp.txt' 2>/dev/null | xargs); [ -n &quot;$$V&quot; ] &amp;&amp; echo &quot;$$V&quot; || echo 'Unknown'"/>
+		</exec>
+		<property name="db.version" value="Unknown"/>
+		<delete file="${basedir}/db-version-temp.txt" quiet="true"/>
+
+		<replace file="${db.junit-html}/overview-summary.html">
+			<replacetoken><![CDATA[<hr size="1">]]></replacetoken>
+			<replacevalue><![CDATA[<div style="background-color:#f4f4f4; border:1px solid #cccccc; padding:10px; margin:10px 0; font-family:monospace; font-size:12px;">
+			<b>Test Timestamp:</b> @TEST_TIMESTAMP@<br/>
+			<b>Test Duration:</b> @TEST_DURATION@<br/>
+			<b>Database Type:</b> @DB_TYPE@<br/>
+			<b>Database Version:</b> @DB_VERSION@<br/>
+			<b>JDBC URL:</b> @DB_URL@<br/>
+			<b>JDBC Driver:</b> @DB_DRIVER@<br/>
+			<b>Username:</b> @DB_USERNAME@<br/>
+		</div>
+		<hr size="1">]]></replacevalue>
+		</replace>
+		<replace file="${db.junit-html}/overview-summary.html" token="@TEST_TIMESTAMP@" value="${test.timestamp}"/>
+		<replace file="${db.junit-html}/overview-summary.html" token="@TEST_DURATION@" value="${test.duration.formatted}"/>
+		<replace file="${db.junit-html}/overview-summary.html" token="@DB_TYPE@" value="${dbinfo.database}"/>
+		<replace file="${db.junit-html}/overview-summary.html" token="@DB_VERSION@" value="${db.version}"/>
+		<replace file="${db.junit-html}/overview-summary.html" token="@DB_URL@" value="${dbinfo.database.url}"/>
+		<replace file="${db.junit-html}/overview-summary.html" token="@DB_DRIVER@" value="${dbinfo.database.driver}"/>
+		<replace file="${db.junit-html}/overview-summary.html" token="@DB_USERNAME@" value="${dbinfo.database.username}"/>
+
+		<!-- Generate JaCoCo HTML report -->
+		<delete dir="${db.jacoco-html}" />
+		<mkdir dir="${db.jacoco-html}" />
+		<jacoco:report xmlns:jacoco="antlib:org.jacoco.ant">
+			<executiondata>
+				<file file="${db.code-coverage-reports}/jacoco.exec" />
+			</executiondata>
+			<structure name="BridgeLink Donkey - ${db.type}">
+				<classfiles>
+					<fileset dir="${classes}">
+						<include name="**/*.class" />
+					</fileset>
+				</classfiles>
+				<sourcefiles encoding="UTF-8">
+					<fileset dir="${src}" />
+				</sourcefiles>
+			</structure>
+			<html destdir="${db.jacoco-html}" />
+			<xml destfile="${db.code-coverage-reports}/jacoco-report.xml" />
+			<csv destfile="${db.code-coverage-reports}/jacoco-report.csv" />
+		</jacoco:report>
+
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="Tests completed for: ${db.type}"/>
+		<echo message="JUnit Report: ${db.junit-html}/index.html"/>
+		<echo message="Coverage Report: ${db.jacoco-html}/index.html"/>
+		<echo message="========================================"/>
+	</target>
+
+	<target name="test-run-db" depends="test-compile, docker-start-db" description="Run tests against a specific database (auto-starts database)">
+		<!-- Usage: ant test-run-db -Ddb.type=postgres -->
+		<!-- This target automatically compiles tests and starts the database before running tests -->
+		<antcall target="test-run-db-only">
+			<param name="db.type" value="${db.type}"/>
+		</antcall>
+	</target>
+
+	<target name="test-run-db-isolated" depends="test-compile" description="Run tests against a specific database with automatic cleanup">
+		<!-- Usage: ant test-run-db-isolated -Ddb.type=postgres -->
+		<!-- This target starts the database, runs tests, and stops the database -->
+		<fail unless="db.type" message="Database type not specified. Use -Ddb.type=[derby|postgres|mysql|oracle|sqlserver]"/>
+
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="Testing ${db.type} (isolated run)"/>
+		<echo message="========================================"/>
+
+		<!-- Start the database -->
+		<antcall target="docker-start-db">
+			<param name="db.type" value="${db.type}"/>
+		</antcall>
+
+		<!-- Run tests -->
+		<antcall target="test-run-db-only">
+			<param name="db.type" value="${db.type}"/>
+		</antcall>
+
+		<!-- Stop and cleanup the database -->
+		<antcall target="docker-cleanup-db">
+			<param name="db.type" value="${db.type}"/>
+		</antcall>
+
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="${db.type} test completed and cleaned up"/>
+		<echo message="========================================"/>
+	</target>
+
+	<!-- Individual database test targets -->
+	<target name="test-run-derby-db" depends="test-compile" description="Run tests against Derby database">
+		<echo message=""/>
+		<echo message="[1/5] Testing Derby..."/>
+		<antcall target="test-run-db-only">
+			<param name="db.type" value="derby"/>
+		</antcall>
+	</target>
+
+	<target name="test-run-postgres-db" depends="test-compile" description="Run tests against PostgreSQL database">
+		<echo message=""/>
+		<echo message="[2/5] Testing PostgreSQL..."/>
+		<antcall target="docker-start-db">
+			<param name="db.type" value="postgres"/>
+		</antcall>
+		<antcall target="test-run-db-only">
+			<param name="db.type" value="postgres"/>
+		</antcall>
+		<antcall target="docker-cleanup-db">
+			<param name="db.type" value="postgres"/>
+		</antcall>
+	</target>
+
+	<target name="test-run-mysql-db" depends="test-compile" description="Run tests against MySQL database">
+		<echo message=""/>
+		<echo message="[3/5] Testing MySQL..."/>
+		<antcall target="docker-start-db">
+			<param name="db.type" value="mysql"/>
+		</antcall>
+		<antcall target="test-run-db-only">
+			<param name="db.type" value="mysql"/>
+		</antcall>
+		<antcall target="docker-cleanup-db">
+			<param name="db.type" value="mysql"/>
+		</antcall>
+	</target>
+
+	<target name="test-run-sqlserver-db" depends="test-compile" description="Run tests against SQL Server database">
+		<echo message=""/>
+		<echo message="[4/5] Testing SQL Server..."/>
+		<antcall target="docker-start-db">
+			<param name="db.type" value="sqlserver"/>
+		</antcall>
+		<antcall target="test-run-db-only">
+			<param name="db.type" value="sqlserver"/>
+		</antcall>
+		<antcall target="docker-cleanup-db">
+			<param name="db.type" value="sqlserver"/>
+		</antcall>
+	</target>
+
+	<target name="test-run-oracle-db" depends="test-compile" description="Run tests against Oracle database">
+		<echo message=""/>
+		<echo message="[5/5] Testing Oracle..."/>
+		<antcall target="docker-start-db">
+			<param name="db.type" value="oracle"/>
+		</antcall>
+		<antcall target="test-run-db-only">
+			<param name="db.type" value="oracle"/>
+		</antcall>
+<!--		<antcall target="docker-cleanup-db">-->
+<!--			<param name="db.type" value="oracle"/>-->
+<!--		</antcall>-->
+	</target>
+
+	<target name="test-run-all-databases" depends="clean-test-reports" description="Run tests against all database types (one at a time)">
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="Running tests against all databases"/>
+		<echo message="(one at a time with cleanup)"/>
+		<echo message="========================================"/>
+		<echo message=""/>
+
+		<antcall target="test-run-derby-db"/>
+		<antcall target="test-run-postgres-db"/>
+		<antcall target="test-run-mysql-db"/>
+		<antcall target="test-run-sqlserver-db"/>
+		<antcall target="test-run-oracle-db"/>
+
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="All database tests completed!"/>
+		<echo message="========================================"/>
+		<echo message="Reports generated in:"/>
+		<echo message="  - junit-html-derby/index.html"/>
+		<echo message="  - junit-html-postgres/index.html"/>
+		<echo message="  - junit-html-mysql/index.html"/>
+		<echo message="  - junit-html-sqlserver/index.html"/>
+		<echo message="  - junit-html-oracle/index.html"/>
+		<echo message="========================================"/>
+	</target>
+
+	<target name="clean-test-reports" description="Clean all test reports for all databases">
+		<delete dir="junit-reports" />
+		<delete dir="junit-html" />
+		<delete dir="code-coverage-reports" />
+		<delete dir="jacoco-html" />
+
+		<delete dir="junit-reports-derby" />
+		<delete dir="junit-html-derby" />
+		<delete dir="code-coverage-reports-derby" />
+		<delete dir="jacoco-html-derby" />
+
+		<delete dir="junit-reports-postgres" />
+		<delete dir="junit-html-postgres" />
+		<delete dir="code-coverage-reports-postgres" />
+		<delete dir="jacoco-html-postgres" />
+
+		<delete dir="junit-reports-mysql" />
+		<delete dir="junit-html-mysql" />
+		<delete dir="code-coverage-reports-mysql" />
+		<delete dir="jacoco-html-mysql" />
+
+		<delete dir="junit-reports-sqlserver" />
+		<delete dir="junit-html-sqlserver" />
+		<delete dir="code-coverage-reports-sqlserver" />
+		<delete dir="jacoco-html-sqlserver" />
+
+		<delete dir="junit-reports-oracle" />
+		<delete dir="junit-html-oracle" />
+		<delete dir="code-coverage-reports-oracle" />
+		<delete dir="jacoco-html-oracle" />
+
+		<echo message="All test reports cleaned"/>
 	</target>
 </project>

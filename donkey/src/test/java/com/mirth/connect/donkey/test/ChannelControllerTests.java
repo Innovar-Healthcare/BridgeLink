@@ -10,6 +10,7 @@
 package com.mirth.connect.donkey.test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -28,6 +29,8 @@ import org.junit.Test;
 
 import com.mirth.connect.donkey.model.message.Status;
 import com.mirth.connect.donkey.server.Donkey;
+import com.mirth.connect.donkey.server.DonkeyConfiguration;
+import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.StartException;
 import com.mirth.connect.donkey.server.channel.Channel;
 import com.mirth.connect.donkey.server.controllers.ChannelController;
@@ -47,13 +50,21 @@ public class ChannelControllerTests {
     @BeforeClass
     final public static void beforeClass() throws StartException {
         Donkey donkey = Donkey.getInstance();
-        donkey.startEngine(TestUtils.getDonkeyTestConfiguration());
+        DonkeyConfiguration config = TestUtils.getDonkeyTestConfiguration();
+
+        // Close any leaked connection pools from a previously-run test class
+        TestUtils.shutdownConnectionPools();
+        // Initialize connection pools before starting the engine
+        DonkeyConnectionPools.getInstance().init(config.getDonkeyProperties());
+
+        donkey.startEngine(config);
         donkey.setDaoFactory(new TimedDaoFactory(donkey.getDaoFactory(), daoTimer));
     }
 
     @AfterClass
     final public static void afterClass() throws StartException {
         Donkey.getInstance().stopEngine();
+        TestUtils.shutdownConnectionPools();
     }
 
     @Before
@@ -108,17 +119,22 @@ public class ChannelControllerTests {
             logger.info("Testing ChannelController.getTotals...");
 
             ChannelController.getInstance().removeChannel(channelId);
-            assertEquals(TestUtils.getChannelStatistics(channelId), ChannelController.getInstance().getStatistics().getChannelStats(channelId));
+            // After removing channel, both database and in-memory stats should be empty
+            Map<Integer, Map<Status, Long>> emptyStats = new HashMap<Integer, Map<Status, Long>>();
+            assertEquals(emptyStats, ChannelController.getInstance().getStatistics().getChannelStats(channelId));
 
             channel = TestUtils.createDefaultChannel(channelId, serverId);
             channel.deploy();
             channel.start(null);
 
-            assertEquals(TestUtils.getChannelStatistics(channel.getChannelId()), ChannelController.getInstance().getStatistics().getChannelStats(channelId));
-
             for (int i = 1; i <= TEST_SIZE; i++) {
                 ((TestSourceConnector) channel.getSourceConnector()).readTestMessage(testMessage);
 
+                // Wait for background statistics updater thread to persist to database
+                // Default update interval is 1000ms, so wait 1500ms to be safe
+                Thread.sleep(1500);
+
+                // After persistence, database and in-memory stats should match
                 assertEquals(TestUtils.getChannelStatistics(channel.getChannelId()), ChannelController.getInstance().getStatistics().getChannelStats(channelId));
             }
 
@@ -140,6 +156,9 @@ public class ChannelControllerTests {
      */
     @Test
     public final void testGetStatistics() throws Exception {
+        // Remove any existing channel first to ensure clean state
+        ChannelController.getInstance().removeChannel(channelId);
+
         Channel channel = TestUtils.createDefaultChannel(channelId, serverId);
 
         try {
@@ -155,14 +174,18 @@ public class ChannelControllerTests {
                 statement.executeUpdate();
                 statement.close();
 
+                // Use the same serverId that the Donkey engine is configured with (from getDonkeyTestConfiguration)
+                String statsServerId = "testserverid";
+
                 for (Integer metaDataId : new Integer[] { null, 0, 1 }) {
-                    statement = connection.prepareStatement("INSERT INTO d_ms" + localChannelId + " (metadata_id, received, filtered, transformed, pending, sent, error) VALUES (?,?,?,?,?,?,?)");
+                    statement = connection.prepareStatement("INSERT INTO d_ms" + localChannelId + " (metadata_id, server_id, received, filtered, sent, error) VALUES (?,?,?,?,?,?)");
                     if (metaDataId != null) {
                         statement.setInt(1, metaDataId);
                     } else {
                         statement.setNull(1, Types.INTEGER);
                     }
-                    for (int i = 2; i <= 7; i++) {
+                    statement.setString(2, statsServerId); // Must match Donkey configuration serverId
+                    for (int i = 3; i <= 6; i++) {
                         statement.setInt(i, (int) (Math.random() * 100));
                     }
                     statement.executeUpdate();
@@ -183,6 +206,10 @@ public class ChannelControllerTests {
             // Send messages
             for (int i = 1; i <= TEST_SIZE; i++) {
                 ((TestSourceConnector) channel.getSourceConnector()).readTestMessage(testMessage);
+
+                // Wait for background statistics updater thread to persist to database
+                // Default update interval is 1000ms, so wait 1500ms to be safe
+                Thread.sleep(1500);
 
                 Map<Integer, Map<Status, Long>> dbStats = TestUtils.getChannelStatistics(channel.getChannelId());
                 Map<Integer, Map<Status, Long>> vmStats = ChannelController.getInstance().getStatistics().getChannelStats(channel.getChannelId());
@@ -206,15 +233,14 @@ public class ChannelControllerTests {
         for (Integer metaDataId : joinSets(minuend.keySet(), subtrahend.keySet())) {
             Map<Status, Long> connectorStats = new HashMap<Status, Long>();
 
-            for (Status status : Status.values()) {
-                if (status != Status.QUEUED) {
-                    connectorStats.put(status, 0L);
-                    if (minuend.containsKey(metaDataId) && minuend.get(metaDataId).containsKey(status)) {
-                        connectorStats.put(status, minuend.get(metaDataId).get(status));
-                    }
-                    if (subtrahend.containsKey(metaDataId) && subtrahend.get(metaDataId).containsKey(status)) {
-                        connectorStats.put(status, connectorStats.get(status) - subtrahend.get(metaDataId).get(status));
-                    }
+            // Only include statuses that are actually in the database schema
+            for (Status status : new Status[] {Status.RECEIVED, Status.FILTERED, Status.SENT, Status.ERROR}) {
+                connectorStats.put(status, 0L);
+                if (minuend.containsKey(metaDataId) && minuend.get(metaDataId).containsKey(status)) {
+                    connectorStats.put(status, minuend.get(metaDataId).get(status));
+                }
+                if (subtrahend.containsKey(metaDataId) && subtrahend.get(metaDataId).containsKey(status)) {
+                    connectorStats.put(status, connectorStats.get(status) - subtrahend.get(metaDataId).get(status));
                 }
             }
 

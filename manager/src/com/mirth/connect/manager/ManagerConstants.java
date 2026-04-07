@@ -17,7 +17,7 @@ public class ManagerConstants {
 
     // Configurable directories
     public static final String DIR_APPDATA = "dir.appdata";
-    public static final String DIR_LOGS = "dir.logs";
+    public static final String PROPERTY_LOGS = "property.logs";
 
     // Log4j
     public static final String LOG4J_MIRTH_LOG_LEVEL = "rootLogger";

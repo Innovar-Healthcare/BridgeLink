@@ -16,11 +16,14 @@ import org.apache.commons.lang3.builder.EqualsBuilder;
 import com.mirth.connect.donkey.model.channel.ConnectorProperties;
 import com.mirth.connect.donkey.model.channel.DestinationConnectorProperties;
 import com.mirth.connect.donkey.model.channel.DestinationConnectorPropertiesInterface;
+import com.mirth.connect.donkey.model.channel.SourceConnectorProperties;
+import com.mirth.connect.donkey.model.channel.SourceConnectorPropertiesInterface;
 import com.mirth.connect.donkey.util.DonkeyElement;
 
 @SuppressWarnings("serial")
-public class TestConnectorProperties extends ConnectorProperties implements DestinationConnectorPropertiesInterface {
+public class TestConnectorProperties extends ConnectorProperties implements DestinationConnectorPropertiesInterface, SourceConnectorPropertiesInterface {
     private DestinationConnectorProperties destinationConnectorProperties = new DestinationConnectorProperties();
+    private SourceConnectorProperties sourceConnectorProperties = new SourceConnectorProperties();
 
     @Override
     public String toFormattedString() {
@@ -40,6 +43,16 @@ public class TestConnectorProperties extends ConnectorProperties implements Dest
     @Override
     public DestinationConnectorProperties getDestinationConnectorProperties() {
         return destinationConnectorProperties;
+    }
+
+    @Override
+    public SourceConnectorProperties getSourceConnectorProperties() {
+        return sourceConnectorProperties;
+    }
+
+    @Override
+    public boolean canBatch() {
+        return false;
     }
 
     @Override

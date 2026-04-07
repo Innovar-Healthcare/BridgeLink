@@ -65,7 +65,7 @@ public class UserProtocol implements Protocol {
             }
 
             for (String recipient : recipients) {
-                if (NumberUtils.isNumber(recipient) && userMap.containsKey(NumberUtils.toInt(recipient))) {
+                if (NumberUtils.isCreatable(recipient) && userMap.containsKey(NumberUtils.toInt(recipient))) {
                     userIds.add(NumberUtils.toInt(recipient));
                 } else if (userMap.containsValue(recipient)) {
                     usernames.add(recipient);

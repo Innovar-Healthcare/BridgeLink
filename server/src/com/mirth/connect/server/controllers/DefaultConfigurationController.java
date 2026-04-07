@@ -1670,7 +1670,22 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             email.setStartTLSEnabled(true);
         }
 
-        if (authentication) {
+        String authType = properties.getProperty("authType", authentication ? "BASIC" : "NONE");
+        if ("OAUTH".equals(authType)) {
+            String clientId = properties.getProperty("oAuthClientId", "");
+            String clientSecret = properties.getProperty("oAuthClientSecret", "");
+            String tokenUrl = properties.getProperty("oAuthTokenEndpointUrl", "");
+            String scope = properties.getProperty("oAuthScope", "");
+            com.mirth.connect.server.util.OAuthTokenManager tokenManager = new com.mirth.connect.server.util.OAuthTokenManager(tokenUrl, clientId, clientSecret, scope);
+            try {
+                String accessToken = tokenManager.getAccessToken();
+                email.setAuthentication(username, accessToken);
+            } catch (Exception e) {
+                return new ConnectionTestResponse(ConnectionTestResponse.Type.FAILURE, "OAuth token request failed: " + e.getMessage());
+            } finally {
+                tokenManager.shutdown();
+            }
+        } else if (authentication) {
             email.setAuthentication(username, password);
         }
 
@@ -1680,6 +1695,9 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
         String cipherSuites = properties.getProperty("cipherSuites", StringUtils.join(MirthSSLUtil.getEnabledHttpsCipherSuites(configurationController.getHttpsCipherSuites()), ' '));
         email.getMailSession().getProperties().setProperty("mail.smtp.ssl.protocols", protocols);
         email.getMailSession().getProperties().setProperty("mail.smtp.ssl.ciphersuites", cipherSuites);
+        if ("OAUTH".equals(authType)) {
+            email.getMailSession().getProperties().setProperty("mail.smtp.auth.mechanisms", "XOAUTH2");
+        }
 
         SSLSocketFactory socketFactory = (SSLSocketFactory) properties.get("socketFactory");
         if (socketFactory != null) {
@@ -1702,7 +1720,28 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             email.send();
             return new ConnectionTestResponse(ConnectionTestResponse.Type.SUCCESS, "Sucessfully sent test email to: " + to);
         } catch (EmailException e) {
-            return new ConnectionTestResponse(ConnectionTestResponse.Type.FAILURE, e.getMessage());
+            logger.error("sendTestEmail failed", e);
+            StringBuilder message = new StringBuilder(e.getMessage());
+            Throwable cause = e.getCause();
+            while (cause != null) {
+                String causeMsg = cause.getMessage();
+                if (causeMsg != null && !causeMsg.equals(message.toString())) {
+                    // Truncate long server diagnostic payloads at [BeginDiagnosticData]
+                    int diagIdx = causeMsg.indexOf("[BeginDiagnosticData]");
+                    if (diagIdx > 0) {
+                        causeMsg = causeMsg.substring(0, diagIdx).trim();
+                    }
+                    // Cap total cause message at 300 characters
+                    if (causeMsg.length() > 300) {
+                        causeMsg = causeMsg.substring(0, 300) + "...";
+                    }
+                    message.append(" | ").append(cause.getClass().getSimpleName()).append(": ").append(causeMsg);
+                } else if (causeMsg == null) {
+                    message.append(" | ").append(cause.getClass().getName());
+                }
+                cause = cause.getCause();
+            }
+            return new ConnectionTestResponse(ConnectionTestResponse.Type.FAILURE, message.toString());
         }
     }
 }

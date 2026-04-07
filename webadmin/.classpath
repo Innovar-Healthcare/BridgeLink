@@ -26,7 +26,7 @@
 			<accessrule kind="nonaccessible" pattern="*/**"/>
 		</accessrules>
 	</classpathentry>
-	<classpathentry kind="lib" path="/Server/lib/javax/javax.servlet-api-3.1.0.jar"/>
+	<classpathentry kind="lib" path="/Server/lib/javax/javax.servlet-api-4.0.1.jar"/>
 	<classpathentry kind="lib" path="/Server/lib/jetty/jsp/org.mortbay.jasper.apache-jsp-8.5.70.jar"/>
 	<classpathentry kind="output" path="build/classes"/>
 </classpath>

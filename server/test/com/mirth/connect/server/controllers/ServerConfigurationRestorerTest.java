@@ -38,7 +38,7 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.commons.io.IOUtils;
-import org.eclipse.jetty.util.MultiException;
+import com.mirth.connect.server.util.MultiException;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.ArgumentMatcher;

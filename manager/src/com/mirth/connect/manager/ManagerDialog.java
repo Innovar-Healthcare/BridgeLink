@@ -515,7 +515,7 @@ public class ManagerDialog extends JDialog {
     }
 
     private void viewFileButtonActionPerformed(ActionEvent evt) {
-        managerController.openLogFile(managerController.getLog4jProperties().getString(com.mirth.connect.manager.ManagerConstants.DIR_LOGS) + System.getProperty("file.separator") + (String) serverLogFiles.getSelectedValue());
+        managerController.openLogFile(managerController.getLogPath() + System.getProperty("file.separator") + (String) serverLogFiles.getSelectedValue());
     }
 
     private void restartButtonActionPerformed(ActionEvent evt) {
@@ -639,7 +639,7 @@ public class ManagerDialog extends JDialog {
     }
 
     private void refreshLogs() {
-        String logPath = managerController.getLog4jProperties().getString(com.mirth.connect.manager.ManagerConstants.DIR_LOGS);
+        String logPath = managerController.getLogPath();
         serverLogFiles.setListData(managerController.getLogFiles(logPath).toArray());
     }
 

@@ -196,7 +196,17 @@
 	<query id="addMetaDataColumnTimestamp">
 		ALTER TABLE D_MCM${localChannelId} ADD "${columnName}" DATETIME DEFAULT NULL
 	</query>
-	
+
+	<query id="removeMetaDataColumn">
+		DECLARE @constraintName NVARCHAR(256);
+		SELECT @constraintName = name FROM sys.default_constraints
+		WHERE parent_object_id = OBJECT_ID('D_MCM${localChannelId}')
+		AND COL_NAME(parent_object_id, parent_column_id) = '${columnName}';
+		IF @constraintName IS NOT NULL
+			EXEC('ALTER TABLE D_MCM${localChannelId} DROP CONSTRAINT [' + @constraintName + ']');
+		ALTER TABLE D_MCM${localChannelId} DROP COLUMN "${columnName}"
+	</query>
+
 	<query id="markAsProcessed">
 		UPDATE D_M${localChannelId} SET PROCESSED = 1
 		WHERE ID = ?

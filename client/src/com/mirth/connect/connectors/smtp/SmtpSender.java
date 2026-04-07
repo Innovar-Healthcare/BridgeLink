@@ -114,10 +114,21 @@ public class SmtpSender extends ConnectorSettingsPanel {
             properties.setEncryption("none");
         }
 
-        properties.setAuthentication(useAuthenticationYes.isSelected());
+        String authType = "NONE";
+        if (useAuthenticationYes.isSelected()) {
+            authType = "BASIC";
+        } else if (useAuthenticationOAuth.isSelected()) {
+            authType = "OAUTH";
+        }
+        properties.setAuthType(authType);
+        properties.setAuthentication("BASIC".equals(authType));
 
         properties.setUsername(usernameField.getText());
         properties.setPassword(new String(passwordField.getPassword()));
+        properties.setOAuthClientId(oAuthClientIdField.getText());
+        properties.setOAuthClientSecret(new String(oAuthClientSecretField.getPassword()));
+        properties.setOAuthTokenEndpointUrl(oAuthTokenUrlField.getText());
+        properties.setOAuthScope(oAuthScopeField.getText());
         properties.setTo(toField.getText());
         properties.setFrom(fromField.getText());
         properties.setSubject(subjectField.getText());
@@ -181,16 +192,24 @@ public class SmtpSender extends ConnectorSettingsPanel {
             encryptionNone.setSelected(true);
         }
 
-        if (props.isAuthentication()) {
-            setAuthenticationFieldsEnabled(true);
+        String authType = props.getAuthType();
+        if ("OAUTH".equals(authType)) {
+            useAuthenticationOAuth.setSelected(true);
+            setAuthTypeFieldsEnabled("OAUTH");
+        } else if ("BASIC".equals(authType) || props.isAuthentication()) {
             useAuthenticationYes.setSelected(true);
+            setAuthTypeFieldsEnabled("BASIC");
         } else {
-            setAuthenticationFieldsEnabled(false);
             useAuthenticationNo.setSelected(true);
+            setAuthTypeFieldsEnabled("NONE");
         }
 
         usernameField.setText(props.getUsername());
         passwordField.setText(props.getPassword());
+        oAuthClientIdField.setText(props.getOAuthClientId());
+        oAuthClientSecretField.setText(props.getOAuthClientSecret());
+        oAuthTokenUrlField.setText(props.getOAuthTokenEndpointUrl());
+        oAuthScopeField.setText(props.getOAuthScope());
         toField.setText(props.getTo());
         fromField.setText(props.getFrom());
         subjectField.setText(props.getSubject());
@@ -300,6 +319,37 @@ public class SmtpSender extends ConnectorSettingsPanel {
             errors.append("Attachments list variable required when Use List mode is selected\n");
         }
 
+        if ("OAUTH".equals(props.getAuthType())) {
+            if (props.getUsername().length() == 0) {
+                valid = false;
+                if (highlight) {
+                    usernameField.setBackground(UIConstants.INVALID_COLOR);
+                }
+                errors.append("\"Username\" is required for OAuth authentication\n");
+            }
+            if (props.getOAuthClientId().length() == 0) {
+                valid = false;
+                if (highlight) {
+                    oAuthClientIdField.setBackground(UIConstants.INVALID_COLOR);
+                }
+                errors.append("\"Client ID\" is required for OAuth authentication\n");
+            }
+            if (props.getOAuthClientSecret().length() == 0) {
+                valid = false;
+                if (highlight) {
+                    oAuthClientSecretField.setBackground(UIConstants.INVALID_COLOR);
+                }
+                errors.append("\"Client Secret\" is required for OAuth authentication\n");
+            }
+            if (props.getOAuthTokenEndpointUrl().length() == 0) {
+                valid = false;
+                if (highlight) {
+                    oAuthTokenUrlField.setBackground(UIConstants.INVALID_COLOR);
+                }
+                errors.append("\"Token URL\" is required for OAuth authentication\n");
+            }
+        }
+
         this.errors = errors.toString();
 
         return valid;
@@ -315,6 +365,10 @@ public class SmtpSender extends ConnectorSettingsPanel {
         fromField.setBackground(null);
         headersVariableField.setBackground(null);
         attachmentsVariableField.setBackground(null);
+        usernameField.setBackground(null);
+        oAuthClientIdField.setBackground(null);
+        oAuthClientSecretField.setBackground(null);
+        oAuthTokenUrlField.setBackground(null);
     }
 
     @Override
@@ -670,34 +724,68 @@ public class SmtpSender extends ConnectorSettingsPanel {
         encryptionSsl.setBackground(getBackground());
         encryptionButtonGroup.add(encryptionSsl);
 
-        useAuthenticationLabel = new JLabel("Use Authentication:");
+        useAuthenticationLabel = new JLabel("Auth Type:");
         ButtonGroup useAuthenticationButtonGroup = new ButtonGroup();
 
-        useAuthenticationYes = new MirthRadioButton("Yes");
-        useAuthenticationYes.setBackground(getBackground());
-        useAuthenticationYes.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent evt) {
-                setAuthenticationFieldsEnabled(true);
-            }
-        });
-        useAuthenticationButtonGroup.add(useAuthenticationYes);
-
-        useAuthenticationNo = new MirthRadioButton("No");
+        useAuthenticationNo = new MirthRadioButton("None");
         useAuthenticationNo.setBackground(getBackground());
         useAuthenticationNo.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent evt) {
-                setAuthenticationFieldsEnabled(false);
+                setAuthTypeFieldsEnabled("NONE");
             }
         });
         useAuthenticationButtonGroup.add(useAuthenticationNo);
 
+        useAuthenticationYes = new MirthRadioButton("Basic");
+        useAuthenticationYes.setBackground(getBackground());
+        useAuthenticationYes.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent evt) {
+                setAuthTypeFieldsEnabled("BASIC");
+            }
+        });
+        useAuthenticationButtonGroup.add(useAuthenticationYes);
+
+        useAuthenticationOAuth = new MirthRadioButton("OAuth 2.0");
+        useAuthenticationOAuth.setBackground(getBackground());
+        useAuthenticationOAuth.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent evt) {
+                setAuthTypeFieldsEnabled("OAUTH");
+            }
+        });
+        useAuthenticationButtonGroup.add(useAuthenticationOAuth);
+
         usernameLabel = new JLabel("Username:");
+        usernameLabel.setEnabled(false);
         usernameField = new MirthTextField();
+        usernameField.setEnabled(false);
 
         passwordLabel = new JLabel("Password:");
+        passwordLabel.setEnabled(false);
         passwordField = new MirthPasswordField();
+        passwordField.setEnabled(false);
+
+        oAuthClientIdLabel = new JLabel("Client ID:");
+        oAuthClientIdLabel.setEnabled(false);
+        oAuthClientIdField = new MirthTextField();
+        oAuthClientIdField.setEnabled(false);
+
+        oAuthClientSecretLabel = new JLabel("Client Secret:");
+        oAuthClientSecretLabel.setEnabled(false);
+        oAuthClientSecretField = new MirthPasswordField();
+        oAuthClientSecretField.setEnabled(false);
+
+        oAuthTokenUrlLabel = new JLabel("Token URL:");
+        oAuthTokenUrlLabel.setEnabled(false);
+        oAuthTokenUrlField = new MirthTextField();
+        oAuthTokenUrlField.setEnabled(false);
+
+        oAuthScopeLabel = new JLabel("Scope:");
+        oAuthScopeLabel.setEnabled(false);
+        oAuthScopeField = new MirthTextField();
+        oAuthScopeField.setEnabled(false);
 
         toLabel = new JLabel("To:");
         toField = new MirthTextField();
@@ -830,10 +918,15 @@ public class SmtpSender extends ConnectorSettingsPanel {
         encryptionTls.setToolTipText(toolTipText);
         encryptionSsl.setToolTipText(toolTipText);
 
-        useAuthenticationYes.setToolTipText("Use SMTP authentication.");
         useAuthenticationNo.setToolTipText("Do not use SMTP authentication.");
+        useAuthenticationYes.setToolTipText("Use Basic (username/password) SMTP authentication.");
+        useAuthenticationOAuth.setToolTipText("Use OAuth 2.0 Client Credentials SMTP authentication (e.g. Microsoft 365).");
         usernameField.setToolTipText("If the SMTP server requires authentication to send a message, enter the username here.");
         passwordField.setToolTipText("If the SMTP server requires authentication to send a message, enter the password here.");
+        oAuthClientIdField.setToolTipText("OAuth 2.0 application (client) ID.");
+        oAuthClientSecretField.setToolTipText("OAuth 2.0 client secret.");
+        oAuthTokenUrlField.setToolTipText("OAuth 2.0 token endpoint URL (e.g. https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token).");
+        oAuthScopeField.setToolTipText("OAuth 2.0 scope (e.g. https://outlook.office365.com/.default).");
         toField.setToolTipText("The name of the mailbox (person, usually) to which the email should be sent.");
         fromField.setToolTipText("The name that should appear as the \"From address\" in the email.");
         subjectField.setToolTipText("The text that should appear as the subject of the email, as seen by the receiver's email client.");
@@ -853,7 +946,7 @@ public class SmtpSender extends ConnectorSettingsPanel {
     }
 
     private void initLayout() {
-        setLayout(new MigLayout("insets 0 8 0 8, novisualpadding, hidemode 3, gap 12 6", "[][]6[]", "[][]4[]4[][][]4[]4[]4[][][][][][]4[]4[][][]"));
+        setLayout(new MigLayout("insets 0 8 0 8, novisualpadding, gap 12 6", "[][]6[]", "[][]4[]4[][][]4[]4[]4[][][][][][]4[]4[][][]"));
 
         add(smtpHostLabel, "right");
         add(smtpHostField, "w 200!, sx, split 2");
@@ -874,12 +967,21 @@ public class SmtpSender extends ConnectorSettingsPanel {
         add(encryptionTls);
         add(encryptionSsl);
         add(useAuthenticationLabel, "newline, right");
-        add(useAuthenticationYes, "split 2");
-        add(useAuthenticationNo);
+        add(useAuthenticationNo, "split 3");
+        add(useAuthenticationYes);
+        add(useAuthenticationOAuth);
         add(usernameLabel, "newline, right");
         add(usernameField, "w 125!, sx");
         add(passwordLabel, "newline, right");
         add(passwordField, "w 125!, sx");
+        add(oAuthClientIdLabel, "newline, right");
+        add(oAuthClientIdField, "w 200!, sx");
+        add(oAuthClientSecretLabel, "newline, right");
+        add(oAuthClientSecretField, "w 200!, sx");
+        add(oAuthTokenUrlLabel, "newline, right");
+        add(oAuthTokenUrlField, "w 300!, sx");
+        add(oAuthScopeLabel, "newline, right");
+        add(oAuthScopeField, "w 300!, sx");
         add(toLabel, "newline, right");
         add(toField, "w 200!, sx");
         add(fromLabel, "newline, right");
@@ -934,12 +1036,22 @@ public class SmtpSender extends ConnectorSettingsPanel {
         }
     }
 
-    private void setAuthenticationFieldsEnabled(boolean useAuthentication) {
-        usernameLabel.setEnabled(useAuthentication);
-        usernameField.setEnabled(useAuthentication);
+    private void setAuthTypeFieldsEnabled(String authType) {
+        boolean isBasic = "BASIC".equals(authType);
+        boolean isOAuth = "OAUTH".equals(authType);
 
-        passwordLabel.setEnabled(useAuthentication);
-        passwordField.setEnabled(useAuthentication);
+        usernameLabel.setEnabled(isBasic || isOAuth);
+        usernameField.setEnabled(isBasic || isOAuth);
+        passwordLabel.setEnabled(isBasic);
+        passwordField.setEnabled(isBasic);
+        oAuthClientIdLabel.setEnabled(isOAuth);
+        oAuthClientIdField.setEnabled(isOAuth);
+        oAuthClientSecretLabel.setEnabled(isOAuth);
+        oAuthClientSecretField.setEnabled(isOAuth);
+        oAuthTokenUrlLabel.setEnabled(isOAuth);
+        oAuthTokenUrlField.setEnabled(isOAuth);
+        oAuthScopeLabel.setEnabled(isOAuth);
+        oAuthScopeField.setEnabled(isOAuth);
     }
 
     private void sendTestEmailButtonActionPerformed() {
@@ -1036,10 +1148,19 @@ public class SmtpSender extends ConnectorSettingsPanel {
     private JLabel useAuthenticationLabel;
     private MirthRadioButton useAuthenticationYes;
     private MirthRadioButton useAuthenticationNo;
+    private MirthRadioButton useAuthenticationOAuth;
     private JLabel usernameLabel;
     private MirthTextField usernameField;
     private JLabel passwordLabel;
     private MirthPasswordField passwordField;
+    private JLabel oAuthClientIdLabel;
+    private MirthTextField oAuthClientIdField;
+    private JLabel oAuthClientSecretLabel;
+    private MirthPasswordField oAuthClientSecretField;
+    private JLabel oAuthTokenUrlLabel;
+    private MirthTextField oAuthTokenUrlField;
+    private JLabel oAuthScopeLabel;
+    private MirthTextField oAuthScopeField;
     private JLabel toLabel;
     private MirthTextField toField;
     private JLabel fromLabel;
