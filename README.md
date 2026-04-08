@@ -12,7 +12,7 @@
 
 <a name="useful-links"></a>
 ## 1. Useful Links
-- [Downloads](https://innovar-oss-mirth-mirror.s3.us-east-2.amazonaws.com/index.html) 
+- [Downloads]([https://innovar-oss-mirth-mirror.s3.us-east-2.amazonaws.com/index.html](https://bridgelink-downloads.s3.us-east-2.amazonaws.com/bridgelink-misc/bridgelink-downloads.html)) 
 - [User Guide]()
 - [Slack Channel](https://bridgelink01.slack.com/)
 
