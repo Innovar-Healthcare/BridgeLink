@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.innovarhealthcare</groupId>
+        <artifactId>bridge-link-parent</artifactId>
+        <version>0.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>bridge-link-client</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.innovarhealthcare</groupId>
+            <artifactId>bridge-link-donkey</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.innovarhealthcare</groupId>
+            <artifactId>bridge-link-server</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.swinglabs</groupId>
+            <artifactId>swingx-core</artifactId>
+            <version>1.6.2-2</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fifesoft</groupId>
+            <artifactId>rsyntaxtextarea</artifactId>
+            <version>2.5.6</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fifesoft</groupId>
+            <artifactId>autocomplete</artifactId>
+            <version>2.5.4</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fifesoft</groupId>
+            <artifactId>languagesupport</artifactId>
+            <!-- TODO: ant has no version number -->
+            <version>2.5.6</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-base</artifactId>
+            <!-- TODO: ant uses a combined openjfx.jar with no version, this is our best guest -->
+            <version>11</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-swing</artifactId>
+            <!-- TODO: ant uses a combined openjfx.jar with no version, this is our best guest -->
+            <version>11</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-web</artifactId>
+            <!-- TODO: ant uses a combined openjfx.jar with no version, this is our best guest -->
+            <version>11</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <!-- TODO: ant uses a combined openjfx.jar with o version, this is our best guest -->
+            <version>11</version>
+        </dependency>
+       <dependency>
+            <groupId>com.miglayout</groupId>
+            <artifactId>miglayout-swing</artifactId>
+            <version>4.2</version>
+        </dependency>
+        <dependency>
+            <groupId>com.jgoodies</groupId>
+            <artifactId>jgoodies-looks</artifactId>
+            <!-- TODO: ant uses 2.3.1-->
+            <version>2.5.2</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.javaparser</groupId>
+            <artifactId>javaparser</artifactId>
+            <version>1.0.8</version>
+        </dependency>
+        <dependency>
+            <groupId>wizard</groupId>
+            <artifactId>wizard</artifactId>
+            <version>1.0</version>
+            <!-- TODO: find maven artefact -->
+            <scope>system</scope>
+            <systemPath>${maven.multiModuleProjectDirectory}/client/lib/wizard.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jersey.core</groupId>
+            <artifactId>jersey-client</artifactId>
+            <version>2.22.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.googlecode.libphonenumber</groupId>
+            <artifactId>libphonenumber</artifactId>
+            <version>8.12.50</version>
+        </dependency>
+        <dependency>
+            <groupId>com.sun.pdfview</groupId>
+            <artifactId>PDFRenderer</artifactId>
+            <version>1.0</version>
+            <!-- TODO: find maven artefact -->
+            <scope>system</scope>
+            <systemPath>${maven.multiModuleProjectDirectory}/server/lib/extensions/pdfviewer/PDFRenderer.jar</systemPath>
+        </dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <sourceDirectory>src</sourceDirectory>
+        <testSourceDirectory>test</testSourceDirectory>
+        <resources>
+            <resource>
+                <directory>src</directory>
+                <excludes>
+                    <exclude>*.java</exclude>
+                </excludes>
+            </resource>
+        </resources>
+    </build>
+
+</project>

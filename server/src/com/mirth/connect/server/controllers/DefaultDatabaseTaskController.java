@@ -12,6 +12,7 @@ package com.mirth.connect.server.controllers;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,8 +43,6 @@ import com.mirth.connect.server.channel.ChannelTask;
 import com.mirth.connect.server.channel.ChannelTaskHandler;
 import com.mirth.connect.server.util.DatabaseUtil;
 import com.mirth.connect.server.util.SqlConfig;
-
-import edu.emory.mathcs.backport.java.util.Collections;
 
 public class DefaultDatabaseTaskController implements DatabaseTaskController {
 
