@@ -226,6 +226,13 @@ public class Mirth extends Thread {
         Donkey.getInstance().setSerializer(ObjectXMLSerializer.getInstance());
 
         configurationController.initializeSecuritySettings();
+
+        if (configurationController.isUsingDefaultKeystorePassword()) {
+            logger.warn("SECURITY WARNING: Keystore passwords are still set to default values " +
+                "and should be updated immediately. Log in to the BridgeLink Administrator " +
+                "and follow the on-screen instructions.");
+        }
+
         configurationController.initializeDatabaseSettings();
 
         // Refresh the in-memory config in case the configuration controller changed it

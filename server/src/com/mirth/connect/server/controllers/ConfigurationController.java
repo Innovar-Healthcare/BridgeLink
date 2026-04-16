@@ -34,6 +34,7 @@ import com.mirth.connect.model.ServerSettings;
 import com.mirth.connect.model.UpdateSettings;
 import com.mirth.connect.util.ConfigurationProperty;
 import com.mirth.connect.util.ConnectionTestResponse;
+import com.mirth.connect.util.KeystoreRegenerationResponse;
 
 /**
  * The ConfigurationController provides access to the Mirth configuration.
@@ -360,4 +361,8 @@ public abstract class ConfigurationController extends Controller {
     public abstract void setChannelTags(Set<ChannelTag> tags);
 
     public abstract Set<ChannelTag> getChannelTags();
+
+    public abstract boolean isUsingDefaultKeystorePassword();
+
+    public abstract KeystoreRegenerationResponse regenerateKeystorePassword() throws Exception;
 }

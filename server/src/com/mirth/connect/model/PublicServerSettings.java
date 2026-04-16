@@ -24,5 +24,6 @@ public class PublicServerSettings extends ServerSettings {
         setAdministratorAutoLogoutIntervalField(toIntegerObject(properties.getProperty(ADMINISTRATOR_AUTO_LOGOUT_INTERVAL_FIELD, DEFAULT_ADMINISTRATOR_AUTO_LOGOUT_INTERVAL_FIELD_VALUE.toString())));
         setQueueBufferSize(toIntegerObject(properties.getProperty(QUEUE_BUFFER_SIZE)));
         setDefaultMetaDataColumns(toList(properties.getProperty(DEFAULT_METADATA_COLUMNS), MetaDataColumn.class, DefaultMetaData.DEFAULT_COLUMNS));
+        setKeystoreUsingDefaultPassword(intToBooleanObject(properties.getProperty(KEYSTORE_USING_DEFAULT_PASSWORD)));
     }
 }

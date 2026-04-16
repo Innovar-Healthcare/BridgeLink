@@ -138,6 +138,7 @@ import com.mirth.connect.util.ChannelDependencyGraph;
 import com.mirth.connect.util.ConfigurationProperty;
 import com.mirth.connect.util.ConnectionTestResponse;
 import com.mirth.connect.util.JavaScriptSharedUtil;
+import com.mirth.connect.util.KeystoreRegenerationResponse;
 import com.mirth.connect.util.MigrationUtil;
 import com.mirth.connect.util.MirthSSLUtil;
 
@@ -203,7 +204,12 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
     private static final String XSTREAM_ALLOW_TYPES = "xstream.allowtypes";
     private static final String XSTREAM_ALLOW_TYPE_HIERARCHIES = "xstream.allowtypehierarchies";
 
-    private static final String DEFAULT_STOREPASS = "81uWxplDtB";
+    private static final String[][] DEFAULT_KEYSTORE_PASSWORD_PAIRS = {
+        {"81uWxplDtB",   "81uWxplDtB" },   // Set A: original defaults (storepass == keypass)
+        {"nfHbaNFacIhQ", "tdW6edezNbmd"},   // Set B: alternate defaults
+    };
+
+    private boolean usingDefaultKeystorePassword = false;
 
     // singleton pattern
     private static com.mirth.connect.server.controllers.ConfigurationController instance = null;
@@ -575,7 +581,9 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
     
     @Override
     public PublicServerSettings getPublicServerSettings() throws ControllerException {
-        return new PublicServerSettings(getServerSettings());
+        ServerSettings s = getServerSettings();
+        s.setKeystoreUsingDefaultPassword(isUsingDefaultKeystorePassword());
+        return new PublicServerSettings(s);
     }
 
     @Override
@@ -1251,7 +1259,7 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
                  * If a new keystore is being created, and the passwords are the defaults, then
                  * create new passwords.
                  */
-                if (Arrays.equals(keyStorePassword, DEFAULT_STOREPASS.toCharArray()) && Arrays.equals(keyPassword, DEFAULT_STOREPASS.toCharArray())) {
+                if (isDefaultKeystorePasswords(new String(keyStorePassword), new String(keyPassword))) {
                     String keyStorePasswordStr = generateNewPassword();
                     mirthConfig.setProperty("keystore.storepass", keyStorePasswordStr);
                     keyStorePassword = keyStorePasswordStr.toCharArray();
@@ -1266,6 +1274,10 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
                 keyStore.load(null, keyStorePassword);
                 logger.debug("keystore file not found, created new one");
             }
+
+            usingDefaultKeystorePassword = isDefaultKeystorePasswords(
+                    mirthConfig.getString("keystore.storepass"),
+                    mirthConfig.getString("keystore.keypass"));
 
             configureEncryption(provider, keyStore, keyPassword);
             generateDefaultCertificate(provider, keyStore, keyPassword);
@@ -1292,6 +1304,78 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             builder.append(characters.charAt(random.nextInt(characters.length())));
         }
         return builder.toString();
+    }
+
+    /**
+     * Returns true if the given storepass/keypass match any known default password set.
+     */
+    private boolean isDefaultKeystorePasswords(String storepass, String keypass) {
+        if (storepass == null || keypass == null) {
+            return false;
+        }
+        for (String[] pair : DEFAULT_KEYSTORE_PASSWORD_PAIRS) {
+            if (storepass.equals(pair[0]) && keypass.equals(pair[1])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean isUsingDefaultKeystorePassword() {
+        return usingDefaultKeystorePassword;
+    }
+
+    @Override
+    public synchronized KeystoreRegenerationResponse regenerateKeystorePassword() throws Exception {
+        String oldStorepass = mirthConfig.getString("keystore.storepass");
+        String oldKeypass = mirthConfig.getString("keystore.keypass");
+        if (!isDefaultKeystorePasswords(oldStorepass, oldKeypass)) {
+            logger.info("Keystore passwords are not default; regeneration skipped.");
+            return new KeystoreRegenerationResponse(KeystoreRegenerationResponse.Type.ALREADY_SECURE,
+                    "Keystore passwords are already set to non-default values. No changes were made.");
+        }
+
+        FileInputStream fis = null;
+        FileOutputStream fos = null;
+        try {
+            File keyStoreFile = new File(mirthConfig.getString("keystore.path"));
+
+            KeyStore keyStore = KeyStore.getInstance(mirthConfig.getString("keystore.type", "JCEKS"));
+            fis = new FileInputStream(keyStoreFile);
+            keyStore.load(fis, oldStorepass.toCharArray());
+            fis.close();
+            fis = null;
+
+            String newStorepass = generateNewPassword();
+            String newKeypass = generateNewPassword();
+
+            // Re-key every private key entry with the new key password
+            java.util.Enumeration<String> aliases = keyStore.aliases();
+            while (aliases.hasMoreElements()) {
+                String alias = aliases.nextElement();
+                if (keyStore.isKeyEntry(alias)) {
+                    java.security.Key key = keyStore.getKey(alias, oldKeypass.toCharArray());
+                    java.security.cert.Certificate[] chain = keyStore.getCertificateChain(alias);
+                    keyStore.setKeyEntry(alias, key, newKeypass.toCharArray(), chain);
+                }
+            }
+
+            fos = new FileOutputStream(keyStoreFile);
+            keyStore.store(fos, newStorepass.toCharArray());
+
+            mirthConfig.setProperty("keystore.storepass", newStorepass);
+            mirthConfig.setProperty("keystore.keypass", newKeypass);
+            saveMirthConfig();
+
+            usingDefaultKeystorePassword = false;
+            logger.info("Keystore passwords regenerated successfully.");
+            return new KeystoreRegenerationResponse(KeystoreRegenerationResponse.Type.REGENERATED,
+                    "Keystore passwords have been updated successfully. Please restart BridgeLink for the new keystore to take effect.");
+        } finally {
+            ResourceUtil.closeResourceQuietly(fis);
+            ResourceUtil.closeResourceQuietly(fos);
+        }
     }
 
     @Override

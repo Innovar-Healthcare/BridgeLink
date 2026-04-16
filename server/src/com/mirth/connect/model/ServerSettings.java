@@ -57,6 +57,7 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
     protected static final String LOGIN_NOTIFICATION_MESSAGE = "loginnotification.message";
     protected static final String ADMINISTRATOR_AUTO_LOGOUT_INTERVAL_ENABLED = "administratorautologoutinterval.enabled";
     protected static final String ADMINISTRATOR_AUTO_LOGOUT_INTERVAL_FIELD = "administratorautologoutinterval.field";
+    protected static final String KEYSTORE_USING_DEFAULT_PASSWORD = "keystore.usingdefaultpassword";
 
     // General
     private String environmentName;
@@ -88,6 +89,9 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
     // Auto Logout
     private Boolean administratorAutoLogoutIntervalEnabled;
     private Integer administratorAutoLogoutIntervalField;
+
+    // Security — runtime flag, not persisted in mirth.properties
+    private Boolean keystoreUsingDefaultPassword;
     
     public ServerSettings() {
 
@@ -165,6 +169,9 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
         }
         if (getAdministratorAutoLogoutIntervalField() != null) {
             properties.put(ADMINISTRATOR_AUTO_LOGOUT_INTERVAL_FIELD, getAdministratorAutoLogoutIntervalField().toString());
+        }
+        if (getKeystoreUsingDefaultPassword() != null) {
+            properties.put(KEYSTORE_USING_DEFAULT_PASSWORD, BooleanUtils.toIntegerObject(getKeystoreUsingDefaultPassword()).toString());
         }
 
         return properties;
@@ -387,7 +394,15 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
     public void setAdministratorAutoLogoutIntervalField(Integer administratorAutoLogoutIntervalField) {
         this.administratorAutoLogoutIntervalField = administratorAutoLogoutIntervalField;
     }
-    
+
+    public Boolean getKeystoreUsingDefaultPassword() {
+        return keystoreUsingDefaultPassword;
+    }
+
+    public void setKeystoreUsingDefaultPassword(Boolean keystoreUsingDefaultPassword) {
+        this.keystoreUsingDefaultPassword = keystoreUsingDefaultPassword;
+    }
+
     @Override
     public String toAuditString() {
         return ToStringBuilder.reflectionToString(this, ToStringStyle.SHORT_PREFIX_STYLE).toString();

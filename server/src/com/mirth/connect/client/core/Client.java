@@ -135,6 +135,7 @@ import com.mirth.connect.model.filters.MessageFilter;
 import com.mirth.connect.server.util.DebuggerUtil;
 import com.mirth.connect.util.ConfigurationProperty;
 import com.mirth.connect.util.ConnectionTestResponse;
+import com.mirth.connect.util.KeystoreRegenerationResponse;
 import com.mirth.connect.util.MirthSSLUtil;
 import com.mirth.connect.util.messagewriter.EncryptionType;
 import com.mirth.connect.util.messagewriter.MessageWriterOptions;
@@ -734,8 +735,18 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     }
 
     /**
+     * Regenerates the keystore with new passwords.
+     *
+     * @see ConfigurationServletInterface#regenerateKeystore
+     */
+    @Override
+    public KeystoreRegenerationResponse regenerateKeystore() throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).regenerateKeystore();
+    }
+
+    /**
      * Returns an UpdateSettings object with all update settings.
-     * 
+     *
      * @see ConfigurationServletInterface#getUpdateSettings
      */
     @Override

@@ -64,6 +64,7 @@ import com.mirth.connect.model.UpdateSettings;
 import com.mirth.connect.server.controllers.ScriptController;
 import com.mirth.connect.util.ConfigurationProperty;
 import com.mirth.connect.util.ConnectionTestResponse;
+import com.mirth.connect.util.KeystoreRegenerationResponse;
 
 @Path("/server")
 @Tag(name = "Server Configuration")
@@ -459,4 +460,11 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
                     @ExampleObject(name = "rhinoLanguageVersion", ref = "../apiexamples/integer_json") }) })
     @MirthOperation(name = "getRhinoLanguageVersion", display = "Get rhino language version", type = ExecuteType.ASYNC, auditable = false)
     public int getRhinoLanguageVersion() throws ClientException;
+
+    @POST
+    @Path("/keystore/regenerate")
+    @Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
+    @Operation(summary = "Regenerates the keystore passwords if they are still set to default values.")
+    @MirthOperation(name = "regenerateKeystore", display = "Regenerate keystore passwords", permission = Permissions.SERVER_SETTINGS_EDIT)
+    public KeystoreRegenerationResponse regenerateKeystore() throws ClientException;
 }

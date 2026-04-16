@@ -61,6 +61,7 @@ import com.mirth.connect.server.controllers.ExtensionController;
 import com.mirth.connect.server.controllers.ScriptController;
 import com.mirth.connect.util.ConfigurationProperty;
 import com.mirth.connect.util.ConnectionTestResponse;
+import com.mirth.connect.util.KeystoreRegenerationResponse;
 import com.mirth.connect.util.MirthSSLUtil;
 
 public class ConfigurationServlet extends MirthServlet implements ConfigurationServletInterface {
@@ -419,6 +420,15 @@ public class ConfigurationServlet extends MirthServlet implements ConfigurationS
             }
         }
         return languageVersion;
+    }
+
+    @Override
+    public KeystoreRegenerationResponse regenerateKeystore() throws ClientException {
+        try {
+            return configurationController.regenerateKeystorePassword();
+        } catch (Exception e) {
+            throw new ClientException(e);
+        }
     }
 
     @Override

@@ -44,6 +44,7 @@ import com.mirth.connect.model.PublicServerSettings;
 import com.mirth.connect.model.User;
 import com.mirth.connect.model.converters.ObjectXMLSerializer;
 import com.mirth.connect.plugins.MultiFactorAuthenticationClientPlugin;
+import com.mirth.connect.util.KeystoreRegenerationResponse;
 import com.mirth.connect.util.MirthSSLUtil;
 
 public class LoginPanel extends AbstractLoginPanel {
@@ -504,8 +505,9 @@ public class LoginPanel extends AbstractLoginPanel {
             }
 
             private boolean handleSuccess(LoginStatus loginStatus) throws ClientException {
+                PublicServerSettings publicServerSettings = null;
                 try {
-                    PublicServerSettings publicServerSettings = client.getPublicServerSettings();
+                    publicServerSettings = client.getPublicServerSettings();
                     
                     if (publicServerSettings.getLoginNotificationEnabled() == true) {
                     	com.mirth.connect.client.ui.CustomBannerPanelDialog customBannerPanelDialog = new com.mirth.connect.client.ui.CustomBannerPanelDialog(LoginPanelProvider.getInstance(), "Login Notification", publicServerSettings.getLoginNotificationMessage());
@@ -632,9 +634,39 @@ public class LoginPanel extends AbstractLoginPanel {
                     com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
                 }
 
+                if (publicServerSettings != null && Boolean.TRUE.equals(publicServerSettings.getKeystoreUsingDefaultPassword())) {
+                    KeystoreWarningDialog dialog = new KeystoreWarningDialog(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME);
+                    if (dialog.wasOkClicked() && dialog.isRegenerateRequested()) {
+                        triggerKeystoreRegeneration();
+                    }
+                }
+
                 com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.sendUsageStatistics();
-                
+
                 return true;
+            }
+
+            private void triggerKeystoreRegeneration() {
+                final String workingId = com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.startWorking("Regenerating keystore passwords...");
+                new SwingWorker<KeystoreRegenerationResponse, Void>() {
+                    @Override
+                    protected KeystoreRegenerationResponse doInBackground() throws Exception {
+                        return client.regenerateKeystore();
+                    }
+
+                    @Override
+                    protected void done() {
+                        com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.stopWorking(workingId);
+                        try {
+                            com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertInformation(
+                                    com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, get().getMessage());
+                        } catch (Exception e) {
+                            com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertThrowable(
+                                    com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e,
+                                    "Failed to regenerate keystore passwords: " + e.getMessage());
+                        }
+                    }
+                }.execute();
             }
 
             public void done() {}
