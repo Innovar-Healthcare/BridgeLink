@@ -7,6 +7,8 @@ on:
   push:
     branches:
       - bridgelink_development
+      # TODO: testing only
+      - fix_github_ant_build
   pull_request:
     branches:
       - bridgelink_development
@@ -21,7 +23,7 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '8'
+          java-version: '11'
           java-package: 'jdk+fx'
           distribution: 'zulu'
 
