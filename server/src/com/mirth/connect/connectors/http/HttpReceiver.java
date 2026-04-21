@@ -650,7 +650,8 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
         sourceMap.put("method", requestMessage.getMethod());
         sourceMap.put("url", requestMessage.getRequestUrl());
         HttpURI uri = request.getHttpURI();
-        sourceMap.put("uri", StringUtils.trimToEmpty(uri.isAbsolute() ? uri.toString() : uri.getPathQuery()));
+        String pathQuery = StringUtils.trimToEmpty(uri.getPathQuery());
+        sourceMap.put("uri", StringUtils.isNotEmpty(pathQuery) ? pathQuery : StringUtils.trimToEmpty(uri.toString()));
         sourceMap.put("protocol", StringUtils.trimToEmpty(request.getProtocol()));
         sourceMap.put("query", requestMessage.getQueryString());
         sourceMap.put("contextPath", requestMessage.getContextPath());
