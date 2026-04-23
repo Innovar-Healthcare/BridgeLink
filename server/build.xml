@@ -1211,7 +1211,7 @@
 		<!-- compile the source -->
 		<mkdir dir="${test_classes}" />
 
-		<javac srcdir="${test}" destdir="${test_classes}" debug="on" includeAntRuntime="false" release="17">
+		<javac srcdir="${test}" destdir="${test_classes}" debug="on" includeAntRuntime="false" source="17" target="17">
 			<classpath refid="testclasspath" />
 <!--			 Uncomment the following and add additional dashes in front of the arguments to allow Java 9+-->
 							<compilerarg value="--add-modules" />
