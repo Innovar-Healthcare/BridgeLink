@@ -2,16 +2,17 @@
 
 ## Overview
 
-Two complementary security features, delivered as sequential phases. Phase 1 eliminates privilege escalation risk by refusing server startup under root or Administrator accounts — pure server-side Java, no UI touch. Phase 2 eliminates the trivial "admin" password from the full stack: REST API boundary, server-side checker, client UI validation, and existing-session enforcement via the grace-period login flow.
+Two complementary security features. Phase 1 eliminates privilege escalation risk by refusing server startup under root or Administrator accounts — pure server-side Java, no UI touch. Phase 2 (admin password ban) is deferred to the next milestone per management decision on 2026-04-23.
 
 ## Milestones
 
-- 🚧 **26.3.1 Security Hardening** - Phases 1-2 (in progress)
+- ✅ **26.3.1 Security Hardening** - Phase 1 only (Phase 2 deferred)
+- ⏳ **Next milestone** - Phase 2: Admin Password Ban
 
 ## Phases
 
-- [ ] **Phase 1: Root/Admin Guard** - Server refuses to start when running as root or Windows Administrator; operator override via mirth.properties
-- [ ] **Phase 2: Admin Password Ban** - Block "admin" as a password at REST API, server internals, and client UI; force change for non-compliant existing passwords on login
+- [x] **Phase 1: Root/Admin Guard** - Server refuses to start when running as root or Windows Administrator; operator override via mirth.properties
+- [⏳] **Phase 2: Admin Password Ban** - DEFERRED (next milestone) — Block "admin" as a password at REST API, server internals, and client UI; force change for non-compliant existing passwords on login
 
 ## Phase Details
 
@@ -29,10 +30,10 @@ Two complementary security features, delivered as sequential phases. Phase 1 eli
 
 Plans:
 - [x] 01-01-PLAN.md — Create RootCheckTest.java stub (Wave 0 test scaffold)
-- [ ] 01-02-PLAN.md — Implement root-check primary guard in MirthLauncher.java (ROOT-01, ROOT-02, ROOT-03, ROOT-04)
-- [ ] 01-03-PLAN.md — Implement root-check secondary guard + no_new_privs in Mirth.java (ROOT-01, ROOT-02, ROOT-03, ROOT-05)
-- [ ] 01-04-PLAN.md — Add server.allowRoot = false to all three mirth.properties files (ROOT-03)
-- [ ] 01-05-PLAN.md — Fill in all RootCheckTest.java assertions and verify ant test passes (ROOT-01, ROOT-02, ROOT-03, ROOT-05)
+- [x] 01-02-PLAN.md — Implement root-check primary guard in MirthLauncher.java (ROOT-01, ROOT-02, ROOT-03, ROOT-04)
+- [x] 01-03-PLAN.md — Implement root-check secondary guard + no_new_privs in Mirth.java (ROOT-01, ROOT-02, ROOT-03, ROOT-05)
+- [x] 01-04-PLAN.md — Add server.allowRoot = false to all three mirth.properties files (ROOT-03)
+- [x] 01-05-PLAN.md — Fill in all RootCheckTest.java assertions and verify ant test passes (ROOT-01, ROOT-02, ROOT-03, ROOT-05)
 
 ### Phase 2: Admin Password Ban
 **Goal**: Users cannot set or keep "admin" as their password, enforced at every layer; existing users with non-compliant passwords are forced to change on next login
@@ -51,5 +52,5 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Root/Admin Guard | 1/5 | In Progress|  |
-| 2. Admin Password Ban | 0/? | Not started | - |
+| 1. Root/Admin Guard | 5/5 | Complete | 2026-04-23 |
+| 2. Admin Password Ban | 0/? | Deferred (next milestone) | - |
