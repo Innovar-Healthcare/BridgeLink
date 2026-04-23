@@ -17,6 +17,7 @@
 
 package com.mirth.connect.server;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -24,13 +25,18 @@ import java.io.PrintStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.configuration2.PropertiesConfiguration;
 import org.apache.commons.io.IOUtils;
@@ -100,6 +106,135 @@ public class Mirth extends Thread {
 
     private static List<Thread> shutdownHooks = new ArrayList<Thread>();
 
+    private static final String ROOT_CHECK_ERROR_MSG =
+        "================================================================\n" +
+        "ERROR: BridgeLink is running as root/Administrator.\n" +
+        "\n" +
+        "This is not permitted by default because it exposes the entire\n" +
+        "operating system to any code executed by BridgeLink channels.\n" +
+        "\n" +
+        "To fix: create a dedicated service account and run BridgeLink as\n" +
+        "that user:\n" +
+        "  Linux/macOS:  useradd -r -s /sbin/nologin bridgelink\n" +
+        "  Windows:      create a non-administrator local or domain account\n" +
+        "\n" +
+        "To override (not recommended):\n" +
+        "  Set server.allowRoot = true in conf/mirth.properties\n" +
+        "  or use JVM flag: -Dserver.allowRoot=true\n" +
+        "================================================================";
+
+    private static final String NO_NEW_PRIVS_WARNING =
+        "================================================================\n" +
+        "WARNING: no_new_privs is NOT set for this process.\n" +
+        "\n" +
+        "A malicious or compromised BridgeLink channel could attempt to\n" +
+        "escalate privileges via sudo, SUID binaries, or capabilities.\n" +
+        "\n" +
+        "Recommended hardening — set one of:\n" +
+        "\n" +
+        "  systemd unit file:\n" +
+        "    [Service]\n" +
+        "    NoNewPrivileges=yes\n" +
+        "\n" +
+        "  Docker:\n" +
+        "    docker run --security-opt=no-new-privileges:true ...\n" +
+        "\n" +
+        "  Kubernetes pod spec:\n" +
+        "    securityContext:\n" +
+        "      allowPrivilegeEscalation: false\n" +
+        "\n" +
+        "When set, the kernel prevents privilege escalation even if the\n" +
+        "service account has sudo access or SUID binaries are present.\n" +
+        "================================================================";
+
+    private enum RootCheckResult {
+        BLOCK, WARN, OK
+    }
+
+    RootCheckResult evaluateRootCheck(String osName, String userName, boolean isWindowsAdmin, boolean allowRoot) {
+        boolean isPrivileged;
+        if (osName.toLowerCase().contains("win")) {
+            isPrivileged = isWindowsAdmin;
+        } else {
+            isPrivileged = "root".equals(userName);
+        }
+
+        if (isPrivileged && !allowRoot) {
+            return RootCheckResult.BLOCK;
+        } else if (isPrivileged && allowRoot) {
+            return RootCheckResult.WARN;
+        }
+        return RootCheckResult.OK;
+    }
+
+    private boolean isWindowsAdmin() {
+        try {
+            Process process = new ProcessBuilder(Arrays.asList("net", "session"))
+                .redirectErrorStream(true)
+                .start();
+            // Drain stdout using existing getNullOutputStream() helper (Java 8 compatible)
+            IOUtils.copy(process.getInputStream(), getNullOutputStream());
+            boolean finished = process.waitFor(3, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                return false; // timeout = fail-open
+            }
+            return process.exitValue() == 0;
+        } catch (Exception e) {
+            return false; // any exception = fail-open
+        }
+    }
+
+    private void checkRunningAsRoot() {
+        // JVM flag takes precedence over mirth.properties
+        String sysProp = System.getProperty("server.allowRoot");
+        boolean allowRoot = (sysProp != null)
+            ? Boolean.parseBoolean(sysProp)
+            : Boolean.parseBoolean(mirthProperties.getString("server.allowRoot", "false"));
+
+        String osName = System.getProperty("os.name", "");
+        String userName = System.getProperty("user.name", "");
+        boolean windowsAdmin = osName.toLowerCase().contains("win") && isWindowsAdmin();
+
+        RootCheckResult result = evaluateRootCheck(osName, userName, windowsAdmin, allowRoot);
+
+        if (result == RootCheckResult.BLOCK) {
+            logger.error(ROOT_CHECK_ERROR_MSG);
+            System.exit(1);
+        } else if (result == RootCheckResult.WARN) {
+            logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set — proceeding.");
+        } else {
+            logger.info("Privilege check passed: running as user '" + userName + "' (not root/Administrator).");
+        }
+    }
+
+    void readNoNewPrivs(Path procSelfStatus) {
+        try (BufferedReader reader = Files.newBufferedReader(procSelfStatus)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith("NoNewPrivs:")) {
+                    int value = Integer.parseInt(line.substring("NoNewPrivs:".length()).trim());
+                    if (value == 0) {
+                        logger.warn(NO_NEW_PRIVS_WARNING);
+                    } else {
+                        logger.info("no_new_privs is active — kernel-level privilege escalation (sudo/SUID) is blocked.");
+                    }
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("no_new_privs check skipped (could not read " + procSelfStatus + "): " + e.getMessage());
+        }
+    }
+
+    private void checkNoNewPrivs() {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (!os.contains("linux")) {
+            return; // non-Linux: silently skip
+        }
+        readNoNewPrivs(Paths.get("/proc/self/status"));
+    }
+
     static {
         // Disable Threadlocals for log4j 2.x, since it messes with the server log
         System.setProperty("log4j2.enableThreadlocals", "false");
@@ -139,6 +274,9 @@ public class Mirth extends Thread {
 
         if (initResources()) {
             logger.debug("starting BridgeLink server...");
+
+            checkRunningAsRoot();
+            checkNoNewPrivs();
 
             // Initialize TLS system properties as early as possible, because otherwise they will be cached
             if (System.getProperty("jdk.tls.ephemeralDHKeySize") == null) {
