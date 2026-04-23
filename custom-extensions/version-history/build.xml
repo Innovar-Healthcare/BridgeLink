@@ -20,7 +20,7 @@
        <mkdir dir="${classes.dir}/client"/>
 
        <!-- Compile shared -->
-       <javac srcdir="shared" destdir="${classes.dir}/shared" includeantruntime="false">
+       <javac srcdir="shared" destdir="${classes.dir}/shared" includeantruntime="false" release="17">
            <classpath>
                <fileset dir="${server.lib}" includes="**/*.jar"/>
                <fileset dir="${client.lib}" includes="**/*.jar"/>
@@ -29,7 +29,7 @@
        </javac>
 
        <!-- Compile server -->
-       <javac srcdir="server" destdir="${classes.dir}/server" includeantruntime="false">
+       <javac srcdir="server" destdir="${classes.dir}/server" includeantruntime="false" release="17">
            <classpath>
                <pathelement path="${classes.dir}/shared"/>
                <pathelement path="${server.classes.dir}"/>
@@ -40,7 +40,7 @@
        </javac>
 
        <!-- Compile client -->
-       <javac srcdir="client" destdir="${classes.dir}/client" includeantruntime="false">
+       <javac srcdir="client" destdir="${classes.dir}/client" includeantruntime="false" release="17">
            <classpath>
                <pathelement path="${classes.dir}/shared"/>
                <pathelement path="${client.classes.dir}"/>
