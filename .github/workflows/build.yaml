@@ -1,0 +1,42 @@
+name: Build OpenIntegrationEngine
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          java-package: 'jdk+fx'
+          distribution: 'zulu'
+
+      - name: Build OIE (signed)
+        if: github.ref == 'refs/heads/main'
+        working-directory: server
+        run: ant -f mirth-build.xml
+
+      - name: Build OIE (unsigned)
+        if: github.ref != 'refs/heads/main'
+        working-directory: server
+        run: ant -f mirth-build.xml -DdisableSigning=true
+
+      - name: Package distribution
+        run: tar czf openintegrationengine.tar.gz -C server/ setup --transform 's|^setup|openintegrationengine/|'
+
+      - name: Create artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oie-build
+          path: openintegrationengine.tar.gz
