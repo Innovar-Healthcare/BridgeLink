@@ -15,7 +15,7 @@
 
 	<target name="compile-generator" depends="clean">
 		<mkdir dir="${generator.classes}" />
-		<javac srcdir="${generator.src}" destdir="${generator.classes}" classpathref="build.classpath" excludes="**/test/*" />
+		<javac srcdir="${generator.src}" destdir="${generator.classes}" classpathref="build.classpath" excludes="**/test/*" includeAntRuntime="false" release="17" />
 	</target>
 
 	<target name="dist-generator" depends="compile-generator">
@@ -38,7 +38,7 @@
 
 	<target name="compile-vocab" depends="generate-vocab-source">
 		<mkdir dir="${vocab.classes}" />
-		<javac srcdir="${vocab.src}" destdir="${vocab.classes}">
+		<javac srcdir="${vocab.src}" destdir="${vocab.classes}" includeAntRuntime="false" release="17">
 			<classpath>
 				<fileset dir="${generator.dist}" includes="*.jar" />
 			</classpath>

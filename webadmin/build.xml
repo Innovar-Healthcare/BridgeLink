@@ -60,7 +60,7 @@
 	</target>
 
 	<target name="compile" depends="jspc">
-		<javac destdir="${build.classes}" debug="true" srcdir="${build.src}">
+		<javac destdir="${build.classes}" debug="true" srcdir="${build.src}" includeAntRuntime="false" release="17">
 			<classpath refid="compile.classpath" />
 		</javac>
 	</target>

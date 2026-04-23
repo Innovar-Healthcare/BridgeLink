@@ -21,10 +21,10 @@
 
 	<target name="compile" depends="clean, init">
 		<mkdir dir="${classes}" />
-		<javac srcdir="${src}" destdir="${classes}" debug="on" includeAntRuntime="false">
+		<javac srcdir="${src}" destdir="${classes}" debug="on" includeAntRuntime="false" release="17">
 			<classpath refid="classpath" />
 		</javac>
-		
+
 		<!-- include log4j2.properties in the jar -->
 		<copy todir="${classes}">
 			<fileset file="${src}/log4j2.properties" />
