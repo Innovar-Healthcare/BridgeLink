@@ -147,7 +147,7 @@ public class Mirth extends Thread {
         "service account has sudo access or SUID binaries are present.\n" +
         "================================================================";
 
-    private enum RootCheckResult {
+    enum RootCheckResult {
         BLOCK, WARN, OK
     }
 

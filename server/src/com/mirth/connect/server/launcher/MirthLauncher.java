@@ -70,7 +70,7 @@ public class MirthLauncher {
 
     private static LoggerWrapper logger;
 
-    enum RootCheckResult {
+    public enum RootCheckResult {
         BLOCK, WARN, OK
     }
 
