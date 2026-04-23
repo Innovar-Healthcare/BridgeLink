@@ -19,6 +19,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
+import java.io.InputStream;
+import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 import java.util.jar.JarFile;
 
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -48,7 +51,89 @@ public class MirthLauncher {
 
     private static String appDataDir = null;
 
+    private static final String ROOT_CHECK_ERROR_MSG =
+        "================================================================\n" +
+        "ERROR: BridgeLink is running as root/Administrator.\n" +
+        "\n" +
+        "This is not permitted by default because it exposes the entire\n" +
+        "operating system to any code executed by BridgeLink channels.\n" +
+        "\n" +
+        "To fix: create a dedicated service account and run BridgeLink as\n" +
+        "that user:\n" +
+        "  Linux/macOS:  useradd -r -s /sbin/nologin bridgelink\n" +
+        "  Windows:      create a non-administrator local or domain account\n" +
+        "\n" +
+        "To override (not recommended):\n" +
+        "  Set server.allowRoot = true in conf/mirth.properties\n" +
+        "  or use JVM flag: -Dserver.allowRoot=true\n" +
+        "================================================================";
+
     private static LoggerWrapper logger;
+
+    enum RootCheckResult {
+        BLOCK, WARN, OK
+    }
+
+    public static RootCheckResult evaluateRootCheck(String osName, String userName, boolean isWindowsAdmin, boolean allowRoot) {
+        boolean isPrivileged;
+        if (osName.toLowerCase().contains("win")) {
+            isPrivileged = isWindowsAdmin;
+        } else {
+            isPrivileged = "root".equals(userName);
+        }
+
+        if (isPrivileged && !allowRoot) {
+            return RootCheckResult.BLOCK;
+        } else if (isPrivileged && allowRoot) {
+            return RootCheckResult.WARN;
+        }
+        return RootCheckResult.OK;
+    }
+
+    private static boolean isWindowsAdmin() {
+        try {
+            Process process = new ProcessBuilder(Arrays.asList("net", "session"))
+                .redirectErrorStream(true)
+                .start();
+            // Drain stdout to prevent the subprocess from blocking (Java 8 compatible)
+            InputStream is = process.getInputStream();
+            byte[] buf = new byte[1024];
+            while (is.read(buf) != -1) {
+                // discard
+            }
+            boolean finished = process.waitFor(3, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                return false; // timeout = fail-open (treat as non-admin)
+            }
+            return process.exitValue() == 0;
+        } catch (Exception e) {
+            return false; // any exception = fail-open (treat as non-admin)
+        }
+    }
+
+    private static void checkRunningAsRoot(Properties mirthProperties) {
+        // JVM flag takes precedence over mirth.properties
+        String sysProp = System.getProperty("server.allowRoot");
+        boolean allowRoot = (sysProp != null)
+            ? Boolean.parseBoolean(sysProp)
+            : Boolean.parseBoolean(mirthProperties.getProperty("server.allowRoot", "false"));
+
+        String osName = System.getProperty("os.name", "");
+        String userName = System.getProperty("user.name", "");
+        boolean windowsAdmin = osName.toLowerCase().contains("win") && isWindowsAdmin();
+
+        RootCheckResult result = evaluateRootCheck(osName, userName, windowsAdmin, allowRoot);
+
+        if (result == RootCheckResult.BLOCK) {
+            logger.error(ROOT_CHECK_ERROR_MSG);
+            System.exit(1);
+        } else if (result == RootCheckResult.WARN) {
+            logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set — proceeding.");
+        } else {
+            logger.debug("Privilege check passed: running as user '" + userName + "' (not root/Administrator).");
+        }
+    }
 
     public static void main(String[] args) {
         JarFile mirthClientCoreJarFile = null;
@@ -84,6 +169,8 @@ public class MirthLauncher {
             } catch (Exception e) {
                 logger.error("Error creating the appdata directory.", e);
             }
+
+            checkRunningAsRoot(mirthProperties);
 
             ManifestFile mirthServerJar = new ManifestFile("server-lib/mirth-server.jar");
             ManifestFile mirthClientCoreJar = new ManifestFile("server-lib/mirth-client-core.jar");
