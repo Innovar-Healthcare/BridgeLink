@@ -33,6 +33,7 @@ import com.innovarhealthcare.channelHistory.shared.dto.response.LibrariesAndTemp
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoChanges;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoInfo;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoItemMetadata;
+import com.innovarhealthcare.channelHistory.shared.dto.response.RemoteStatus;
 import com.innovarhealthcare.channelHistory.shared.interfaces.VersionHistoryServletInterface;
 import com.innovarhealthcare.channelHistory.shared.model.CommitMetaData;
 import com.innovarhealthcare.channelHistory.shared.model.VersionHistoryErrorCodes;
@@ -732,6 +733,80 @@ public class VersionHistoryPluginServlet extends MirthServlet implements Version
         } catch (Exception e) {
             logger.error("Unexpected error restoring files", e);
             throw new VersionHistoryApiException(Response.Status.INTERNAL_SERVER_ERROR, VersionHistoryErrorCodes.UNKNOWN_ERROR, "Failed to restore files: " + (e.getMessage() != null ? e.getMessage() : "Unknown error"));
+        }
+    }
+    @Override
+    public String getRemoteStatus() {
+        logger.info("getRemoteStatus: fetching and computing ahead/behind counts");
+        try {
+            RemoteStatus status = getService().getRemoteStatus();
+            return JsonUtils.toJson(status);
+        } catch (GitNotConnectedException e) {
+            logger.error("Git not connected: getRemoteStatus");
+            throw new VersionHistoryApiException(Response.Status.SERVICE_UNAVAILABLE, VersionHistoryErrorCodes.GIT_NOT_CONNECTED, "Git repository is not connected. Please configure git connection first.");
+        } catch (GitOperationException e) {
+            logger.error("Git operation failed: getRemoteStatus: {}", e.getMessage(), e);
+            throw new VersionHistoryApiException(Response.Status.INTERNAL_SERVER_ERROR, VersionHistoryErrorCodes.GIT_OPERATION_ERROR, "Failed to get remote status: " + e.getMessage());
+        } catch (VersionHistoryApiException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("Unexpected error getting remote status", e);
+            throw new VersionHistoryApiException(Response.Status.INTERNAL_SERVER_ERROR, VersionHistoryErrorCodes.UNKNOWN_ERROR, "Failed to get remote status: " + (e.getMessage() != null ? e.getMessage() : "Unknown error"));
+        }
+    }
+    @Override
+    public void pull() {
+        logger.info("pull: pulling from remote (normal merge, conflicts resolved using remote)");
+        try {
+            getService().pullNormal();
+        } catch (GitNotConnectedException e) {
+            logger.error("Git not connected: pull");
+            throw new VersionHistoryApiException(Response.Status.SERVICE_UNAVAILABLE, VersionHistoryErrorCodes.GIT_NOT_CONNECTED, "Git repository is not connected. Please configure git connection first.");
+        } catch (GitOperationException e) {
+            logger.error("Pull failed: {}", e.getMessage(), e);
+            throw new VersionHistoryApiException(Response.Status.INTERNAL_SERVER_ERROR, VersionHistoryErrorCodes.GIT_OPERATION_ERROR, "Pull failed: " + e.getMessage());
+        } catch (VersionHistoryApiException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("Unexpected error during pull", e);
+            throw new VersionHistoryApiException(Response.Status.INTERNAL_SERVER_ERROR, VersionHistoryErrorCodes.UNKNOWN_ERROR, "Pull failed: " + (e.getMessage() != null ? e.getMessage() : "Unknown error"));
+        }
+    }
+    @Override
+    public String push() {
+        logger.info("push: pushing local commits to remote");
+        try {
+            getService().pushOnly();
+            return JsonUtils.toJson("OK");
+        } catch (GitNotConnectedException e) {
+            logger.error("Git not connected: push");
+            throw new VersionHistoryApiException(Response.Status.SERVICE_UNAVAILABLE, VersionHistoryErrorCodes.GIT_NOT_CONNECTED, "Git repository is not connected. Please configure git connection first.");
+        } catch (GitConflictException e) {
+            logger.error("Rebase conflict during push: {}", e.getMessage());
+            ErrorResponse err = ErrorResponseFactory.build(VersionHistoryErrorCodes.GIT_CONFLICT, "Remote has conflicting changes. Your changes have been backed up.");
+            if (!e.getBackedUpContent().isEmpty()) {
+                err.setBackedUpContent(e.getBackedUpContent());
+            }
+            String conflictJson;
+            try {
+                conflictJson = JsonUtils.toJson(err);
+            } catch (Exception serEx) {
+                logger.error("Failed to serialize GIT_CONFLICT response: {}", serEx.getMessage(), serEx);
+                throw new VersionHistoryApiException(Response.Status.CONFLICT, VersionHistoryErrorCodes.GIT_CONFLICT, "Remote has conflicting changes.");
+            }
+            Response conflictResponse = Response.status(Response.Status.CONFLICT).type(MediaType.APPLICATION_JSON).entity(conflictJson).build();
+            throw new VersionHistoryApiException(conflictResponse);
+        } catch (GitPushFailedException e) {
+            logger.error("Push rejected: {}", e.getMessage());
+            throw new VersionHistoryApiException(Response.Status.CONFLICT, VersionHistoryErrorCodes.PUSH_REJECTED, "Push rejected: " + e.getMessage());
+        } catch (GitOperationException e) {
+            logger.error("Git operation failed: push: {}", e.getMessage(), e);
+            throw new VersionHistoryApiException(Response.Status.INTERNAL_SERVER_ERROR, VersionHistoryErrorCodes.GIT_OPERATION_ERROR, "Push failed: " + e.getMessage());
+        } catch (VersionHistoryApiException e) {
+            throw e;
+        } catch (Exception e) {
+            logger.error("Unexpected error during push", e);
+            throw new VersionHistoryApiException(Response.Status.INTERNAL_SERVER_ERROR, VersionHistoryErrorCodes.UNKNOWN_ERROR, "Push failed: " + (e.getMessage() != null ? e.getMessage() : "Unknown error"));
         }
     }
     private VersionHistoryService getService() {

@@ -31,6 +31,7 @@ import com.innovarhealthcare.channelHistory.shared.dto.response.RepoChanges;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoInfo;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoItemChange;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoItemMetadata;
+import com.innovarhealthcare.channelHistory.shared.dto.response.RemoteStatus;
 import com.innovarhealthcare.channelHistory.shared.model.CommitMetaData;
 import com.innovarhealthcare.channelHistory.shared.model.VersionHistoryProperties;
 import com.innovarhealthcare.channelHistory.shared.util.CommitMessageUtil;
@@ -1106,5 +1107,36 @@ public class VersionHistoryService {
         if (revision == null || revision.trim().isEmpty()) {
             throw new IllegalArgumentException("Revision cannot be null or empty");
         }
+    }
+
+    /**
+     * Fetches from origin and returns ahead/behind commit counts relative to the remote branch.
+     */
+    public RemoteStatus getRemoteStatus() throws GitNotConnectedException, GitOperationException {
+        if (!gitRepositoryService.isGitAvailable()) {
+            throw new GitNotConnectedException("Git repository is not available: " + gitRepositoryService.getGitUnavailableReason());
+        }
+        return gitRepositoryService.getRemoteStatus();
+    }
+
+    /**
+     * Pulls from origin using a normal merge. Conflicts are auto-resolved by taking the remote
+     * version; local unpushed commits are preserved in the resulting merge commit.
+     */
+    public void pullNormal() throws GitNotConnectedException, GitOperationException {
+        if (!gitRepositoryService.isGitAvailable()) {
+            throw new GitNotConnectedException("Git repository is not available: " + gitRepositoryService.getGitUnavailableReason());
+        }
+        gitRepositoryService.pullNormal();
+    }
+
+    /**
+     * Fetches, rebases, and pushes any already-committed local work to the remote.
+     */
+    public void pushOnly() throws GitNotConnectedException, GitConflictException, GitPushFailedException, GitOperationException {
+        if (!gitRepositoryService.isGitAvailable()) {
+            throw new GitNotConnectedException("Git repository is not available: " + gitRepositoryService.getGitUnavailableReason());
+        }
+        gitRepositoryService.pushOnly();
     }
 }

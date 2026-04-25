@@ -67,6 +67,7 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             @Parameter(description = "The type of item: 'channel' or 'codetemplate'", required = true)
             @QueryParam("mode") String mode
     ) throws ClientException;
+    
     @GET
     @Path("/content")
     @ApiResponse(
@@ -95,36 +96,168 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             @Parameter(description = "The entity type: 'channel', 'library', or 'codetemplate'", required = true)
             @QueryParam("mode") String mode
     ) throws ClientException;
+    
     @POST
     @Path("/validateSetting")
-    @ApiResponse(responseCode = "200", description = "validate git repo setting", content = {@Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)), @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))})
-    @MirthOperation(name = "validateSetting", display = "validate git repo setting", permission = Permissions.CHANNELS_VIEW, type = Operation.ExecuteType.SYNC, auditable = false)
-    public String validateSetting(@Param("properties") @RequestBody(description = "description", content = {@Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = Properties.class), examples = {@ExampleObject(name = "propertiesObject", ref = "../apiexamples/properties_xml")}), @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Properties.class), examples = {@ExampleObject(name = "propertiesObject", ref = "../apiexamples/properties_json")})}) Properties properties) throws ClientException;
+    @ApiResponse(
+            responseCode = "200",
+            description = "Validate git repository settings",
+            content = {
+                    @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)),
+                    @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))
+            }
+    )
+    @MirthOperation(
+            name = "validateSetting",
+            display = "Validate git repository settings",
+            permission = Permissions.CHANNELS_VIEW,
+            type = Operation.ExecuteType.SYNC,
+            auditable = false
+    )
+    public String validateSetting(
+            @Param("properties")
+            @RequestBody(
+                    description = "Git repository connection properties",
+                    content = {
+                            @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = Properties.class), examples = {@ExampleObject(name = "propertiesObject", ref = "../apiexamples/properties_xml")}),
+                            @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Properties.class), examples = {@ExampleObject(name = "propertiesObject", ref = "../apiexamples/properties_json")})
+                    }
+            )
+            Properties properties
+    ) throws ClientException;
+    
     @POST
     @Path("/commitAndPushChannel")
-    @ApiResponse(responseCode = "200", description = "commit and push channel", content = {@Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)), @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))})
-    @MirthOperation(name = "commitAndPushChannel", display = "commit and push channel", permission = Permissions.CHANNELS_VIEW, type = Operation.ExecuteType.SYNC, auditable = false)
-    public String commitAndPushChannel(@Param("channel") @RequestBody(description = "The Channel object to create.", required = true, content = {@Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = Channel.class), examples = {@ExampleObject(name = "channel", ref = "../apiexamples/channel_xml")}), @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Channel.class), examples = {@ExampleObject(name = "channel", ref = "../apiexamples/channel_json")})}) Channel channel, @Param("message") @Parameter(description = "message", required = true) @QueryParam("message") String message, @Param("userId") @Parameter(description = "user id", required = true) @QueryParam("userId") String userId, @Param("overwrite") @Parameter(description = "true = auto-commit (pullWithOverwrite), false = manual commit (rebase+conflict detection)") @QueryParam("overwrite") @DefaultValue("true") boolean overwrite) throws ClientException;
+    @ApiResponse(
+            responseCode = "200",
+            description = "Commit and push channel to repository",
+            content = {
+                    @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)),
+                    @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))
+            }
+    )
+    @MirthOperation(
+            name = "commitAndPushChannel",
+            display = "Commit and push channel",
+            permission = Permissions.CHANNELS_VIEW,
+            type = Operation.ExecuteType.SYNC,
+            auditable = false
+    )
+    public String commitAndPushChannel(
+            @Param("channel")
+            @RequestBody(
+                    description = "The Channel object to commit.",
+                    required = true,
+                    content = {
+                            @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = Channel.class), examples = {@ExampleObject(name = "channel", ref = "../apiexamples/channel_xml")}),
+                            @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Channel.class), examples = {@ExampleObject(name = "channel", ref = "../apiexamples/channel_json")})
+                    }
+            )
+            Channel channel,
+            @Param("message")
+            @Parameter(description = "Commit message", required = true)
+            @QueryParam("message") String message,
+            @Param("userId")
+            @Parameter(description = "User ID", required = true)
+            @QueryParam("userId") String userId,
+            @Param("overwrite")
+            @Parameter(description = "true = auto-commit (pullWithOverwrite), false = manual commit (rebase+conflict detection)")
+            @QueryParam("overwrite") @DefaultValue("true") boolean overwrite
+    ) throws ClientException;
+    
     @POST
     @Path("/writeChannel")
     @ApiResponse(responseCode = "204", description = "Write channel to working tree without committing")
-    @MirthOperation(name = "writeChannel", display = "write channel to working tree", permission = Permissions.CHANNELS_VIEW, type = Operation.ExecuteType.SYNC, auditable = false)
-    public void writeChannel(@Param("channel") @RequestBody(description = "The Channel object to write.", required = true, content = {@Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = Channel.class), examples = {@ExampleObject(name = "channel", ref = "../apiexamples/channel_xml")}), @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Channel.class), examples = {@ExampleObject(name = "channel", ref = "../apiexamples/channel_json")})}) Channel channel) throws ClientException;
+    @MirthOperation(
+            name = "writeChannel",
+            display = "Write channel to working tree",
+            permission = Permissions.CHANNELS_VIEW,
+            type = Operation.ExecuteType.SYNC,
+            auditable = false
+    )
+    public void writeChannel(
+            @Param("channel")
+            @RequestBody(
+                    description = "The Channel object to write.",
+                    required = true,
+                    content = {
+                            @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = Channel.class), examples = {@ExampleObject(name = "channel", ref = "../apiexamples/channel_xml")}),
+                            @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = Channel.class), examples = {@ExampleObject(name = "channel", ref = "../apiexamples/channel_json")})
+                    }
+            )
+            Channel channel
+    ) throws ClientException;
+    
     @GET
     @Path("/channel_on_repo")
-    @ApiResponse(responseCode = "200", description = "Load channels on repo", content = {@Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)), @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))})
-    @MirthOperation(name = "loadChannelsMetadata", display = "load the channels on repo", permission = Permissions.CHANNELS_VIEW, type = Operation.ExecuteType.SYNC, auditable = false)
+    @ApiResponse(
+            responseCode = "200",
+            description = "Load channels on repo",
+            content = {
+                    @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)),
+                    @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))
+            }
+    )
+    @MirthOperation(
+            name = "loadChannelsMetadata",
+            display = "Load channels on repo",
+            permission = Permissions.CHANNELS_VIEW,
+            type = Operation.ExecuteType.SYNC,
+            auditable = false
+    )
     public String loadChannelsMetadata() throws ClientException;
+    
     @GET
     @Path("/code_template_on_repo")
-    @ApiResponse(responseCode = "200", description = "Load code templates on repo", content = {@Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)), @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))})
-    @MirthOperation(name = "loadCodeTemplatesMetadata", display = "load the code templates on repo", permission = Permissions.CHANNELS_VIEW, type = Operation.ExecuteType.SYNC, auditable = false)
+    @ApiResponse(
+            responseCode = "200",
+            description = "Load code templates on repo",
+            content = {
+                    @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)),
+                    @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))
+            }
+    )
+    @MirthOperation(
+            name = "loadCodeTemplatesMetadata",
+            display = "Load code templates on repo",
+            permission = Permissions.CHANNELS_VIEW,
+            type = Operation.ExecuteType.SYNC,
+            auditable = false
+    )
     public String loadCodeTemplatesMetadata() throws ClientException;
+    
     @POST
     @Path("/commitAndPushCodeTemplate")
-    @ApiResponse(responseCode = "200", description = "commit and push channel", content = {@Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)), @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))})
-    @MirthOperation(name = "commitAndPushCodeTemplate", display = "commit and push code template", permission = Permissions.CHANNELS_VIEW, type = Operation.ExecuteType.SYNC, auditable = false)
-    public String commitAndPushCodeTemplate(@Param("codeTemplateId") @Parameter(description = "code template id", required = true) @QueryParam("codeTemplateId") String codeTemplateId, @Param("message") @Parameter(description = "message", required = true) @QueryParam("message") String message, @Param("userId") @Parameter(description = "user id", required = true) @QueryParam("userId") String userId, @Param("overwrite") @Parameter(description = "true = auto-commit (pullWithOverwrite), false = manual commit (rebase+conflict detection)") @QueryParam("overwrite") @DefaultValue("true") boolean overwrite) throws ClientException;
+    @ApiResponse(
+            responseCode = "200",
+            description = "Commit and push code template to repository",
+            content = {
+                    @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)),
+                    @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))
+            }
+    )
+    @MirthOperation(
+            name = "commitAndPushCodeTemplate",
+            display = "Commit and push code template",
+            permission = Permissions.CHANNELS_VIEW,
+            type = Operation.ExecuteType.SYNC,
+            auditable = false
+    )
+    public String commitAndPushCodeTemplate(
+            @Param("codeTemplateId")
+            @Parameter(description = "Code template ID", required = true)
+            @QueryParam("codeTemplateId") String codeTemplateId,
+            @Param("message")
+            @Parameter(description = "Commit message", required = true)
+            @QueryParam("message") String message,
+            @Param("userId")
+            @Parameter(description = "User ID", required = true)
+            @QueryParam("userId") String userId,
+            @Param("overwrite")
+            @Parameter(description = "true = auto-commit (pullWithOverwrite), false = manual commit (rebase+conflict detection)")
+            @QueryParam("overwrite") @DefaultValue("true") boolean overwrite
+    ) throws ClientException;
+    
     @GET
     @Path("/libraries_and_templates")
     @ApiResponse(
@@ -142,6 +275,7 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             auditable = false
     )
     public String loadLibrariesAndTemplateMetadata() throws ClientException;
+    
     @POST
     @Path("/saveLibraries")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
@@ -175,6 +309,7 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
                     required = true)
             @QueryParam("userId") String userId
             ) throws ClientException;
+    
     @POST
     @Path("/commitAndPushGlobalScripts")
     @ApiResponse(responseCode = "200", description = "commit and push global scripts", content = {
@@ -249,6 +384,7 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             @QueryParam("userId")
             String userId
     ) throws ClientException;
+    
     @GET
     @Path("/repoInfo")
     @ApiResponse(
@@ -267,6 +403,7 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             auditable = false
     )
     public String getRepoInfo() throws ClientException;
+    
     @GET
     @Path("/repoChanges")
     @ApiResponse(
@@ -285,6 +422,7 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             auditable = false
     )
     public String getRepoChanges() throws ClientException;
+    
     @GET
     @Path("/fileContent")
     @ApiResponse(
@@ -307,6 +445,7 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             @Parameter(description = "Relative file path from repository root (e.g., 'Channels/abc-123.xml')", required = true)
             @QueryParam("filePath") String filePath
     ) throws ClientException;
+    
     @GET
     @Path("/fileContentAtHead")
     @ApiResponse(
@@ -329,6 +468,7 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             @Parameter(description = "Relative file path from repository root (e.g., 'Channels/abc-123.xml')", required = true)
             @QueryParam("filePath") String filePath
     ) throws ClientException;
+    
     @GET
     @Path("/fileHistory")
     @ApiResponse(
@@ -346,11 +486,12 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             type = Operation.ExecuteType.SYNC,
             auditable = false
     )
-    String getFileHistory(
+    public String getFileHistory(
             @Param("filePath")
             @Parameter(description = "Relative file path from repository root (e.g., 'Channels/abc-123.xml')", required = true)
             @QueryParam("filePath") String filePath
     ) throws ClientException;
+    
     @GET
     @Path("/fileContentAtRevision")
     @ApiResponse(
@@ -368,7 +509,7 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             type = Operation.ExecuteType.SYNC,
             auditable = false
     )
-    String getFileContentAtRevision(
+    public String getFileContentAtRevision(
             @Param("filePath")
             @Parameter(description = "Relative file path from repository root (e.g., 'Channels/abc-123.xml')", required = true)
             @QueryParam("filePath") String filePath,
@@ -376,6 +517,7 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             @Parameter(description = "The commit hash to read the file at", required = true)
             @QueryParam("commitHash") String commitHash
     ) throws ClientException;
+    
     @GET
     @Path("/repoLog")
     @ApiResponse(
@@ -393,11 +535,12 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             type = Operation.ExecuteType.SYNC,
             auditable = false
     )
-    String getRepoLog(
+    public String getRepoLog(
             @Param("maxCount")
             @Parameter(description = "Maximum number of commits to return", required = false)
             @QueryParam("maxCount") @DefaultValue("" + VersionControlConstants.REPO_LOG_MAX_COUNT) int maxCount
     ) throws ClientException;
+    
     @GET
     @Path("/commitChanges")
     @ApiResponse(
@@ -415,11 +558,12 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             type = Operation.ExecuteType.SYNC,
             auditable = false
     )
-    String getCommitChanges(
+    public String getCommitChanges(
             @Param("commitHash")
             @Parameter(description = "The commit hash to inspect", required = true)
             @QueryParam("commitHash") String commitHash
     ) throws ClientException;
+    
     @POST
     @Path("/commitAndPushFiles")
     @ApiResponse(
@@ -437,7 +581,7 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             type = Operation.ExecuteType.SYNC,
             auditable = false
     )
-    String commitAndPushFiles(
+    public String commitAndPushFiles(
             @Param("requestJson")
             @RequestBody(
                     description = "JSON-serialized CommitFilesRequest containing file paths, message, and user ID",
@@ -449,14 +593,81 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             )
             String requestJson
     ) throws ClientException;
+    
     @POST
     @Path("/restoreFiles")
-    @ApiResponse(responseCode = "200", description = "Restore backed-up file content to working tree (no commit)", content = {@Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)), @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))})
-    @MirthOperation(name = "restoreFiles", display = "Restore files to working tree", permission = Permissions.CHANNELS_VIEW, type = Operation.ExecuteType.SYNC, auditable = false)
-    String restoreFiles(
+    @ApiResponse(
+            responseCode = "200",
+            description = "Restore backed-up file content to working tree (no commit)",
+            content = {
+                    @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)),
+                    @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))
+            }
+    )
+    @MirthOperation(
+            name = "restoreFiles",
+            display = "Restore files to working tree",
+            permission = Permissions.CHANNELS_VIEW,
+            type = Operation.ExecuteType.SYNC,
+            auditable = false
+    )
+    public String restoreFiles(
             @Param("requestJson")
             @RequestBody(description = "JSON-serialized Map<String,String> of relative file paths to their content", required = true, content = {@Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class))})
             String requestJson
     ) throws ClientException;
+    
+    @GET
+    @Path("/remoteStatus")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Fetch from origin and return ahead/behind commit counts",
+            content = {
+                    @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)),
+                    @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))
+            }
+    )
+    @MirthOperation(
+            name = "getRemoteStatus",
+            display = "Get remote sync status",
+            permission = Permissions.CHANNELS_VIEW,
+            type = Operation.ExecuteType.SYNC,
+            auditable = false
+    )
+    public String getRemoteStatus() throws ClientException;
+    
+    @POST
+    @Path("/pull")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Pull from remote and merge; conflicts resolved using remote version"
+    )
+    @MirthOperation(
+            name = "pull",
+            display = "Pull from remote",
+            permission = Permissions.CHANNELS_VIEW,
+            type = Operation.ExecuteType.SYNC,
+            auditable = false
+    )
+    public void pull() throws ClientException;
+    
+    @POST
+    @Path("/push")
+    @ApiResponse(
+            responseCode = "200",
+            description = "Push already-committed local work to remote (fetch + rebase + push)",
+            content = {
+                    @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = String.class)),
+                    @Content(mediaType = MediaType.APPLICATION_XML, schema = @Schema(implementation = String.class))
+            }
+    )
+    @MirthOperation(
+            name = "push",
+            display = "Push local commits to remote",
+            permission = Permissions.CHANNELS_VIEW,
+            type = Operation.ExecuteType.SYNC,
+            auditable = false
+    )
+    public String push() throws ClientException;
 }
 //@formatter:on

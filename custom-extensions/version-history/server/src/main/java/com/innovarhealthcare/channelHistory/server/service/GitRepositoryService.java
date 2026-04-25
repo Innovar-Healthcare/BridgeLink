@@ -37,6 +37,7 @@ import com.innovarhealthcare.channelHistory.shared.dto.response.RepoFile;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoFolder;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoInfo;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoItemChange;
+import com.innovarhealthcare.channelHistory.shared.dto.response.RemoteStatus;
 import com.innovarhealthcare.channelHistory.shared.model.CommitMetaData;
 import com.innovarhealthcare.channelHistory.shared.model.GitSettings;
 import com.innovarhealthcare.channelHistory.shared.model.VersionHistoryProperties;
@@ -561,6 +562,62 @@ public class GitRepositoryService {
         gitOperations.writeWorkingTreeFiles(files);
     }
 
+    // ========== Remote Sync Operations ==========
+
+    /**
+     * Fetches from origin and returns the ahead/behind commit counts relative to the remote
+     * tracking branch. Contacts the remote — use only when an accurate, up-to-date status is needed.
+     *
+     * @return RemoteStatus with aheadCount and behindCount
+     * @throws GitOperationException if the fetch or count operation fails
+     */
+    public synchronized RemoteStatus getRemoteStatus() throws GitOperationException, GitNotConnectedException {
+        ensureStarted();
+        ensureGitAvailable();
+        try {
+            return gitOperations.getAheadBehindCounts();
+        } catch (Exception e) {
+            throw new GitOperationException("Failed to get remote status: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Pulls from remote using a normal merge. Fast-forward and clean merges complete silently.
+     * Conflicts are auto-resolved by taking the remote version; a merge commit is created.
+     * Unpushed local commits are preserved in the merge.
+     *
+     * @throws GitOperationException if the pull operation fails
+     */
+    public synchronized void pullNormal() throws GitOperationException, GitNotConnectedException {
+        ensureStarted();
+        ensureGitAvailable();
+        try {
+            gitOperations.pullNormal();
+        } catch (Exception e) {
+            throw new GitOperationException("Pull failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Fetches from origin, rebases local commits onto the remote tracking branch, then pushes.
+     * No staging or commit is performed — use to push already-committed local work.
+     *
+     * @throws GitConflictException   if the rebase finds a conflict with remote changes
+     * @throws GitPushFailedException if the push is rejected by the remote
+     * @throws GitOperationException  if any other git operation fails
+     */
+    public synchronized void pushOnly() throws GitConflictException, GitPushFailedException, GitOperationException, GitNotConnectedException {
+        ensureStarted();
+        ensureGitAvailable();
+        try {
+            gitOperations.fetchRebaseAndPush();
+        } catch (GitConflictException | GitPushFailedException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new GitOperationException("Push failed: " + e.getMessage(), e);
+        }
+    }
+
     // ========== Connection Validation ==========
 
     /**
@@ -713,7 +770,9 @@ public class GitRepositoryService {
     }
 
     /**
-     * Opens existing repository, syncs remote URL/branch from current config, then pulls.
+     * Opens existing repository. If the configured remote URL or branch differs from what is
+     * stored in .git/config, the local repository is deleted and re-cloned to avoid unrelated
+     * history or wrong-branch errors. Otherwise, syncs the remote config and pulls latest changes.
      */
     private void openAndUpdate() throws Exception {
         logger.info("Opening existing repository...");
@@ -721,27 +780,46 @@ public class GitRepositoryService {
         git = Git.open(repositoryDirectory);
         logger.info("Repository opened at: {}", repositoryDirectory.getAbsolutePath());
 
-        // Sync remote URL and branch from current plugin settings into .git/config
-        syncRemoteConfig();
+        StoredConfig config = git.getRepository().getConfig();
+        String configuredUrl    = versionHistoryProperties.getGitSettings().getRemoteRepositoryUrl();
+        String configuredBranch = versionHistoryProperties.getGitSettings().getBranchName();
+        String existingUrl    = config.getString("remote", "origin", "url");
+        String existingBranch = git.getRepository().getBranch();
 
-        // Try to pull latest changes (non-fatal if fails)
+        boolean urlChanged    = existingUrl != null && !configuredUrl.equals(existingUrl);
+        boolean branchChanged = existingBranch != null && !configuredBranch.equals(existingBranch);
+
+        if (urlChanged || branchChanged) {
+            if (urlChanged) {
+                logger.warn("Remote URL changed from '{}' to '{}' — deleting local repository and re-cloning", existingUrl, configuredUrl);
+            }
+            if (branchChanged) {
+                logger.warn("Branch changed from '{}' to '{}' — deleting local repository and re-cloning", existingBranch, configuredBranch);
+            }
+            git.close();
+            git = null;
+            FileUtils.deleteDirectory(repositoryDirectory);
+            cloneFromRemote();
+            return;
+        }
+
+        // Same repo and branch — sync config and pull
+        syncRemoteConfig();
         pullLatestChanges();
     }
 
     /**
-     * Writes the current remoteRepositoryUrl and branchName from plugin settings
-     * into the local .git/config so that subsequent push/pull use the new values.
+     * Ensures the fetch refspec in .git/config is set correctly for the current remote.
+     * Called only when the remote URL has not changed (URL-change is handled by re-clone in openAndUpdate).
      */
     private void syncRemoteConfig() throws IOException {
-        String newUrl = versionHistoryProperties.getGitSettings().getRemoteRepositoryUrl();
-
         StoredConfig config = git.getRepository().getConfig();
-        String currentUrl = config.getString("remote", "origin", "url");
+        String currentFetch = config.getString("remote", "origin", "fetch");
+        String expectedFetch = "+refs/heads/*:refs/remotes/origin/*";
 
-        if (!newUrl.equals(currentUrl)) {
-            logger.info("Remote URL changed from '{}' to '{}', updating .git/config", currentUrl, newUrl);
-            config.setString("remote", "origin", "url", newUrl);
-            config.setString("remote", "origin", "fetch", "+refs/heads/*:refs/remotes/origin/*");
+        if (!expectedFetch.equals(currentFetch)) {
+            logger.info("Updating fetch refspec in .git/config");
+            config.setString("remote", "origin", "fetch", expectedFetch);
             config.save();
         }
     }

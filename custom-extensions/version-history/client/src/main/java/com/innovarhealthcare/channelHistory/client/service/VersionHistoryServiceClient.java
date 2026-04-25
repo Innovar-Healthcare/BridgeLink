@@ -26,6 +26,7 @@ import com.innovarhealthcare.channelHistory.shared.dto.response.RepoChanges;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoInfo;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoItemChange;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoItemMetadata;
+import com.innovarhealthcare.channelHistory.shared.dto.response.RemoteStatus;
 import com.innovarhealthcare.channelHistory.shared.interfaces.VersionHistoryServletInterface;
 import com.innovarhealthcare.channelHistory.shared.model.CommitMetaData;
 import com.innovarhealthcare.channelHistory.shared.model.VersionHistoryErrorCodes;
@@ -794,6 +795,63 @@ public class VersionHistoryServiceClient {
             throw rethrowParsedClientError(e, true);
         } catch (Exception e) {
             throw new ClientException("Failed to restore files: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Fetches from origin and returns the ahead/behind commit counts relative to the remote branch.
+     * Contacts the remote — only call when an up-to-date status is needed (e.g., on ↺ Reload).
+     *
+     * @return RemoteStatus with aheadCount and behindCount
+     * @throws ClientException if Git is not connected or the operation fails
+     */
+    public RemoteStatus getRemoteStatus() throws ClientException {
+        try {
+            String json = getServlet().getRemoteStatus();
+            return JsonUtils.fromJson(json, RemoteStatus.class);
+        } catch (ClientException e) {
+            throw rethrowParsedClientError(e, true);
+        } catch (Exception e) {
+            throw new ClientException("Failed to get remote status: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Pulls from origin with a hard reset, discarding any local uncommitted changes.
+     *
+     * @throws ClientException if Git is not connected or the pull fails
+     */
+    public void pull() throws ClientException {
+        try {
+            getServlet().pull();
+        } catch (ClientException e) {
+            throw rethrowParsedClientError(e, true);
+        } catch (Exception e) {
+            throw new ClientException("Pull failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Pushes already-committed local work to the remote (fetch + rebase + push, no new commit).
+     * Use this when local has unpushed commits and no working-tree changes.
+     *
+     * @throws GitConflictClientException if the rebase conflicts with remote changes
+     * @throws ClientException            if Git is not connected, push is rejected, or an error occurs
+     */
+    public void pushOnly() throws ClientException {
+        try {
+            getServlet().push();
+        } catch (ClientException e) {
+            ClientException parsed = rethrowParsedClientError(e, true);
+            if (parsed instanceof VersionHistoryClientException) {
+                VersionHistoryClientException vhe = (VersionHistoryClientException) parsed;
+                if (VersionHistoryErrorCodes.GIT_CONFLICT.equals(vhe.getError().getCode())) {
+                    throw new GitConflictClientException(vhe.getError(), e);
+                }
+            }
+            throw parsed;
+        } catch (Exception e) {
+            throw new ClientException("Push failed: " + e.getMessage(), e);
         }
     }
 
