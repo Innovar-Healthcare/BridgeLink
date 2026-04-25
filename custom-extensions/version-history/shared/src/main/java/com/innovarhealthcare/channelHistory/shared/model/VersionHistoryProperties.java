@@ -75,7 +75,7 @@ public class VersionHistoryProperties {
             properties.setProperty(VERSION_HISTORY_REMOTE_BRANCH, gitSettings.getBranchName() != null ? gitSettings.getBranchName() : "");
             properties.setProperty(VERSION_HISTORY_REMOTE_SSH_KEY, gitSettings.getSshPrivateKey() != null ? gitSettings.getSshPrivateKey() : "");
             properties.setProperty(VERSION_HISTORY_REMOTE_SSH_KEY_PATH, gitSettings.getSshPrivateKeyPath() != null ? gitSettings.getSshPrivateKeyPath() : "");
-            properties.setProperty(VERSION_HISTORY_REMOTE_AUTH_TYPE, gitSettings.getAuthType() != null ? gitSettings.getAuthType() : "SSH");
+            properties.setProperty(VERSION_HISTORY_REMOTE_AUTH_TYPE, gitSettings.getAuthType() != null ? gitSettings.getAuthType() : GitSettings.AUTH_TYPE_SSH);
             properties.setProperty(VERSION_HISTORY_REMOTE_HTTPS_USERNAME, gitSettings.getHttpsUsername() != null ? gitSettings.getHttpsUsername() : "");
             properties.setProperty(VERSION_HISTORY_REMOTE_HTTPS_PASSWORD, gitSettings.getHttpsPassword() != null ? gitSettings.getHttpsPassword() : "");
             properties.setProperty(VERSION_HISTORY_REMOTE_HTTPS_CREDENTIALS_PATH, gitSettings.getHttpsCredentialsPath() != null ? gitSettings.getHttpsCredentialsPath() : "");
@@ -85,7 +85,7 @@ public class VersionHistoryProperties {
             properties.setProperty(VERSION_HISTORY_REMOTE_BRANCH, "");
             properties.setProperty(VERSION_HISTORY_REMOTE_SSH_KEY, "");
             properties.setProperty(VERSION_HISTORY_REMOTE_SSH_KEY_PATH, "");
-            properties.setProperty(VERSION_HISTORY_REMOTE_AUTH_TYPE, "SSH");
+            properties.setProperty(VERSION_HISTORY_REMOTE_AUTH_TYPE, GitSettings.AUTH_TYPE_SSH);
             properties.setProperty(VERSION_HISTORY_REMOTE_HTTPS_USERNAME, "");
             properties.setProperty(VERSION_HISTORY_REMOTE_HTTPS_PASSWORD, "");
             properties.setProperty(VERSION_HISTORY_REMOTE_HTTPS_CREDENTIALS_PATH, "");
@@ -109,7 +109,7 @@ public class VersionHistoryProperties {
         String branchName = getStringProperty(properties, VERSION_HISTORY_REMOTE_BRANCH, "");
         String sshPrivateKey = getStringProperty(properties, VERSION_HISTORY_REMOTE_SSH_KEY, "");
         String sshPrivateKeyPath = getStringProperty(properties, VERSION_HISTORY_REMOTE_SSH_KEY_PATH, "");
-        String authType = getStringProperty(properties, VERSION_HISTORY_REMOTE_AUTH_TYPE, "SSH");
+        String authType = getStringProperty(properties, VERSION_HISTORY_REMOTE_AUTH_TYPE, GitSettings.AUTH_TYPE_SSH);
         String httpsUsername = getStringProperty(properties, VERSION_HISTORY_REMOTE_HTTPS_USERNAME, "");
         String httpsPassword = getStringProperty(properties, VERSION_HISTORY_REMOTE_HTTPS_PASSWORD, "");
         String httpsCredentialsPath = getStringProperty(properties, VERSION_HISTORY_REMOTE_HTTPS_CREDENTIALS_PATH, "");

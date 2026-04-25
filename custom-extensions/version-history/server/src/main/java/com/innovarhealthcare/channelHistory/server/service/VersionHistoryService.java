@@ -87,14 +87,14 @@ public class VersionHistoryService {
     /**
      * Validates the Git connection described by the given properties.
      * Parses properties into a VersionHistoryProperties, then delegates to
-     * GitRepositoryService.validateSSHConnection() which clones to a temp dir and deletes it.
+     * GitRepositoryService.validateRemoteConnection() which uses ls-remote to verify access.
      *
      * @param properties Plugin properties containing Git settings
      * @return Success message on success; error message on failure
      */
     public String validateGitConnection(Properties properties) {
         VersionHistoryProperties tempProperties = new VersionHistoryProperties(properties);
-        String error = gitRepositoryService.validateSSHConnection(tempProperties.getGitSettings());
+        String error = gitRepositoryService.validateRemoteConnection(tempProperties.getGitSettings());
         if (error != null) {
             throw new GitNotConnectedException(error);
         }

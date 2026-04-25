@@ -51,8 +51,7 @@ import org.eclipse.jgit.transport.FetchResult;
 import org.eclipse.jgit.transport.PushResult;
 import org.eclipse.jgit.transport.RefSpec;
 import org.eclipse.jgit.transport.RemoteRefUpdate;
-import org.eclipse.jgit.transport.SshSessionFactory;
-import org.eclipse.jgit.transport.SshTransport;
+import org.eclipse.jgit.api.TransportConfigCallback;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.EmptyTreeIterator;
 import org.eclipse.jgit.treewalk.TreeWalk;
@@ -69,29 +68,29 @@ public class GitOperations {
 
     private final Git git;
     private final String branch;
-    private final SshSessionFactory sshSessionFactory;
+    private final TransportConfigCallback transportConfig;
 
     /**
      * Creates a new GitOperations instance
      *
-     * @param git               The JGit Git instance
-     * @param branch            The branch name (e.g., "main", "master")
-     * @param sshSessionFactory SSH session factory for authentication
+     * @param git             The JGit Git instance
+     * @param branch          The branch name (e.g., "main", "master")
+     * @param transportConfig Transport config callback for authentication (SSH or HTTPS)
      */
-    public GitOperations(Git git, String branch, SshSessionFactory sshSessionFactory) {
+    public GitOperations(Git git, String branch, TransportConfigCallback transportConfig) {
         if (git == null) {
             throw new IllegalArgumentException("Git instance cannot be null");
         }
         if (branch == null || branch.trim().isEmpty()) {
             throw new IllegalArgumentException("Branch cannot be null or empty");
         }
-        if (sshSessionFactory == null) {
-            throw new IllegalArgumentException("SSH session factory cannot be null");
+        if (transportConfig == null) {
+            throw new IllegalArgumentException("Transport config cannot be null");
         }
 
         this.git = git;
         this.branch = branch;
-        this.sshSessionFactory = sshSessionFactory;
+        this.transportConfig = transportConfig;
     }
 
     /**
@@ -305,12 +304,8 @@ public class GitOperations {
         git.fetch()
            .setRemote("origin")
            .setRefSpecs(new RefSpec("refs/heads/" + branch + ":refs/remotes/origin/" + branch))
-           .setTransportConfigCallback(transport -> {
-                if (transport instanceof SshTransport) {
-                    ((SshTransport) transport).setSshSessionFactory(sshSessionFactory);
-                }
-            })
-            .call();
+           .setTransportConfigCallback(transportConfig)
+           .call();
         //@formatter:on
 
         // Get refs
@@ -350,11 +345,7 @@ public class GitOperations {
         FetchCommand fetchCommand = git.fetch();
         fetchCommand.setRemote("origin");
         fetchCommand.setRefSpecs(new RefSpec("refs/heads/" + branch + ":refs/remotes/origin/" + branch));
-        fetchCommand.setTransportConfigCallback(transport -> {
-            if (transport instanceof SshTransport) {
-                ((SshTransport) transport).setSshSessionFactory(sshSessionFactory);
-            }
-        });
+        fetchCommand.setTransportConfigCallback(transportConfig);
 
         FetchResult fetchResult = fetchCommand.call();
         result.append("Fetch completed: ").append(fetchResult.getMessages()).append("\n");
@@ -450,11 +441,7 @@ public class GitOperations {
         pushCommand.setRemote("origin");
         pushCommand.setRefSpecs(new RefSpec("refs/heads/" + branch));
         pushCommand.setForce(forcePush);
-        pushCommand.setTransportConfigCallback(transport -> {
-            if (transport instanceof SshTransport) {
-                ((SshTransport) transport).setSshSessionFactory(sshSessionFactory);
-            }
-        });
+        pushCommand.setTransportConfigCallback(transportConfig);
 
         Iterable<PushResult> results = pushCommand.call();
 
@@ -717,11 +704,7 @@ public class GitOperations {
      */
     private void fetch() throws GitAPIException {
         logger.debug("Fetching from origin/{}", branch);
-        git.fetch().setRemote("origin").setRefSpecs(new RefSpec("refs/heads/" + branch + ":refs/remotes/origin/" + branch)).setTransportConfigCallback(transport -> {
-            if (transport instanceof SshTransport) {
-                ((SshTransport) transport).setSshSessionFactory(sshSessionFactory);
-            }
-        }).call();
+        git.fetch().setRemote("origin").setRefSpecs(new RefSpec("refs/heads/" + branch + ":refs/remotes/origin/" + branch)).setTransportConfigCallback(transportConfig).call();
         logger.debug("Fetch completed");
     }
 

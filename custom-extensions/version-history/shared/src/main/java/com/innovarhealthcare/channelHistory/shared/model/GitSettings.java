@@ -13,6 +13,10 @@ package com.innovarhealthcare.channelHistory.shared.model;
 import org.apache.commons.lang3.StringUtils;
 
 public class GitSettings {
+
+    public static final String AUTH_TYPE_SSH = "SSH";
+    public static final String AUTH_TYPE_HTTPS = "HTTPS";
+
     private String remoteRepositoryUrl;
     private String branchName;
     private String sshPrivateKey;
@@ -97,11 +101,11 @@ public class GitSettings {
     }
 
     public boolean isSSH() {
-        return "SSH".equalsIgnoreCase(authType) || authType == null || authType.isEmpty();
+        return authType == null || authType.isEmpty() || AUTH_TYPE_SSH.equalsIgnoreCase(authType);
     }
 
     public boolean isHTTPS() {
-        return "HTTPS".equalsIgnoreCase(authType);
+        return AUTH_TYPE_HTTPS.equalsIgnoreCase(authType);
     }
 
     public boolean validate() {
