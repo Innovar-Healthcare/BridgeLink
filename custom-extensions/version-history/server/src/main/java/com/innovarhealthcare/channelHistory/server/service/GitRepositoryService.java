@@ -23,6 +23,8 @@ import com.innovarhealthcare.channelHistory.server.exception.GitNotConnectedExce
 import com.innovarhealthcare.channelHistory.server.exception.GitOperationException;
 import com.innovarhealthcare.channelHistory.server.exception.GitPushFailedException;
 import com.innovarhealthcare.channelHistory.server.file.FileOperations;
+import com.innovarhealthcare.channelHistory.server.git.HttpsTransportConfig;
+import com.innovarhealthcare.channelHistory.server.git.SshTransportConfig;
 import com.innovarhealthcare.channelHistory.server.util.GitCommitterHelper;
 import com.innovarhealthcare.channelHistory.server.git.GitOperations;
 import com.mirth.connect.model.User;
@@ -35,12 +37,10 @@ import com.innovarhealthcare.channelHistory.shared.dto.response.RepoFile;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoFolder;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoInfo;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoItemChange;
+import com.innovarhealthcare.channelHistory.shared.dto.response.RemoteStatus;
 import com.innovarhealthcare.channelHistory.shared.model.CommitMetaData;
 import com.innovarhealthcare.channelHistory.shared.model.GitSettings;
 import com.innovarhealthcare.channelHistory.shared.model.VersionHistoryProperties;
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.JSchException;
-import com.jcraft.jsch.Session;
 import com.mirth.connect.donkey.server.Donkey;
 import com.mirth.connect.model.converters.ObjectXMLSerializer;
 import com.mirth.connect.server.controllers.ControllerFactory;
@@ -51,12 +51,7 @@ import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.PullResult;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.StoredConfig;
-import org.eclipse.jgit.transport.JschConfigSessionFactory;
-import org.eclipse.jgit.transport.OpenSshConfig;
-import org.eclipse.jgit.transport.SshSessionFactory;
-import org.eclipse.jgit.transport.SshTransport;
-import org.eclipse.jgit.transport.Transport;
-import org.eclipse.jgit.util.FS;
+import org.eclipse.jgit.api.TransportConfigCallback;
 
 /**
  * Git Repository Infrastructure Service
@@ -88,7 +83,6 @@ public class GitRepositoryService {
 
     private static final Logger logger = LogManager.getLogger(GitRepositoryService.class);
     private static final String DATA_DIR = "version-history";
-    private static final String SSH_KEY_IDENTITY_NAME = "version-history-ssh-key";
 
     // ========== State ==========
     private boolean started;
@@ -105,7 +99,7 @@ public class GitRepositoryService {
 
     // ========== Infrastructure Components ==========
     private Git git;
-    private SshSessionFactory sshSessionFactory;
+    private TransportConfigCallback transportConfig;
     private GitOperations gitOperations;
     private FileOperations fileOperations;
 
@@ -144,10 +138,11 @@ public class GitRepositoryService {
             // Initialize components
             initializeBasicComponents();
             validateConfiguration();
-            createSshSessionFactory();
+            transportConfig = buildTransportConfig(versionHistoryProperties.getGitSettings());
 
             // Validate remote connection before touching the local repository
-            String connError = validateSSHConnection(versionHistoryProperties.getGitSettings());
+            GitSettings gitSettings = versionHistoryProperties.getGitSettings();
+            String connError = doValidateRemoteConnection(gitSettings.getRemoteRepositoryUrl(), gitSettings.getBranchName(), transportConfig);
             if (connError != null) {
                 logger.warn("Git connection validation failed: {}", connError);
                 this.gitAvailable = false;
@@ -567,17 +562,73 @@ public class GitRepositoryService {
         gitOperations.writeWorkingTreeFiles(files);
     }
 
+    // ========== Remote Sync Operations ==========
+
+    /**
+     * Fetches from origin and returns the ahead/behind commit counts relative to the remote
+     * tracking branch. Contacts the remote — use only when an accurate, up-to-date status is needed.
+     *
+     * @return RemoteStatus with aheadCount and behindCount
+     * @throws GitOperationException if the fetch or count operation fails
+     */
+    public synchronized RemoteStatus getRemoteStatus() throws GitOperationException, GitNotConnectedException {
+        ensureStarted();
+        ensureGitAvailable();
+        try {
+            return gitOperations.getAheadBehindCounts();
+        } catch (Exception e) {
+            throw new GitOperationException("Failed to get remote status: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Pulls from remote using a normal merge. Fast-forward and clean merges complete silently.
+     * Conflicts are auto-resolved by taking the remote version; a merge commit is created.
+     * Unpushed local commits are preserved in the merge.
+     *
+     * @throws GitOperationException if the pull operation fails
+     */
+    public synchronized void pullNormal() throws GitOperationException, GitNotConnectedException {
+        ensureStarted();
+        ensureGitAvailable();
+        try {
+            gitOperations.pullNormal();
+        } catch (Exception e) {
+            throw new GitOperationException("Pull failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Fetches from origin, rebases local commits onto the remote tracking branch, then pushes.
+     * No staging or commit is performed — use to push already-committed local work.
+     *
+     * @throws GitConflictException   if the rebase finds a conflict with remote changes
+     * @throws GitPushFailedException if the push is rejected by the remote
+     * @throws GitOperationException  if any other git operation fails
+     */
+    public synchronized void pushOnly() throws GitConflictException, GitPushFailedException, GitOperationException, GitNotConnectedException {
+        ensureStarted();
+        ensureGitAvailable();
+        try {
+            gitOperations.fetchRebaseAndPush();
+        } catch (GitConflictException | GitPushFailedException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new GitOperationException("Push failed: " + e.getMessage(), e);
+        }
+    }
+
     // ========== Connection Validation ==========
 
     /**
-     * Validates the SSH (or default) connection to the remote repository described by gitSettings.
-     * Clones to a temporary directory with no checkout, then deletes the temp dir.
+     * Validates the remote connection using the given gitSettings.
+     * Uses ls-remote — no objects are downloaded, no temp directory needed.
      * Never throws — returns null on success or an error message string on failure.
      *
-     * @param gitSettings Settings to validate (URL, branch, SSH key or key path)
+     * @param gitSettings Settings to validate (URL, branch, auth credentials)
      * @return null on success; error message on failure
      */
-    public String validateSSHConnection(GitSettings gitSettings) {
+    public String validateRemoteConnection(GitSettings gitSettings) {
         if (gitSettings == null) {
             return "Git settings cannot be null";
         }
@@ -592,20 +643,18 @@ public class GitRepositoryService {
             return "Branch name is not configured";
         }
 
-        try {
-            SshSessionFactory tempFactory = buildSshSessionFactory(gitSettings);
+        return doValidateRemoteConnection(remoteUrl, branch, buildTransportConfig(gitSettings));
+    }
 
+    private String doValidateRemoteConnection(String remoteUrl, String branch, TransportConfigCallback config) {
+        try {
             // Use ls-remote instead of clone — only establishes the connection and lists refs,
             // no objects are downloaded and no temp directory is needed. Much faster.
             Collection<Ref> refs = Git.lsRemoteRepository()
                     .setRemote(remoteUrl)
                     .setHeads(true)
                     .setTags(false)
-                    .setTransportConfigCallback(transport -> {
-                        if (transport instanceof SshTransport) {
-                            ((SshTransport) transport).setSshSessionFactory(tempFactory);
-                        }
-                    })
+                    .setTransportConfigCallback(config)
                     .call();
 
             // Verify the configured branch exists on the remote
@@ -624,58 +673,10 @@ public class GitRepositoryService {
         }
     }
 
-    /**
-     * Converts a raw JGit/JSch exception into a concise, user-readable error message.
-     */
     private String friendlyValidationError(Exception e) {
-        String msg = e.getMessage() != null ? e.getMessage() : "";
-        String cause = e.getCause() != null && e.getCause().getMessage() != null ? e.getCause().getMessage() : "";
-        String combined = (msg + " " + cause).toLowerCase();
-
-        // SSH authentication failures
-        if (combined.contains("auth fail") || combined.contains("not authorized") || combined.contains("authentication failed")) {
-            return "Authentication failed. Verify your SSH private key is correct and has access to the repository.";
-        }
-        // Unknown/rejected host key
-        if (combined.contains("unknownhostkey") || combined.contains("reject hostkey") || combined.contains("hostkey")) {
-            return "The server's SSH host key is not recognized. The host may need to be added to known_hosts.";
-        }
-        // Repository not found
-        if (combined.contains("repository not found") || combined.contains("does not appear to be a git repository")) {
-            return "Repository not found. Check the repository URL and that your account has access.";
-        }
-        // Branch not found
-        if (combined.contains("remote does not have") || combined.contains("couldn't find remote ref")) {
-            return "Branch not found on the remote. Check the branch name.";
-        }
-        // Cannot resolve host / network unreachable
-        if (combined.contains("unknownhostexception") || combined.contains("nodename nor servname") || combined.contains("name or service not known")) {
-            return "Cannot resolve host. Check the repository URL and your network connectivity.";
-        }
-        // Connection refused / timed out
-        if (combined.contains("connection refused") || combined.contains("timed out") || combined.contains("connection timed out")) {
-            return "Connection refused or timed out. Check the host, port, and firewall settings.";
-        }
-        // Invalid URL / remote
-        if (combined.contains("invalid remote") || combined.contains("not a valid url")) {
-            return "Invalid repository URL. Use an SSH URL in the form git@host:user/repo.git.";
-        }
-        // SSH key file not found or unreadable
-        if (combined.contains("no such file") || combined.contains("cannot read") || combined.contains("filenotfoundexception")) {
-            return "SSH private key file not found or unreadable. Check the file path.";
-        }
-        // Invalid / unsupported key format
-        if (combined.contains("invalid privatekey") || combined.contains("invalid key") || combined.contains("unsupported key")) {
-            return "Invalid SSH private key format. Ensure the key is a valid OpenSSH or PEM private key.";
-        }
-        // Permission denied on key file
-        if (combined.contains("permission denied")) {
-            return "Permission denied. The SSH key may be rejected by the server, or the key file is not readable.";
-        }
-
-        // Fallback — return the raw message but strip verbose package prefixes
-        logger.warn("Unmapped validation error: {}", msg);
-        return msg.isEmpty() ? "Unknown error during connection validation" : msg;
+        String msg = e.getMessage() != null ? e.getMessage() : "Unknown error during connection validation";
+        logger.warn("Remote connection validation failed: {}", msg);
+        return msg;
     }
 
     // ========== Private Initialization Methods ==========
@@ -723,101 +724,16 @@ public class GitRepositoryService {
     }
 
     /**
-     * Creates the live SSH session factory from the current plugin configuration.
-     * Supports two key modes:
-     * <ul>
-     *   <li><b>Inline key</b> ({@code sshPrivateKey}): key content is loaded directly from memory.</li>
-     *   <li><b>File path</b> ({@code sshPrivateKeyPath}): key is read from the given path on the
-     *       Mirth server file system (absolute or relative to appdata).</li>
-     * </ul>
-     * Falls back to the default JSch session factory if neither is configured.
+     * Builds a TransportConfigCallback for the given GitSettings.
+     * Returns an SshTransportConfig for SSH auth or HttpsTransportConfig for HTTPS/PAT auth.
      */
-    private void createSshSessionFactory() {
-        logger.debug("Creating SSH session factory...");
-
-        final String sshPrivateKey = versionHistoryProperties.getGitSettings().getSshPrivateKey();
-        final String sshPrivateKeyPath = versionHistoryProperties.getGitSettings().getSshPrivateKeyPath();
-
-        boolean hasInlineKey = sshPrivateKey != null && !sshPrivateKey.trim().isEmpty();
-        boolean hasKeyPath = sshPrivateKeyPath != null && !sshPrivateKeyPath.trim().isEmpty();
-
-        if (!hasInlineKey && !hasKeyPath) {
-            logger.warn("No SSH private key configured, using default session factory");
-            sshSessionFactory = SshSessionFactory.getInstance();
-            return;
+    private TransportConfigCallback buildTransportConfig(GitSettings gitSettings) {
+        if (gitSettings.isHTTPS()) {
+            logger.debug("Building HTTPS transport config");
+            return new HttpsTransportConfig(gitSettings);
         }
-
-        sshSessionFactory = new JschConfigSessionFactory() {
-            @Override
-            protected void configure(OpenSshConfig.Host hc, Session session) {
-                session.setConfig("StrictHostKeyChecking", "no");
-            }
-
-            @Override
-            protected JSch createDefaultJSch(FS fs) throws JSchException {
-                JSch defaultJSch = super.createDefaultJSch(fs);
-                try {
-                    if (hasInlineKey) {
-                        // Load key from in-memory bytes (paste mode)
-                        defaultJSch.addIdentity(SSH_KEY_IDENTITY_NAME, sshPrivateKey.getBytes(), null, null);
-                        logger.debug("SSH private key loaded from inline content");
-                    } else {
-                        // Load key from file path on the server file system
-                        defaultJSch.addIdentity(sshPrivateKeyPath.trim());
-                        logger.debug("SSH private key loaded from path: {}", sshPrivateKeyPath);
-                    }
-                } catch (JSchException e) {
-                    logger.error("Failed to add SSH private key", e);
-                    throw e;
-                }
-                return defaultJSch;
-            }
-        };
-
-        logger.debug("SSH session factory created successfully");
-    }
-
-    /**
-     * Builds a standalone SshSessionFactory from the given GitSettings.
-     * Supports both inline key content (bytes) and file-path key.
-     * Used by validateSSHConnection() so it can work independently of the live sshSessionFactory.
-     */
-    private SshSessionFactory buildSshSessionFactory(GitSettings gitSettings) {
-        final String sshPrivateKey = gitSettings.getSshPrivateKey();
-        final String sshPrivateKeyPath = gitSettings.getSshPrivateKeyPath();
-
-        boolean hasInlineKey = sshPrivateKey != null && !sshPrivateKey.trim().isEmpty();
-        boolean hasKeyPath = sshPrivateKeyPath != null && !sshPrivateKeyPath.trim().isEmpty();
-
-        if (!hasInlineKey && !hasKeyPath) {
-            logger.warn("No SSH private key configured for validation, using default session factory");
-            return SshSessionFactory.getInstance();
-        }
-
-        return new JschConfigSessionFactory() {
-            @Override
-            protected void configure(OpenSshConfig.Host hc, Session session) {
-                session.setConfig("StrictHostKeyChecking", "no");
-            }
-
-            @Override
-            protected JSch createDefaultJSch(FS fs) throws JSchException {
-                JSch jsch = super.createDefaultJSch(fs);
-                try {
-                    if (hasInlineKey) {
-                        jsch.addIdentity(SSH_KEY_IDENTITY_NAME, sshPrivateKey.getBytes(), null, null);
-                        logger.debug("SSH private key added from inline content");
-                    } else {
-                        jsch.addIdentity(sshPrivateKeyPath.trim());
-                        logger.debug("SSH private key loaded from path: {}", sshPrivateKeyPath);
-                    }
-                } catch (JSchException e) {
-                    logger.error("Failed to add SSH private key", e);
-                    throw e;
-                }
-                return jsch;
-            }
-        };
+        logger.debug("Building SSH transport config");
+        return new SshTransportConfig(gitSettings);
     }
 
     /**
@@ -854,7 +770,9 @@ public class GitRepositoryService {
     }
 
     /**
-     * Opens existing repository, syncs remote URL/branch from current config, then pulls.
+     * Opens existing repository. If the configured remote URL or branch differs from what is
+     * stored in .git/config, the local repository is deleted and re-cloned to avoid unrelated
+     * history or wrong-branch errors. Otherwise, syncs the remote config and pulls latest changes.
      */
     private void openAndUpdate() throws Exception {
         logger.info("Opening existing repository...");
@@ -862,27 +780,46 @@ public class GitRepositoryService {
         git = Git.open(repositoryDirectory);
         logger.info("Repository opened at: {}", repositoryDirectory.getAbsolutePath());
 
-        // Sync remote URL and branch from current plugin settings into .git/config
-        syncRemoteConfig();
+        StoredConfig config = git.getRepository().getConfig();
+        String configuredUrl    = versionHistoryProperties.getGitSettings().getRemoteRepositoryUrl();
+        String configuredBranch = versionHistoryProperties.getGitSettings().getBranchName();
+        String existingUrl    = config.getString("remote", "origin", "url");
+        String existingBranch = git.getRepository().getBranch();
 
-        // Try to pull latest changes (non-fatal if fails)
+        boolean urlChanged    = existingUrl != null && !configuredUrl.equals(existingUrl);
+        boolean branchChanged = existingBranch != null && !configuredBranch.equals(existingBranch);
+
+        if (urlChanged || branchChanged) {
+            if (urlChanged) {
+                logger.warn("Remote URL changed from '{}' to '{}' — deleting local repository and re-cloning", existingUrl, configuredUrl);
+            }
+            if (branchChanged) {
+                logger.warn("Branch changed from '{}' to '{}' — deleting local repository and re-cloning", existingBranch, configuredBranch);
+            }
+            git.close();
+            git = null;
+            FileUtils.deleteDirectory(repositoryDirectory);
+            cloneFromRemote();
+            return;
+        }
+
+        // Same repo and branch — sync config and pull
+        syncRemoteConfig();
         pullLatestChanges();
     }
 
     /**
-     * Writes the current remoteRepositoryUrl and branchName from plugin settings
-     * into the local .git/config so that subsequent push/pull use the new values.
+     * Ensures the fetch refspec in .git/config is set correctly for the current remote.
+     * Called only when the remote URL has not changed (URL-change is handled by re-clone in openAndUpdate).
      */
     private void syncRemoteConfig() throws IOException {
-        String newUrl = versionHistoryProperties.getGitSettings().getRemoteRepositoryUrl();
-
         StoredConfig config = git.getRepository().getConfig();
-        String currentUrl = config.getString("remote", "origin", "url");
+        String currentFetch = config.getString("remote", "origin", "fetch");
+        String expectedFetch = "+refs/heads/*:refs/remotes/origin/*";
 
-        if (!newUrl.equals(currentUrl)) {
-            logger.info("Remote URL changed from '{}' to '{}', updating .git/config", currentUrl, newUrl);
-            config.setString("remote", "origin", "url", newUrl);
-            config.setString("remote", "origin", "fetch", "+refs/heads/*:refs/remotes/origin/*");
+        if (!expectedFetch.equals(currentFetch)) {
+            logger.info("Updating fetch refspec in .git/config");
+            config.setString("remote", "origin", "fetch", expectedFetch);
             config.save();
         }
     }
@@ -900,7 +837,7 @@ public class GitRepositoryService {
         logger.info("Cloning from: {}", remoteUrl);
         logger.info("Branch: {}", branch);
 
-        git = Git.cloneRepository().setURI(remoteUrl).setDirectory(repositoryDirectory).setBranch(branch).setTransportConfigCallback(this::configureSsh).call();
+        git = Git.cloneRepository().setURI(remoteUrl).setDirectory(repositoryDirectory).setBranch(branch).setTransportConfigCallback(transportConfig).call();
 
         logger.info("Successfully cloned repository from: {}", remoteUrl);
     }
@@ -913,7 +850,7 @@ public class GitRepositoryService {
         logger.info("Pulling latest changes from remote...");
 
         try {
-            PullResult result = git.pull().setRemote("origin").setRemoteBranchName(versionHistoryProperties.getGitSettings().getBranchName()).setTransportConfigCallback(this::configureSsh).call();
+            PullResult result = git.pull().setRemote("origin").setRemoteBranchName(versionHistoryProperties.getGitSettings().getBranchName()).setTransportConfigCallback(transportConfig).call();
 
             if (result.isSuccessful()) {
                 logger.info("Successfully pulled latest changes");
@@ -934,7 +871,7 @@ public class GitRepositoryService {
     private void createOperations() {
         logger.debug("Creating operations...");
 
-        gitOperations = new GitOperations(git, versionHistoryProperties.getGitSettings().getBranchName(), sshSessionFactory);
+        gitOperations = new GitOperations(git, versionHistoryProperties.getGitSettings().getBranchName(), transportConfig);
 
         fileOperations = new FileOperations(repositoryDirectory, serializer);
 
@@ -952,7 +889,7 @@ public class GitRepositoryService {
 
         gitOperations = null;
         fileOperations = null;
-        sshSessionFactory = null;
+        transportConfig = null;
     }
 
     /**
@@ -974,17 +911,6 @@ public class GitRepositoryService {
     private void ensureGitAvailable() {
         if (!gitAvailable) {
             throw new GitNotConnectedException("Git repository is not connected. " + gitUnavailableReason);
-        }
-    }
-
-    /**
-     * Configures SSH for transport.
-     *
-     * @param transport Git transport
-     */
-    private void configureSsh(Transport transport) {
-        if (transport instanceof SshTransport) {
-            ((SshTransport) transport).setSshSessionFactory(sshSessionFactory);
         }
     }
 

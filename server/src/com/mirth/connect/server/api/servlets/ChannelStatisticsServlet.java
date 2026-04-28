@@ -58,12 +58,12 @@ public class ChannelStatisticsServlet extends MirthServlet implements ChannelSta
     }
 
     @Override
-    public List<ChannelStatistics> getStatistics(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds, boolean aggregateStats) {
+    public List<ChannelStatistics> getStatistics(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds, boolean aggregateStats, boolean useStorageStats) {
         if (CollectionUtils.isNotEmpty(includeMetadataIds) && CollectionUtils.isNotEmpty(excludeMetadataIds)) {
             throw new MirthApiException(Response.status(Response.Status.BAD_REQUEST).type(MediaType.TEXT_PLAIN_TYPE).entity("Cannot include and exclude connectors in one call").build());
         }
 
-        List<ChannelStatistics> stats = engineController.getChannelStatisticsList(channelIds, includeUndeployed, includeMetadataIds, excludeMetadataIds);
+        List<ChannelStatistics> stats = engineController.getChannelStatisticsList(channelIds, includeUndeployed, includeMetadataIds, excludeMetadataIds, useStorageStats);
 
         if (aggregateStats) {
             ChannelStatistics totalStatistics = new ChannelStatistics();
@@ -93,8 +93,8 @@ public class ChannelStatisticsServlet extends MirthServlet implements ChannelSta
     }
 
     @Override
-    public List<ChannelStatistics> getStatisticsPost(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds, boolean aggregateStats) {
-        return getStatistics(channelIds, includeUndeployed, includeMetadataIds, excludeMetadataIds, aggregateStats);
+    public List<ChannelStatistics> getStatisticsPost(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds, boolean aggregateStats, boolean useStorageStats) {
+        return getStatistics(channelIds, includeUndeployed, includeMetadataIds, excludeMetadataIds, aggregateStats, useStorageStats);
     }
 
     @Override

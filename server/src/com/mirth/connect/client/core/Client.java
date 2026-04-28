@@ -1577,42 +1577,42 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
      */
 
     public List<ChannelStatistics> getStatistics() throws ClientException {
-        return getServlet(ChannelStatisticsServletInterface.class).getStatistics(null, false, null, null, false);
+        return getServlet(ChannelStatisticsServletInterface.class).getStatistics(null, false, null, null, false, false);
     }
 
     /**
      * Returns the individual statistics for channels. Has option to include undeployed channels.
-     * 
+     *
      * @see ChannelStatisticsServletInterface#getStatistics
      */
 
     public List<ChannelStatistics> getStatistics(boolean includeUndeployed) throws ClientException {
-        return getServlet(ChannelStatisticsServletInterface.class).getStatistics(null, includeUndeployed, null, null, false);
+        return getServlet(ChannelStatisticsServletInterface.class).getStatistics(null, includeUndeployed, null, null, false, false);
     }
 
     /**
      * Returns the individual statistics for channels. Has option to include undeployed channels and
      * to aggregate stats.
-     * 
+     *
      * @see ChannelStatisticsServletInterface#getStatistics
      */
 
     public List<ChannelStatistics> getStatistics(boolean includeUndeployed, boolean aggregateStats) throws ClientException {
-        return getServlet(ChannelStatisticsServletInterface.class).getStatistics(null, includeUndeployed, null, null, aggregateStats);
+        return getServlet(ChannelStatisticsServletInterface.class).getStatistics(null, includeUndeployed, null, null, aggregateStats, false);
     }
 
     /**
      * Returns the individual statistics for channels supplied. Has option to include undeployed
      * channels, aggregate stats, and also include OR exclude connectors.
-     * 
+     *
      * @see ChannelStatisticsServletInterface#getStatistics
      */
     @Override
-    public List<ChannelStatistics> getStatistics(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds, boolean aggregateStats) throws ClientException {
+    public List<ChannelStatistics> getStatistics(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds, boolean aggregateStats, boolean useStorageStats) throws ClientException {
         if (CollectionUtils.size(channelIds) > MAX_QUERY_PARAM_COLLECTION_SIZE) {
-            return getStatisticsPost(channelIds, includeUndeployed, includeMetadataIds, excludeMetadataIds, aggregateStats);
+            return getStatisticsPost(channelIds, includeUndeployed, includeMetadataIds, excludeMetadataIds, aggregateStats, useStorageStats);
         }
-        return getServlet(ChannelStatisticsServletInterface.class).getStatistics(channelIds, includeUndeployed, includeMetadataIds, excludeMetadataIds, aggregateStats);
+        return getServlet(ChannelStatisticsServletInterface.class).getStatistics(channelIds, includeUndeployed, includeMetadataIds, excludeMetadataIds, aggregateStats, useStorageStats);
     }
 
     /**
@@ -1620,12 +1620,12 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
      * channels, aggregate stats, and also include OR exclude connectors. This is a POST request
      * alternative to GET /statistics that may be used when there are too many channel IDs to
      * include in the query parameters.
-     * 
+     *
      * @see ChannelStatisticsServletInterface#getStatistics
      */
     @Override
-    public List<ChannelStatistics> getStatisticsPost(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds, boolean aggregateStats) throws ClientException {
-        return getServlet(ChannelStatisticsServletInterface.class).getStatisticsPost(channelIds, includeUndeployed, includeMetadataIds, excludeMetadataIds, aggregateStats);
+    public List<ChannelStatistics> getStatisticsPost(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds, boolean aggregateStats, boolean useStorageStats) throws ClientException {
+        return getServlet(ChannelStatisticsServletInterface.class).getStatisticsPost(channelIds, includeUndeployed, includeMetadataIds, excludeMetadataIds, aggregateStats, useStorageStats);
     }
 
     /**

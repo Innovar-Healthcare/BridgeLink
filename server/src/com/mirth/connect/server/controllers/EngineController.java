@@ -99,6 +99,8 @@ public interface EngineController {
 
     public List<ChannelStatistics> getChannelStatisticsList(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds);
 
+    public List<ChannelStatistics> getChannelStatisticsList(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds, boolean useStorageForDeployed);
+
     /**
      * Returns a DashboardStatus object representing a running channel.
      */

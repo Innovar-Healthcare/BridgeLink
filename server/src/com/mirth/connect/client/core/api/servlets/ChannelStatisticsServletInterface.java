@@ -58,7 +58,8 @@ public interface ChannelStatisticsServletInterface extends BaseServletInterface 
             @Param("includeUndeployed") @Parameter(description = "If true, statistics for undeployed channels will also be included.") @QueryParam("includeUndeployed") boolean includeUndeployed,
             @Param("includeMetadataIds") @Parameter(description = "The ids of connectors to include. Cannot include and exclude connectors.") @QueryParam("includeMetadataId") Set<Integer> includeMetadataIds,
             @Param("excludeMetadataIds") @Parameter(description = "The ids of connectors to exclude. Cannot include and exclude connectors.") @QueryParam("excludeMetadataId") Set<Integer> excludeMetadataIds,
-            @Param("aggregateStats") @Parameter(description = "If true, statistics will be aggregated into one result") @QueryParam("aggregateStats") boolean aggregateStats) throws ClientException;
+            @Param("aggregateStats") @Parameter(description = "If true, statistics will be aggregated into one result") @QueryParam("aggregateStats") boolean aggregateStats,
+            @Param("useStorageStats") @Parameter(description = "If true, statistics for deployed channels will be read from persistent storage instead of in-memory counters.") @QueryParam("useStorageStats") boolean useStorageStats) throws ClientException;
     // @formatter:on
 
     @POST
@@ -75,7 +76,8 @@ public interface ChannelStatisticsServletInterface extends BaseServletInterface 
             @Param("includeUndeployed") @Parameter(description = "If true, statistics for undeployed channels will also be included.") @FormDataParam("includeUndeployed") boolean includeUndeployed,
             @Param("includeMetadataIds") @Parameter(description = "The ids of connectors to include. Cannot include and exclude connectors.") @FormDataParam("includeMetadataIds") Set<Integer> includeMetadataIds,
             @Param("excludeMetadataIds") @Parameter(description = "The ids of connectors to exclude. Cannot include and exclude connectors.") @FormDataParam("excludeMetadataIds") Set<Integer> excludeMetadataIds,
-            @Param("aggregateStats") @Parameter(description = "If true, statistics will be aggregated into one result") @FormDataParam("aggregateStats") boolean aggregateStats) throws ClientException;
+            @Param("aggregateStats") @Parameter(description = "If true, statistics will be aggregated into one result") @FormDataParam("aggregateStats") boolean aggregateStats,
+            @Param("useStorageStats") @Parameter(description = "If true, statistics for deployed channels will be read from persistent storage instead of in-memory counters.") @FormDataParam("useStorageStats") boolean useStorageStats) throws ClientException;
     // @formatter:on
 
     @GET

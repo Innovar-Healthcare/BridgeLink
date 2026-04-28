@@ -13,6 +13,7 @@ package com.innovarhealthcare.channelHistory.client.panel;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JTabbedPane;
@@ -20,17 +21,23 @@ import javax.swing.SwingWorker;
 import javax.swing.event.ChangeListener;
 import java.awt.Color;
 import java.awt.Cursor;
+import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Frame;
 import java.awt.event.HierarchyEvent;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
+import com.innovarhealthcare.channelHistory.client.dialog.ConflictResolutionDialog;
+import com.innovarhealthcare.channelHistory.client.exception.GitConflictClientException;
 import com.innovarhealthcare.channelHistory.client.panel.gitstatus.ChangesTabPanel;
 import com.innovarhealthcare.channelHistory.client.panel.gitstatus.FilesTabPanel;
 import com.innovarhealthcare.channelHistory.client.panel.gitstatus.HistoryTabPanel;
 import com.innovarhealthcare.channelHistory.client.service.VersionHistoryServiceClient;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoChanges;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoInfo;
+import com.innovarhealthcare.channelHistory.shared.dto.response.RemoteStatus;
 import com.innovarhealthcare.channelHistory.shared.model.VersionHistoryProperties;
 import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.ui.PlatformUI;
@@ -39,7 +46,7 @@ import net.miginfocom.swing.MigLayout;
 
 /**
  * Shell panel for the Git Status tab in the Version History settings.
- * Owns the repository info header bar, the JTabbedPane, and the LoadDataWorker.
+ * Owns the repository info header bar, the JTabbedPane, and the SyncLoadWorker.
  * All tab-specific UI and logic is delegated to the three sub-panels:
  * {@link FilesTabPanel}, {@link ChangesTabPanel}, and {@link HistoryTabPanel}.
  *
@@ -66,10 +73,15 @@ public class GitStatusTabPanel extends JPanel {
     // ── Main tab pane ──────────────────────────────────────────────────────────
     private JTabbedPane leftTabbedPane;
 
+    // ── Header action buttons ──────────────────────────────────────────────────
+    private JButton reloadButton;
+    private JButton pullButton;
+    private JButton pushButton;
+    private JLabel syncStatusLabel;
+
     // ── Status / controls ──────────────────────────────────────────────────────
     private JProgressBar loadingBar;
     private JLabel statusLabel;
-    private JButton refreshButton;
 
     // ── Listener ───────────────────────────────────────────────────────────────
     private ChangeListener tabChangeListener;
@@ -90,7 +102,7 @@ public class GitStatusTabPanel extends JPanel {
                 // VersionHistorySettingPanel's ChangeListener guarantees no unsaved changes
                 // exist before this panel becomes visible (via UnsavedChangesDialog).
                 if (!PlatformUI.MIRTH_FRAME.isSaveEnabled()) {
-                    loadData();
+                    loadDataWithSync();
                 }
             }
         });
@@ -120,31 +132,52 @@ public class GitStatusTabPanel extends JPanel {
         statusLabel.setFont(new Font("Tahoma", Font.PLAIN, 11));
         statusLabel.setVisible(false);
 
-        refreshButton = new JButton("Refresh");
-        refreshButton.addActionListener(e -> loadData());
+        syncStatusLabel = new JLabel("—");
+        syncStatusLabel.setFont(new Font("Tahoma", Font.PLAIN, 11));
+        syncStatusLabel.setForeground(new Color(100, 100, 100));
+
+        reloadButton = new JButton("↺");
+        reloadButton.setToolTipText("Fetch from remote and update sync status");
+
+        pullButton = new JButton("Pull");
+        pullButton.setToolTipText("Pull from remote (overwrites local uncommitted changes)");
+
+        pushButton = new JButton("Push");
+        pushButton.setToolTipText("Push local commits to remote");
     }
 
     private void initLayout() {
         setLayout(new MigLayout("fill, hidemode 3, novisualpadding, insets 4", "[grow]", "[][grow][][]"));
 
         // ── Header bar ────────────────────────────────────────────────────────
-        JPanel headerBar = new JPanel(new MigLayout("insets 4 8 4 8, novisualpadding", "[right]4[grow,fill]20[right]4[grow,fill]20[right]4[grow,fill]20[right]4[grow,fill]"));
+        JPanel infoPanel = new JPanel(new MigLayout("insets 0, novisualpadding", "[right]4[grow,fill]20[right]4[grow,fill]20[right]4[grow,fill]20[right]4[grow,fill]"));
+        infoPanel.setBackground(UIConstants.BACKGROUND_COLOR);
+        infoPanel.add(new JLabel("Local Path:"));
+        infoPanel.add(localRepoPathValueLabel);
+        infoPanel.add(new JLabel("Remote:"));
+        infoPanel.add(remoteUrlValueLabel);
+        infoPanel.add(new JLabel("Branch:"));
+        infoPanel.add(branchValueLabel);
+        infoPanel.add(new JLabel("Size:"));
+        infoPanel.add(sizeValueLabel);
+
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        actionPanel.setBackground(UIConstants.BACKGROUND_COLOR);
+        actionPanel.add(syncStatusLabel);
+        actionPanel.add(pullButton);
+        actionPanel.add(pushButton);
+        actionPanel.add(reloadButton);
+
+        JPanel headerBar = new JPanel(new MigLayout("insets 4 8 4 8, novisualpadding", "[grow,fill][]"));
         headerBar.setBackground(UIConstants.BACKGROUND_COLOR);
         headerBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(204, 204, 204)));
-        headerBar.add(new JLabel("Local Path:"));
-        headerBar.add(localRepoPathValueLabel);
-        headerBar.add(new JLabel("Remote:"));
-        headerBar.add(remoteUrlValueLabel);
-        headerBar.add(new JLabel("Branch:"));
-        headerBar.add(branchValueLabel);
-        headerBar.add(new JLabel("Size:"));
-        headerBar.add(sizeValueLabel);
+        headerBar.add(infoPanel, "grow");
+        headerBar.add(actionPanel);
 
         add(headerBar, "growx, wrap");
         add(leftTabbedPane, "grow, push, wrap");
         add(loadingBar, "growx, wrap");
         add(statusLabel, "growx, wrap");
-        add(refreshButton, "right");
     }
 
     private void initListeners() {
@@ -162,6 +195,10 @@ public class GitStatusTabPanel extends JPanel {
             }
         };
         leftTabbedPane.addChangeListener(tabChangeListener);
+
+        reloadButton.addActionListener(e -> loadDataWithSync());
+        pullButton.addActionListener(e -> onPull());
+        pushButton.addActionListener(e -> onPush());
     }
 
     // ========== Cross-tab Navigation ==========
@@ -175,39 +212,182 @@ public class GitStatusTabPanel extends JPanel {
 
     // ========== Data Loading ==========
 
-    private void loadData() {
+    private void loadDataWithSync() {
         enterLoadingState();
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-        new LoadDataWorker().execute();
+        new SyncLoadWorker().execute();
+    }
+
+    private void onPull() {
+        int choice = JOptionPane.showConfirmDialog(
+                this,
+                "Pull changes from remote?\n\n"
+                        + "• If remote has new commits: they will be merged into local.\n"
+                        + "• If there are conflicts: remote version wins automatically.\n"
+                        + "• Local committed work is preserved.",
+                "Pull from Remote",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.INFORMATION_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        setActionButtonsEnabled(false);
+        loadingBar.setVisible(true);
+        statusLabel.setVisible(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                VersionHistoryServiceClient.getInstance().pull();
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    get();
+                    loadDataWithSync();
+                } catch (Exception ex) {
+                    Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                    String msg = cause.getMessage() != null ? cause.getMessage() : "Unknown error";
+                    setCursor(Cursor.getDefaultCursor());
+                    loadingBar.setVisible(false);
+                    setActionButtonsEnabled(true);
+                    statusLabel.setText("Pull failed: " + msg);
+                    statusLabel.setVisible(true);
+                }
+            }
+        }.execute();
+    }
+
+    private void onPush() {
+        setActionButtonsEnabled(false);
+        loadingBar.setVisible(true);
+        statusLabel.setVisible(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                VersionHistoryServiceClient.getInstance().pushOnly();
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                setCursor(Cursor.getDefaultCursor());
+                loadingBar.setVisible(false);
+                try {
+                    get();
+                    loadDataWithSync();
+                } catch (java.util.concurrent.ExecutionException ex) {
+                    Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                    setActionButtonsEnabled(true);
+                    if (cause instanceof GitConflictClientException) {
+                        Map<String, String> backed = ((GitConflictClientException) cause).getBackedUpContent();
+                        if (backed.isEmpty()) {
+                            // Rebase conflict during standalone push — no working-tree changes were
+                            // backed up (the user's work is already committed locally). Pull first
+                            // to incorporate remote changes, then retry the push.
+                            statusLabel.setText("Push failed: Remote branch has diverged. Pull first, then retry.");
+                            statusLabel.setVisible(true);
+                        } else {
+                            Frame parent = PlatformUI.MIRTH_FRAME;
+                            new ConflictResolutionDialog(parent, VersionHistoryServiceClient.getInstance(), backed, () -> {
+                                setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+                                new SwingWorker<RepoChanges, Void>() {
+                                    @Override
+                                    protected RepoChanges doInBackground() throws Exception {
+                                        return VersionHistoryServiceClient.getInstance().getRepoChanges();
+                                    }
+
+                                    @Override
+                                    protected void done() {
+                                        setCursor(Cursor.getDefaultCursor());
+                                        try {
+                                            changesTabPanel.populate(get());
+                                        } catch (Exception reloadEx) {
+                                            PlatformUI.MIRTH_FRAME.alertError(GitStatusTabPanel.this, "Failed to reload: " + reloadEx.getMessage());
+                                        }
+                                    }
+                                }.execute();
+                            }).setVisible(true);
+                        }
+                    } else {
+                        String msg = cause.getMessage() != null ? cause.getMessage() : "Unknown error";
+                        statusLabel.setText("Push failed: " + msg);
+                        statusLabel.setVisible(true);
+                    }
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    setActionButtonsEnabled(true);
+                } catch (Exception ex) {
+                    setActionButtonsEnabled(true);
+                    String msg = ex.getMessage() != null ? ex.getMessage() : "Unknown error";
+                    statusLabel.setText("Push failed: " + msg);
+                    statusLabel.setVisible(true);
+                }
+            }
+        }.execute();
     }
 
     private void enterLoadingState() {
         loadingBar.setVisible(true);
         statusLabel.setVisible(false);
-        refreshButton.setEnabled(false);
+        setActionButtonsEnabled(false);
         clearValues();
     }
 
-    private void exitLoadedState(RepoInfo info, RepoChanges changes) {
+    private void setActionButtonsEnabled(boolean enabled) {
+        reloadButton.setEnabled(enabled);
+        pullButton.setEnabled(enabled);
+        pushButton.setEnabled(enabled);
+    }
+
+    private void exitLoadedState(RepoInfo info, RepoChanges changes, RemoteStatus remoteStatus) {
         setCursor(Cursor.getDefaultCursor());
         loadingBar.setVisible(false);
         statusLabel.setVisible(false);
-        refreshButton.setEnabled(true);
+        setActionButtonsEnabled(true);
 
         localRepoPathValueLabel.setText(info.getLocalRepoPath());
         remoteUrlValueLabel.setText(info.getRemoteUrl());
         branchValueLabel.setText(info.getBranch());
         sizeValueLabel.setText(formatBytes(info.getTotalSizeBytes()));
 
+        updateSyncStatusLabel(remoteStatus);
+
         filesTabPanel.populate(info);
         changesTabPanel.populate(changes);
 
         // If the History tab is currently active, reload it now.
         // The ChangeListener only fires when the selected index *changes*, so if the
-        // user is already on the History tab when Refresh is clicked, the listener
+        // user is already on the History tab when Reload is clicked, the listener
         // would never fire and the tab would remain empty after clear().
         if (leftTabbedPane.getSelectedIndex() == TAB_HISTORY) {
             historyTabPanel.onTabSelected();
+        }
+    }
+
+    private void updateSyncStatusLabel(RemoteStatus status) {
+        if (status == null) {
+            syncStatusLabel.setText("—");
+            syncStatusLabel.setForeground(new Color(100, 100, 100));
+            return;
+        }
+        int ahead = status.getAheadCount();
+        int behind = status.getBehindCount();
+        if (ahead == 0 && behind == 0) {
+            syncStatusLabel.setText("✓ Up to date");
+            syncStatusLabel.setForeground(new Color(0, 128, 0));
+        } else if (ahead > 0 && behind == 0) {
+            syncStatusLabel.setText("↑" + ahead + " to push");
+            syncStatusLabel.setForeground(new Color(0, 100, 200));
+        } else if (ahead == 0) {
+            syncStatusLabel.setText("↓" + behind + " to pull");
+            syncStatusLabel.setForeground(new Color(180, 80, 0));
+        } else {
+            syncStatusLabel.setText("↑" + ahead + " ↓" + behind);
+            syncStatusLabel.setForeground(new Color(150, 0, 0));
         }
     }
 
@@ -216,7 +396,7 @@ public class GitStatusTabPanel extends JPanel {
         loadingBar.setVisible(false);
         statusLabel.setText(message);
         statusLabel.setVisible(true);
-        refreshButton.setEnabled(true);
+        setActionButtonsEnabled(true);
     }
 
     private void clearValues() {
@@ -224,6 +404,8 @@ public class GitStatusTabPanel extends JPanel {
         remoteUrlValueLabel.setText("—");
         branchValueLabel.setText("—");
         sizeValueLabel.setText("—");
+        syncStatusLabel.setText("—");
+        syncStatusLabel.setForeground(new Color(100, 100, 100));
         filesTabPanel.clear();
         changesTabPanel.clear();
         historyTabPanel.clear();
@@ -263,22 +445,24 @@ public class GitStatusTabPanel extends JPanel {
 
     // ========== Background Worker ==========
 
-    private static final class LoadResult {
+    private static final class SyncLoadResult {
         final RepoInfo info;
         final RepoChanges changes;
+        final RemoteStatus remoteStatus;
 
-        LoadResult(RepoInfo info, RepoChanges changes) {
+        SyncLoadResult(RepoInfo info, RepoChanges changes, RemoteStatus remoteStatus) {
             this.info = info;
             this.changes = changes;
+            this.remoteStatus = remoteStatus;
         }
     }
 
-    private final class LoadDataWorker extends SwingWorker<LoadResult, Void> {
+    private final class SyncLoadWorker extends SwingWorker<SyncLoadResult, Void> {
         @Override
-        protected LoadResult doInBackground() throws Exception {
+        protected SyncLoadResult doInBackground() throws Exception {
             VersionHistoryServiceClient c = VersionHistoryServiceClient.getInstance();
 
-            // Fetch repoInfo and repoChanges in parallel
+            // All three calls in parallel; getRemoteStatus() does git fetch internally
             CompletableFuture<RepoInfo> infoFuture = CompletableFuture.supplyAsync(() -> {
                 try {
                     return c.getRepoInfo();
@@ -293,11 +477,17 @@ public class GitStatusTabPanel extends JPanel {
                     throw new RuntimeException(e);
                 }
             });
+            CompletableFuture<RemoteStatus> statusFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return c.getRemoteStatus();
+                } catch (ClientException e) {
+                    throw new RuntimeException(e);
+                }
+            });
 
             try {
-                return new LoadResult(infoFuture.join(), changesFuture.join());
+                return new SyncLoadResult(infoFuture.join(), changesFuture.join(), statusFuture.join());
             } catch (CompletionException ex) {
-                // Unwrap: CompletionException → RuntimeException → ClientException
                 Throwable cause = ex.getCause();
                 if (cause instanceof RuntimeException && cause.getCause() != null) {
                     cause = cause.getCause();
@@ -312,8 +502,8 @@ public class GitStatusTabPanel extends JPanel {
         @Override
         protected void done() {
             try {
-                LoadResult result = get();
-                exitLoadedState(result.info, result.changes);
+                SyncLoadResult result = get();
+                exitLoadedState(result.info, result.changes, result.remoteStatus);
             } catch (Exception e) {
                 Throwable cause = e.getCause() != null ? e.getCause() : e;
                 String msg = cause.getMessage() != null ? cause.getMessage() : "Unknown error";

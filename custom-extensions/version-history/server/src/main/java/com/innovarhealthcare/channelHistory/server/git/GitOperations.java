@@ -22,13 +22,17 @@ import com.innovarhealthcare.channelHistory.server.exception.GitFileNotFoundExce
 import com.innovarhealthcare.channelHistory.server.exception.GitOperationException;
 import com.innovarhealthcare.channelHistory.server.exception.GitPushFailedException;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoChanges;
+import com.innovarhealthcare.channelHistory.shared.dto.response.RemoteStatus;
 import com.innovarhealthcare.channelHistory.shared.dto.response.RepoItemChange;
 import com.innovarhealthcare.channelHistory.shared.model.CommitMetaData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.eclipse.jgit.api.CheckoutCommand;
 import org.eclipse.jgit.api.FetchCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.LogCommand;
+import org.eclipse.jgit.api.MergeCommand;
+import org.eclipse.jgit.api.MergeResult;
 import org.eclipse.jgit.api.PushCommand;
 import org.eclipse.jgit.api.RebaseCommand;
 import org.eclipse.jgit.api.RebaseResult;
@@ -51,8 +55,7 @@ import org.eclipse.jgit.transport.FetchResult;
 import org.eclipse.jgit.transport.PushResult;
 import org.eclipse.jgit.transport.RefSpec;
 import org.eclipse.jgit.transport.RemoteRefUpdate;
-import org.eclipse.jgit.transport.SshSessionFactory;
-import org.eclipse.jgit.transport.SshTransport;
+import org.eclipse.jgit.api.TransportConfigCallback;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.EmptyTreeIterator;
 import org.eclipse.jgit.treewalk.TreeWalk;
@@ -69,29 +72,29 @@ public class GitOperations {
 
     private final Git git;
     private final String branch;
-    private final SshSessionFactory sshSessionFactory;
+    private final TransportConfigCallback transportConfig;
 
     /**
      * Creates a new GitOperations instance
      *
-     * @param git               The JGit Git instance
-     * @param branch            The branch name (e.g., "main", "master")
-     * @param sshSessionFactory SSH session factory for authentication
+     * @param git             The JGit Git instance
+     * @param branch          The branch name (e.g., "main", "master")
+     * @param transportConfig Transport config callback for authentication (SSH or HTTPS)
      */
-    public GitOperations(Git git, String branch, SshSessionFactory sshSessionFactory) {
+    public GitOperations(Git git, String branch, TransportConfigCallback transportConfig) {
         if (git == null) {
             throw new IllegalArgumentException("Git instance cannot be null");
         }
         if (branch == null || branch.trim().isEmpty()) {
             throw new IllegalArgumentException("Branch cannot be null or empty");
         }
-        if (sshSessionFactory == null) {
-            throw new IllegalArgumentException("SSH session factory cannot be null");
+        if (transportConfig == null) {
+            throw new IllegalArgumentException("Transport config cannot be null");
         }
 
         this.git = git;
         this.branch = branch;
-        this.sshSessionFactory = sshSessionFactory;
+        this.transportConfig = transportConfig;
     }
 
     /**
@@ -305,12 +308,8 @@ public class GitOperations {
         git.fetch()
            .setRemote("origin")
            .setRefSpecs(new RefSpec("refs/heads/" + branch + ":refs/remotes/origin/" + branch))
-           .setTransportConfigCallback(transport -> {
-                if (transport instanceof SshTransport) {
-                    ((SshTransport) transport).setSshSessionFactory(sshSessionFactory);
-                }
-            })
-            .call();
+           .setTransportConfigCallback(transportConfig)
+           .call();
         //@formatter:on
 
         // Get refs
@@ -323,6 +322,47 @@ public class GitOperations {
         }
 
         return !localRef.getObjectId().equals(remoteRef.getObjectId());
+    }
+
+    /**
+     * Fetches from origin and returns the number of commits local is ahead of and behind the
+     * remote tracking branch. Both counts use a RevWalk from the respective tip to the merge-base,
+     * so no upstream tracking configuration is required.
+     *
+     * @return RemoteStatus with aheadCount and behindCount
+     * @throws GitAPIException if the fetch fails
+     * @throws IOException     if a ref or object cannot be read
+     */
+    public RemoteStatus getAheadBehindCounts() throws GitAPIException, IOException {
+        fetch();
+        Ref localRef  = git.getRepository().findRef(branch);
+        Ref remoteRef = git.getRepository().findRef("refs/remotes/origin/" + branch);
+        if (localRef == null || remoteRef == null) {
+            return new RemoteStatus(0, 0);
+        }
+        ObjectId localId  = localRef.getObjectId();
+        ObjectId remoteId = remoteRef.getObjectId();
+        if (localId.equals(remoteId)) {
+            return new RemoteStatus(0, 0);
+        }
+        int ahead = 0;
+        try (RevWalk walk = new RevWalk(git.getRepository())) {
+            walk.markStart(walk.parseCommit(localId));
+            walk.markUninteresting(walk.parseCommit(remoteId));
+            while (walk.next() != null){ 
+                ahead++;
+            }
+        }
+        int behind = 0;
+        try (RevWalk walk = new RevWalk(git.getRepository())) {
+            walk.markStart(walk.parseCommit(remoteId));
+            walk.markUninteresting(walk.parseCommit(localId));
+            while (walk.next() != null){ 
+                behind++;
+            }
+        }
+        logger.debug("Remote sync status: ahead={}, behind={}", ahead, behind);
+        return new RemoteStatus(ahead, behind);
     }
 
     /**
@@ -350,11 +390,7 @@ public class GitOperations {
         FetchCommand fetchCommand = git.fetch();
         fetchCommand.setRemote("origin");
         fetchCommand.setRefSpecs(new RefSpec("refs/heads/" + branch + ":refs/remotes/origin/" + branch));
-        fetchCommand.setTransportConfigCallback(transport -> {
-            if (transport instanceof SshTransport) {
-                ((SshTransport) transport).setSshSessionFactory(sshSessionFactory);
-            }
-        });
+        fetchCommand.setTransportConfigCallback(transportConfig);
 
         FetchResult fetchResult = fetchCommand.call();
         result.append("Fetch completed: ").append(fetchResult.getMessages()).append("\n");
@@ -372,6 +408,59 @@ public class GitOperations {
 
         logger.info("Pull with overwrite completed successfully");
         return result.toString();
+    }
+
+    /**
+     * Pulls changes from remote using a normal merge strategy.
+     * Fast-forward and clean merges complete silently.
+     * Conflicts are auto-resolved by taking the remote (theirs) version of each conflicting file,
+     * then a merge commit is created. This preserves any local unpushed commits.
+     *
+     * @throws GitAPIException if git operation fails
+     * @throws IOException     if I/O error occurs
+     */
+    public void pullNormal() throws GitAPIException, IOException {
+        logger.info("Pulling (normal merge) from origin/{}", branch);
+
+        fetch();
+
+        Ref remoteRef = git.getRepository().findRef("refs/remotes/origin/" + branch);
+        if (remoteRef == null) {
+            throw new IOException("Remote ref not found: refs/remotes/origin/" + branch);
+        }
+
+        MergeResult mergeResult = git.merge()
+                .include(remoteRef)
+                .setFastForward(MergeCommand.FastForwardMode.FF)
+                .call();
+
+        MergeResult.MergeStatus status = mergeResult.getMergeStatus();
+        logger.info("Merge status: {}", status);
+
+        if (status == MergeResult.MergeStatus.CONFLICTING) {
+            Map<String, int[][]> conflicts = mergeResult.getConflicts();
+            logger.warn("Merge conflicts in {} file(s); auto-resolving using remote version", conflicts.size());
+
+            CheckoutCommand checkout = git.checkout();
+            for (String conflictPath : conflicts.keySet()) {
+                checkout.setStage(CheckoutCommand.Stage.THEIRS).addPath(conflictPath);
+            }
+            checkout.call();
+
+            for (String conflictPath : conflicts.keySet()) {
+                git.add().addFilepattern(conflictPath).call();
+            }
+
+            git.commit()
+                    .setMessage("Merge remote-tracking branch 'origin/" + branch + "' (conflicts resolved using remote)")
+                    .call();
+
+            logger.info("Pull completed: conflicts in {} file(s) resolved using remote version", conflicts.size());
+        } else if (status.isSuccessful()) {
+            logger.info("Pull completed successfully: {}", status);
+        } else {
+            throw new IOException("Merge failed with status: " + status);
+        }
     }
 
     /**
@@ -450,11 +539,7 @@ public class GitOperations {
         pushCommand.setRemote("origin");
         pushCommand.setRefSpecs(new RefSpec("refs/heads/" + branch));
         pushCommand.setForce(forcePush);
-        pushCommand.setTransportConfigCallback(transport -> {
-            if (transport instanceof SshTransport) {
-                ((SshTransport) transport).setSshSessionFactory(sshSessionFactory);
-            }
-        });
+        pushCommand.setTransportConfigCallback(transportConfig);
 
         Iterable<PushResult> results = pushCommand.call();
 
@@ -467,9 +552,10 @@ public class GitOperations {
             for (RemoteRefUpdate update : result.getRemoteUpdates()) {
                 resultMessage.append("  Ref: ").append(update.getRemoteName()).append(", Status: ").append(update.getStatus()).append("\n");
 
-                if (update.getStatus() == RemoteRefUpdate.Status.OK) {
+                if (update.getStatus() == RemoteRefUpdate.Status.OK
+                        || update.getStatus() == RemoteRefUpdate.Status.UP_TO_DATE) {
                     pushSuccessful = true;
-                    logger.info("Push successful for ref: {}", update.getRemoteName());
+                    logger.info("Push successful for ref: {} ({})", update.getRemoteName(), update.getStatus());
                 } else {
                     logger.warn("Push status for {}: {}", update.getRemoteName(), update.getStatus());
                     if (update.getMessage() != null) {
@@ -713,15 +799,26 @@ public class GitOperations {
     }
 
     /**
+     * Fetches from origin, rebases the local branch onto the remote tracking ref, then pushes.
+     * No staging or commit is performed — intended for pushing already-committed local work.
+     *
+     * @throws GitConflictException   if the rebase is stopped by a conflict with remote changes
+     * @throws GitPushFailedException if the push is rejected by the remote
+     * @throws GitAPIException        if any git API operation fails
+     * @throws IOException            if an I/O error occurs during ref lookup
+     */
+    public void fetchRebaseAndPush() throws GitAPIException, IOException, GitConflictException, GitPushFailedException {
+        fetch();
+        rebaseOntoRemote();
+        push(false);
+    }
+
+    /**
      * Fetches the configured branch from origin into refs/remotes/origin/<branch>.
      */
     private void fetch() throws GitAPIException {
         logger.debug("Fetching from origin/{}", branch);
-        git.fetch().setRemote("origin").setRefSpecs(new RefSpec("refs/heads/" + branch + ":refs/remotes/origin/" + branch)).setTransportConfigCallback(transport -> {
-            if (transport instanceof SshTransport) {
-                ((SshTransport) transport).setSshSessionFactory(sshSessionFactory);
-            }
-        }).call();
+        git.fetch().setRemote("origin").setRefSpecs(new RefSpec("refs/heads/" + branch + ":refs/remotes/origin/" + branch)).setTransportConfigCallback(transportConfig).call();
         logger.debug("Fetch completed");
     }
 
