@@ -975,15 +975,24 @@ public class DonkeyEngineController implements EngineController {
 
     @Override
     public List<ChannelStatistics> getChannelStatisticsList(Set<String> channelIds, boolean includeUndeployed) {
-        return getChannelStatisticsList(channelIds, includeUndeployed, null, null);
+        return getChannelStatisticsList(channelIds, includeUndeployed, null, null, false);
     }
 
     @Override
     public List<ChannelStatistics> getChannelStatisticsList(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds) {
+        return getChannelStatisticsList(channelIds, includeUndeployed, includeMetadataIds, excludeMetadataIds, false);
+    }
+
+    @Override
+    public List<ChannelStatistics> getChannelStatisticsList(Set<String> channelIds, boolean includeUndeployed, Set<Integer> includeMetadataIds, Set<Integer> excludeMetadataIds, boolean useStorageForDeployed) {
         List<ChannelStatistics> statistics = new ArrayList<ChannelStatistics>();
         Map<String, Channel> dashboardChannels = getDashboardChannels(channelIds);
 
-        statistics.addAll(getDashboardChannelStatistics(dashboardChannels.values(), includeMetadataIds, excludeMetadataIds));
+        Statistics deployedStats = useStorageForDeployed
+                ? channelController.getStatisticsFromStorage(configurationController.getServerId())
+                : channelController.getStatistics();
+
+        statistics.addAll(getDashboardChannelStatistics(dashboardChannels.values(), deployedStats, includeMetadataIds, excludeMetadataIds));
 
         if (includeUndeployed) {
             Map<String, com.mirth.connect.model.Channel> channelModels = new HashMap<String, com.mirth.connect.model.Channel>();
@@ -998,9 +1007,8 @@ public class DonkeyEngineController implements EngineController {
         return statistics;
     }
 
-    private List<ChannelStatistics> getDashboardChannelStatistics(Collection<Channel> channels, Set<Integer> includeMetaDataIds, Set<Integer> excludeMetaDataIds) {
+    private List<ChannelStatistics> getDashboardChannelStatistics(Collection<Channel> channels, Statistics stats, Set<Integer> includeMetaDataIds, Set<Integer> excludeMetaDataIds) {
         List<ChannelStatistics> statisticsList = new ArrayList<ChannelStatistics>();
-        Statistics stats = channelController.getStatistics();
 
         String serverId = configurationController.getServerId();
 

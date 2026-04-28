@@ -11,10 +11,8 @@ package com.mirth.connect.server.api.servlets;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -32,7 +30,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.mirth.connect.client.core.api.MirthApiException;
-import com.mirth.connect.donkey.model.message.Status;
 import com.mirth.connect.model.ChannelStatistics;
 import com.mirth.connect.server.api.ServletTestBase;
 import com.mirth.connect.server.controllers.ChannelController;
@@ -89,7 +86,7 @@ public class ChannelStatisticsServletTest extends ServletTestBase {
         List<ChannelStatistics> singleStatsList = new ArrayList<>();
         singleStatsList.add(statsA);
 
-        when(mockEngineController.getChannelStatisticsList(any(), anyBoolean(), any(), any())).thenReturn(statsList);
+        when(mockEngineController.getChannelStatisticsList(any(), anyBoolean(), any(), any(), anyBoolean())).thenReturn(statsList);
         when(mockEngineController.getChannelStatisticsList(any(Set.class), anyBoolean())).thenReturn(singleStatsList);
 
         doNothing().when(mockChannelController).resetStatistics(any(), any());
@@ -101,7 +98,7 @@ public class ChannelStatisticsServletTest extends ServletTestBase {
     @Test
     public void testGetStatisticsBasic() {
         ChannelStatisticsServlet servlet = new ChannelStatisticsServlet(request, sc, controllerFactory);
-        List<ChannelStatistics> stats = servlet.getStatistics(null, false, null, null, false);
+        List<ChannelStatistics> stats = servlet.getStatistics(null, false, null, null, false, false);
         assertNotNull(stats);
         assertEquals(2, stats.size());
     }
@@ -110,14 +107,14 @@ public class ChannelStatisticsServletTest extends ServletTestBase {
     public void testGetStatisticsWithChannelIds() {
         ChannelStatisticsServlet servlet = new ChannelStatisticsServlet(request, sc, controllerFactory);
         Set<String> channelIds = new HashSet<>(Arrays.asList(CHANNEL_ID_A));
-        List<ChannelStatistics> stats = servlet.getStatistics(channelIds, false, null, null, false);
+        List<ChannelStatistics> stats = servlet.getStatistics(channelIds, false, null, null, false, false);
         assertNotNull(stats);
     }
 
     @Test
     public void testGetStatisticsAggregated() {
         ChannelStatisticsServlet servlet = new ChannelStatisticsServlet(request, sc, controllerFactory);
-        List<ChannelStatistics> stats = servlet.getStatistics(null, false, null, null, true);
+        List<ChannelStatistics> stats = servlet.getStatistics(null, false, null, null, true, false);
         assertNotNull(stats);
         assertEquals(1, stats.size());
 
@@ -135,14 +132,14 @@ public class ChannelStatisticsServletTest extends ServletTestBase {
         ChannelStatisticsServlet servlet = new ChannelStatisticsServlet(request, sc, controllerFactory);
         Set<Integer> includeIds = new HashSet<>(Arrays.asList(0));
         Set<Integer> excludeIds = new HashSet<>(Arrays.asList(1));
-        servlet.getStatistics(null, false, includeIds, excludeIds, false);
+        servlet.getStatistics(null, false, includeIds, excludeIds, false, false);
     }
 
     @Test
     public void testGetStatisticsWithIncludeMetadataIds() {
         ChannelStatisticsServlet servlet = new ChannelStatisticsServlet(request, sc, controllerFactory);
         Set<Integer> includeIds = new HashSet<>(Arrays.asList(0, 1));
-        List<ChannelStatistics> stats = servlet.getStatistics(null, false, includeIds, null, false);
+        List<ChannelStatistics> stats = servlet.getStatistics(null, false, includeIds, null, false, false);
         assertNotNull(stats);
     }
 
@@ -150,14 +147,14 @@ public class ChannelStatisticsServletTest extends ServletTestBase {
     public void testGetStatisticsWithExcludeMetadataIds() {
         ChannelStatisticsServlet servlet = new ChannelStatisticsServlet(request, sc, controllerFactory);
         Set<Integer> excludeIds = new HashSet<>(Arrays.asList(2));
-        List<ChannelStatistics> stats = servlet.getStatistics(null, false, null, excludeIds, false);
+        List<ChannelStatistics> stats = servlet.getStatistics(null, false, null, excludeIds, false, false);
         assertNotNull(stats);
     }
 
     @Test
     public void testGetStatisticsIncludeUndeployed() {
         ChannelStatisticsServlet servlet = new ChannelStatisticsServlet(request, sc, controllerFactory);
-        List<ChannelStatistics> stats = servlet.getStatistics(null, true, null, null, false);
+        List<ChannelStatistics> stats = servlet.getStatistics(null, true, null, null, false, false);
         assertNotNull(stats);
     }
 
@@ -166,7 +163,7 @@ public class ChannelStatisticsServletTest extends ServletTestBase {
     @Test
     public void testGetStatisticsPostDelegatesToGet() {
         ChannelStatisticsServlet servlet = new ChannelStatisticsServlet(request, sc, controllerFactory);
-        List<ChannelStatistics> stats = servlet.getStatisticsPost(null, false, null, null, false);
+        List<ChannelStatistics> stats = servlet.getStatisticsPost(null, false, null, null, false, false);
         assertNotNull(stats);
         assertEquals(2, stats.size());
     }
@@ -174,7 +171,7 @@ public class ChannelStatisticsServletTest extends ServletTestBase {
     @Test
     public void testGetStatisticsPostAggregated() {
         ChannelStatisticsServlet servlet = new ChannelStatisticsServlet(request, sc, controllerFactory);
-        List<ChannelStatistics> stats = servlet.getStatisticsPost(null, false, null, null, true);
+        List<ChannelStatistics> stats = servlet.getStatisticsPost(null, false, null, null, true, false);
         assertEquals(1, stats.size());
         assertEquals(300, stats.get(0).getReceived());
     }
