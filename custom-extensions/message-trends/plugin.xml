@@ -3,7 +3,7 @@
     <name>Message Trends Management System</name>
     <author>Daniel Svanstedt, Thai Tran</author>
     <pluginVersion>1.0.0</pluginVersion>
-    <mirthVersion>4.5.4, 4.6.0, 4.6.1, 26.3.0</mirthVersion>
+    <mirthVersion>4.5.4, 4.6.0, 4.6.1, 26.3.1</mirthVersion>
     <url>https://www.innovarhealthcare.com</url>
     <description>This plugin provides time-series message statistics tracking and visualization</description>
     <clientClasses>

@@ -87,7 +87,8 @@ public enum Version {
     v4_5_4("4.5.4"), //BridgeLink
     v4_6_0("4.6.0"),//BridgeLink
     v4_6_1("4.6.1"), //BridgeLink
-    v26_3_0("26.3.0"); //BridgeLink — SMTP OAuth
+    v26_3_0("26.3.0"), //BridgeLink — SMTP OAuth
+    v26_3_1("26.3.1"); //BridgeLink
     
     // @formatter:on
 
