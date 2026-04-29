@@ -214,8 +214,6 @@ public class Mirth extends Thread {
                     int value = Integer.parseInt(line.substring("NoNewPrivs:".length()).trim());
                     if (value == 0) {
                         logger.warn(NO_NEW_PRIVS_WARNING);
-                    } else {
-                        logger.info("no_new_privs is active — kernel-level privilege escalation (sudo/SUID) is blocked.");
                     }
                     return;
                 }
