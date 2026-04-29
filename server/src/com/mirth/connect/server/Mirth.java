@@ -203,8 +203,6 @@ public class Mirth extends Thread {
             System.exit(1);
         } else if (result == RootCheckResult.WARN) {
             logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set — proceeding.");
-        } else {
-            logger.info("Privilege check passed: running as user '" + userName + "' (not root/Administrator).");
         }
     }
 
@@ -216,8 +214,6 @@ public class Mirth extends Thread {
                     int value = Integer.parseInt(line.substring("NoNewPrivs:".length()).trim());
                     if (value == 0) {
                         logger.warn(NO_NEW_PRIVS_WARNING);
-                    } else {
-                        logger.info("no_new_privs is active — kernel-level privilege escalation (sudo/SUID) is blocked.");
                     }
                     return;
                 }
