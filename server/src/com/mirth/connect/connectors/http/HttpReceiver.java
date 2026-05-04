@@ -346,6 +346,10 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
     private class RequestHandler extends AbstractHandler {
         @Override
         public void handle(String target, Request baseRequest, HttpServletRequest servletRequest, HttpServletResponse servletResponse) throws IOException, ServletException {
+            // Skip if a static resource handler already served this request (Jetty 12 EE8 ContextHandler no longer guards on isHandled())
+            if (baseRequest.isHandled()) {
+                return;
+            }
             logger.debug("received HTTP request");
             eventController.dispatchEvent(new ConnectionStatusEvent(getChannelId(), getMetaDataId(), getSourceName(), ConnectionStatusEventType.CONNECTED));
             DispatchResult dispatchResult = null;
