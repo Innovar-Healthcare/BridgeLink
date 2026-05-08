@@ -42,12 +42,9 @@ public class KeystoreWarningDialog extends MirthDialog {
                 + "default values.</b><br><br>"
                 + "The keystore stores the SSL/TLS certificate for the BridgeLink API and<br>"
                 + "Administrator (port 8443).<br><br>"
-                + "<b>Note:</b> If any channels have message-level encryption enabled<br>"
-                + "(encryptData=true), those stored messages will become unreadable after<br>"
-                + "regeneration. Channels will continue to process new messages normally.<br><br>"
-                + "<b>Note:</b> If encrypt.properties=true in mirth.properties, the encrypted<br>"
-                + "database.password will also become unreadable after regeneration.<br>"
-                + "This setting defaults to false in most installations.<br><br>"
+                + "<b>Note:</b> Channel message encryption (encryptData=true) and encrypted<br>"
+                + "database passwords (encrypt.properties=true) are NOT affected — they use<br>"
+                + "a separate AES key that is preserved during regeneration.<br><br>"
                 + "<b>Note:</b> BridgeLink must be restarted after regenerating the keystore<br>"
                 + "for the new SSL certificate to take effect.</html>");
 
