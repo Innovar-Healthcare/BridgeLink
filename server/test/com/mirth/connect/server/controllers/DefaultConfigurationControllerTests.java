@@ -24,9 +24,13 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.Writer;
+import java.lang.reflect.Field;
+import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -52,6 +56,7 @@ import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.server.controllers.ConfigurationController;
+import com.mirth.connect.util.KeystoreRegenerationResponse;
 import com.mirth.connect.util.ConnectionTestResponse;
 import com.mirth.connect.model.DriverInfo;
 import com.mirth.connect.util.ConfigurationProperty;
@@ -68,6 +73,7 @@ public class DefaultConfigurationControllerTests {
         ConfigurationController configController = mock(ConfigurationController.class);
         when(configController.getHttpsClientProtocols()).thenReturn(new String[0]);
         when(configController.getHttpsCipherSuites()).thenReturn(new String[0]);
+        when(configController.getConfigurationDir()).thenReturn(System.getProperty("java.io.tmpdir"));
         when(controllerFactory.createConfigurationController()).thenReturn(configController);
 
         Injector injector = Guice.createInjector(new AbstractModule() {
@@ -564,6 +570,154 @@ public class DefaultConfigurationControllerTests {
             fail("Expected IllegalArgumentException for empty OAuth token URL");
         } catch (IllegalArgumentException e) {
             assertTrue("Expected HTTPS error message", e.getMessage().contains("HTTPS"));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // regenerateKeystorePassword
+    // -----------------------------------------------------------------------
+
+    private static final String DEFAULT_STOREPASS_A = "81uWxplDtB";
+    private static final String DEFAULT_KEYPASS_A   = "81uWxplDtB";
+    private static final String DEFAULT_STOREPASS_B = "nfHbaNFacIhQ";
+    private static final String DEFAULT_KEYPASS_B   = "tdW6edezNbmd";
+
+    @Test
+    public void regenerateKeystorePassword_NonDefaultPasswords_ReturnsAlreadySecure() throws Exception {
+        String prevStorepass = DefaultConfigurationController.mirthConfig.getString("keystore.storepass");
+        String prevKeypass   = DefaultConfigurationController.mirthConfig.getString("keystore.keypass");
+        try {
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.storepass", "uniqueNonDefault1");
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.keypass",   "uniqueNonDefault2");
+
+            KeystoreRegenerationResponse response = new DefaultConfigurationController().regenerateKeystorePassword();
+
+            assertEquals(KeystoreRegenerationResponse.Type.ALREADY_SECURE, response.getType());
+            assertEquals("uniqueNonDefault1", DefaultConfigurationController.mirthConfig.getString("keystore.storepass"));
+        } finally {
+            restoreMirthConfigProperty("keystore.storepass", prevStorepass);
+            restoreMirthConfigProperty("keystore.keypass",   prevKeypass);
+        }
+    }
+
+    @Test
+    public void regenerateKeystorePassword_NullPasswords_ReturnsAlreadySecure() throws Exception {
+        String prevStorepass = DefaultConfigurationController.mirthConfig.getString("keystore.storepass");
+        String prevKeypass   = DefaultConfigurationController.mirthConfig.getString("keystore.keypass");
+        try {
+            DefaultConfigurationController.mirthConfig.clearProperty("keystore.storepass");
+            DefaultConfigurationController.mirthConfig.clearProperty("keystore.keypass");
+
+            KeystoreRegenerationResponse response = new DefaultConfigurationController().regenerateKeystorePassword();
+
+            assertEquals(KeystoreRegenerationResponse.Type.ALREADY_SECURE, response.getType());
+        } finally {
+            restoreMirthConfigProperty("keystore.storepass", prevStorepass);
+            restoreMirthConfigProperty("keystore.keypass",   prevKeypass);
+        }
+    }
+
+    @Test
+    public void regenerateKeystorePassword_DefaultSetA_ReturnsRegenerated() throws Exception {
+        String prevStorepass = DefaultConfigurationController.mirthConfig.getString("keystore.storepass");
+        String prevKeypass   = DefaultConfigurationController.mirthConfig.getString("keystore.keypass");
+        String prevPath      = DefaultConfigurationController.mirthConfig.getString("keystore.path");
+        String prevType      = DefaultConfigurationController.mirthConfig.getString("keystore.type");
+        File tempKs = createEmptyJceksKeystore(DEFAULT_STOREPASS_A);
+        try {
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.storepass", DEFAULT_STOREPASS_A);
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.keypass",   DEFAULT_KEYPASS_A);
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.path",      tempKs.getAbsolutePath());
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.type",      "JCEKS");
+
+            DefaultConfigurationController controller = new DefaultConfigurationController();
+            KeystoreRegenerationResponse response = controller.regenerateKeystorePassword();
+
+            assertEquals(KeystoreRegenerationResponse.Type.REGENERATED, response.getType());
+            assertFalse("storepass must change from Set-A default",
+                    DEFAULT_STOREPASS_A.equals(DefaultConfigurationController.mirthConfig.getString("keystore.storepass")));
+            assertFalse("keypass must change from Set-A default",
+                    DEFAULT_KEYPASS_A.equals(DefaultConfigurationController.mirthConfig.getString("keystore.keypass")));
+            Field flag = DefaultConfigurationController.class.getDeclaredField("usingDefaultKeystorePassword");
+            flag.setAccessible(true);
+            assertFalse((Boolean) flag.get(controller));
+        } finally {
+            restoreMirthConfigProperty("keystore.storepass", prevStorepass);
+            restoreMirthConfigProperty("keystore.keypass",   prevKeypass);
+            restoreMirthConfigProperty("keystore.path",      prevPath);
+            restoreMirthConfigProperty("keystore.type",      prevType);
+            tempKs.delete();
+        }
+    }
+
+    @Test
+    public void regenerateKeystorePassword_DefaultSetB_ReturnsRegenerated() throws Exception {
+        String prevStorepass = DefaultConfigurationController.mirthConfig.getString("keystore.storepass");
+        String prevKeypass   = DefaultConfigurationController.mirthConfig.getString("keystore.keypass");
+        String prevPath      = DefaultConfigurationController.mirthConfig.getString("keystore.path");
+        String prevType      = DefaultConfigurationController.mirthConfig.getString("keystore.type");
+        File tempKs = createEmptyJceksKeystore(DEFAULT_STOREPASS_B);
+        try {
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.storepass", DEFAULT_STOREPASS_B);
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.keypass",   DEFAULT_KEYPASS_B);
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.path",      tempKs.getAbsolutePath());
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.type",      "JCEKS");
+
+            KeystoreRegenerationResponse response = new DefaultConfigurationController().regenerateKeystorePassword();
+
+            assertEquals(KeystoreRegenerationResponse.Type.REGENERATED, response.getType());
+            assertFalse("storepass must change from Set-B default",
+                    DEFAULT_STOREPASS_B.equals(DefaultConfigurationController.mirthConfig.getString("keystore.storepass")));
+            assertFalse("keypass must change from Set-B default",
+                    DEFAULT_KEYPASS_B.equals(DefaultConfigurationController.mirthConfig.getString("keystore.keypass")));
+        } finally {
+            restoreMirthConfigProperty("keystore.storepass", prevStorepass);
+            restoreMirthConfigProperty("keystore.keypass",   prevKeypass);
+            restoreMirthConfigProperty("keystore.path",      prevPath);
+            restoreMirthConfigProperty("keystore.type",      prevType);
+            tempKs.delete();
+        }
+    }
+
+    @Test
+    public void regenerateKeystorePassword_MissingKeystoreFile_ThrowsException() throws Exception {
+        String prevStorepass = DefaultConfigurationController.mirthConfig.getString("keystore.storepass");
+        String prevKeypass   = DefaultConfigurationController.mirthConfig.getString("keystore.keypass");
+        String prevPath      = DefaultConfigurationController.mirthConfig.getString("keystore.path");
+        try {
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.storepass", DEFAULT_STOREPASS_A);
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.keypass",   DEFAULT_KEYPASS_A);
+            DefaultConfigurationController.mirthConfig.setProperty("keystore.path",      "/no/such/file.jks");
+
+            try {
+                new DefaultConfigurationController().regenerateKeystorePassword();
+                fail("Expected FileNotFoundException for missing keystore");
+            } catch (FileNotFoundException e) {
+                // expected
+            }
+        } finally {
+            restoreMirthConfigProperty("keystore.storepass", prevStorepass);
+            restoreMirthConfigProperty("keystore.keypass",   prevKeypass);
+            restoreMirthConfigProperty("keystore.path",      prevPath);
+        }
+    }
+
+    private static File createEmptyJceksKeystore(String storepass) throws Exception {
+        KeyStore ks = KeyStore.getInstance("JCEKS");
+        ks.load(null, null);
+        File f = File.createTempFile("test-ks-", ".jks");
+        f.deleteOnExit();
+        try (FileOutputStream fos = new FileOutputStream(f)) {
+            ks.store(fos, storepass.toCharArray());
+        }
+        return f;
+    }
+
+    private static void restoreMirthConfigProperty(String key, String value) {
+        if (value == null) {
+            DefaultConfigurationController.mirthConfig.clearProperty(key);
+        } else {
+            DefaultConfigurationController.mirthConfig.setProperty(key, value);
         }
     }
 
