@@ -728,12 +728,14 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                 OutputStream responseOutputStream = servletResponse.getOutputStream();
 
                 // If the client accepts GZIP compression, compress the content
+                boolean gzipOutput = false;
                 List<String> acceptEncodingList = requestMessage.getCaseInsensitiveHeaders().get("Accept-Encoding");
                 if (CollectionUtils.isNotEmpty(acceptEncodingList)) {
                     for (String acceptEncoding : acceptEncodingList) {
                         if (acceptEncoding != null && acceptEncoding.contains("gzip")) {
                             servletResponse.setHeader(HTTP.CONTENT_ENCODING, "gzip");
                             responseOutputStream = new GZIPOutputStream(responseOutputStream);
+                            gzipOutput = true;
                             break;
                         }
                     }
@@ -743,7 +745,11 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                     // Just stream the file itself back to the client
                     InputStream is = null;
                     try {
-                        is = new FileInputStream(value);
+                        File f = new File(value);
+                        if (!gzipOutput) {
+                            servletResponse.setContentLengthLong(f.length());
+                        }
+                        is = new FileInputStream(f);
                         IOUtils.copy(is, responseOutputStream);
                     } finally {
                         ResourceUtil.closeResourceQuietly(is);
@@ -791,6 +797,9 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                         // A valid file was found; stream it back to the client
                         InputStream is = null;
                         try {
+                            if (!gzipOutput) {
+                                servletResponse.setContentLengthLong(file.length());
+                            }
                             is = new FileInputStream(file);
                             IOUtils.copy(is, responseOutputStream);
                         } finally {
@@ -803,21 +812,29 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                     }
                 } else {
                     // Stream the value string back to the client
-                    IOUtils.write(value, responseOutputStream, charset);
+                    byte[] valueBytes = value.getBytes(charset);
+                    if (!gzipOutput) {
+                        servletResponse.setContentLength(valueBytes.length);
+                    }
+                    responseOutputStream.write(valueBytes);
                 }
 
                 // If we gzipped, we need to finish the stream now
-                if (responseOutputStream instanceof GZIPOutputStream) {
+                if (gzipOutput) {
                     ((GZIPOutputStream) responseOutputStream).finish();
                 }
             } catch (Throwable t) {
                 logger.error("Error handling static HTTP resource request (" + getConnectorProperties().getName() + " \"Source\" on channel " + getChannelId() + ").", t);
                 eventController.dispatchEvent(new ErrorEvent(getChannelId(), getMetaDataId(), null, ErrorEventType.SOURCE_CONNECTOR, getSourceName(), getConnectorProperties().getName(), "Error handling static HTTP resource request", t));
 
-                servletResponse.reset();
-                servletResponse.setContentType(ContentType.TEXT_PLAIN.toString());
-                servletResponse.setStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR);
-                servletResponse.getOutputStream().write(ExceptionUtils.getStackTrace(t).getBytes());
+                try {
+                    servletResponse.reset();
+                    servletResponse.setContentType(ContentType.TEXT_PLAIN.toString());
+                    servletResponse.setStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR);
+                    servletResponse.getOutputStream().write(ExceptionUtils.getStackTrace(t).getBytes());
+                } catch (IllegalStateException ise) {
+                    logger.debug("Could not reset already-committed response after static resource error", ise);
+                }
             } finally {
                 Thread.currentThread().setName(originalThreadName);
             }
