@@ -697,6 +697,7 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
 
             String originalThreadName = Thread.currentThread().getName();
 
+            boolean responded = false;
             try {
                 Thread.currentThread().setName("HTTP Receiver Thread on " + getChannel().getName() + " (" + getChannelId() + ") < " + originalThreadName);
                 HttpRequestMessage requestMessage = createRequestMessage(baseRequest, true);
@@ -837,6 +838,7 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                 if (gzipOutput) {
                     ((GZIPOutputStream) responseOutputStream).finish();
                 }
+                responded = true;
             } catch (Throwable t) {
                 logger.error("Error handling static HTTP resource request (" + getConnectorProperties().getName() + " \"Source\" on channel " + getChannelId() + ").", t);
                 eventController.dispatchEvent(new ErrorEvent(getChannelId(), getMetaDataId(), null, ErrorEventType.SOURCE_CONNECTOR, getSourceName(), getConnectorProperties().getName(), "Error handling static HTTP resource request", t));
@@ -849,11 +851,14 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                 } catch (IllegalStateException ise) {
                     logger.debug("Could not reset already-committed response after static resource error", ise);
                 }
+                responded = true;
             } finally {
                 Thread.currentThread().setName(originalThreadName);
             }
 
-            baseRequest.setHandled(true);
+            if (responded) {
+                baseRequest.setHandled(true);
+            }
         }
     }
 
