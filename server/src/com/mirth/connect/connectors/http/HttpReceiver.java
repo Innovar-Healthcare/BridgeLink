@@ -228,7 +228,13 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
             server = new Server();
             configuration.configureReceiver(this);
 
+            // handlers: staging list for CUSTOM/FILE resources that get their own ContextHandler.
+            // directoryHandlers: DIRECTORY resources embedded inside the channel context instead,
+            // because CoreContextHandler.handle() returns true once the context path matches even
+            // when the inner EE8 handler never sets isHandled() — a separate ContextHandler per
+            // DIRECTORY resource would therefore block fallthrough to the channel handler.
             HandlerCollection handlers = new HandlerCollection();
+            List<org.eclipse.jetty.ee8.nested.Handler> directoryHandlers = new ArrayList<>();
 
             // Add handlers for each static resource
             if (getConnectorProperties().getStaticResources() != null) {
@@ -278,44 +284,76 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                 for (List<HttpStaticResource> staticResourcesList : staticResourcesMap.descendingMap().values()) {
                     for (HttpStaticResource staticResource : staticResourcesList) {
                         logger.debug("Adding static resource handler for context path: " + staticResource.getContextPath());
-                        ContextHandler resourceContextHandler = new ContextHandler();
-                        resourceContextHandler.setContextPath(staticResource.getContextPath());
-                        // This allows resources to be requested without a relative context path (e.g. "/")
-                        resourceContextHandler.setAllowNullPathInfo(true);
                         org.eclipse.jetty.ee8.nested.Handler resourceInner = new StaticResourceHandler(staticResource);
                         if (authenticatorProvider != null) {
                             resourceInner = createSecurityHandler(resourceInner);
                         }
-                        resourceContextHandler.setHandler(resourceInner);
-                        handlers.addHandler(resourceContextHandler);
+                        if (staticResource.getResourceType() == ResourceType.DIRECTORY) {
+                            // Collected here; embedded inside the channel context below.
+                            directoryHandlers.add(resourceInner);
+                        } else {
+                            ContextHandler resourceContextHandler = new ContextHandler();
+                            resourceContextHandler.setContextPath(staticResource.getContextPath());
+                            // This allows resources to be requested without a relative context path (e.g. "/")
+                            resourceContextHandler.setAllowNullPathInfo(true);
+                            resourceContextHandler.setHandler(resourceInner);
+                            handlers.addHandler(resourceContextHandler);
+                        }
                     }
                 }
             }
 
-            // Add the main request handler
+            // Build the channel context handler.  DIRECTORY resource handlers are placed
+            // before RequestHandler inside a stop-on-first-handled HandlerCollection so that
+            // unanswered requests fall through to the channel.  Using HandlerCollection (not
+            // an anonymous AbstractHandler) ensures Jetty's lifecycle methods (setServer,
+            // start) propagate to all inner handlers via addHandler().
             ContextHandler contextHandler = new ContextHandler();
             contextHandler.setContextPath(contextPath);
             contextHandler.setAllowNullPathInfo(true);
-            org.eclipse.jetty.ee8.nested.Handler channelInner = new RequestHandler();
+            org.eclipse.jetty.ee8.nested.Handler channelBase = new RequestHandler();
             if (authenticatorProvider != null) {
-                channelInner = createSecurityHandler(channelInner);
+                channelBase = createSecurityHandler(channelBase);
             }
-            contextHandler.setHandler(channelInner);
+            if (directoryHandlers.isEmpty()) {
+                contextHandler.setHandler(channelBase);
+            } else {
+                final org.eclipse.jetty.ee8.nested.Handler finalChannelBase = channelBase;
+                HandlerCollection dirChain = new HandlerCollection() {
+                    @Override
+                    public void handle(String target, Request baseRequest,
+                            HttpServletRequest servletRequest, HttpServletResponse servletResponse)
+                            throws IOException, ServletException {
+                        for (org.eclipse.jetty.ee8.nested.Handler h : getHandlers()) {
+                            h.handle(target, baseRequest, servletRequest, servletResponse);
+                            if (baseRequest.isHandled()) {
+                                return;
+                            }
+                        }
+                    }
+                };
+                for (org.eclipse.jetty.ee8.nested.Handler h : directoryHandlers) {
+                    dirChain.addHandler(h);
+                }
+                dirChain.addHandler(finalChannelBase);
+                contextHandler.setHandler(dirChain);
+            }
             handlers.addHandler(contextHandler);
 
-            org.eclipse.jetty.server.handler.ContextHandlerCollection coreHandlers =
-                    new org.eclipse.jetty.server.handler.ContextHandlerCollection();
+            org.eclipse.jetty.server.Handler.Sequence handlerSequence =
+                    new org.eclipse.jetty.server.Handler.Sequence();
             for (org.eclipse.jetty.ee8.nested.Handler h : handlers.getHandlers()) {
                 if (h instanceof ContextHandler ch) {
                     ch.setServer(server);
-                    coreHandlers.addHandler(ch.getCoreContextHandler());
+                    handlerSequence.addHandler(ch.getCoreContextHandler());
                 }
             }
             org.eclipse.jetty.server.handler.DefaultHandler defaultHandler =
                     new org.eclipse.jetty.server.handler.DefaultHandler();
             defaultHandler.setServeFavIcon(false);
             defaultHandler.setShowContexts(false);
-            server.setHandler(new org.eclipse.jetty.server.Handler.Sequence(coreHandlers, defaultHandler));
+            handlerSequence.addHandler(defaultHandler);
+            server.setHandler(handlerSequence);
 
             logger.debug("starting HTTP server with address: " + host + ":" + port);
             server.start();

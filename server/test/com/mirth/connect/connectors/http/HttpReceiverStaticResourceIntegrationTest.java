@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
@@ -21,6 +22,10 @@ import java.util.HashMap;
 import java.util.Random;
 import java.util.zip.GZIPInputStream;
 
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
 import org.apache.commons.io.IOUtils;
 import org.apache.http.Header;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -29,6 +34,8 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.eclipse.jetty.ee8.nested.AbstractHandler;
 import org.eclipse.jetty.ee8.nested.ContextHandler;
+import org.eclipse.jetty.ee8.nested.HandlerCollection;
+import org.eclipse.jetty.ee8.nested.Request;
 import org.eclipse.jetty.server.HttpConnectionFactory;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
@@ -280,6 +287,57 @@ public class HttpReceiverStaticResourceIntegrationTest {
     }
 
     // =========================================================================
+    // GROUP D — ResourceType.DIRECTORY fallthrough to channel handler (IRT-831 fix)
+    // Verifies that StaticResourceHandler does NOT mark the request as handled when
+    // a requested file is absent, allowing the channel context to process it.
+    // =========================================================================
+
+    @Test
+    public void testDirectory_missingFile_fallsThroughToChannelHandler() throws Exception {
+        File dir = tempFolder.newFolder("dir-missing");
+        int port = startServerWithDirectoryAndChannel("/test/data", dir, "/test");
+
+        try (CloseableHttpClient client = noCompressionClient();
+             CloseableHttpResponse resp = client.execute(get(port, "/test/data/nonexistent.txt"))) {
+            assertEquals("Missing file under DIRECTORY resource must fall through to channel handler",
+                    200, resp.getStatusLine().getStatusCode());
+            assertEquals("channel",
+                    IOUtils.toString(resp.getEntity().getContent(), StandardCharsets.UTF_8));
+        }
+    }
+
+    @Test
+    public void testDirectory_existingFile_isServedByStaticHandler() throws Exception {
+        File dir = tempFolder.newFolder("dir-serve");
+        File file = new File(dir, "hello.txt");
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write("static-content".getBytes(StandardCharsets.UTF_8));
+        }
+        int port = startServerWithDirectoryAndChannel("/test/data", dir, "/test");
+
+        try (CloseableHttpClient client = noCompressionClient();
+             CloseableHttpResponse resp = client.execute(get(port, "/test/data/hello.txt"))) {
+            assertEquals(200, resp.getStatusLine().getStatusCode());
+            assertEquals("static-content",
+                    IOUtils.toString(resp.getEntity().getContent(), StandardCharsets.UTF_8));
+        }
+    }
+
+    @Test
+    public void testDirectory_subdirectoryInPath_fallsThroughToChannelHandler() throws Exception {
+        File dir = tempFolder.newFolder("dir-subpath");
+        int port = startServerWithDirectoryAndChannel("/test/data", dir, "/test");
+
+        try (CloseableHttpClient client = noCompressionClient();
+             CloseableHttpResponse resp = client.execute(get(port, "/test/data/sub/file.txt"))) {
+            assertEquals("Subdirectory path must fall through to channel handler",
+                    200, resp.getStatusLine().getStatusCode());
+            assertEquals("channel",
+                    IOUtils.toString(resp.getEntity().getContent(), StandardCharsets.UTF_8));
+        }
+    }
+
+    // =========================================================================
     // Helpers — Jetty server setup
     // =========================================================================
 
@@ -381,5 +439,89 @@ public class HttpReceiverStaticResourceIntegrationTest {
         char[] buf = new char[count];
         Arrays.fill(buf, c);
         return new String(buf);
+    }
+
+    /**
+     * Starts a server with a DIRECTORY {@link StaticResourceHandler} at {@code resourceContextPath}
+     * and a simple channel echo handler at {@code channelContextPath}. Used by GROUP D tests to
+     * verify that unanswered requests fall through from the resource context to the channel.
+     */
+    private int startServerWithDirectoryAndChannel(
+            String resourceContextPath, File dir, String channelContextPath) throws Exception {
+        jettyServer = new Server();
+        org.eclipse.jetty.server.HttpConfiguration httpCfg =
+                new org.eclipse.jetty.server.HttpConfiguration();
+        httpCfg.setSendServerVersion(false);
+        serverConnector = new ServerConnector(jettyServer, new HttpConnectionFactory(httpCfg));
+        serverConnector.setHost(LOOPBACK);
+        serverConnector.setPort(0);
+        serverConnector.setIdleTimeout(30_000);
+        jettyServer.addConnector(serverConnector);
+
+        Class<?> handlerClass = null;
+        for (Class<?> c : HttpReceiver.class.getDeclaredClasses()) {
+            if ("StaticResourceHandler".equals(c.getSimpleName())) {
+                handlerClass = c;
+                break;
+            }
+        }
+        assertNotNull("StaticResourceHandler inner class not found in HttpReceiver", handlerClass);
+        Constructor<?> ctor = handlerClass.getDeclaredConstructor(
+                HttpReceiver.class, HttpStaticResource.class);
+        ctor.setAccessible(true);
+        HttpStaticResource resource = new HttpStaticResource(
+                resourceContextPath, ResourceType.DIRECTORY,
+                dir.getAbsolutePath(), "application/octet-stream", Collections.emptyMap());
+        AbstractHandler staticHandler = (AbstractHandler) ctor.newInstance(receiver, resource);
+
+        // Both handlers live inside ONE channel ContextHandler with a stop-on-first-handled
+        // HandlerCollection. Separate contexts don't work: the EE8-to-core bridge
+        // (CoreContextHandler) returns true once the context path matches, even when the
+        // inner EE8 handler never sets isHandled(). Subclassing HandlerCollection (rather
+        // than using an anonymous AbstractHandler) ensures Jetty's lifecycle calls
+        // (setServer, start) propagate through addHandler() to both inner handlers.
+        HandlerCollection innerChain = new HandlerCollection() {
+            @Override
+            public void handle(String target, Request baseRequest,
+                    HttpServletRequest request, HttpServletResponse response)
+                    throws IOException, ServletException {
+                for (org.eclipse.jetty.ee8.nested.Handler h : getHandlers()) {
+                    h.handle(target, baseRequest, request, response);
+                    if (baseRequest.isHandled()) {
+                        return;
+                    }
+                }
+            }
+        };
+        innerChain.addHandler(staticHandler);
+        innerChain.addHandler(new ChannelEchoHandler());
+
+        ContextHandler channelCtx = new ContextHandler();
+        channelCtx.setContextPath(channelContextPath);
+        channelCtx.setAllowNullPathInfo(true);
+        channelCtx.setHandler(innerChain);
+        channelCtx.setServer(jettyServer);
+
+        org.eclipse.jetty.server.handler.DefaultHandler defaultHandler =
+                new org.eclipse.jetty.server.handler.DefaultHandler();
+        defaultHandler.setServeFavIcon(false);
+
+        jettyServer.setHandler(new org.eclipse.jetty.server.Handler.Sequence(
+                channelCtx.getCoreContextHandler(),
+                defaultHandler));
+
+        jettyServer.start();
+        return serverConnector.getLocalPort();
+    }
+
+    private static class ChannelEchoHandler extends AbstractHandler {
+        @Override
+        public void handle(String target, Request baseRequest,
+                HttpServletRequest request, HttpServletResponse response)
+                throws IOException, ServletException {
+            baseRequest.setHandled(true);
+            response.setStatus(HttpServletResponse.SC_OK);
+            response.getWriter().write("channel");
+        }
     }
 }
