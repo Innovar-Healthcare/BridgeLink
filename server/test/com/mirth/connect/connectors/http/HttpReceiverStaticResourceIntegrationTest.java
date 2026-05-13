@@ -29,7 +29,6 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.eclipse.jetty.ee8.nested.AbstractHandler;
 import org.eclipse.jetty.ee8.nested.ContextHandler;
-import org.eclipse.jetty.ee8.nested.HandlerCollection;
 import org.eclipse.jetty.server.HttpConnectionFactory;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
@@ -265,13 +264,30 @@ public class HttpReceiverStaticResourceIntegrationTest {
     }
 
     // =========================================================================
+    // GROUP C — Routing: requests outside context path must return 404 (IRT-831)
+    // =========================================================================
+
+    @Test
+    public void testRequestOutsideResourceContextPathReturns404() throws Exception {
+        String content = "hello";
+        int port = startServer(new HttpStaticResource("/resource", ResourceType.CUSTOM, content,
+                "text/plain", Collections.emptyMap()));
+
+        try (CloseableHttpClient client = noCompressionClient();
+             CloseableHttpResponse resp = client.execute(get(port, "/other"))) {
+            assertEquals(404, resp.getStatusLine().getStatusCode());
+        }
+    }
+
+    // =========================================================================
     // Helpers — Jetty server setup
     // =========================================================================
 
     /**
-     * Starts a real Jetty 12 server on a random loopback port, replicating the handler chain
-     * from {@link HttpReceiver#onStart()} but with {@code StaticResourceHandler} for a single
-     * static resource.  Uses reflection to instantiate the private inner class.
+     * Starts a real Jetty 12 server on a random loopback port using the IRT-831 handler chain
+     * ({@code ContextHandlerCollection} + {@code DefaultHandler} + {@code Handler.Sequence})
+     * with {@code StaticResourceHandler} for a single static resource.
+     * Uses reflection to instantiate the private inner class.
      *
      * @return the local port the server is listening on
      */
@@ -305,13 +321,16 @@ public class HttpReceiverStaticResourceIntegrationTest {
         resourceContext.setAllowNullPathInfo(true);
         resourceContext.setHandler(staticHandler);
 
-        HandlerCollection handlers = new HandlerCollection();
-        handlers.addHandler(resourceContext);
+        org.eclipse.jetty.server.handler.ContextHandlerCollection coreHandlers =
+                new org.eclipse.jetty.server.handler.ContextHandlerCollection();
+        resourceContext.setServer(jettyServer);
+        coreHandlers.addHandler(resourceContext.getCoreContextHandler());
 
-        ContextHandler rootContext = new ContextHandler();
-        rootContext.setContextPath("/");
-        rootContext.setHandler(handlers);
-        jettyServer.setHandler(rootContext.getCoreContextHandler());
+        org.eclipse.jetty.server.handler.DefaultHandler defaultHandler =
+                new org.eclipse.jetty.server.handler.DefaultHandler();
+        defaultHandler.setServeFavIcon(false);
+
+        jettyServer.setHandler(new org.eclipse.jetty.server.Handler.Sequence(coreHandlers, defaultHandler));
 
         jettyServer.start();
         return serverConnector.getLocalPort();

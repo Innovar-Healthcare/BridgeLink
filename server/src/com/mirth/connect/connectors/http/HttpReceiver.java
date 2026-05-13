@@ -282,7 +282,11 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                         resourceContextHandler.setContextPath(staticResource.getContextPath());
                         // This allows resources to be requested without a relative context path (e.g. "/")
                         resourceContextHandler.setAllowNullPathInfo(true);
-                        resourceContextHandler.setHandler(new StaticResourceHandler(staticResource));
+                        org.eclipse.jetty.ee8.nested.Handler resourceInner = new StaticResourceHandler(staticResource);
+                        if (authenticatorProvider != null) {
+                            resourceInner = createSecurityHandler(resourceInner);
+                        }
+                        resourceContextHandler.setHandler(resourceInner);
                         handlers.addHandler(resourceContextHandler);
                     }
                 }
@@ -291,20 +295,27 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
             // Add the main request handler
             ContextHandler contextHandler = new ContextHandler();
             contextHandler.setContextPath(contextPath);
-            contextHandler.setHandler(new RequestHandler());
+            contextHandler.setAllowNullPathInfo(true);
+            org.eclipse.jetty.ee8.nested.Handler channelInner = new RequestHandler();
+            if (authenticatorProvider != null) {
+                channelInner = createSecurityHandler(channelInner);
+            }
+            contextHandler.setHandler(channelInner);
             handlers.addHandler(contextHandler);
 
-            // Wrap the handler collection in a security handler if needed
-            org.eclipse.jetty.ee8.nested.Handler serverHandler = handlers;
-            if (authenticatorProvider != null) {
-                serverHandler = createSecurityHandler(handlers);
+            org.eclipse.jetty.server.handler.ContextHandlerCollection coreHandlers =
+                    new org.eclipse.jetty.server.handler.ContextHandlerCollection();
+            for (org.eclipse.jetty.ee8.nested.Handler h : handlers.getHandlers()) {
+                if (h instanceof ContextHandler ch) {
+                    ch.setServer(server);
+                    coreHandlers.addHandler(ch.getCoreContextHandler());
+                }
             }
-            
-            // In Jetty 12, we need to wrap the EE8 handler in a ContextHandler and get the core handler
-            ContextHandler rootContextHandler = new ContextHandler();
-            rootContextHandler.setContextPath("/");
-            rootContextHandler.setHandler(serverHandler);
-            server.setHandler(rootContextHandler.getCoreContextHandler());
+            org.eclipse.jetty.server.handler.DefaultHandler defaultHandler =
+                    new org.eclipse.jetty.server.handler.DefaultHandler();
+            defaultHandler.setServeFavIcon(false);
+            defaultHandler.setShowContexts(false);
+            server.setHandler(new org.eclipse.jetty.server.Handler.Sequence(coreHandlers, defaultHandler));
 
             logger.debug("starting HTTP server with address: " + host + ":" + port);
             server.start();
