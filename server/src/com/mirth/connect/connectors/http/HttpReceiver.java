@@ -529,6 +529,7 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                     gzipOutputStream.write(responseBytes);
                     gzipOutputStream.finish();
                 } else {
+                    servletResponse.setContentLength(responseBytes.length);
                     responseOutputStream.write(responseBytes);
                 }
 
@@ -561,9 +562,11 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
             }
         }
 
+        byte[] errBytes = responseError.getBytes();
         servletResponse.setContentType("text/plain");
         servletResponse.setStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR);
-        servletResponse.getOutputStream().write(responseError.getBytes());
+        servletResponse.setContentLength(errBytes.length);
+        servletResponse.getOutputStream().write(errBytes);
     }
 
     protected Object getMessage(Request request, Map<String, Object> sourceMap, List<Attachment> attachments) throws IOException, ChannelException, MessagingException, DonkeyElementException, ParserConfigurationException {

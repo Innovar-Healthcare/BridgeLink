@@ -1,5 +1,6 @@
 package com.mirth.connect.connectors.http;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -987,6 +988,68 @@ public class HttpReceiverTest {
         assertTrue(dr.isAttemptedResponse());
     }
 
+    // ========== IRT-832: Content-Length tests ==========
+
+    @Test
+    public void testSendResponseNonGzipSetsContentLength() throws Exception {
+        TestHttpServletResponse servletResponse = new TestHttpServletResponse();
+        Request baseRequest = mock(Request.class);
+        when(baseRequest.getHeaders("Accept-Encoding")).thenReturn(Collections.enumeration(Collections.emptyList()));
+
+        props.setResponseDataTypeBinary(false);
+        props.setCharset("UTF-8");
+        props.setResponseStatusCode("200");
+
+        String body = "Hello Content-Length";
+        byte[] expectedBytes = body.getBytes(StandardCharsets.UTF_8);
+
+        Response selectedResponse = mock(Response.class);
+        when(selectedResponse.getMessage()).thenReturn(body);
+        when(selectedResponse.getStatus()).thenReturn(Status.SENT);
+        DispatchResult dr = new TestDispatchResult(1L, message, selectedResponse, true, true);
+
+        receiver.sendResponse(baseRequest, servletResponse, dr);
+
+        assertEquals("Content-Length must match body byte length", expectedBytes.length, servletResponse.contentLength);
+        assertArrayEquals(expectedBytes, servletResponse.outputStream.toByteArray());
+    }
+
+    @Test
+    public void testSendResponseGzipDoesNotSetContentLength() throws Exception {
+        TestHttpServletResponse servletResponse = new TestHttpServletResponse();
+        Request baseRequest = mock(Request.class);
+        Vector<String> acceptEncodings = new Vector<>();
+        acceptEncodings.add("gzip");
+        when(baseRequest.getHeaders("Accept-Encoding")).thenReturn(acceptEncodings.elements());
+
+        props.setResponseDataTypeBinary(false);
+        props.setCharset("UTF-8");
+        props.setResponseStatusCode("200");
+
+        Response selectedResponse = mock(Response.class);
+        when(selectedResponse.getMessage()).thenReturn("Gzip body");
+        when(selectedResponse.getStatus()).thenReturn(Status.SENT);
+        DispatchResult dr = new TestDispatchResult(1L, message, selectedResponse, true, true);
+
+        receiver.sendResponse(baseRequest, servletResponse, dr);
+
+        assertEquals("Content-Length must not be set for gzip responses", -1, servletResponse.contentLength);
+        assertEquals("gzip", servletResponse.headers.get("Content-Encoding"));
+    }
+
+    @Test
+    public void testSendErrorResponseSetsContentLength() throws Exception {
+        TestHttpServletResponse servletResponse = new TestHttpServletResponse();
+        Request baseRequest = mock(Request.class);
+
+        receiver.sendErrorResponse(baseRequest, servletResponse, null, new RuntimeException("boom"));
+
+        byte[] errBytes = servletResponse.outputStream.toByteArray();
+        assertTrue("Error body must be non-empty", errBytes.length > 0);
+        assertEquals("Content-Length must match error body byte length", errBytes.length, servletResponse.contentLength);
+        assertEquals(500, servletResponse.statusCode);
+    }
+
     // ========== Helper methods ==========
 
     /**
@@ -1056,6 +1119,7 @@ public class HttpReceiverTest {
     static class TestHttpServletResponse implements HttpServletResponse {
         int statusCode;
         String contentTypeValue;
+        int contentLength = -1;
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         Map<String, String> headers = new HashMap<>();
 
@@ -1109,8 +1173,8 @@ public class HttpReceiverTest {
         @Override public String getCharacterEncoding() { return "UTF-8"; }
         @Override public java.io.PrintWriter getWriter() { return new java.io.PrintWriter(outputStream); }
         @Override public void setCharacterEncoding(String charset) {}
-        @Override public void setContentLength(int len) {}
-        @Override public void setContentLengthLong(long len) {}
+        @Override public void setContentLength(int len) { this.contentLength = len; }
+        @Override public void setContentLengthLong(long len) { this.contentLength = (int) len; }
         @Override public void setBufferSize(int size) {}
         @Override public int getBufferSize() { return 0; }
         @Override public void flushBuffer() {}
