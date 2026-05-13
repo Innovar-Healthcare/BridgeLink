@@ -935,12 +935,18 @@ public class MirthWebServer extends Server {
                         OutputStream responseOutputStream = response.getOutputStream();
 
                         // If the client accepts GZIP compression, compress the content
+                        boolean gzip = false;
                         for (Enumeration<String> en = request.getHeaders("Accept-Encoding"); en.hasMoreElements();) {
                             if (StringUtils.contains(en.nextElement(), "gzip")) {
                                 response.setHeader(HTTP.CONTENT_ENCODING, "gzip");
                                 responseOutputStream = new GZIPOutputStream(responseOutputStream);
+                                gzip = true;
                                 break;
                             }
+                        }
+
+                        if (!gzip) {
+                            response.setContentLengthLong(file.length());
                         }
 
                         fis = new FileInputStream(file);
@@ -951,9 +957,14 @@ public class MirthWebServer extends Server {
                             ((GZIPOutputStream) responseOutputStream).finish();
                         }
                     } catch (Throwable t) {
+                        try {
+                            response.reset();
+                            response.setStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR);
+                        } catch (IllegalStateException ise) {
+                            logger.debug("Response already committed", ise);
+                        }
+                    } finally {
                         IOUtils.closeQuietly(fis);
-                        response.reset();
-                        response.setStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR);
                     }
                 }
             } else {
