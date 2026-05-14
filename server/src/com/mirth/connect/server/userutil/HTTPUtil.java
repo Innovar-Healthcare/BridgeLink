@@ -21,6 +21,7 @@ import javax.mail.util.ByteArrayDataSource;
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.apache.commons.fileupload.FileUploadBase;
+// TODO: migrate to org.apache.http; blocked on HttpParser equivalent (SEC-V2-01 companion)
 import org.apache.commons.httpclient.Header;
 import org.apache.commons.httpclient.HttpParser;
 import org.apache.commons.io.IOUtils;
