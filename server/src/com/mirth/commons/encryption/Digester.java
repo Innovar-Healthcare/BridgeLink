@@ -176,7 +176,7 @@ public class Digester {
     public void initialize() throws EncryptionException {
         if (!isInitialized()) {
             try {
-                saltGenerator = SecureRandom.getInstance("SHA1PRNG");
+                saltGenerator = new SecureRandom();
             } catch (NoSuchAlgorithmException e) {
                 throw new EncryptionException(e);
             }
