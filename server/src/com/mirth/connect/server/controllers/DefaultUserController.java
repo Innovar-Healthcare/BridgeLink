@@ -44,6 +44,49 @@ public class DefaultUserController extends UserController {
     public static final String VACUUM_LOCK_PERSON_STATEMENT_ID = "User.vacuumPersonTable";
     public static final String VACUUM_LOCK_PREFERENCES_STATEMENT_ID = "User.vacuumPersonPreferencesTable";
     private static final String INCORRECT_CREDENTIALS_MESSAGE = "Incorrect username or password.";
+
+    /**
+     * Pre-computed PBKDF2WithHmacSHA256 hash used to equalize wall-clock cost
+     * between the known-user and unknown-user authentication paths, mitigating
+     * username enumeration via response-time side-channel (CWE-208).
+     *
+     * <p>Without this constant, an unauthenticated attacker can distinguish
+     * valid usernames from invalid ones by measuring login latency: the valid
+     * path runs PBKDF2 (~100ms at 600,000 iterations) while the invalid path
+     * returns immediately. See OWASP Authentication Cheat Sheet and the
+     * Spring Security CVE-2025-22234 disclosure for the canonical fix
+     * pattern.
+     *
+     * <p>Generation parameters (byte-equivalent to the production
+     * {@link com.mirth.commons.encryption.Digester} default):
+     * <ul>
+     *   <li>Algorithm: {@code PBKDF2WithHmacSHA256}</li>
+     *   <li>Iterations: {@code 600000} (matches
+     *       {@code EncryptionSettings.DEFAULT_DIGEST_ITERATIONS} and
+     *       {@code Digester.DEFAULT_ITERATIONS})</li>
+     *   <li>Provider: BouncyCastle</li>
+     *   <li>Salt: 8 bytes (deterministic — first 8 bytes of
+     *       {@code SHA-256("dummy-placeholder-do-not-use-in-prod")})</li>
+     *   <li>Key size: 256 bits</li>
+     *   <li>Output: base64 of (salt || derivedKey) — 40 bytes raw</li>
+     *   <li>Plaintext source: {@code "dummy-placeholder-do-not-use-in-prod"}
+     *       — never a real credential</li>
+     * </ul>
+     *
+     * <p><b>Residual risk:</b> Operators who override {@code digest.iterations}
+     * to a non-default value retain a smaller-but-non-zero residual timing
+     * delta. Disclosed in PR #125 body. Dynamic computation at server startup
+     * is a documented follow-up.
+     *
+     * <p><b>Regeneration:</b> Must be regenerated if
+     * {@code EncryptionSettings.DEFAULT_DIGEST_ITERATIONS} changes. The hash
+     * is validated at boot indirectly by
+     * {@code AuthorizeUserTimingTest#dummyHashIsConsumableWithoutThrowing},
+     * which asserts {@code digester.matches(...)} returns false without
+     * throwing — guards against malformed base64 / wrong salt-size pitfalls.
+     */
+    private static final String DUMMY_HASH = "L5+whfGBNpMMKJgAWt/jWIUPX8jnOCy5CzQomGpdNu/3hTQRWNp/yg==";
+
     private Logger logger = LogManager.getLogger(this.getClass());
     private ExtensionController extensionController = null;
 
@@ -297,8 +340,13 @@ public class DefaultUserController extends UserController {
             // Retrieve the matching User
             User validUser = getUser(null, username);
 
+            // Hoisted above the if/else so both branches share a single Digester
+            // reference. The unknown-user path consumes the same PBKDF2 work as
+            // the known-user path to defeat username enumeration via timing
+            // (CWE-208 — see DUMMY_HASH javadoc and AuthorizeUserTimingTest).
+            Digester digester = ControllerFactory.getFactory().createConfigurationController().getDigester();
+
             if (validUser != null) {
-                Digester digester = ControllerFactory.getFactory().createConfigurationController().getDigester();
                 loginRequirementsChecker = new LoginRequirementsChecker(validUser);
                 if (loginRequirementsChecker.isUserLockedOut()) {
                     if (passwordRequirements.getAllowUsernameEnumeration()) {
@@ -323,6 +371,12 @@ public class DefaultUserController extends UserController {
                         authorized = digester.matches(plainPassword, credentials.getPassword());
                     }
                 }
+            } else {
+                // Timing equalization (CWE-208): run the same PBKDF2 work for
+                // unknown usernames so attackers cannot distinguish "user does
+                // not exist" from "wrong password" via response-time analysis.
+                // The boolean result is intentionally discarded.
+                digester.matches(plainPassword, DUMMY_HASH);
             }
 
             LoginStatus loginStatus = null;

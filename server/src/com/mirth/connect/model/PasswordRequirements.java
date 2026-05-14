@@ -31,14 +31,35 @@ public class PasswordRequirements implements Serializable {
     private int reuseLimit;
     private boolean allowUsernameEnumeration;
 
+    /**
+     * No-arg constructor — hardened defaults bundled with issue #125 (SEC-04).
+     *
+     * <p>Previously every integer field defaulted to {@code 0}, which left
+     * operators who never explicitly configured a password policy with
+     * <em>no</em> enforcement at all (zero-length passwords, no retry limit,
+     * no lockout). The hardened defaults below match the OWASP Authentication
+     * Cheat Sheet baseline:
+     * <ul>
+     *   <li>{@code minLength = 8}</li>
+     *   <li>{@code minUpper = 1}, {@code minLower = 1}, {@code minNumeric = 1}</li>
+     *   <li>{@code minSpecial = 0} (kept zero — special characters are often
+     *       blocked or normalized by upstream LDAP/AD integrations)</li>
+     *   <li>{@code retryLimit = 5}, {@code lockoutPeriod = 5} (minutes)</li>
+     *   <li>{@code expiration = 0}, {@code gracePeriod = 0},
+     *       {@code reusePeriod = 0}, {@code reuseLimit = 0} (opt-in — unchanged)</li>
+     *   <li>{@code allowUsernameEnumeration = false} (unchanged — already safe)</li>
+     * </ul>
+     * Operators who relied on the old all-zero defaults to bypass policy can
+     * still call setters explicitly to restore that posture.
+     */
     public PasswordRequirements() {
-        this.minLength = 0;
-        this.minUpper = 0;
-        this.minLower = 0;
-        this.minNumeric = 0;
+        this.minLength = 8;
+        this.minUpper = 1;
+        this.minLower = 1;
+        this.minNumeric = 1;
         this.minSpecial = 0;
-        this.retryLimit = 0;
-        this.lockoutPeriod = 0;
+        this.retryLimit = 5;
+        this.lockoutPeriod = 5;
         this.expiration = 0;
         this.gracePeriod = 0;
         this.reusePeriod = 0;
