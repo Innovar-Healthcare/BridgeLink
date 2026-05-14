@@ -76,20 +76,24 @@ public class PasswordRequirementsChecker implements Serializable {
     }
 
     public PasswordRequirements loadPasswordRequirements(PropertiesConfiguration securityProperties) {
+        // Start with the hardened no-arg defaults from PasswordRequirements
+        // (issue #125 SEC-04). Then read each property using the hardened
+        // value as the fallback default, so absent keys retain the secure
+        // baseline instead of collapsing to zero. See WR-01 in 01-REVIEW.md.
         PasswordRequirements passwordRequirements = new PasswordRequirements();
 
-        passwordRequirements.setMinLength(securityProperties.getInt(PASSWORD_MINLENGTH, 0));
-        passwordRequirements.setMinUpper(securityProperties.getInt(PASSWORD_MIN_UPPER, 0));
-        passwordRequirements.setMinLower(securityProperties.getInt(PASSWORD_MIN_LOWER, 0));
-        passwordRequirements.setMinNumeric(securityProperties.getInt(PASSWORD_MIN_NUMERIC, 0));
-        passwordRequirements.setMinSpecial(securityProperties.getInt(PASSWORD_MIN_SPECIAL, 0));
-        passwordRequirements.setExpiration(securityProperties.getInt(PASSWORD_EXPIRATION, 0));
-        passwordRequirements.setGracePeriod(securityProperties.getInt(PASSWORD_GRACE_PERIOD, 0));
-        passwordRequirements.setRetryLimit(securityProperties.getInt(PASSWORD_RETRY_LIMIT, 0));
-        passwordRequirements.setLockoutPeriod(securityProperties.getInt(PASSWORD_LOCKOUT_PERIOD, 0));
-        passwordRequirements.setReusePeriod(securityProperties.getInt(PASSWORD_REUSE_PERIOD, 0));
-        passwordRequirements.setReuseLimit(securityProperties.getInt(PASSWORD_REUSE_LIMIT, 0));
-        passwordRequirements.setAllowUsernameEnumeration(securityProperties.getBoolean(PASSWORD_ALLOW_USERNAME_ENUMERATION, false));
+        passwordRequirements.setMinLength(securityProperties.getInt(PASSWORD_MINLENGTH, passwordRequirements.getMinLength()));
+        passwordRequirements.setMinUpper(securityProperties.getInt(PASSWORD_MIN_UPPER, passwordRequirements.getMinUpper()));
+        passwordRequirements.setMinLower(securityProperties.getInt(PASSWORD_MIN_LOWER, passwordRequirements.getMinLower()));
+        passwordRequirements.setMinNumeric(securityProperties.getInt(PASSWORD_MIN_NUMERIC, passwordRequirements.getMinNumeric()));
+        passwordRequirements.setMinSpecial(securityProperties.getInt(PASSWORD_MIN_SPECIAL, passwordRequirements.getMinSpecial()));
+        passwordRequirements.setExpiration(securityProperties.getInt(PASSWORD_EXPIRATION, passwordRequirements.getExpiration()));
+        passwordRequirements.setGracePeriod(securityProperties.getInt(PASSWORD_GRACE_PERIOD, passwordRequirements.getGracePeriod()));
+        passwordRequirements.setRetryLimit(securityProperties.getInt(PASSWORD_RETRY_LIMIT, passwordRequirements.getRetryLimit()));
+        passwordRequirements.setLockoutPeriod(securityProperties.getInt(PASSWORD_LOCKOUT_PERIOD, passwordRequirements.getLockoutPeriod()));
+        passwordRequirements.setReusePeriod(securityProperties.getInt(PASSWORD_REUSE_PERIOD, passwordRequirements.getReusePeriod()));
+        passwordRequirements.setReuseLimit(securityProperties.getInt(PASSWORD_REUSE_LIMIT, passwordRequirements.getReuseLimit()));
+        passwordRequirements.setAllowUsernameEnumeration(securityProperties.getBoolean(PASSWORD_ALLOW_USERNAME_ENUMERATION, passwordRequirements.getAllowUsernameEnumeration()));
         return passwordRequirements;
     }
 
