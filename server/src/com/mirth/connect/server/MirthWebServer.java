@@ -40,7 +40,7 @@ import javax.ws.rs.ext.Provider;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.configuration2.PropertiesConfiguration;
-import org.apache.commons.httpclient.HttpStatus;
+import org.apache.http.HttpStatus;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.filefilter.FalseFileFilter;
