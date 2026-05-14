@@ -228,13 +228,14 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
             server = new Server();
             configuration.configureReceiver(this);
 
-            // handlers: staging list for CUSTOM/FILE resources that get their own ContextHandler.
-            // directoryHandlers: DIRECTORY resources embedded inside the channel context instead,
-            // because CoreContextHandler.handle() returns true once the context path matches even
-            // when the inner EE8 handler never sets isHandled() — a separate ContextHandler per
-            // DIRECTORY resource would therefore block fallthrough to the channel handler.
+            // All static resource handlers are embedded inside the channel ContextHandler rather
+            // than given their own separate ContextHandlers. CoreContextHandler.handle() returns
+            // true once the request path matches the context prefix — even when the inner EE8
+            // handler never sets isHandled(). A separate ContextHandler per resource therefore
+            // blocks fallthrough to the channel for any sub-path the resource cannot serve
+            // (e.g. GET /test/data/wrong when the resource is the CUSTOM type at /test/data).
             HandlerCollection handlers = new HandlerCollection();
-            List<org.eclipse.jetty.ee8.nested.Handler> directoryHandlers = new ArrayList<>();
+            List<org.eclipse.jetty.ee8.nested.Handler> resourceHandlers = new ArrayList<>();
 
             // Add handlers for each static resource
             if (getConnectorProperties().getStaticResources() != null) {
@@ -288,26 +289,17 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                         if (authenticatorProvider != null) {
                             resourceInner = createSecurityHandler(resourceInner);
                         }
-                        if (staticResource.getResourceType() == ResourceType.DIRECTORY) {
-                            // Collected here; embedded inside the channel context below.
-                            directoryHandlers.add(resourceInner);
-                        } else {
-                            ContextHandler resourceContextHandler = new ContextHandler();
-                            resourceContextHandler.setContextPath(staticResource.getContextPath());
-                            // This allows resources to be requested without a relative context path (e.g. "/")
-                            resourceContextHandler.setAllowNullPathInfo(true);
-                            resourceContextHandler.setHandler(resourceInner);
-                            handlers.addHandler(resourceContextHandler);
-                        }
+                        // Collected here; embedded inside the channel context below.
+                        resourceHandlers.add(resourceInner);
                     }
                 }
             }
 
-            // Build the channel context handler.  DIRECTORY resource handlers are placed
+            // Build the channel context handler. All static resource handlers are placed
             // before RequestHandler inside a stop-on-first-handled HandlerCollection so that
-            // unanswered requests fall through to the channel.  Using HandlerCollection (not
-            // an anonymous AbstractHandler) ensures Jetty's lifecycle methods (setServer,
-            // start) propagate to all inner handlers via addHandler().
+            // any request the resource handler cannot serve falls through to the channel.
+            // Using HandlerCollection (not an anonymous AbstractHandler) ensures Jetty's
+            // lifecycle methods (setServer, start) propagate to all inner handlers via addHandler().
             ContextHandler contextHandler = new ContextHandler();
             contextHandler.setContextPath(contextPath);
             contextHandler.setAllowNullPathInfo(true);
@@ -315,11 +307,11 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
             if (authenticatorProvider != null) {
                 channelBase = createSecurityHandler(channelBase);
             }
-            if (directoryHandlers.isEmpty()) {
+            if (resourceHandlers.isEmpty()) {
                 contextHandler.setHandler(channelBase);
             } else {
                 final org.eclipse.jetty.ee8.nested.Handler finalChannelBase = channelBase;
-                HandlerCollection dirChain = new HandlerCollection() {
+                HandlerCollection resourceChain = new HandlerCollection() {
                     @Override
                     public void handle(String target, Request baseRequest,
                             HttpServletRequest servletRequest, HttpServletResponse servletResponse)
@@ -332,11 +324,11 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                         }
                     }
                 };
-                for (org.eclipse.jetty.ee8.nested.Handler h : directoryHandlers) {
-                    dirChain.addHandler(h);
+                for (org.eclipse.jetty.ee8.nested.Handler h : resourceHandlers) {
+                    resourceChain.addHandler(h);
                 }
-                dirChain.addHandler(finalChannelBase);
-                contextHandler.setHandler(dirChain);
+                resourceChain.addHandler(finalChannelBase);
+                contextHandler.setHandler(resourceChain);
             }
             handlers.addHandler(contextHandler);
 
