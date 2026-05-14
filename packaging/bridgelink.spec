@@ -33,6 +33,7 @@ mkdir -p %{buildroot}/opt/bridgelink
 cp -r * %{buildroot}/opt/bridgelink/
 
 %files
+%defattr(-,root,root,-)
 /opt/bridgelink
 
 %changelog
