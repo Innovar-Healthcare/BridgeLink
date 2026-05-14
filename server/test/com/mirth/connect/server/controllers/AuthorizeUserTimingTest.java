@@ -298,14 +298,29 @@ public class AuthorizeUserTimingTest {
         PasswordRequirements pr = new PasswordRequirements();
         // Force allowUsernameEnumeration=false so we exercise the safe error path.
         pr.setAllowUsernameEnumeration(false);
+        // Bypass the strike/lockout path so the wrong-password branch does NOT
+        // invoke LoginRequirementsChecker.incrementStrikes(); combined with the
+        // UserController stub below, this isolates the test from the hardened
+        // PasswordRequirements defaults (retryLimit=5, lockoutPeriod=5) added
+        // by issue #125. See CR-01 in 01-REVIEW.md.
+        pr.setRetryLimit(0);
+        pr.setLockoutPeriod(0);
         when(mockConfigController.getPasswordRequirements()).thenReturn(pr);
 
         ExtensionController mockExtController = mock(ExtensionController.class);
         when(mockExtController.getAuthorizationPlugin()).thenReturn((AuthorizationPlugin) null);
 
+        // UserController stub — required so LoginRequirementsChecker's
+        // constructor (which calls ControllerFactory.getFactory().createUserController())
+        // does not return null and subsequently NPE in any code path that
+        // dereferences userController. Belt-and-suspenders alongside
+        // retryLimit=0 above.
+        UserController mockUserController = mock(UserController.class);
+
         ControllerFactory mockFactory = mock(ControllerFactory.class);
         when(mockFactory.createConfigurationController()).thenReturn(mockConfigController);
         when(mockFactory.createExtensionController()).thenReturn(mockExtController);
+        when(mockFactory.createUserController()).thenReturn(mockUserController);
 
         controllerFactoryStatic = mockStatic(ControllerFactory.class);
         controllerFactoryStatic.when(ControllerFactory::getFactory).thenReturn(mockFactory);
