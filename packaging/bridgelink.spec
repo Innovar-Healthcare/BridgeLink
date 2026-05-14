@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Innovar Healthcare
-# Licensed under the MPL-1.1.
+# Licensed under the MPL-2.0.
 # BridgeLink RPM spec — FIPS-compatible (SHA-256 file digests). Closes #93. See packaging/README.md.
 
 %global _binary_filedigest_algorithm 8
@@ -10,7 +10,7 @@ Name:           bridgelink
 Version:        26.3.1
 Release:        1%{?dist}
 Summary:        BridgeLink healthcare integration engine
-License:        MPL-1.1
+License:        MPL-2.0
 URL:            https://github.com/Innovar-Healthcare/BridgeLink
 Source0:        bridgelink-%{version}.tar.gz
 BuildArch:      noarch

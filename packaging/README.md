@@ -1,6 +1,6 @@
 <!--
 Copyright (c) 2026 Innovar Healthcare
-Licensed under the MPL-1.1.
+Licensed under the MPL-2.0.
 -->
 
 # BridgeLink RPM Packaging
