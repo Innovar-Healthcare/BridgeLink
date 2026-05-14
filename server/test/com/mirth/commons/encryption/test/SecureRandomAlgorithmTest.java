@@ -84,6 +84,7 @@ public class SecureRandomAlgorithmTest {
     @Test
     public void pbeEncryptorSaltGeneratorIsNotSHA1PRNGAfterInitialize() throws EncryptionException {
         PBEEncryptor encryptor = new PBEEncryptor();
+        encryptor.setProvider(new BouncyCastleProvider());
         encryptor.setAlgorithm("PBEWithMD5AndDES");
         encryptor.setPassword("test-only-not-real");
         encryptor.initialize();
