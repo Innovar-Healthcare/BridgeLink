@@ -44,7 +44,12 @@ public class PasswordRequirements implements Serializable {
      *   <li>{@code minUpper = 1}, {@code minLower = 1}, {@code minNumeric = 1}</li>
      *   <li>{@code minSpecial = 0} (kept zero — special characters are often
      *       blocked or normalized by upstream LDAP/AD integrations)</li>
-     *   <li>{@code retryLimit = 5}, {@code lockoutPeriod = 5} (minutes)</li>
+     *   <li>{@code retryLimit = 5}, {@code lockoutPeriod = 1} (hour) — the
+     *       field is interpreted as hours by
+     *       {@code LoginRequirementsChecker.getStrikeTimeRemaining}
+     *       ({@code Duration.standardHours(lockoutPeriod)}); the shipped
+     *       {@code server/conf/mirth.properties} ships {@code lockoutperiod=1}
+     *       and this default matches</li>
      *   <li>{@code expiration = 0}, {@code gracePeriod = 0},
      *       {@code reusePeriod = 0}, {@code reuseLimit = 0} (opt-in — unchanged)</li>
      *   <li>{@code allowUsernameEnumeration = false} (unchanged — already safe)</li>
@@ -59,7 +64,7 @@ public class PasswordRequirements implements Serializable {
         this.minNumeric = 1;
         this.minSpecial = 0;
         this.retryLimit = 5;
-        this.lockoutPeriod = 5;
+        this.lockoutPeriod = 1;
         this.expiration = 0;
         this.gracePeriod = 0;
         this.reusePeriod = 0;
