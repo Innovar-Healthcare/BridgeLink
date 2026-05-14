@@ -338,6 +338,47 @@ public class HttpReceiverStaticResourceIntegrationTest {
     }
 
     // =========================================================================
+    // GROUP E — CUSTOM and FILE fallthrough to channel handler (IRT-831, commit a200466b0)
+    // Before this fix, only DIRECTORY resources were embedded inside the channel
+    // ContextHandler. CUSTOM and FILE still had their own ContextHandler, so
+    // CoreContextHandler returned true on any prefix match — blocking fallthrough
+    // for sub-paths the StaticResourceHandler could not serve.
+    // =========================================================================
+
+    @Test
+    public void testCustom_subPath_fallsThroughToChannelHandler() throws Exception {
+        String content = "custom-content";
+        int port = startServerWithResourceAndChannel(
+                "/test/data", ResourceType.CUSTOM, content, "/test");
+
+        try (CloseableHttpClient client = noCompressionClient();
+             CloseableHttpResponse resp = client.execute(get(port, "/test/data/wrong"))) {
+            assertEquals(
+                    "Sub-path miss on CUSTOM resource must fall through to channel handler",
+                    200, resp.getStatusLine().getStatusCode());
+            assertEquals("channel",
+                    IOUtils.toString(resp.getEntity().getContent(), StandardCharsets.UTF_8));
+        }
+    }
+
+    @Test
+    public void testFile_subPath_fallsThroughToChannelHandler() throws Exception {
+        byte[] content = "file-content".getBytes(StandardCharsets.UTF_8);
+        File f = writeTempFile("serve.bin", content);
+        int port = startServerWithResourceAndChannel(
+                "/test/data", ResourceType.FILE, f.getAbsolutePath(), "/test");
+
+        try (CloseableHttpClient client = noCompressionClient();
+             CloseableHttpResponse resp = client.execute(get(port, "/test/data/wrong"))) {
+            assertEquals(
+                    "Sub-path miss on FILE resource must fall through to channel handler",
+                    200, resp.getStatusLine().getStatusCode());
+            assertEquals("channel",
+                    IOUtils.toString(resp.getEntity().getContent(), StandardCharsets.UTF_8));
+        }
+    }
+
+    // =========================================================================
     // Helpers — Jetty server setup
     // =========================================================================
 
@@ -389,6 +430,73 @@ public class HttpReceiverStaticResourceIntegrationTest {
         defaultHandler.setServeFavIcon(false);
 
         jettyServer.setHandler(new org.eclipse.jetty.server.Handler.Sequence(coreHandlers, defaultHandler));
+
+        jettyServer.start();
+        return serverConnector.getLocalPort();
+    }
+
+    /**
+     * Starts a server with a single static resource handler (any {@link ResourceType}) and a
+     * {@link ChannelEchoHandler} embedded inside one channel {@link ContextHandler}, replicating
+     * the architecture from commit a200466b0. Used by GROUP E tests.
+     */
+    private int startServerWithResourceAndChannel(
+            String resourceContextPath, ResourceType resourceType,
+            String resourceValue, String channelContextPath) throws Exception {
+        jettyServer = new Server();
+        org.eclipse.jetty.server.HttpConfiguration httpCfg =
+                new org.eclipse.jetty.server.HttpConfiguration();
+        httpCfg.setSendServerVersion(false);
+        serverConnector = new ServerConnector(jettyServer, new HttpConnectionFactory(httpCfg));
+        serverConnector.setHost(LOOPBACK);
+        serverConnector.setPort(0);
+        serverConnector.setIdleTimeout(30_000);
+        jettyServer.addConnector(serverConnector);
+
+        Class<?> handlerClass = null;
+        for (Class<?> c : HttpReceiver.class.getDeclaredClasses()) {
+            if ("StaticResourceHandler".equals(c.getSimpleName())) {
+                handlerClass = c;
+                break;
+            }
+        }
+        assertNotNull("StaticResourceHandler inner class not found in HttpReceiver", handlerClass);
+        Constructor<?> ctor = handlerClass.getDeclaredConstructor(
+                HttpReceiver.class, HttpStaticResource.class);
+        ctor.setAccessible(true);
+        HttpStaticResource resource = new HttpStaticResource(
+                resourceContextPath, resourceType,
+                resourceValue, "text/plain", Collections.emptyMap());
+        AbstractHandler staticHandler = (AbstractHandler) ctor.newInstance(receiver, resource);
+
+        HandlerCollection innerChain = new HandlerCollection() {
+            @Override
+            public void handle(String target, Request baseRequest,
+                    HttpServletRequest request, HttpServletResponse response)
+                    throws IOException, ServletException {
+                for (org.eclipse.jetty.ee8.nested.Handler h : getHandlers()) {
+                    h.handle(target, baseRequest, request, response);
+                    if (baseRequest.isHandled()) {
+                        return;
+                    }
+                }
+            }
+        };
+        innerChain.addHandler(staticHandler);
+        innerChain.addHandler(new ChannelEchoHandler());
+
+        ContextHandler channelCtx = new ContextHandler();
+        channelCtx.setContextPath(channelContextPath);
+        channelCtx.setAllowNullPathInfo(true);
+        channelCtx.setHandler(innerChain);
+        channelCtx.setServer(jettyServer);
+
+        org.eclipse.jetty.server.handler.DefaultHandler defaultHandler =
+                new org.eclipse.jetty.server.handler.DefaultHandler();
+        defaultHandler.setServeFavIcon(false);
+
+        jettyServer.setHandler(new org.eclipse.jetty.server.Handler.Sequence(
+                channelCtx.getCoreContextHandler(), defaultHandler));
 
         jettyServer.start();
         return serverConnector.getLocalPort();
