@@ -782,4 +782,77 @@ public class MirthWebServerTest {
             @Override public void setWriteListener(WriteListener wl) {}
         };
     }
+
+    // ===== SwaggerUiFilter tests (IRT-834) =====
+
+    @Test
+    public void testSwaggerUiFilterServesIndexHtmlWithContentLength() throws Exception {
+        File tmpDir = createTempDir();
+        File indexFile = new File(tmpDir, "index.html");
+        byte[] content = "<html>swagger</html>".getBytes();
+        Files.write(indexFile.toPath(), content);
+
+        MirthWebServer.SwaggerUiFilter filter = new MirthWebServer.SwaggerUiFilter(tmpDir.getAbsolutePath());
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getPathInfo()).thenReturn(null);
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        when(response.getOutputStream()).thenReturn(capturingStream(baos));
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(response).setContentLengthLong(content.length);
+        verify(response).setContentType("text/html; charset=UTF-8");
+        verify(chain, never()).doFilter(request, response);
+    }
+
+    @Test
+    public void testSwaggerUiFilterServesStaticCssWithContentLength() throws Exception {
+        File tmpDir = createTempDir();
+        File cssFile = new File(tmpDir, "swagger-ui.css");
+        byte[] content = "body { margin: 0; }".getBytes();
+        Files.write(cssFile.toPath(), content);
+
+        MirthWebServer.SwaggerUiFilter filter = new MirthWebServer.SwaggerUiFilter(tmpDir.getAbsolutePath());
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getPathInfo()).thenReturn("/swagger-ui.css");
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        when(response.getOutputStream()).thenReturn(capturingStream(baos));
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(response).setContentLengthLong(content.length);
+        verify(response).setContentType("text/css");
+        verify(chain, never()).doFilter(request, response);
+    }
+
+    @Test
+    public void testSwaggerUiFilterPassesThroughNonStaticApiPath() throws Exception {
+        File tmpDir = createTempDir();
+
+        MirthWebServer.SwaggerUiFilter filter = new MirthWebServer.SwaggerUiFilter(tmpDir.getAbsolutePath());
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getPathInfo()).thenReturn("/channels");
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(request, response);
+        verify(response, never()).setContentLengthLong(anyLong());
+    }
+
+    private File createTempDir() throws IOException {
+        File dir = File.createTempFile("swagger-test-", "");
+        dir.delete();
+        dir.mkdirs();
+        dir.deleteOnExit();
+        return dir;
+    }
 }
