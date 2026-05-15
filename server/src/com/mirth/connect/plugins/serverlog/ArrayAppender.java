@@ -17,8 +17,10 @@ import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.config.Property;
 import org.apache.logging.log4j.core.util.Throwables;
+import org.apache.logging.log4j.util.ReadOnlyStringMap;
 import org.apache.logging.log4j.util.Strings;
 
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.server.logging.MirthLog4jFilter;
 
 public class ArrayAppender extends AbstractAppender {
@@ -42,6 +44,11 @@ public class ArrayAppender extends AbstractAppender {
         String category = logEvent.getLoggerName();
         String message = logEvent.getMessage().getFormattedMessage();
 
+        String channelPrefix = buildChannelPrefix(logEvent.getContextData());
+        if (!channelPrefix.isEmpty()) {
+            message = channelPrefix + " " + message;
+        }
+
         String lineNumber = "?";
         StackTraceElement source = logEvent.getSource();
         if (source != null) {
@@ -62,5 +69,30 @@ public class ArrayAppender extends AbstractAppender {
         }
 
         serverLogProvider.newServerLogReceived(level, date, threadName, category, lineNumber, message, throwableInformation);
+    }
+
+    private static String buildChannelPrefix(ReadOnlyStringMap ctx) {
+        if (ctx == null || ctx.isEmpty()) {
+            return "";
+        }
+        String name = ctx.getValue(LogContext.CHANNEL_NAME);
+        String id = ctx.getValue(LogContext.CHANNEL_ID);
+        String connector = ctx.getValue(LogContext.CONNECTOR);
+        String msgId = ctx.getValue(LogContext.MESSAGE_ID);
+
+        if (name == null && id == null) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder("[channel=");
+        sb.append(name != null ? name : id);
+        if (connector != null && !connector.isEmpty()) {
+            sb.append(", connector=").append(connector);
+        }
+        if (msgId != null && !msgId.isEmpty()) {
+            sb.append(", msgId=").append(msgId);
+        }
+        sb.append(']');
+        return sb.toString();
     }
 }
