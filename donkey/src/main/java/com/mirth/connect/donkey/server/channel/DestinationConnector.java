@@ -485,6 +485,9 @@ public abstract class DestinationConnector extends Connector implements Runnable
      * @throws InterruptedException
      */
     public void process(DonkeyDao dao, ConnectorMessage message, Status previousStatus) throws InterruptedException {
+        try (LogContext.Scope channelScope = LogContext.channel(getChannelId(), channel.getName());
+             LogContext.Scope connectorScope = LogContext.connector(getDestinationName(), getMetaDataId());
+             LogContext.Scope messageScope = LogContext.message(message.getMessageId())) {
         ConnectorProperties connectorProperties = null;
 
         ThreadUtils.checkInterruptedStatus();
@@ -540,6 +543,7 @@ public abstract class DestinationConnector extends Connector implements Runnable
         } else {
             updateQueuedStatus(dao, message, previousStatus);
         }
+        }
     }
 
     public void updateQueuedStatus(DonkeyDao dao, ConnectorMessage message, Status previousStatus) throws InterruptedException {
@@ -579,7 +583,9 @@ public abstract class DestinationConnector extends Connector implements Runnable
                     dao.updateErrors(message);
                 }
             } catch (DonkeyException e) {
-                logger.error("Error executing response transformer for channel " + channel.getName() + " (" + channel.getChannelId() + ") on destination " + destinationName + ".", e);
+                // Logging is centralized in DefaultEventController.dispatchEvent — the response
+                // transformer dispatches an ErrorEvent before throwing, which the central handler
+                // logs to mirth.log with structured channel/connector/messageId MDC.
                 response.setStatus(Status.ERROR);
                 response.setError(e.getFormattedError());
                 message.setProcessingError(message.getProcessingError() != null ? message.getProcessingError() + System.getProperty("line.separator") + System.getProperty("line.separator") + e.getFormattedError() : e.getFormattedError());
@@ -613,6 +619,8 @@ public abstract class DestinationConnector extends Connector implements Runnable
 
     @Override
     public void run() {
+        try (LogContext.Scope channelScope = LogContext.channel(getChannelId(), channel.getName());
+             LogContext.Scope connectorScope = LogContext.connector(getDestinationName(), getMetaDataId())) {
         DonkeyDao dao = null;
         boolean commitSuccess = false;
         Serializer serializer = channel.getSerializer();
@@ -892,6 +900,7 @@ public abstract class DestinationConnector extends Connector implements Runnable
                 }
             }
         } while ((getCurrentState() == DeployedState.STARTED || getCurrentState() == DeployedState.STARTING) && !stopQueue.get());
+        }
     }
 
     private Response handleSend(ConnectorProperties connectorProperties, ConnectorMessage message) throws InterruptedException {
@@ -973,7 +982,7 @@ public abstract class DestinationConnector extends Connector implements Runnable
                 dao.updateErrors(message);
             }
         } catch (DonkeyException e) {
-            logger.error("Error executing response transformer for channel " + channel.getName() + " (" + channel.getChannelId() + ") on destination " + destinationName + ".", e);
+            // Logging is centralized in DefaultEventController.dispatchEvent — see note above.
             response.setStatus(Status.ERROR);
             response.setError(e.getFormattedError());
             message.setStatus(response.getStatus());
