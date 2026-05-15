@@ -40,11 +40,13 @@ public class RecoveryTask implements Callable<Void> {
     public Void call() throws Exception {
         String originalThreadName = Thread.currentThread().getName();
 
-        try {
+        try (LogContext.Scope channelScope = LogContext.channel(channel.getChannelId(), channel.getName())) {
             Thread.currentThread().setName("Recovery Task Thread on " + channel.getName() + " (" + channel.getChannelId() + ") < " + originalThreadName);
-            return doCall();
-        } finally {
-            Thread.currentThread().setName(originalThreadName);
+            try {
+                return doCall();
+            } finally {
+                Thread.currentThread().setName(originalThreadName);
+            }
         }
     }
 

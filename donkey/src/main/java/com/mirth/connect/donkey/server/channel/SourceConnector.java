@@ -185,13 +185,16 @@ public abstract class SourceConnector extends Connector {
      * @throws ChannelException
      */
     public DispatchResult dispatchRawMessage(RawMessage rawMessage, boolean force) throws ChannelException {
-        if (!force && getCurrentState() == DeployedState.STOPPED) {
-            ChannelException e = new ChannelException(true);
-            logger.warn("Source connector is currently stopped for channel " + channel.getName() + " (" + channel.getChannelId() + ").", e);
-            throw e;
-        }
+        try (LogContext.Scope channelScope = LogContext.channel(channel.getChannelId(), channel.getName());
+             LogContext.Scope connectorScope = LogContext.connector(sourceName, 0)) {
+            if (!force && getCurrentState() == DeployedState.STOPPED) {
+                ChannelException e = new ChannelException(true);
+                logger.warn("Source connector is currently stopped for channel " + channel.getName() + " (" + channel.getChannelId() + ").", e);
+                throw e;
+            }
 
-        return channel.dispatchRawMessage(rawMessage, false);
+            return channel.dispatchRawMessage(rawMessage, false);
+        }
     }
 
     public Boolean dispatchBatchMessage(BatchRawMessage batchRawMessage, ResponseHandler responseHandler) throws BatchMessageException {
@@ -316,7 +319,9 @@ public abstract class SourceConnector extends Connector {
             return;
         }
 
-        try {
+        try (LogContext.Scope channelScope = LogContext.channel(channel.getChannelId(), channel.getName());
+             LogContext.Scope connectorScope = LogContext.connector(sourceName, 0);
+             LogContext.Scope messageScope = LogContext.message(dispatchResult.getMessageId())) {
             boolean attemptedResponse = dispatchResult.isAttemptedResponse();
             String responseError = dispatchResult.getResponseError();
             Response selectedResponse = dispatchResult.getSelectedResponse();

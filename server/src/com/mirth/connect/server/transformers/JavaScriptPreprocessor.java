@@ -169,7 +169,7 @@ public class JavaScriptPreprocessor implements PreProcessor {
                     debugger.setVisible(true);
                 }
             }
-            return JavaScriptUtil.executePreprocessorScripts(this, message, channel.getSourceConnector().getDestinationIdMap(), this.scopeProvider);
+            return JavaScriptUtil.executePreprocessorScripts(this, message, channel.getSourceConnector().getDestinationIdMap(), this.scopeProvider, channel.getName());
         }
     }
 }

@@ -23,6 +23,7 @@ import com.mirth.connect.donkey.model.event.ErrorEventType;
 import com.mirth.connect.donkey.model.message.ConnectorMessage;
 import com.mirth.connect.donkey.model.message.Response;
 import com.mirth.connect.donkey.server.channel.Connector;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.server.channel.components.ResponseTransformer;
 import com.mirth.connect.donkey.server.channel.components.ResponseTransformerException;
 import com.mirth.connect.donkey.server.event.ErrorEvent;
@@ -185,6 +186,9 @@ public class JavaScriptResponseTransformer implements ResponseTransformer {
         @Override
         public String doCall() throws Exception {
             Logger scriptLogger = LogManager.getLogger("response");
+            try (LogContext.Scope channelScope = LogContext.channel(connector.getChannelId(), connector.getChannel() != null ? connector.getChannel().getName() : null);
+                 LogContext.Scope connectorScope = LogContext.connector(connectorName, connector.getMetaDataId());
+                 LogContext.Scope messageScope = LogContext.message(connectorMessage.getMessageId())) {
 
             // Get the script from the cache
             Script compiledScript = compiledScriptCache.getCompiledScript(scriptId);
@@ -223,22 +227,35 @@ public class JavaScriptResponseTransformer implements ResponseTransformer {
                     // Return the result
                     return JavaScriptScopeUtil.getTransformedDataFromScope(scope, StringUtils.isNotBlank(template));
                 } catch (Throwable t) {
+                    int errorLine = -1;
+                    String errorDetails = null;
                     if (t instanceof RhinoException) {
+                        RhinoException re = (RhinoException) t;
+                        errorLine = re.lineNumber();
+                        errorDetails = re.details();
                         try {
                             String script = CompiledScriptCache.getInstance().getSourceScript(scriptId);
-                            int linenumber = ((RhinoException) t).lineNumber();
-                            String errorReport = JavaScriptUtil.getSourceCode(script, linenumber, 0);
-                            t = new MirthJavascriptTransformerException((RhinoException) t, connector.getChannelId(), connectorName, 0, "response", errorReport);
+                            String errorReport = JavaScriptUtil.getSourceCode(script, errorLine, 0);
+                            t = new MirthJavascriptTransformerException(re, connector.getChannelId(), connectorName, 0, "response", errorReport);
                         } catch (Exception ee) {
-                            t = new MirthJavascriptTransformerException((RhinoException) t, connector.getChannelId(), connectorName, 0, "response", null);
+                            t = new MirthJavascriptTransformerException(re, connector.getChannelId(), connectorName, 0, "response", null);
                         }
                     }
 
-                    eventController.dispatchEvent(new ErrorEvent(connectorMessage.getChannelId(), connectorMessage.getMetaDataId(), connectorMessage.getMessageId(), ErrorEventType.RESPONSE_TRANSFORMER, connectorName, null, "Error evaluating response transformer", t));
-                    throw new ResponseTransformerException(t.getMessage(), t, ErrorMessageBuilder.buildErrorMessage(ErrorEventType.RESPONSE_TRANSFORMER.toString(), "Error evaluating response transformer", t));
+                    String oneLineMsg = "Error evaluating response transformer"
+                            + (errorDetails != null ? ": " + errorDetails : "");
+
+                    // Logging is centralized in DefaultEventController.dispatchEvent. We open a
+                    // script scope so scriptPhase/scriptLine MDC keys are present on the
+                    // resulting log line.
+                    try (LogContext.Scope scriptScope = LogContext.script("RESPONSE", errorLine)) {
+                        eventController.dispatchEvent(new ErrorEvent(connectorMessage.getChannelId(), connectorMessage.getMetaDataId(), connectorMessage.getMessageId(), ErrorEventType.RESPONSE_TRANSFORMER, connectorName, null, oneLineMsg, t));
+                        throw new ResponseTransformerException(t.getMessage(), t, ErrorMessageBuilder.buildErrorMessage(ErrorEventType.RESPONSE_TRANSFORMER.toString(), "Error evaluating response transformer", t));
+                    }
                 } finally {
                     Context.exit();
                 }
+            }
             }
         }
 
