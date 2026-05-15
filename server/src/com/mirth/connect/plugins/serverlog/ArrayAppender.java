@@ -44,7 +44,9 @@ public class ArrayAppender extends AbstractAppender {
         String category = logEvent.getLoggerName();
         String message = logEvent.getMessage().getFormattedMessage();
 
-        String channelPrefix = buildChannelPrefix(logEvent.getContextData());
+        ReadOnlyStringMap ctx = logEvent.getContextData();
+        String channelId = (ctx != null) ? ctx.getValue(LogContext.CHANNEL_ID) : null;
+        String channelPrefix = buildChannelPrefix(ctx);
         if (!channelPrefix.isEmpty()) {
             message = channelPrefix + " " + message;
         }
@@ -68,7 +70,7 @@ public class ArrayAppender extends AbstractAppender {
             throwableInformation = logText.toString();
         }
 
-        serverLogProvider.newServerLogReceived(level, date, threadName, category, lineNumber, message, throwableInformation);
+        serverLogProvider.newServerLogReceived(level, date, threadName, category, lineNumber, message, throwableInformation, channelId);
     }
 
     private static String buildChannelPrefix(ReadOnlyStringMap ctx) {
