@@ -30,15 +30,20 @@ public class ServerLogClient extends DashboardTabPlugin {
     private ServerLogPanel serverLogPanel;
     private LinkedList<ServerLogItem> serverLogs;
     private static final ServerLogItem unauthorizedLog = new ServerLogItem("You are not authorized to view the server log.");
-    private int currentServerLogSize;
+
+    // The fields below are touched from the Swing EDT (via resetServerLogSize) and from the
+    // dashboard's background polling thread (via prepareData/update). `volatile` ensures safe
+    // publication across threads. Compound updates of `serverLogs` itself still go through
+    // synchronized(this).
+    private volatile int currentServerLogSize;
     private boolean receivedNewLogs;
-    private Long lastLogId;
+    private volatile Long lastLogId;
     private String currentServerId;
 
     // The set of channel IDs currently highlighted on the dashboard. Empty means "no filter — show
     // everything from the unified server buffer". When this set changes we drop the local buffer
     // and reset lastLogId so the next fetch returns a fresh view of the new selection.
-    private Set<String> selectedChannelIds = Collections.emptySet();
+    private volatile Set<String> selectedChannelIds = Collections.emptySet();
 
     public ServerLogClient(String name) {
         super(name);

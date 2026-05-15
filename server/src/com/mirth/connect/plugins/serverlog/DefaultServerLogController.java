@@ -66,6 +66,12 @@ public class DefaultServerLogController extends ServerLogController {
 
     @Override
     public List<ServerLogItem> getServerLogs(int fetchSize, Long lastLogId, Set<String> channelIds) {
+        // Defensive: a missing or negative fetchSize from the REST binding would otherwise blow
+        // up the ArrayList constructor below with NegativeArraySizeException.
+        if (fetchSize < 0) {
+            fetchSize = 0;
+        }
+
         // Snapshot the relevant buffers under the lock, then build the response outside it so we
         // don't hold the lock across the (small) sort/filter cost.
         List<ServerLogItem> snapshot;
