@@ -35,19 +35,18 @@ public class KeystoreWarningDialog extends MirthDialog {
     private void initComponents() {
         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
 
-        JLabel iconLabel = new JLabel(UIManager.getIcon("OptionPane.warningIcon"));
+        javax.swing.Icon warningIcon = UIManager.getIcon("OptionPane.warningIcon");
+        JLabel iconLabel = new JLabel(warningIcon);
+        int iconWidth = (warningIcon != null) ? warningIcon.getIconWidth() : 32;
 
         JLabel messageLabel = new JLabel(
                 "<html><b>The keystore passwords for this BridgeLink instance are still set to "
                 + "default values.</b><br><br>"
                 + "The keystore stores the SSL/TLS certificate for the BridgeLink API and<br>"
                 + "Administrator (port 8443).<br><br>"
-                + "<b>Note:</b> If any channels have message-level encryption enabled<br>"
-                + "(encryptData=true), those stored messages will become unreadable after<br>"
-                + "regeneration. Channels will continue to process new messages normally.<br><br>"
-                + "<b>Note:</b> If encrypt.properties=true in mirth.properties, the encrypted<br>"
-                + "database.password will also become unreadable after regeneration.<br>"
-                + "This setting defaults to false in most installations.<br><br>"
+                + "<b>Note:</b> Channel message encryption (encryptData=true) and encrypted<br>"
+                + "database passwords (encrypt.properties=true) are NOT affected &mdash; they<br>"
+                + "use a separate AES key that is preserved during regeneration.<br><br>"
                 + "<b>Note:</b> BridgeLink must be restarted after regenerating the keystore<br>"
                 + "for the new SSL certificate to take effect.</html>");
 
@@ -87,7 +86,9 @@ public class KeystoreWarningDialog extends MirthDialog {
                 .addGroup(layout.createSequentialGroup()
                     .addComponent(iconLabel)
                     .addComponent(messageLabel))
-                .addComponent(regenerateCheckBox)
+                .addGroup(layout.createSequentialGroup()
+                    .addGap(iconWidth + 6)
+                    .addComponent(regenerateCheckBox))
                 .addComponent(buttonPanel, javax.swing.GroupLayout.DEFAULT_SIZE,
                         javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
         );

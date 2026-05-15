@@ -228,7 +228,14 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
             server = new Server();
             configuration.configureReceiver(this);
 
+            // All static resource handlers are embedded inside the channel ContextHandler rather
+            // than given their own separate ContextHandlers. CoreContextHandler.handle() returns
+            // true once the request path matches the context prefix — even when the inner EE8
+            // handler never sets isHandled(). A separate ContextHandler per resource therefore
+            // blocks fallthrough to the channel for any sub-path the resource cannot serve
+            // (e.g. GET /test/data/wrong when the resource is the CUSTOM type at /test/data).
             HandlerCollection handlers = new HandlerCollection();
+            List<org.eclipse.jetty.ee8.nested.Handler> resourceHandlers = new ArrayList<>();
 
             // Add handlers for each static resource
             if (getConnectorProperties().getStaticResources() != null) {
@@ -278,33 +285,67 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                 for (List<HttpStaticResource> staticResourcesList : staticResourcesMap.descendingMap().values()) {
                     for (HttpStaticResource staticResource : staticResourcesList) {
                         logger.debug("Adding static resource handler for context path: " + staticResource.getContextPath());
-                        ContextHandler resourceContextHandler = new ContextHandler();
-                        resourceContextHandler.setContextPath(staticResource.getContextPath());
-                        // This allows resources to be requested without a relative context path (e.g. "/")
-                        resourceContextHandler.setAllowNullPathInfo(true);
-                        resourceContextHandler.setHandler(new StaticResourceHandler(staticResource));
-                        handlers.addHandler(resourceContextHandler);
+                        org.eclipse.jetty.ee8.nested.Handler resourceInner = new StaticResourceHandler(staticResource);
+                        if (authenticatorProvider != null) {
+                            resourceInner = createSecurityHandler(resourceInner);
+                        }
+                        // Collected here; embedded inside the channel context below.
+                        resourceHandlers.add(resourceInner);
                     }
                 }
             }
 
-            // Add the main request handler
+            // Build the channel context handler. All static resource handlers are placed
+            // before RequestHandler inside a stop-on-first-handled HandlerCollection so that
+            // any request the resource handler cannot serve falls through to the channel.
+            // Using HandlerCollection (not an anonymous AbstractHandler) ensures Jetty's
+            // lifecycle methods (setServer, start) propagate to all inner handlers via addHandler().
             ContextHandler contextHandler = new ContextHandler();
             contextHandler.setContextPath(contextPath);
-            contextHandler.setHandler(new RequestHandler());
+            contextHandler.setAllowNullPathInfo(true);
+            org.eclipse.jetty.ee8.nested.Handler channelBase = new RequestHandler();
+            if (authenticatorProvider != null) {
+                channelBase = createSecurityHandler(channelBase);
+            }
+            if (resourceHandlers.isEmpty()) {
+                contextHandler.setHandler(channelBase);
+            } else {
+                final org.eclipse.jetty.ee8.nested.Handler finalChannelBase = channelBase;
+                HandlerCollection resourceChain = new HandlerCollection() {
+                    @Override
+                    public void handle(String target, Request baseRequest,
+                            HttpServletRequest servletRequest, HttpServletResponse servletResponse)
+                            throws IOException, ServletException {
+                        for (org.eclipse.jetty.ee8.nested.Handler h : getHandlers()) {
+                            h.handle(target, baseRequest, servletRequest, servletResponse);
+                            if (baseRequest.isHandled()) {
+                                return;
+                            }
+                        }
+                    }
+                };
+                for (org.eclipse.jetty.ee8.nested.Handler h : resourceHandlers) {
+                    resourceChain.addHandler(h);
+                }
+                resourceChain.addHandler(finalChannelBase);
+                contextHandler.setHandler(resourceChain);
+            }
             handlers.addHandler(contextHandler);
 
-            // Wrap the handler collection in a security handler if needed
-            org.eclipse.jetty.ee8.nested.Handler serverHandler = handlers;
-            if (authenticatorProvider != null) {
-                serverHandler = createSecurityHandler(handlers);
+            org.eclipse.jetty.server.Handler.Sequence handlerSequence =
+                    new org.eclipse.jetty.server.Handler.Sequence();
+            for (org.eclipse.jetty.ee8.nested.Handler h : handlers.getHandlers()) {
+                if (h instanceof ContextHandler ch) {
+                    ch.setServer(server);
+                    handlerSequence.addHandler(ch.getCoreContextHandler());
+                }
             }
-            
-            // In Jetty 12, we need to wrap the EE8 handler in a ContextHandler and get the core handler
-            ContextHandler rootContextHandler = new ContextHandler();
-            rootContextHandler.setContextPath("/");
-            rootContextHandler.setHandler(serverHandler);
-            server.setHandler(rootContextHandler.getCoreContextHandler());
+            org.eclipse.jetty.server.handler.DefaultHandler defaultHandler =
+                    new org.eclipse.jetty.server.handler.DefaultHandler();
+            defaultHandler.setServeFavIcon(false);
+            defaultHandler.setShowContexts(false);
+            handlerSequence.addHandler(defaultHandler);
+            server.setHandler(handlerSequence);
 
             logger.debug("starting HTTP server with address: " + host + ":" + port);
             server.start();
@@ -346,6 +387,10 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
     private class RequestHandler extends AbstractHandler {
         @Override
         public void handle(String target, Request baseRequest, HttpServletRequest servletRequest, HttpServletResponse servletResponse) throws IOException, ServletException {
+            // Skip if a static resource handler already served this request (Jetty 12 EE8 ContextHandler no longer guards on isHandled())
+            if (baseRequest.isHandled()) {
+                return;
+            }
             logger.debug("received HTTP request");
             eventController.dispatchEvent(new ConnectionStatusEvent(getChannelId(), getMetaDataId(), getSourceName(), ConnectionStatusEventType.CONNECTED));
             DispatchResult dispatchResult = null;
@@ -514,6 +559,7 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                     gzipOutputStream.write(responseBytes);
                     gzipOutputStream.finish();
                 } else {
+                    servletResponse.setContentLength(responseBytes.length);
                     responseOutputStream.write(responseBytes);
                 }
 
@@ -546,9 +592,11 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
             }
         }
 
+        byte[] errBytes = responseError.getBytes();
         servletResponse.setContentType("text/plain");
         servletResponse.setStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR);
-        servletResponse.getOutputStream().write(responseError.getBytes());
+        servletResponse.setContentLength(errBytes.length);
+        servletResponse.getOutputStream().write(errBytes);
     }
 
     protected Object getMessage(Request request, Map<String, Object> sourceMap, List<Attachment> attachments) throws IOException, ChannelException, MessagingException, DonkeyElementException, ParserConfigurationException {
@@ -679,6 +727,7 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
 
             String originalThreadName = Thread.currentThread().getName();
 
+            boolean responded = false;
             try {
                 Thread.currentThread().setName("HTTP Receiver Thread on " + getChannel().getName() + " (" + getChannelId() + ") < " + originalThreadName);
                 HttpRequestMessage requestMessage = createRequestMessage(baseRequest, true);
@@ -724,12 +773,14 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                 OutputStream responseOutputStream = servletResponse.getOutputStream();
 
                 // If the client accepts GZIP compression, compress the content
+                boolean gzipOutput = false;
                 List<String> acceptEncodingList = requestMessage.getCaseInsensitiveHeaders().get("Accept-Encoding");
                 if (CollectionUtils.isNotEmpty(acceptEncodingList)) {
                     for (String acceptEncoding : acceptEncodingList) {
                         if (acceptEncoding != null && acceptEncoding.contains("gzip")) {
                             servletResponse.setHeader(HTTP.CONTENT_ENCODING, "gzip");
                             responseOutputStream = new GZIPOutputStream(responseOutputStream);
+                            gzipOutput = true;
                             break;
                         }
                     }
@@ -739,7 +790,11 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                     // Just stream the file itself back to the client
                     InputStream is = null;
                     try {
-                        is = new FileInputStream(value);
+                        File f = new File(value);
+                        if (!gzipOutput) {
+                            servletResponse.setContentLengthLong(f.length());
+                        }
+                        is = new FileInputStream(f);
                         IOUtils.copy(is, responseOutputStream);
                     } finally {
                         ResourceUtil.closeResourceQuietly(is);
@@ -787,6 +842,9 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                         // A valid file was found; stream it back to the client
                         InputStream is = null;
                         try {
+                            if (!gzipOutput) {
+                                servletResponse.setContentLengthLong(file.length());
+                            }
                             is = new FileInputStream(file);
                             IOUtils.copy(is, responseOutputStream);
                         } finally {
@@ -799,26 +857,38 @@ public class HttpReceiver extends SourceConnector implements BinaryContentTypeRe
                     }
                 } else {
                     // Stream the value string back to the client
-                    IOUtils.write(value, responseOutputStream, charset);
+                    byte[] valueBytes = value.getBytes(charset);
+                    if (!gzipOutput) {
+                        servletResponse.setContentLength(valueBytes.length);
+                    }
+                    responseOutputStream.write(valueBytes);
                 }
 
                 // If we gzipped, we need to finish the stream now
-                if (responseOutputStream instanceof GZIPOutputStream) {
+                if (gzipOutput) {
                     ((GZIPOutputStream) responseOutputStream).finish();
                 }
+                responded = true;
             } catch (Throwable t) {
                 logger.error("Error handling static HTTP resource request (" + getConnectorProperties().getName() + " \"Source\" on channel " + getChannelId() + ").", t);
                 eventController.dispatchEvent(new ErrorEvent(getChannelId(), getMetaDataId(), null, ErrorEventType.SOURCE_CONNECTOR, getSourceName(), getConnectorProperties().getName(), "Error handling static HTTP resource request", t));
 
-                servletResponse.reset();
-                servletResponse.setContentType(ContentType.TEXT_PLAIN.toString());
-                servletResponse.setStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR);
-                servletResponse.getOutputStream().write(ExceptionUtils.getStackTrace(t).getBytes());
+                try {
+                    servletResponse.reset();
+                    servletResponse.setContentType(ContentType.TEXT_PLAIN.toString());
+                    servletResponse.setStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR);
+                    servletResponse.getOutputStream().write(ExceptionUtils.getStackTrace(t).getBytes());
+                } catch (IllegalStateException ise) {
+                    logger.debug("Could not reset already-committed response after static resource error", ise);
+                }
+                responded = true;
             } finally {
                 Thread.currentThread().setName(originalThreadName);
             }
 
-            baseRequest.setHandled(true);
+            if (responded) {
+                baseRequest.setHandled(true);
+            }
         }
     }
 

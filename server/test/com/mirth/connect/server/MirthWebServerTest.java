@@ -2,20 +2,36 @@ package com.mirth.connect.server;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.util.Collections;
+import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.Vector;
 
 import javax.servlet.FilterChain;
+import javax.servlet.ServletOutputStream;
+import javax.servlet.WriteListener;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import org.eclipse.jetty.ee8.nested.Request;
+import org.eclipse.jetty.http.MimeTypes;
 
 import org.apache.commons.configuration2.PropertiesConfiguration;
 import org.junit.Test;
@@ -474,7 +490,7 @@ public class MirthWebServerTest {
         if (contextPath.endsWith("/")) {
             contextPath = contextPath.substring(0, contextPath.length() - 1);
         }
-        assertEquals("/", contextPath);
+        assertEquals("", contextPath);
     }
 
     @Test
@@ -620,7 +636,7 @@ public class MirthWebServerTest {
         PropertiesConfiguration mirthProperties = PropertiesConfigurationUtil.create();
         mirthProperties.setProperty("server.api.sessioncache", "none");
         String sessionCacheProperty = mirthProperties.getString("server.api.sessioncache", "default");
-        assertTrue(org.apache.commons.lang3.StringUtils.equalsIgnoreCase(sessionCacheProperty, "none"));
+        assertTrue(sessionCacheProperty.equalsIgnoreCase("none"));
     }
 
     @Test
@@ -631,7 +647,7 @@ public class MirthWebServerTest {
         String sessionCacheProperty = mirthProperties.getString("server.api.sessioncache", "default");
         boolean sessionStore = Boolean.parseBoolean(mirthProperties.getString("server.api.sessionstore", "false"));
 
-        boolean useNullCache = org.apache.commons.lang3.StringUtils.equalsIgnoreCase(sessionCacheProperty, "none") && sessionStore;
+        boolean useNullCache = sessionCacheProperty.equalsIgnoreCase("none") && sessionStore;
         assertFalse(useNullCache); // Should not use NullSessionCache when sessionStore is false
     }
 
@@ -643,7 +659,200 @@ public class MirthWebServerTest {
         String sessionCacheProperty = mirthProperties.getString("server.api.sessioncache", "default");
         boolean sessionStore = Boolean.parseBoolean(mirthProperties.getString("server.api.sessionstore", "false"));
 
-        boolean useNullCache = org.apache.commons.lang3.StringUtils.equalsIgnoreCase(sessionCacheProperty, "none") && sessionStore;
+        boolean useNullCache = sessionCacheProperty.equalsIgnoreCase("none") && sessionStore;
         assertTrue(useNullCache); // Should use NullSessionCache
+    }
+
+    // ===== InstallerFileHandler tests (IRT-833) =====
+
+    @Test
+    public void testInstallerFileHandlerSetsContentLengthLongForNonGzip() throws Exception {
+        File tempFile = File.createTempFile("installer-test-", ".zip");
+        tempFile.deleteOnExit();
+        Files.write(tempFile.toPath(), new byte[]{1, 2, 3, 4, 5});
+
+        Object handler = newInstallerHandlerInstance(tempFile);
+
+        Request baseRequest = mock(Request.class);
+        when(baseRequest.getMethod()).thenReturn("GET");
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        Enumeration<String> emptyEnum = Collections.enumeration(Collections.emptyList());
+        when(request.getHeaders("Accept-Encoding")).thenReturn(emptyEnum);
+
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        when(response.getOutputStream()).thenReturn(capturingStream(baos));
+
+        invokeInstallerHandler(handler, baseRequest, request, response);
+
+        verify(response).setContentLengthLong(tempFile.length());
+    }
+
+    @Test
+    public void testInstallerFileHandlerDoesNotSetContentLengthLongForGzip() throws Exception {
+        File tempFile = File.createTempFile("installer-test-gzip-", ".zip");
+        tempFile.deleteOnExit();
+        Files.write(tempFile.toPath(), new byte[]{1, 2, 3, 4, 5});
+
+        Object handler = newInstallerHandlerInstance(tempFile);
+
+        Request baseRequest = mock(Request.class);
+        when(baseRequest.getMethod()).thenReturn("GET");
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        Vector<String> encodings = new Vector<>();
+        encodings.add("gzip");
+        when(request.getHeaders("Accept-Encoding")).thenReturn(encodings.elements());
+
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        when(response.getOutputStream()).thenReturn(capturingStream(baos));
+
+        invokeInstallerHandler(handler, baseRequest, request, response);
+
+        verify(response, never()).setContentLengthLong(anyLong());
+    }
+
+    @Test
+    public void testInstallerFileHandlerSwallowsIllegalStateExceptionOnReset() throws Exception {
+        File tempFile = File.createTempFile("installer-test-err-", ".zip");
+        tempFile.deleteOnExit();
+        Files.write(tempFile.toPath(), new byte[]{1, 2, 3});
+
+        Object handler = newInstallerHandlerInstance(tempFile);
+
+        Request baseRequest = mock(Request.class);
+        when(baseRequest.getMethod()).thenReturn("GET");
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        Enumeration<String> emptyEnum = Collections.enumeration(Collections.emptyList());
+        when(request.getHeaders("Accept-Encoding")).thenReturn(emptyEnum);
+
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        when(response.getOutputStream()).thenThrow(new IOException("simulated write failure"));
+
+        // handle() should complete normally — error caught internally, 500 status set
+        invokeInstallerHandler(handler, baseRequest, request, response);
+
+        verify(response).reset();
+        verify(response).setStatus(org.apache.commons.httpclient.HttpStatus.SC_INTERNAL_SERVER_ERROR);
+    }
+
+    private Object newInstallerHandlerInstance(File file) throws Exception {
+        java.lang.reflect.Field unsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+        unsafeField.setAccessible(true);
+        sun.misc.Unsafe unsafe = (sun.misc.Unsafe) unsafeField.get(null);
+        MirthWebServer outer = (MirthWebServer) unsafe.allocateInstance(MirthWebServer.class);
+
+        Class<?> handlerClass = null;
+        for (Class<?> c : MirthWebServer.class.getDeclaredClasses()) {
+            if ("InstallerFileHandler".equals(c.getSimpleName())) {
+                handlerClass = c;
+                break;
+            }
+        }
+        assertNotNull("InstallerFileHandler inner class not found", handlerClass);
+
+        Constructor<?> ctor = handlerClass.getDeclaredConstructor(MirthWebServer.class, File.class, MimeTypes.class);
+        ctor.setAccessible(true);
+        return ctor.newInstance(outer, file, new MimeTypes());
+    }
+
+    private void invokeInstallerHandler(Object handler, Request baseRequest,
+            HttpServletRequest request, HttpServletResponse response) throws Exception {
+        Method handle = handler.getClass().getMethod("handle", String.class, Request.class,
+                HttpServletRequest.class, HttpServletResponse.class);
+        try {
+            handle.invoke(handler, "/test", baseRequest, request, response);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            if (cause instanceof Exception) throw (Exception) cause;
+            throw new RuntimeException(cause);
+        }
+    }
+
+    private static ServletOutputStream capturingStream(ByteArrayOutputStream baos) {
+        return new ServletOutputStream() {
+            @Override public void write(int b) throws IOException { baos.write(b); }
+            @Override public void write(byte[] b) throws IOException { baos.write(b); }
+            @Override public void write(byte[] b, int off, int len) throws IOException { baos.write(b, off, len); }
+            @Override public boolean isReady() { return true; }
+            @Override public void setWriteListener(WriteListener wl) {}
+        };
+    }
+
+    // ===== SwaggerUiFilter tests (IRT-834) =====
+
+    @Test
+    public void testSwaggerUiFilterServesIndexHtmlWithContentLength() throws Exception {
+        File tmpDir = createTempDir();
+        File indexFile = new File(tmpDir, "index.html");
+        byte[] content = "<html>swagger</html>".getBytes();
+        Files.write(indexFile.toPath(), content);
+
+        MirthWebServer.SwaggerUiFilter filter = new MirthWebServer.SwaggerUiFilter(tmpDir.getAbsolutePath());
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getPathInfo()).thenReturn(null);
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        when(response.getOutputStream()).thenReturn(capturingStream(baos));
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(response).setContentLengthLong(content.length);
+        verify(response).setContentType("text/html; charset=UTF-8");
+        verify(chain, never()).doFilter(request, response);
+    }
+
+    @Test
+    public void testSwaggerUiFilterServesStaticCssWithContentLength() throws Exception {
+        File tmpDir = createTempDir();
+        File cssFile = new File(tmpDir, "swagger-ui.css");
+        byte[] content = "body { margin: 0; }".getBytes();
+        Files.write(cssFile.toPath(), content);
+
+        MirthWebServer.SwaggerUiFilter filter = new MirthWebServer.SwaggerUiFilter(tmpDir.getAbsolutePath());
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getPathInfo()).thenReturn("/swagger-ui.css");
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        when(response.getOutputStream()).thenReturn(capturingStream(baos));
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(response).setContentLengthLong(content.length);
+        verify(response).setContentType("text/css");
+        verify(chain, never()).doFilter(request, response);
+    }
+
+    @Test
+    public void testSwaggerUiFilterPassesThroughNonStaticApiPath() throws Exception {
+        File tmpDir = createTempDir();
+
+        MirthWebServer.SwaggerUiFilter filter = new MirthWebServer.SwaggerUiFilter(tmpDir.getAbsolutePath());
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getPathInfo()).thenReturn("/channels");
+        HttpServletResponse response = mock(HttpServletResponse.class);
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(request, response);
+        verify(response, never()).setContentLengthLong(anyLong());
+    }
+
+    private File createTempDir() throws IOException {
+        File dir = File.createTempFile("swagger-test-", "");
+        dir.delete();
+        dir.mkdirs();
+        dir.deleteOnExit();
+        return dir;
     }
 }

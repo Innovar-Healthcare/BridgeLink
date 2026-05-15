@@ -25,10 +25,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -38,6 +40,7 @@ import java.util.Locale;
 import java.util.Map;
 
 import javax.servlet.ServletOutputStream;
+import javax.servlet.WriteListener;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -130,6 +133,22 @@ public class WebStartServletTest {
 		);
 		assertEquals("application/x-java-jnlp-file", response.getContentType());
 		assertEquals("attachment; filename = \"webstart.jnlp\"", response.getHeader("Content-Disposition"));
+	}
+
+	@Test
+	public void testDoGetCoreSetsContentLength() throws Exception {
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRequestURI()).thenReturn("/webstart");
+		when(request.getServletPath()).thenReturn("/webstart");
+		when(request.getParameterNames()).thenReturn(Collections.emptyEnumeration());
+
+		TestHttpServletResponse response = new TestHttpServletResponse();
+		webStartServlet.doGet(request, response);
+
+		String body = response.getResponseString();
+		assertTrue("Content-Length should be positive", response.getContentLength() > 0);
+		assertEquals("Content-Length must match actual body bytes",
+				body.getBytes(StandardCharsets.UTF_8).length, response.getContentLength());
 	}
 
 	@Test
@@ -485,12 +504,9 @@ public class WebStartServletTest {
 
 		TestHttpServletResponse response = new TestHttpServletResponse();
 
-		try {
-			webStartServlet.doGet(request, response);
-		} catch (Exception e) {
-			// May throw ServletException wrapping NPE for null jnlpDocument
-		}
+		webStartServlet.doGet(request, response);
 
+		assertEquals(404, response.getStatus());
 		assertEquals("", response.getContentType());
 		assertNull(response.getHeader("Content-Disposition"));
 	}
@@ -504,12 +520,9 @@ public class WebStartServletTest {
 
 		TestHttpServletResponse response = new TestHttpServletResponse();
 
-		try {
-			webStartServlet.doGet(request, response);
-		} catch (Exception e) {
-			// URI /webstart/ doesn't match /webstart exactly
-		}
+		webStartServlet.doGet(request, response);
 
+		assertEquals(404, response.getStatus());
 		assertEquals("", response.getContentType());
 		assertNull(response.getHeader("Content-Disposition"));
 	}
@@ -598,12 +611,9 @@ public class WebStartServletTest {
 
 		TestHttpServletResponse response = new TestHttpServletResponse();
 
-		try {
-			contextServlet.doGet(request, response);
-		} catch (Exception e) {
-			// May throw for null jnlpDocument
-		}
+		contextServlet.doGet(request, response);
 
+		assertEquals(404, response.getStatus());
 		assertEquals("", response.getContentType());
 		assertNull(response.getHeader("Content-Disposition"));
 	}
@@ -615,6 +625,9 @@ public class WebStartServletTest {
 		private StringWriter stringWriter;
 		private PrintWriter printWriter;
 		private Map<String, List<String>> headers;
+		private final ByteArrayOutputStream bodyBytes = new ByteArrayOutputStream();
+		private int status = 200;
+		private int contentLength = -1;
 
 		public TestHttpServletResponse() {
 			contentType = "";
@@ -625,8 +638,13 @@ public class WebStartServletTest {
 		}
 
 		public String getResponseString() {
+			if (bodyBytes.size() > 0) {
+				return new String(bodyBytes.toByteArray(), StandardCharsets.UTF_8);
+			}
 			return stringWriter.toString();
 		}
+
+		public int getContentLength() { return contentLength; }
 
 		@Override
 		public void flushBuffer() throws IOException {
@@ -655,7 +673,11 @@ public class WebStartServletTest {
 
 		@Override
 		public ServletOutputStream getOutputStream() throws IOException {
-			return null;
+			return new ServletOutputStream() {
+				@Override public void write(int b) { bodyBytes.write(b); }
+				@Override public boolean isReady() { return true; }
+				@Override public void setWriteListener(WriteListener l) {}
+			};
 		}
 
 		@Override
@@ -690,7 +712,7 @@ public class WebStartServletTest {
 
 		@Override
 		public void setContentLength(int arg0) {
-
+			this.contentLength = arg0;
 		}
 
 		@Override
@@ -774,12 +796,12 @@ public class WebStartServletTest {
 
 		@Override
 		public int getStatus() {
-			return 0;
+			return status;
 		}
 
 		@Override
 		public void sendError(int arg0) throws IOException {
-
+			this.status = arg0;
 		}
 
 		@Override
@@ -814,7 +836,7 @@ public class WebStartServletTest {
 
 		@Override
 		public void setStatus(int arg0) {
-
+			this.status = arg0;
 		}
 
 		@Override

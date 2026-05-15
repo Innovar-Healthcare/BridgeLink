@@ -24,6 +24,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -80,28 +82,32 @@ public class WebStartServlet extends HttpServlet {
         response.setCharacterEncoding("UTF-8");
 
         try {
-            response.setContentType("application/x-java-jnlp-file");
             response.setHeader("Pragma", "no-cache");
             response.setHeader("X-Content-Type-Options", "nosniff");
-            PrintWriter out = response.getWriter();
             Document jnlpDocument = null;
-            
+
             PropertiesConfiguration mirthProperties = getMirthProperties();
             String contextPathProp = getContextPathProp(mirthProperties);
-            
+
             if ((request.getRequestURI().equals(contextPathProp + "/webstart.jnlp") || request.getRequestURI().equals(contextPathProp + "/webstart")) && isWebstartRequestValid(request)) {
                 jnlpDocument = getAdministratorJnlp(request);
                 response.setHeader("Content-Disposition", "attachment; filename = \"webstart.jnlp\"");
             } else if (request.getServletPath().equals("/webstart/extensions") && isWebstartExtensionsRequestValid(request, contextPathProp)) {
                 String extensionPath = getExtensionPath(request);
-                jnlpDocument = getExtensionJnlp(getExtensionPath(request));
-                response.setHeader("Content-Disposition", "attachment; filename = \"" + extensionPath +  ".jnlp\"");
+                jnlpDocument = getExtensionJnlp(extensionPath);
+                response.setHeader("Content-Disposition", "attachment; filename = \"" + extensionPath + ".jnlp\"");
             } else {
-            	response.setContentType("");
+                response.sendError(HttpServletResponse.SC_NOT_FOUND);
+                return;
             }
 
+            response.setContentType("application/x-java-jnlp-file");
             DocumentSerializer docSerializer = new DocumentSerializer(true);
-            docSerializer.toXML(jnlpDocument, out);
+            StringWriter sw = new StringWriter();
+            docSerializer.toXML(jnlpDocument, new PrintWriter(sw));
+            byte[] bytes = sw.toString().getBytes(StandardCharsets.UTF_8);
+            response.setContentLength(bytes.length);
+            response.getOutputStream().write(bytes);
         } catch (RuntimeIOException rio) {
             logger.debug(rio);
         } catch (Throwable t) {

@@ -528,50 +528,7 @@ public class MirthWebServer extends Server {
         // Swagger UI filter - must be BEFORE RequestedWithFilter so that static file requests
         // (index.html, css, js) don't require the X-Requested-With header
         final String swaggerUiBase = ControllerFactory.getFactory().createConfigurationController().getBaseDir() + File.separator + "public_api_html";
-        apiServletContextHandler.addFilter(new FilterHolder(new javax.servlet.Filter() {
-            @Override
-            public void init(javax.servlet.FilterConfig filterConfig) throws javax.servlet.ServletException {}
-            @Override
-            public void destroy() {}
-            @Override
-            public void doFilter(javax.servlet.ServletRequest request, javax.servlet.ServletResponse response, javax.servlet.FilterChain chain) throws java.io.IOException, javax.servlet.ServletException {
-                javax.servlet.http.HttpServletRequest httpRequest = (javax.servlet.http.HttpServletRequest) request;
-                javax.servlet.http.HttpServletResponse httpResponse = (javax.servlet.http.HttpServletResponse) response;
-                String pathInfo = httpRequest.getPathInfo();
-                
-                // Serve index.html for root /api/ request
-                if (pathInfo == null || pathInfo.equals("/") || pathInfo.isEmpty()) {
-                    java.io.File indexFile = new java.io.File(swaggerUiBase, "index.html");
-                    if (indexFile.exists()) {
-                        httpResponse.setContentType("text/html; charset=UTF-8");
-                        httpResponse.setStatus(javax.servlet.http.HttpServletResponse.SC_OK);
-                        java.nio.file.Files.copy(indexFile.toPath(), httpResponse.getOutputStream());
-                        return;
-                    }
-                }
-                
-                // Serve static files from public_api_html if they exist (css, js, images, etc.)
-                if (pathInfo != null && !pathInfo.equals("/")) {
-                    java.io.File staticFile = new java.io.File(swaggerUiBase, pathInfo);
-                    if (staticFile.exists() && staticFile.isFile() && staticFile.getCanonicalPath().startsWith(new java.io.File(swaggerUiBase).getCanonicalPath())) {
-                        String fileName = staticFile.getName();
-                        if (fileName.endsWith(".css")) httpResponse.setContentType("text/css");
-                        else if (fileName.endsWith(".js")) httpResponse.setContentType("application/javascript");
-                        else if (fileName.endsWith(".html")) httpResponse.setContentType("text/html");
-                        else if (fileName.endsWith(".png")) httpResponse.setContentType("image/png");
-                        else if (fileName.endsWith(".json")) httpResponse.setContentType("application/json");
-                        else if (fileName.endsWith(".map")) httpResponse.setContentType("application/json");
-                        else httpResponse.setContentType("application/octet-stream");
-                        httpResponse.setStatus(javax.servlet.http.HttpServletResponse.SC_OK);
-                        java.nio.file.Files.copy(staticFile.toPath(), httpResponse.getOutputStream());
-                        return;
-                    }
-                }
-                
-                // Not a static file - pass through to remaining filters and Jersey
-                chain.doFilter(request, response);
-            }
-        }), "/*", EnumSet.of(DispatcherType.REQUEST));
+        apiServletContextHandler.addFilter(new FilterHolder(new SwaggerUiFilter(swaggerUiBase)), "/*", EnumSet.of(DispatcherType.REQUEST));
         
         apiServletContextHandler.addFilter(new FilterHolder(new RequestedWithFilter(mirthProperties)), "/*", EnumSet.of(DispatcherType.REQUEST));
         apiServletContextHandler.addFilter(new FilterHolder(new MethodFilter()), "/*", EnumSet.of(DispatcherType.REQUEST));
@@ -935,12 +892,18 @@ public class MirthWebServer extends Server {
                         OutputStream responseOutputStream = response.getOutputStream();
 
                         // If the client accepts GZIP compression, compress the content
+                        boolean gzip = false;
                         for (Enumeration<String> en = request.getHeaders("Accept-Encoding"); en.hasMoreElements();) {
                             if (StringUtils.contains(en.nextElement(), "gzip")) {
                                 response.setHeader(HTTP.CONTENT_ENCODING, "gzip");
                                 responseOutputStream = new GZIPOutputStream(responseOutputStream);
+                                gzip = true;
                                 break;
                             }
+                        }
+
+                        if (!gzip) {
+                            response.setContentLengthLong(file.length());
                         }
 
                         fis = new FileInputStream(file);
@@ -951,9 +914,14 @@ public class MirthWebServer extends Server {
                             ((GZIPOutputStream) responseOutputStream).finish();
                         }
                     } catch (Throwable t) {
+                        try {
+                            response.reset();
+                            response.setStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR);
+                        } catch (IllegalStateException ise) {
+                            logger.debug("Response already committed", ise);
+                        }
+                    } finally {
                         IOUtils.closeQuietly(fis);
-                        response.reset();
-                        response.setStatus(HttpStatus.SC_INTERNAL_SERVER_ERROR);
                     }
                 }
             } else {
@@ -961,6 +929,65 @@ public class MirthWebServer extends Server {
             }
 
             baseRequest.setHandled(true);
+        }
+    }
+
+    public static class SwaggerUiFilter implements javax.servlet.Filter {
+        private final String swaggerUiBase;
+
+        public SwaggerUiFilter(String swaggerUiBase) {
+            this.swaggerUiBase = swaggerUiBase;
+        }
+
+        @Override
+        public void init(javax.servlet.FilterConfig filterConfig) throws javax.servlet.ServletException {}
+
+        @Override
+        public void destroy() {}
+
+        @Override
+        public void doFilter(javax.servlet.ServletRequest request, javax.servlet.ServletResponse response, javax.servlet.FilterChain chain) throws java.io.IOException, javax.servlet.ServletException {
+            javax.servlet.http.HttpServletRequest httpRequest = (javax.servlet.http.HttpServletRequest) request;
+            javax.servlet.http.HttpServletResponse httpResponse = (javax.servlet.http.HttpServletResponse) response;
+            String pathInfo = httpRequest.getPathInfo();
+
+            // Serve index.html for root /api/ request
+            if (pathInfo == null || pathInfo.equals("/") || pathInfo.isEmpty()) {
+                java.io.File indexFile = new java.io.File(swaggerUiBase, "index.html");
+                if (indexFile.exists()) {
+                    httpResponse.setContentType("text/html; charset=UTF-8");
+                    httpResponse.setStatus(javax.servlet.http.HttpServletResponse.SC_OK);
+                    httpResponse.setContentLengthLong(java.nio.file.Files.size(indexFile.toPath()));
+                    try (java.io.OutputStream out = httpResponse.getOutputStream()) {
+                        java.nio.file.Files.copy(indexFile.toPath(), out);
+                    }
+                    return;
+                }
+            }
+
+            // Serve static files from public_api_html if they exist (css, js, images, etc.)
+            if (pathInfo != null && !pathInfo.equals("/")) {
+                java.io.File staticFile = new java.io.File(swaggerUiBase, pathInfo);
+                if (staticFile.exists() && staticFile.isFile() && staticFile.getCanonicalPath().startsWith(new java.io.File(swaggerUiBase).getCanonicalPath())) {
+                    String fileName = staticFile.getName();
+                    if (fileName.endsWith(".css")) httpResponse.setContentType("text/css");
+                    else if (fileName.endsWith(".js")) httpResponse.setContentType("application/javascript");
+                    else if (fileName.endsWith(".html")) httpResponse.setContentType("text/html");
+                    else if (fileName.endsWith(".png")) httpResponse.setContentType("image/png");
+                    else if (fileName.endsWith(".json")) httpResponse.setContentType("application/json");
+                    else if (fileName.endsWith(".map")) httpResponse.setContentType("application/json");
+                    else httpResponse.setContentType("application/octet-stream");
+                    httpResponse.setStatus(javax.servlet.http.HttpServletResponse.SC_OK);
+                    httpResponse.setContentLengthLong(java.nio.file.Files.size(staticFile.toPath()));
+                    try (java.io.OutputStream out = httpResponse.getOutputStream()) {
+                        java.nio.file.Files.copy(staticFile.toPath(), out);
+                    }
+                    return;
+                }
+            }
+
+            // Not a static file - pass through to remaining filters and Jersey
+            chain.doFilter(request, response);
         }
     }
 }
