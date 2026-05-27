@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+// TODO: migrate to Sardine; blocked by Apache Slide dependency (SEC-V2-01)
 import org.apache.commons.httpclient.HttpURL;
 import org.apache.commons.httpclient.HttpsURL;
 import org.apache.commons.io.filefilter.WildcardFileFilter;
