@@ -461,12 +461,16 @@ public abstract class BaseRepository<T> implements Repository<T> {
      */
     @Override
     public List<CommitMetaData> getHistory(String id) throws GitOperationException, IllegalArgumentException {
+        return getHistory(id, 0);
+    }
+
+    @Override
+    public List<CommitMetaData> getHistory(String id, int limit) throws GitOperationException, IllegalArgumentException {
 
         if (id == null || id.trim().isEmpty()) {
             throw new IllegalArgumentException("ID cannot be null or empty");
         }
 
-        // Validate file name (security check)
         if (id.contains("..") || id.contains("/") || id.contains("\\")) {
             throw new IllegalArgumentException("Invalid ID: " + id);
         }
@@ -474,12 +478,8 @@ public abstract class BaseRepository<T> implements Repository<T> {
         logger.debug("Getting history for {} '{}'", getTypeName(), id);
 
         try {
-            // Build file path
             String filePath = getDirectory() + "/" + id;
-
-            // ✅ Call GitOperations (NO direct Git access)
-            List<CommitMetaData> history = gitOps.getFileHistory(filePath);
-
+            List<CommitMetaData> history = gitOps.getFileHistory(filePath, limit);
             logger.info("Found {} commits for {} '{}'", history.size(), getTypeName(), id);
             return history;
 

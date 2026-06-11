@@ -11,6 +11,7 @@
 package com.innovarhealthcare.channelHistory.client.panel;
 
 import javax.swing.BorderFactory;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -72,6 +73,7 @@ public class ChannelHistoryTabPanel extends AbstractChannelTabPanel {
     private JPanel historyPanel;
     private JScrollPane historyScrollPane;
     private CommitMetaDataTable tblCommitMetaData;
+    private JComboBox<Integer> commitLimitCombo;
     private String currentChannelId;
 
     private final Frame parent;
@@ -273,6 +275,10 @@ public class ChannelHistoryTabPanel extends AbstractChannelTabPanel {
         });
 
         historyScrollPane = new JScrollPane(tblCommitMetaData);
+
+        commitLimitCombo = new JComboBox<>(new Integer[]{5, 10, 20, 50, 100, 200, 500});
+        commitLimitCombo.setSelectedItem(10);
+        commitLimitCombo.addActionListener(e -> loadHistory(false));
     }
 
     /**
@@ -283,8 +289,10 @@ public class ChannelHistoryTabPanel extends AbstractChannelTabPanel {
         setLayout(new MigLayout("insets 12, novisualpadding, hidemode 3, fill", "", "[][grow][]"));
 
         // History panel - shows commit history table
-        historyPanel.setLayout(new MigLayout("insets 0 10 10 10, novisualpadding, hidemode 3, fill, gap 6", "[grow][]"));
-        historyPanel.add(historyScrollPane, "sy, grow");
+        historyPanel.setLayout(new MigLayout("insets 0 10 10 10, novisualpadding, hidemode 3, fill, gap 4", "[grow][]", "[]2[grow]"));
+        historyPanel.add(new JLabel("Show last:"), "split 2");
+        historyPanel.add(commitLimitCombo, "wrap 2");
+        historyPanel.add(historyScrollPane, "span 2, grow");
 
         // Disable panel - for any disable/enable controls if needed
         disablePanel.setLayout(new MigLayout("insets 0 10 10 10, novisualpadding, hidemode 3, fill, gap 6", "[]12[]12[][grow]"));
@@ -628,7 +636,8 @@ public class ChannelHistoryTabPanel extends AbstractChannelTabPanel {
         protected List<CommitMetaData> doInBackground() throws Exception {
             // Background thread - load history from server
             logger.debug("Loading history for channel: {}", currentChannelId);
-            return VersionHistoryServiceClient.getInstance().loadChannelHistory(currentChannelId);
+            int limit = (Integer) commitLimitCombo.getSelectedItem();
+            return VersionHistoryServiceClient.getInstance().loadChannelHistory(currentChannelId, limit);
         }
 
         @Override

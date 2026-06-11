@@ -76,7 +76,7 @@ public class VersionHistoryPluginServlet extends MirthServlet implements Version
      * @return JSON response with commit history
      */
     @Override
-    public String getHistory(String id, String mode) {
+    public String getHistory(String id, String mode, int limit) {
         // Validate inputs
         if (id == null || id.trim().isEmpty()) {
             throw new VersionHistoryApiException(Response.Status.BAD_REQUEST, VersionHistoryErrorCodes.INVALID_REQUEST, "Entity ID is required");
@@ -84,22 +84,22 @@ public class VersionHistoryPluginServlet extends MirthServlet implements Version
         if (mode == null || mode.trim().isEmpty()) {
             throw new VersionHistoryApiException(Response.Status.BAD_REQUEST, VersionHistoryErrorCodes.INVALID_REQUEST, "Mode is required");
         }
-        logger.info("getHistory: id={}, mode={}", id, mode);
+        logger.info("getHistory: id={}, mode={}, limit={}", id, mode, limit);
         try {
             List<CommitMetaData> history;
             // Route based on mode
             switch (mode) {
                 case VersionControlConstants.MODE_CHANNEL:
-                    history = getService().getChannelHistory(id);
+                    history = getService().getChannelHistory(id, limit);
                     break;
                 case VersionControlConstants.MODE_CODE_TEMPLATE_LIBRARY:
-                    history = getService().getLibraryHistory(id);
+                    history = getService().getLibraryHistory(id, limit);
                     break;
                 case VersionControlConstants.MODE_CODE_TEMPLATE:
-                    history = getService().getCodeTemplateHistory(id);
+                    history = getService().getCodeTemplateHistory(id, limit);
                     break;
                 case VersionControlConstants.MODE_GLOBAL_SCRIPTS:
-                    history = getService().getGlobalScriptsHistory(id);
+                    history = getService().getGlobalScriptsHistory(id, limit);
                     break;
                 default:
                     throw new IllegalArgumentException("Invalid mode: " + mode + ". Must be 'channel', 'library', or 'codetemplate'");

@@ -96,6 +96,8 @@ public interface Repository<T> {
 
     List<CommitMetaData> getHistory(String id) throws GitOperationException, IllegalArgumentException;
 
+    List<CommitMetaData> getHistory(String id, int limit) throws GitOperationException, IllegalArgumentException;
+
     String getContent(String fileName, String revision) throws GitFileNotFoundException, GitOperationException;
 
     /**

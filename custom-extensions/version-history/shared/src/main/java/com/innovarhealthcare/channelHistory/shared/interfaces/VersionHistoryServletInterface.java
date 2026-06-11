@@ -65,9 +65,12 @@ public interface VersionHistoryServletInterface extends BaseServletInterface {
             @QueryParam("fileName") String fileName,
             @Param("mode")
             @Parameter(description = "The type of item: 'channel' or 'codetemplate'", required = true)
-            @QueryParam("mode") String mode
+            @QueryParam("mode") String mode,
+            @Param("limit")
+            @Parameter(description = "Maximum number of commits to return (0 = no limit)")
+            @QueryParam("limit") @DefaultValue("0") int limit
     ) throws ClientException;
-    
+
     @GET
     @Path("/content")
     @ApiResponse(

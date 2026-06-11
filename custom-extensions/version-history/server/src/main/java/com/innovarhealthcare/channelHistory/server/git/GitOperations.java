@@ -221,6 +221,10 @@ public class GitOperations {
      * @throws IOException     if I/O error occurs
      */
     public List<CommitMetaData> getFileHistory(String filePath) throws GitAPIException, IOException {
+        return getFileHistory(filePath, 0);
+    }
+
+    public List<CommitMetaData> getFileHistory(String filePath, int maxCount) throws GitAPIException, IOException {
 
         if (filePath == null || filePath.trim().isEmpty()) {
             throw new IllegalArgumentException("File path cannot be null or empty");
@@ -231,8 +235,10 @@ public class GitOperations {
         List<CommitMetaData> history = new ArrayList<>();
         Repository repo = git.getRepository();
 
-        // Get commit history for specific file
         LogCommand logCommand = git.log().add(repo.resolve(Constants.HEAD)).addPath(filePath);
+        if (maxCount > 0) {
+            logCommand.setMaxCount(maxCount);
+        }
 
         Iterable<RevCommit> commits = logCommand.call();
 

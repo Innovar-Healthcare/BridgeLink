@@ -399,10 +399,11 @@ public class FilesTabPanel extends JPanel {
 
         String id   = extractId(fileNode.relativePath);
         String mode = detectMode(fileNode.relativePath);
+        int limit = 0;
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         new SwingWorker<List<CommitMetaData>, Void>() {
             @Override protected List<CommitMetaData> doInBackground() throws Exception {
-                return client.getHistory(id, mode);
+                return client.getHistory(id, mode, limit);
             }
             @Override protected void done() {
                 setCursor(Cursor.getDefaultCursor());
