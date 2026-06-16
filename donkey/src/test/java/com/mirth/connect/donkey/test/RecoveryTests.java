@@ -374,7 +374,7 @@ public class RecoveryTests {
 
         try {
             connection = TestUtils.getConnection();
-            statement = connection.prepareStatement("SELECT COUNT(*) FROM d_mm" + localChannelId + " WHERE status = ? AND id = ?");
+            statement = connection.prepareStatement("SELECT COUNT(*) FROM D_MM" + localChannelId + " WHERE status = ? AND id = ?");
             statement.setString(1, Character.toString(status.getStatusCode()));
             statement.setInt(2, metaDataId);
             result = statement.executeQuery();

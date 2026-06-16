@@ -173,7 +173,7 @@ public class DestinationChainTests {
                         connection = TestUtils.getConnection();
 
                         // Assert that the transformed data was stored
-                        statement = connection.prepareStatement("SELECT * FROM d_mc" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
+                        statement = connection.prepareStatement("SELECT * FROM D_MC" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
                         statement.setLong(1, messageResponse.getMessageId());
                         statement.setInt(2, metaDataId);
                         statement.setInt(3, ContentType.TRANSFORMED.getContentTypeCode());
@@ -249,7 +249,7 @@ public class DestinationChainTests {
                 for (DestinationChainProvider chain : channel.getDestinationChainProviders()) {
                     for (int metaDataId : chain.getMetaDataIds()) {
                         // Assert that the connector message was stored
-                        statement = connection.prepareStatement("SELECT * FROM d_mm" + localChannelId + " WHERE message_id = ? AND id = ?");
+                        statement = connection.prepareStatement("SELECT * FROM D_MM" + localChannelId + " WHERE message_id = ? AND id = ?");
                         statement.setLong(1, messageResponse.getMessageId());
                         statement.setInt(2, metaDataId);
                         result = statement.executeQuery();
@@ -264,7 +264,7 @@ public class DestinationChainTests {
                         assertTrue(responseMap.get("key").equals(new Response(Status.SENT, "value")));
 
                         // Assert that the raw data was stored
-                        statement = connection.prepareStatement("SELECT * FROM d_mc" + localChannelId + " WHERE message_id = ? AND metadata_id = 0 AND content_type = ?");
+                        statement = connection.prepareStatement("SELECT * FROM D_MC" + localChannelId + " WHERE message_id = ? AND metadata_id = 0 AND content_type = ?");
                         statement.setLong(1, messageResponse.getMessageId());
                         statement.setInt(2, ContentType.ENCODED.getContentTypeCode());
                         result = statement.executeQuery();
