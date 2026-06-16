@@ -85,12 +85,9 @@ public class Migrate26_6_0 extends Migrator {
     private boolean lowercaseTablesExist(Connection conn) throws Exception {
         // Detects both the initial state (lowercase d_channels present) and a partial-rename state
         // where a prior run renamed d_channels but failed before finishing the per-channel tables.
-        String sql = "SELECT COUNT(*) FROM information_schema.TABLES " +
-                     "WHERE TABLE_SCHEMA = DATABASE() AND (BINARY TABLE_NAME = 'd_channels' OR BINARY TABLE_NAME REGEXP '^d_m')";
-        try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            return rs.next() && rs.getInt(1) > 0;
-        }
+        // Java string comparison is always exact-case regardless of MySQL charset/collation.
+        List<String> tableNames = fetchCurrentSchemaTableNames(conn);
+        return tableNames.stream().anyMatch(name -> name.equals("d_channels") || name.startsWith("d_m"));
     }
 
     private int renameTables(Connection conn) throws Exception {
