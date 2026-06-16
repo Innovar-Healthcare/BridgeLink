@@ -164,7 +164,7 @@ public class TestUtils {
                         Statement statement = null;
                         try {
                             statement = connection.createStatement();
-                            statement.executeUpdate("DELETE FROM d_m" + localChannelId);
+                            statement.executeUpdate("DELETE FROM D_M" + localChannelId);
                             connection.commit();
                             logger.debug("Deleted existing messages from channel tables for " + channelId);
                         } catch (SQLException e) {
@@ -431,7 +431,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT local_channel_id FROM d_channels WHERE channel_id = ?");
+            statement = connection.prepareStatement("SELECT local_channel_id FROM D_CHANNELS WHERE channel_id = ?");
             statement.setString(1, channelId);
             result = statement.executeQuery();
 
@@ -462,7 +462,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT local_channel_id FROM d_channels WHERE channel_id = ?");
+            statement = connection.prepareStatement("SELECT local_channel_id FROM D_CHANNELS WHERE channel_id = ?");
             statement.setString(1, channelId);
             result = statement.executeQuery();
             assertFalse(result.next());
@@ -531,7 +531,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT * FROM d_m" + localChannelId + " WHERE id = ?");
+            statement = connection.prepareStatement("SELECT * FROM D_M" + localChannelId + " WHERE id = ?");
             statement.setLong(1, message.getMessageId());
             result = statement.executeQuery();
 
@@ -568,7 +568,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT * FROM d_m" + localChannelId + " WHERE id = ?");
+            statement = connection.prepareStatement("SELECT * FROM D_M" + localChannelId + " WHERE id = ?");
             statement.setLong(1, message.getMessageId());
             result = statement.executeQuery();
             assertFalse(result.next());
@@ -610,7 +610,7 @@ public class TestUtils {
         ResultSet result = null;
 
         try {
-            statement = connection.prepareStatement("SELECT * FROM d_mm" + localChannelId + " WHERE message_id = ? AND id = ?");
+            statement = connection.prepareStatement("SELECT * FROM D_MM" + localChannelId + " WHERE message_id = ? AND id = ?");
             statement.setLong(1, connectorMessage.getMessageId());
             statement.setLong(2, connectorMessage.getMetaDataId());
             result = statement.executeQuery();
@@ -653,7 +653,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT * FROM d_mm" + localChannelId + " WHERE message_id = ? AND id = ?");
+            statement = connection.prepareStatement("SELECT * FROM D_MM" + localChannelId + " WHERE message_id = ? AND id = ?");
             statement.setLong(1, message.getMessageId());
             statement.setInt(2, message.getMetaDataId());
             result = statement.executeQuery();
@@ -673,7 +673,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT status FROM d_mm" + localChannelId + " WHERE message_id = ? AND id = ?");
+            statement = connection.prepareStatement("SELECT status FROM D_MM" + localChannelId + " WHERE message_id = ? AND id = ?");
             statement.setLong(1, messageId);
             statement.setInt(2, metaDataId);
             result = statement.executeQuery();
@@ -766,7 +766,7 @@ public class TestUtils {
         ResultSet result = null;
 
         try {
-            statement = connection.prepareStatement("SELECT * FROM d_mc" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
+            statement = connection.prepareStatement("SELECT * FROM D_MC" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
             statement.setLong(1, content.getMessageId());
             statement.setLong(2, content.getMetaDataId());
             statement.setInt(3, content.getContentType().getContentTypeCode());
@@ -843,7 +843,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT * FROM d_mc" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
+            statement = connection.prepareStatement("SELECT * FROM D_MC" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
             statement.setLong(1, content.getMessageId());
             statement.setInt(2, content.getMetaDataId());
             statement.setInt(3, content.getContentType().getContentTypeCode());
@@ -878,7 +878,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT * FROM d_ma" + localChannelId + " WHERE message_id = ? AND id = ?");
+            statement = connection.prepareStatement("SELECT * FROM D_MA" + localChannelId + " WHERE message_id = ? AND id = ?");
             statement.setLong(1, messageId);
             statement.setString(2, attachment.getId());
             result = statement.executeQuery();
@@ -903,7 +903,7 @@ public class TestUtils {
         // Assert that the source connector response was created
         try {
             connection = TestUtils.getConnection();
-            statement = connection.prepareStatement("SELECT * FROM d_mc" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
+            statement = connection.prepareStatement("SELECT * FROM D_MC" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
             statement.setLong(1, messageId);
             statement.setInt(2, 0);
             statement.setInt(3, ContentType.RESPONSE.getContentTypeCode());
@@ -925,7 +925,7 @@ public class TestUtils {
         // Assert that the source connector response was created
         try {
             connection = TestUtils.getConnection();
-            statement = connection.prepareStatement("SELECT * FROM d_mc" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
+            statement = connection.prepareStatement("SELECT * FROM D_MC" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
             statement.setLong(1, messageId);
             statement.setInt(2, 0);
             statement.setInt(3, ContentType.SENT.getContentTypeCode());
@@ -1087,7 +1087,7 @@ public class TestUtils {
 
             try {
                 connection = getConnection();
-                statement = connection.prepareStatement("SELECT * FROM d_mcm" + localChannelId + " WHERE message_id = ? AND metadata_id = ?");
+                statement = connection.prepareStatement("SELECT * FROM D_MCM" + localChannelId + " WHERE message_id = ? AND metadata_id = ?");
                 statement.setLong(1, messageId);
                 statement.setInt(2, metaDataId);
                 result = statement.executeQuery();
@@ -1206,7 +1206,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT content, data_type, is_encrypted FROM d_mc" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
+            statement = connection.prepareStatement("SELECT content, data_type, is_encrypted FROM D_MC" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
             statement.setLong(1, messageId);
             statement.setInt(2, metaDataId);
             statement.setInt(3, contentType.getContentTypeCode());
@@ -1239,7 +1239,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT processed FROM d_m" + localChannelId + " WHERE id = ?");
+            statement = connection.prepareStatement("SELECT processed FROM D_M" + localChannelId + " WHERE id = ?");
             statement.setLong(1, messageId);
             result = statement.executeQuery();
             result.next();
@@ -1260,7 +1260,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT * FROM d_ms" + localChannelId);
+            statement = connection.prepareStatement("SELECT * FROM D_MS" + localChannelId);
             result = statement.executeQuery();
 
             while (result.next()) {
@@ -1293,7 +1293,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("DELETE FROM d_ms" + localChannelId);
+            statement = connection.prepareStatement("DELETE FROM D_MS" + localChannelId);
             statement.executeUpdate();
             connection.commit();
         } finally {
@@ -1330,12 +1330,13 @@ public class TestUtils {
             // Get all channel tables from database metadata
             rs = connection.getMetaData().getTables(null, null, "%", null);
             while (rs.next()) {
-                String tableName = rs.getString("TABLE_NAME").toLowerCase();
+                String tableName = rs.getString("TABLE_NAME");          // preserve original case
+                String tableNameLower = tableName.toLowerCase();         // lowercase for regex only
 
-                // Check if table matches channel table patterns
-                if (tableName.matches("d_m[a-z]*\\d+")) {
+                // Check if table matches channel table patterns (case-insensitive via lowercase)
+                if (tableNameLower.matches("d_m[a-z]*\\d+")) {
                     // Extract the localChannelId from the table name
-                    String numericPart = tableName.replaceAll("[^0-9]", "");
+                    String numericPart = tableNameLower.replaceAll("[^0-9]", "");
                     if (!numericPart.isEmpty()) {
                         Long localChannelId = Long.parseLong(numericPart);
                         allChannelTables.computeIfAbsent(localChannelId, k -> new ArrayList<>()).add(tableName);
@@ -1350,21 +1351,25 @@ public class TestUtils {
             } else {
                 // Drop ALL channel tables in correct order (respecting foreign key constraints)
                 // Order: statistics, attachments, custom metadata, content, metadata, sequence, message
+                // Use lowercase prefixes for matching; drop using the original-case name from metadata.
                 String[] tableOrder = {"d_ms", "d_ma", "d_mcm", "d_mc", "d_mm", "d_msq", "d_m"};
 
                 for (Long localChannelId : allChannelTables.keySet()) {
                     logger.debug("Dropping tables for local channel ID: " + localChannelId);
 
                     for (String tablePrefix : tableOrder) {
-                        String tableName = tablePrefix + localChannelId;
-                        if (allChannelTables.get(localChannelId).contains(tableName)) {
+                        final String expectedLower = tablePrefix + localChannelId;
+                        String originalName = allChannelTables.get(localChannelId).stream()
+                            .filter(t -> t.equalsIgnoreCase(expectedLower))
+                            .findFirst().orElse(null);
+                        if (originalName != null) {
                             try {
-                                String dropSql = "DROP TABLE " + tableName;
+                                String dropSql = "DROP TABLE " + originalName;
                                 logger.debug("Executing: " + dropSql);
                                 statement.executeUpdate(dropSql);
                             } catch (SQLException e) {
                                 // Log but continue - table might have dependencies or not exist
-                                logger.warn("Failed to drop table " + tableName + ": " + e.getMessage());
+                                logger.warn("Failed to drop table " + originalName + ": " + e.getMessage());
                             }
                         }
                     }
@@ -1409,7 +1414,7 @@ public class TestUtils {
 
             // Clear all entries from d_channels to reset local channel ID generation
             try {
-                statement.executeUpdate("DELETE FROM d_channels");
+                statement.executeUpdate("DELETE FROM D_CHANNELS");
                 logger.info("Cleared all entries from d_channels table");
             } catch (SQLException e) {
                 logger.warn("Failed to clear d_channels table: " + e.getMessage());
@@ -1540,7 +1545,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT send_attempts FROM d_mm" + localChannelId + " WHERE message_id = ? AND id = ?");
+            statement = connection.prepareStatement("SELECT send_attempts FROM D_MM" + localChannelId + " WHERE message_id = ? AND id = ?");
             statement.setLong(1, messageId);
             statement.setInt(2, 1);
             result = statement.executeQuery();
@@ -1769,7 +1774,7 @@ public class TestUtils {
 
         try {
             connection = getConnection();
-            statement = connection.prepareStatement("SELECT * FROM d_mc" + localChannelId + " WHERE message_id = ?");
+            statement = connection.prepareStatement("SELECT * FROM D_MC" + localChannelId + " WHERE message_id = ?");
             statement.setLong(1, dispatchResult.getMessageId());
             resultSet = statement.executeQuery();
 
