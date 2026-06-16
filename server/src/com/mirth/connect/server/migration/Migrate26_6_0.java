@@ -93,24 +93,22 @@ public class Migrate26_6_0 extends Migrator {
     private int renameTables(Connection conn) throws Exception {
         List<String> clauses = new ArrayList<>();
 
+        // Fetch all table names via a single neutral query; filter in Java to avoid
+        // MySQL charset/collation incompatibilities (utf8mb3 vs utf8mb4_0900_ai_ci, etc.).
+        List<String> tableNames = fetchCurrentSchemaTableNames(conn);
+
         // Only include d_channels if it is still lowercase (a prior partial run may have renamed it already).
-        String checkChannelsSql = "SELECT COUNT(*) FROM information_schema.TABLES " +
-                                  "WHERE TABLE_SCHEMA = DATABASE() AND BINARY TABLE_NAME = 'd_channels'";
-        try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(checkChannelsSql)) {
-            if (rs.next() && rs.getInt(1) > 0) {
+        for (String name : tableNames) {
+            if (name.contains("d_channels")) {
                 clauses.add("`d_channels` TO `D_CHANNELS`");
+                break;
             }
         }
 
-        // Discover all lowercase d_m* per-channel tables (D_M*, D_MM*, D_MC*, D_MCM*, D_MA*, D_MS*, D_MSQ*).
-        String discoverSql = "SELECT TABLE_NAME FROM information_schema.TABLES " +
-                             "WHERE TABLE_SCHEMA = DATABASE() AND BINARY TABLE_NAME REGEXP '^d_m'";
-        try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(discoverSql)) {
-            while (rs.next()) {
-                String tableName = rs.getString("TABLE_NAME");
-                clauses.add("`" + tableName + "` TO `" + tableName.toUpperCase() + "`");
+        // Discover all lowercase d_m* per-channel tables (d_m*, d_mm*, d_mc*, d_mcm*, d_ma*, d_ms*, d_msq*).
+        for (String name : tableNames) {
+            if (name.startsWith("d_m")) {
+                clauses.add("`" + name + "` TO `" + name.toUpperCase() + "`");
             }
         }
 
