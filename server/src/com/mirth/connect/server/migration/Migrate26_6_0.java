@@ -99,7 +99,7 @@ public class Migrate26_6_0 extends Migrator {
 
         // Only include d_channels if it is still lowercase (a prior partial run may have renamed it already).
         for (String name : tableNames) {
-            if (name.contains("d_channels")) {
+            if (name.equals("d_channels")) {
                 clauses.add("`d_channels` TO `D_CHANNELS`");
                 break;
             }
