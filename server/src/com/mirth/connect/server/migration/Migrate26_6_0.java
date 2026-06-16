@@ -71,9 +71,10 @@ public class Migrate26_6_0 extends Migrator {
     }
 
     private boolean lowercaseTablesExist(Connection conn) throws Exception {
-        // On case-sensitive MySQL, this exact-case lookup finds 'd_channels' but not 'D_CHANNELS'.
+        // Detects both the initial state (lowercase d_channels present) and a partial-rename state
+        // where a prior run renamed d_channels but failed before finishing the per-channel tables.
         String sql = "SELECT COUNT(*) FROM information_schema.TABLES " +
-                     "WHERE TABLE_SCHEMA = DATABASE() AND BINARY TABLE_NAME = 'd_channels'";
+                     "WHERE TABLE_SCHEMA = DATABASE() AND (BINARY TABLE_NAME = 'd_channels' OR BINARY TABLE_NAME REGEXP '^d_m')";
         try (Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             return rs.next() && rs.getInt(1) > 0;
@@ -81,42 +82,47 @@ public class Migrate26_6_0 extends Migrator {
     }
 
     private int renameTables(Connection conn) throws Exception {
-        // Discover all lowercase d_m* per-channel tables via exact-case regex.
-        List<String> perChannelTables = new ArrayList<>();
+        List<String> clauses = new ArrayList<>();
+
+        // Only include d_channels if it is still lowercase (a prior partial run may have renamed it already).
+        String checkChannelsSql = "SELECT COUNT(*) FROM information_schema.TABLES " +
+                                  "WHERE TABLE_SCHEMA = DATABASE() AND BINARY TABLE_NAME = 'd_channels'";
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(checkChannelsSql)) {
+            if (rs.next() && rs.getInt(1) > 0) {
+                clauses.add("`d_channels` TO `D_CHANNELS`");
+            }
+        }
+
+        // Discover all lowercase d_m* per-channel tables (D_M*, D_MM*, D_MC*, D_MCM*, D_MA*, D_MS*, D_MSQ*).
         String discoverSql = "SELECT TABLE_NAME FROM information_schema.TABLES " +
                              "WHERE TABLE_SCHEMA = DATABASE() AND BINARY TABLE_NAME REGEXP '^d_m'";
         try (Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(discoverSql)) {
             while (rs.next()) {
-                perChannelTables.add(rs.getString("TABLE_NAME"));
+                String tableName = rs.getString("TABLE_NAME");
+                clauses.add("`" + tableName + "` TO `" + tableName.toUpperCase() + "`");
             }
         }
 
-        int count = 0;
+        if (clauses.isEmpty()) {
+            return 0;
+        }
+
+        String renameSql = "RENAME TABLE " + String.join(", ", clauses);
+        logger.debug("IRT-953: Executing atomic rename: " + renameSql);
 
         try (Statement stmt = conn.createStatement()) {
             // Disable FK checks for this session to avoid constraint ordering issues during rename.
             // SET FOREIGN_KEY_CHECKS is session-scoped — other connections are unaffected.
             stmt.execute("SET FOREIGN_KEY_CHECKS = 0");
-
             try {
-                // Rename D_CHANNELS
-                stmt.execute("RENAME TABLE `d_channels` TO `D_CHANNELS`");
-                count++;
-                logger.debug("IRT-953: Renamed d_channels to D_CHANNELS");
-
-                // Rename all per-channel tables (D_M*, D_MM*, D_MC*, D_MCM*, D_MA*, D_MS*, D_MSQ*)
-                for (String tableName : perChannelTables) {
-                    String upperName = tableName.toUpperCase();
-                    stmt.execute("RENAME TABLE `" + tableName + "` TO `" + upperName + "`");
-                    count++;
-                    logger.debug("IRT-953: Renamed " + tableName + " to " + upperName);
-                }
+                stmt.execute(renameSql);
             } finally {
                 stmt.execute("SET FOREIGN_KEY_CHECKS = 1");
             }
         }
 
-        return count;
+        return clauses.size();
     }
 }

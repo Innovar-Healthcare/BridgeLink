@@ -616,7 +616,7 @@ public class TestUtils {
             result = statement.executeQuery();
 
             if (!result.next()) {
-//                throw new AssertionError();
+                throw new AssertionError();
             }
 
             Calendar receivedDate = Calendar.getInstance();
@@ -848,7 +848,7 @@ public class TestUtils {
             statement.setInt(2, content.getMetaDataId());
             statement.setInt(3, content.getContentType().getContentTypeCode());
             result = statement.executeQuery();
-//            assertFalse(result.next());
+            assertFalse(result.next());
         } finally {
             close(result);
             close(statement);
@@ -928,7 +928,7 @@ public class TestUtils {
             statement = connection.prepareStatement("SELECT * FROM D_MC" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
             statement.setLong(1, messageId);
             statement.setInt(2, 0);
-            statement.setInt(3, ContentType.SENT.getContentTypeCode());
+            statement.setInt(3, ContentType.RESPONSE.getContentTypeCode());
             result = statement.executeQuery();
             assertFalse(result.next());
         } finally {
