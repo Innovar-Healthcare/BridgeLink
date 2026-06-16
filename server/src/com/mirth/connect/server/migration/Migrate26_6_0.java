@@ -70,6 +70,18 @@ public class Migrate26_6_0 extends Migrator {
         }
     }
 
+    private List<String> fetchCurrentSchemaTableNames(Connection conn) throws Exception {
+        String sql = "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()";
+        List<String> tableNames = new ArrayList<>();
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                tableNames.add(rs.getString(1));
+            }
+        }
+        return tableNames;
+    }
+
     private boolean lowercaseTablesExist(Connection conn) throws Exception {
         // Detects both the initial state (lowercase d_channels present) and a partial-rename state
         // where a prior run renamed d_channels but failed before finishing the per-channel tables.
