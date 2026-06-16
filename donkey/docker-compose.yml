@@ -34,7 +34,11 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-    command: --default-authentication-plugin=mysql_native_password
+    # IRT-953: --lower-case-table-names=0 enforces case-sensitive table names (Linux default).
+    # If you have an existing mysql_data volume from a run without this flag, destroy it first:
+    #   docker compose -f donkey/docker-compose.yml down -v
+    # MySQL cannot change lower_case_table_names on an already-initialized data directory.
+    command: --default-authentication-plugin=mysql_native_password --lower-case-table-names=0
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "mirthdb", "-pmirthdb"]
       interval: 10s
