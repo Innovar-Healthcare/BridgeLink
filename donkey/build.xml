@@ -295,7 +295,8 @@
 
 	<target name="docker-start-db-exec" if="not.derby">
 		<echo message="Starting ${db.type} database container..."/>
-		<exec executable="docker-compose" dir="${basedir}" failonerror="true">
+		<exec executable="docker" dir="${basedir}" failonerror="true">
+			<arg value="compose"/>
 			<arg value="up"/>
 			<arg value="-d"/>
 			<arg value="${db.type}"/>
@@ -342,7 +343,8 @@
 
 	<target name="docker-stop-db-exec" if="not.derby">
 		<echo message="Stopping ${db.type} database container..."/>
-		<exec executable="docker-compose" dir="${basedir}" failonerror="false">
+		<exec executable="docker" dir="${basedir}" failonerror="false">
+			<arg value="compose"/>
 			<arg value="stop"/>
 			<arg value="${db.type}"/>
 		</exec>
@@ -357,7 +359,8 @@
 
 	<target name="docker-cleanup-db-exec" if="not.derby">
 		<echo message="Cleaning up ${db.type} database container and volumes..."/>
-		<exec executable="docker-compose" dir="${basedir}" failonerror="false">
+		<exec executable="docker" dir="${basedir}" failonerror="false">
+			<arg value="compose"/>
 			<arg value="down"/>
 			<arg value="-v"/>
 			<arg value="${db.type}"/>
@@ -366,13 +369,15 @@
 
 	<target name="docker-start-all-dbs" description="Start all database containers">
 		<echo message="Starting all database containers (postgres, mysql, sqlserver, oracle)..."/>
-		<exec executable="docker-compose" dir="${basedir}" failonerror="true">
+		<exec executable="docker" dir="${basedir}" failonerror="true">
+			<arg value="compose"/>
 			<arg value="up"/>
 			<arg value="-d"/>
 		</exec>
 		<echo message="Waiting for all databases to be healthy..."/>
 		<sleep seconds="30"/>
-		<exec executable="docker-compose" dir="${basedir}" failonerror="false">
+		<exec executable="docker" dir="${basedir}" failonerror="false">
+			<arg value="compose"/>
 			<arg value="ps"/>
 		</exec>
 		<echo message="All database containers are ready"/>
@@ -380,14 +385,16 @@
 
 	<target name="docker-stop-all-dbs" description="Stop all database containers">
 		<echo message="Stopping all database containers..."/>
-		<exec executable="docker-compose" dir="${basedir}" failonerror="false">
+		<exec executable="docker" dir="${basedir}" failonerror="false">
+			<arg value="compose"/>
 			<arg value="stop"/>
 		</exec>
 	</target>
 
 	<target name="docker-cleanup-all-dbs" description="Stop and remove all database containers and volumes">
 		<echo message="Cleaning up all database containers and volumes..."/>
-		<exec executable="docker-compose" dir="${basedir}" failonerror="false">
+		<exec executable="docker" dir="${basedir}" failonerror="false">
+			<arg value="compose"/>
 			<arg value="down"/>
 			<arg value="-v"/>
 		</exec>
