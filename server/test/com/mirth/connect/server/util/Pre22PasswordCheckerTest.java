@@ -13,7 +13,7 @@ import junit.framework.Assert;
 
 import org.junit.Test;
 
-public class Pre22PasswordCheckerTests {
+public class Pre22PasswordCheckerTest {
 
     @Test
     public void testCheckPassword() throws Exception {
