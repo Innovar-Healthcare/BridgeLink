@@ -180,11 +180,24 @@
 		</header>
 	</target>
 
-	<target name="test-run" depends="init">
-<!--		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run"/>-->
-<!--		<ant antfile="${server}/build.xml" dir="${server}" target="test-run"/>-->
-<!--		<ant antfile="${client}/ant-build.xml" dir="${client}" target="test-run"/>-->
-<!--		<ant antfile="${cli}/build.xml" dir="${cli}" target="test-run"/>-->
+	<target name="test-extensions-init" depends="init" description="Copy testlib JARs into custom extension testlib dirs (gitignored)">
+		<mkdir dir="${custom-extensions}/dynamic-lookup-gateway/testlib"/>
+		<mkdir dir="${custom-extensions}/message-trends/testlib"/>
+		<copy todir="${custom-extensions}/dynamic-lookup-gateway/testlib" failonerror="false">
+			<fileset dir="${server}/testlib" includes="*.jar"/>
+		</copy>
+		<copy todir="${custom-extensions}/message-trends/testlib" failonerror="false">
+			<fileset dir="${server}/testlib" includes="*.jar"/>
+		</copy>
+	</target>
+
+	<target name="test-run" depends="init, test-extensions-init">
+		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run"/>
+		<ant antfile="${server}/build.xml" dir="${server}" target="test-run"/>
+		<ant antfile="${client}/ant-build.xml" dir="${client}" target="test-run"/>
+		<ant antfile="${cli}/build.xml" dir="${cli}" target="test-run"/>
+		<ant antfile="${custom-extensions}/dynamic-lookup-gateway/build.xml" dir="${custom-extensions}/dynamic-lookup-gateway" target="test-run"/>
+		<ant antfile="${custom-extensions}/message-trends/build.xml" dir="${custom-extensions}/message-trends" target="test-run"/>
 	</target>
 
 	<target name="test-run-and-aggregate" depends="test-run" description="Run all tests and aggregate reports">
@@ -280,6 +293,36 @@
 			</fileset>
 		</copy>
 
+		<!-- Copy all JUnit XML reports from Client module -->
+		<echo message="Collecting Client test reports..."/>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${client}/junit-reports" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+
+		<!-- Copy all JUnit XML reports from CLI (command) module -->
+		<echo message="Collecting CLI test reports..."/>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${cli}/junit-reports" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+
+		<!-- Copy all JUnit XML reports from custom extensions (IRT-1056) -->
+		<echo message="Collecting Dynamic Lookup Gateway test reports..."/>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${custom-extensions}/dynamic-lookup-gateway/junit-reports" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+		<echo message="Collecting Message Trends test reports..."/>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${custom-extensions}/message-trends/junit-reports" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+
 		<!-- Generate aggregated HTML report -->
 		<echo message="Generating aggregated HTML report..."/>
 		<junitreport todir="${aggregate.junit.xml}">
@@ -322,6 +365,16 @@
 
 			<!-- Server coverage data -->
 			<fileset dir="${server}" includes="code-coverage-reports/jacoco.exec" erroronmissingdir="false"/>
+
+			<!-- Client coverage data -->
+			<fileset dir="${client}" includes="code-coverage-reports/jacoco.exec" erroronmissingdir="false"/>
+
+			<!-- CLI (command) coverage data -->
+			<fileset dir="${cli}" includes="code-coverage-reports/jacoco.exec" erroronmissingdir="false"/>
+
+			<!-- Custom extension coverage data (IRT-1056) -->
+			<fileset dir="${custom-extensions}/dynamic-lookup-gateway" includes="code-coverage-reports/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${custom-extensions}/message-trends" includes="code-coverage-reports/jacoco.exec" erroronmissingdir="false"/>
 		</jacoco:merge>
 
 		<!-- Generate aggregated coverage report -->
@@ -353,6 +406,74 @@
 					</classfiles>
 					<sourcefiles encoding="UTF-8">
 						<fileset dir="${server}/src" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+					</sourcefiles>
+				</group>
+
+				<!-- Client classes and sources -->
+				<group name="Client Module">
+					<classfiles>
+						<fileset dir="${client}/classes" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+					</classfiles>
+					<sourcefiles encoding="UTF-8">
+						<fileset dir="${client}/src" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+					</sourcefiles>
+				</group>
+
+				<!-- CLI (command) classes and sources -->
+				<group name="CLI Module">
+					<classfiles>
+						<fileset dir="${cli}/classes" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+					</classfiles>
+					<sourcefiles encoding="UTF-8">
+						<fileset dir="${cli}/src" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+					</sourcefiles>
+				</group>
+
+				<!-- Dynamic Lookup Gateway extension -->
+				<group name="Dynamic Lookup Gateway">
+					<classfiles>
+						<fileset dir="${custom-extensions}/dynamic-lookup-gateway/build/classes/server" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+						<fileset dir="${custom-extensions}/dynamic-lookup-gateway/build/classes/shared" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+					</classfiles>
+					<sourcefiles encoding="UTF-8">
+						<fileset dir="${custom-extensions}/dynamic-lookup-gateway/server/src/main/java" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+						<fileset dir="${custom-extensions}/dynamic-lookup-gateway/shared/src/main/java" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+					</sourcefiles>
+				</group>
+
+				<!-- Message Trends extension -->
+				<group name="Message Trends">
+					<classfiles>
+						<fileset dir="${custom-extensions}/message-trends/build/classes/server" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+						<fileset dir="${custom-extensions}/message-trends/build/classes/shared" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+					</classfiles>
+					<sourcefiles encoding="UTF-8">
+						<fileset dir="${custom-extensions}/message-trends/server/src/main/java" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+						<fileset dir="${custom-extensions}/message-trends/shared/src/main/java" erroronmissingdir="false">
 							<include name="**/*.java"/>
 						</fileset>
 					</sourcefiles>
