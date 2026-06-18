@@ -26,7 +26,7 @@ import org.junit.Test;
 
 import com.mirth.connect.donkey.model.message.ConnectorMessage;
 
-public class ValueReplacerTests {
+public class ValueReplacerTest {
     private ValueReplacer replacer;
     private Map<String, List<String>> map;
     private ConnectorMessage connectorMessage;

@@ -14,7 +14,7 @@ import junit.framework.TestCase;
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.model.PasswordRequirements;
 
-public class PasswordRequirementsTests extends TestCase {
+public class PasswordRequirementsTest extends TestCase {
 
     protected void setUp() throws Exception {
         super.setUp();
