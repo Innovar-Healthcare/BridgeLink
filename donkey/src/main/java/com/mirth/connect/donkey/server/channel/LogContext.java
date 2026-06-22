@@ -30,7 +30,51 @@ public final class LogContext {
 
     private LogContext() {}
 
+    /**
+     * Whether channel-context (MDC) enrichment is active. When false, every factory method
+     * returns a shared no-op scope so no MDC keys are written and log lines render in the
+     * legacy format. Defaults to true so standalone/unit-test usage behaves as before; the
+     * server overrides this at startup from the {@code log.channelcontext.enabled}
+     * mirth.properties option (default false), making the production default opt-in.
+     */
+    private static volatile boolean enabled = true;
+
+    /**
+     * Whether dispatched ErrorEvents are mirrored to mirth.log. Defaults to false (opt-in): the
+     * legacy behavior keeps connector/transformer errors out of mirth.log (they remain visible in
+     * the in-app Server Log). The server sets this at startup from the {@code log.errorevent.enabled}
+     * mirth.properties option. It lives here, in the donkey module, so both DefaultEventController
+     * (server, the central error sink) and DestinationConnector (donkey, the legacy fallback) can
+     * consult it without a server-on-donkey dependency.
+     */
+    private static volatile boolean errorEventLoggingEnabled = false;
+
+    /**
+     * Shared no-op scope returned when enrichment is disabled. No keys are ever added to it,
+     * so {@link Scope#close()} is a no-op and the instance is safe to share across threads.
+     */
+    private static final Scope NOOP = new Scope();
+
+    public static void setEnabled(boolean value) {
+        enabled = value;
+    }
+
+    public static boolean isEnabled() {
+        return enabled;
+    }
+
+    public static void setErrorEventLoggingEnabled(boolean value) {
+        errorEventLoggingEnabled = value;
+    }
+
+    public static boolean isErrorEventLoggingEnabled() {
+        return errorEventLoggingEnabled;
+    }
+
     public static Scope channel(String channelId, String channelName) {
+        if (!enabled) {
+            return NOOP;
+        }
         Scope scope = new Scope();
         scope.put(CHANNEL_ID, channelId);
         scope.put(CHANNEL_NAME, channelName);
@@ -38,6 +82,9 @@ public final class LogContext {
     }
 
     public static Scope connector(String connectorName, int metaDataId) {
+        if (!enabled) {
+            return NOOP;
+        }
         Scope scope = new Scope();
         scope.put(CONNECTOR, connectorName);
         scope.put(META_DATA_ID, Integer.toString(metaDataId));
@@ -45,6 +92,9 @@ public final class LogContext {
     }
 
     public static Scope message(long messageId) {
+        if (!enabled) {
+            return NOOP;
+        }
         Scope scope = new Scope();
         scope.put(MESSAGE_ID, Long.toString(messageId));
         return scope;
@@ -56,6 +106,9 @@ public final class LogContext {
      * indicates the line is unknown.
      */
     public static Scope script(String phase, int lineNumber) {
+        if (!enabled) {
+            return NOOP;
+        }
         Scope scope = new Scope();
         scope.put(SCRIPT_PHASE, phase);
         if (lineNumber >= 0) {

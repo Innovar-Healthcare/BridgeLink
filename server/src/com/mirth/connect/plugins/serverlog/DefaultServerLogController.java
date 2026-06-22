@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.mirth.connect.donkey.server.channel.LogContext;
+
 public class DefaultServerLogController extends ServerLogController {
 
     // Maximum entries per buffer (the unified buffer, the per-channel buffers, and the system buffer
@@ -77,8 +79,11 @@ public class DefaultServerLogController extends ServerLogController {
         List<ServerLogItem> snapshot;
 
         synchronized (lock) {
-            if (channelIds == null || channelIds.isEmpty()) {
-                // No channel filter: return from the unified buffer (unchanged legacy behavior).
+            if (channelIds == null || channelIds.isEmpty() || !LogContext.isEnabled()) {
+                // No channel filter, or channel-context logging is disabled (log.channelcontext.enabled
+                // = false): with context off, no entry carries a channelId and the per-channel buffers
+                // are empty, so channel filtering is meaningless. Return the unified buffer — the
+                // dependency is explicit and the in-app Server Log can never show an empty pane.
                 snapshot = new ArrayList<ServerLogItem>(allLogs);
             } else {
                 // Merge the requested per-channel buffers with the system buffer. Deduplicate by

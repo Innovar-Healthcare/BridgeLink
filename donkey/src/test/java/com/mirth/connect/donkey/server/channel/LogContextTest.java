@@ -22,6 +22,9 @@ public class LogContextTest {
     @Before
     @After
     public void clear() {
+        // These tests assert the enriched (enabled) behavior. The server can flip this off at
+        // runtime via the log.channelcontext.enabled property, so set it explicitly here.
+        LogContext.setEnabled(true);
         ThreadContext.clearAll();
     }
 
@@ -142,5 +145,32 @@ public class LogContextTest {
             assertNull(ThreadContext.get(LogContext.META_DATA_ID));
         }
         assertNull(ThreadContext.get(LogContext.CHANNEL_ID));
+    }
+
+    /**
+     * When disabled (the production default, set by the server from log.channelcontext.enabled),
+     * every factory must be a no-op so no MDC keys are written and log lines stay in the legacy
+     * format. The returned no-op scope must also close cleanly.
+     */
+    @Test
+    public void disabled_writesNoContext() {
+        LogContext.setEnabled(false);
+        try {
+            try (LogContext.Scope c = LogContext.channel("abc", "Channel A");
+                 LogContext.Scope k = LogContext.connector("dest1", 7);
+                 LogContext.Scope m = LogContext.message(42L);
+                 LogContext.Scope s = LogContext.script("FILTER", 101)) {
+                assertNull(ThreadContext.get(LogContext.CHANNEL_ID));
+                assertNull(ThreadContext.get(LogContext.CHANNEL_NAME));
+                assertNull(ThreadContext.get(LogContext.CONNECTOR));
+                assertNull(ThreadContext.get(LogContext.META_DATA_ID));
+                assertNull(ThreadContext.get(LogContext.MESSAGE_ID));
+                assertNull(ThreadContext.get(LogContext.SCRIPT_PHASE));
+                assertNull(ThreadContext.get(LogContext.SCRIPT_LINE));
+            }
+            assertNull(ThreadContext.get(LogContext.CHANNEL_ID));
+        } finally {
+            LogContext.setEnabled(true);
+        }
     }
 }

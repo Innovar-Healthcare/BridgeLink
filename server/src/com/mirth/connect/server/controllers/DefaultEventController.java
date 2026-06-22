@@ -159,6 +159,11 @@ public class DefaultEventController extends EventController {
      * with identical values when they did).
      */
     private void logErrorEvent(ErrorEvent event) {
+        // Opt-in (log.errorevent.enabled). When off, connector/transformer errors stay out of
+        // mirth.log (legacy behavior); they remain visible in the in-app Server Log.
+        if (!LogContext.isErrorEventLoggingEnabled()) {
+            return;
+        }
         try (LogContext.Scope channelScope = event.getChannelId() != null
                                              ? LogContext.channel(event.getChannelId(), null) : null;
              LogContext.Scope connectorScope = (event.getMetaDataId() != null && event.getConnectorName() != null)

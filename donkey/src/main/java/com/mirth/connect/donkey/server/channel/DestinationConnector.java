@@ -583,9 +583,14 @@ public abstract class DestinationConnector extends Connector implements Runnable
                     dao.updateErrors(message);
                 }
             } catch (DonkeyException e) {
-                // Logging is centralized in DefaultEventController.dispatchEvent — the response
-                // transformer dispatches an ErrorEvent before throwing, which the central handler
-                // logs to mirth.log with structured channel/connector/messageId MDC.
+                // When error-event logging is enabled, the response transformer's dispatched
+                // ErrorEvent is logged centrally in DefaultEventController.dispatchEvent (with
+                // structured channel/connector/messageId MDC), so logging here would duplicate it.
+                // When it's disabled (the legacy default), fall back to logging here so response
+                // transformer failures still reach mirth.log as they did before centralization.
+                if (!LogContext.isErrorEventLoggingEnabled()) {
+                    logger.error("Error executing response transformer for channel " + channel.getName() + " (" + channel.getChannelId() + ") on destination " + destinationName + ".", e);
+                }
                 response.setStatus(Status.ERROR);
                 response.setError(e.getFormattedError());
                 message.setProcessingError(message.getProcessingError() != null ? message.getProcessingError() + System.getProperty("line.separator") + System.getProperty("line.separator") + e.getFormattedError() : e.getFormattedError());
@@ -982,7 +987,11 @@ public abstract class DestinationConnector extends Connector implements Runnable
                 dao.updateErrors(message);
             }
         } catch (DonkeyException e) {
-            // Logging is centralized in DefaultEventController.dispatchEvent — see note above.
+            // Centralized when error-event logging is enabled; legacy fallback otherwise. See note
+            // in processPendingConnectorMessage above.
+            if (!LogContext.isErrorEventLoggingEnabled()) {
+                logger.error("Error executing response transformer for channel " + channel.getName() + " (" + channel.getChannelId() + ") on destination " + destinationName + ".", e);
+            }
             response.setStatus(Status.ERROR);
             response.setError(e.getFormattedError());
             message.setStatus(response.getStatus());
