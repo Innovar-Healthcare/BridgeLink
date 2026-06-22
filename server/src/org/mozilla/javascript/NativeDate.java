@@ -196,7 +196,7 @@ public final class NativeDate extends IdScriptableObject
         // The rest of Date.prototype methods require thisObj to be Date
 
         if (!(thisObj instanceof NativeDate))
-            throw incompatibleCallError(f);
+            throw ScriptRuntime.typeError1("msg.incompat.call", f.getFunctionName());
         NativeDate realThis = (NativeDate)thisObj;
         double t = realThis.date;
 

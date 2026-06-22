@@ -624,7 +624,7 @@ abstract class XMLObjectImpl extends XMLObject {
 
         // All (XML|XMLList).prototype methods require thisObj to be XML
         if (!(thisObj instanceof XMLObjectImpl))
-            throw incompatibleCallError(f);
+            throw ScriptRuntime.typeError1("msg.incompat.call", f.getFunctionName());
         XMLObjectImpl realThis = (XMLObjectImpl)thisObj;
 
         XML xml = realThis.getXML();

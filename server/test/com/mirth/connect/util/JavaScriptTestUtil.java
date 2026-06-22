@@ -68,9 +68,18 @@ public class JavaScriptTestUtil {
         try {
             Script compiledScript = context.compileString(script, UUID.randomUUID().toString(), 1, null);
 
-            Scriptable scope = context.newObject(sealedSharedScope);
+            ScriptableObject scope = (ScriptableObject) context.newObject(sealedSharedScope);
             scope.setPrototype(sealedSharedScope);
             scope.setParentScope(null);
+            // Rhino 1.7.15+ stores importPackage'd packages as associatedValue("importedPackages")
+            // on the ImporterTopLevel scope. getNativeJavaPackages() looks up this value on the
+            // scope returned by getTopLevelScope(). With parentScope=null the child is the
+            // top-level scope and carries no packages. Propagate the sealed scope's packages so
+            // importPackage'd symbols (e.g. Lists) remain accessible in the executing scope.
+            Object importedPackages = sealedSharedScope.getAssociatedValue("importedPackages");
+            if (importedPackages != null) {
+                scope.associateValue("importedPackages", importedPackages);
+            }
             add("logger", scope, logger);
 
             if (connectorMessage != null) {

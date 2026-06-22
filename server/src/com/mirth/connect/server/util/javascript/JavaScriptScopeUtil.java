@@ -100,9 +100,21 @@ public class JavaScriptScopeUtil {
 
     // Creates a new global scope within the current Context
     private static Scriptable getScope(Context context) {
-        Scriptable scope = context.newObject(((MirthContext) context).getSealedSharedScope());
-        scope.setPrototype(((MirthContext) context).getSealedSharedScope());
+        ScriptableObject sealedSharedScope = ((MirthContext) context).getSealedSharedScope();
+        ScriptableObject scope = (ScriptableObject) context.newObject(sealedSharedScope);
+        scope.setPrototype(sealedSharedScope);
         scope.setParentScope(null);
+        // Rhino 1.7.15+ stores importPackage'd packages as associatedValue("importedPackages") on
+        // the ImporterTopLevel scope. getNativeJavaPackages() looks up this value on the scope
+        // returned by getTopLevelScope(), which traverses parentScope. With parentScope=null the
+        // child scope is the top-level scope and carries no packages. We propagate the sealed
+        // scope's importedPackages to the child so importPackage'd symbols (e.g. Lists, Response)
+        // remain accessible without making the child's parentScope point to the sealed scope
+        // (which would cause bare-assignment global writes to fail on the sealed object).
+        Object importedPackages = sealedSharedScope.getAssociatedValue("importedPackages");
+        if (importedPackages != null) {
+            scope.associateValue("importedPackages", importedPackages);
+        }
         return scope;
     }
 

@@ -92,7 +92,7 @@ public final class NativeBoolean extends IdScriptableObject
         // The rest of Boolean.prototype methods require thisObj to be Boolean
 
         if (!(thisObj instanceof NativeBoolean))
-            throw incompatibleCallError(f);
+            throw ScriptRuntime.typeError1("msg.incompat.call", f.getFunctionName());
         boolean value = ((NativeBoolean)thisObj).booleanValue;
 
         switch (id) {
