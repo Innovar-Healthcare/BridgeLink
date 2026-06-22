@@ -28,14 +28,19 @@ public class ServerLogItem implements Serializable {
     private String lineNumber;
     private String message;
     private String throwableInformation;
+    private String channelId;
 
     public ServerLogItem() {}
 
     public ServerLogItem(String message) {
-        this(null, null, null, null, null, null, null, message, null);
+        this(null, null, null, null, null, null, null, message, null, null);
     }
 
     public ServerLogItem(String serverId, Long id, String level, Date date, String threadName, String category, String lineNumber, String message, String throwableInformation) {
+        this(serverId, id, level, date, threadName, category, lineNumber, message, throwableInformation, null);
+    }
+
+    public ServerLogItem(String serverId, Long id, String level, Date date, String threadName, String category, String lineNumber, String message, String throwableInformation, String channelId) {
         this.serverId = serverId;
         this.id = id;
         this.level = level;
@@ -45,6 +50,7 @@ public class ServerLogItem implements Serializable {
         this.lineNumber = lineNumber;
         this.message = message;
         this.throwableInformation = throwableInformation;
+        this.channelId = channelId;
     }
 
     public String getServerId() {
@@ -117,6 +123,14 @@ public class ServerLogItem implements Serializable {
 
     public void setThrowableInformation(String throwableInformation) {
         this.throwableInformation = throwableInformation;
+    }
+
+    public String getChannelId() {
+        return channelId;
+    }
+
+    public void setChannelId(String channelId) {
+        this.channelId = channelId;
     }
 
     @Override

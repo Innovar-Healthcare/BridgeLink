@@ -17,8 +17,10 @@ import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.config.Property;
 import org.apache.logging.log4j.core.util.Throwables;
+import org.apache.logging.log4j.util.ReadOnlyStringMap;
 import org.apache.logging.log4j.util.Strings;
 
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.server.logging.MirthLog4jFilter;
 
 public class ArrayAppender extends AbstractAppender {
@@ -42,6 +44,13 @@ public class ArrayAppender extends AbstractAppender {
         String category = logEvent.getLoggerName();
         String message = logEvent.getMessage().getFormattedMessage();
 
+        ReadOnlyStringMap ctx = logEvent.getContextData();
+        String channelId = (ctx != null) ? ctx.getValue(LogContext.CHANNEL_ID) : null;
+        String channelPrefix = buildChannelPrefix(ctx);
+        if (!channelPrefix.isEmpty()) {
+            message = channelPrefix + " " + message;
+        }
+
         String lineNumber = "?";
         StackTraceElement source = logEvent.getSource();
         if (source != null) {
@@ -61,6 +70,31 @@ public class ArrayAppender extends AbstractAppender {
             throwableInformation = logText.toString();
         }
 
-        serverLogProvider.newServerLogReceived(level, date, threadName, category, lineNumber, message, throwableInformation);
+        serverLogProvider.newServerLogReceived(level, date, threadName, category, lineNumber, message, throwableInformation, channelId);
+    }
+
+    private static String buildChannelPrefix(ReadOnlyStringMap ctx) {
+        if (ctx == null || ctx.isEmpty()) {
+            return "";
+        }
+        String name = ctx.getValue(LogContext.CHANNEL_NAME);
+        String id = ctx.getValue(LogContext.CHANNEL_ID);
+        String connector = ctx.getValue(LogContext.CONNECTOR);
+        String msgId = ctx.getValue(LogContext.MESSAGE_ID);
+
+        if (name == null && id == null) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder("[channel=");
+        sb.append(name != null ? name : id);
+        if (connector != null && !connector.isEmpty()) {
+            sb.append(", connector=").append(connector);
+        }
+        if (msgId != null && !msgId.isEmpty()) {
+            sb.append(", msgId=").append(msgId);
+        }
+        sb.append(']');
+        return sb.toString();
     }
 }

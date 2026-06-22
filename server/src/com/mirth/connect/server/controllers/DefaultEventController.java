@@ -31,6 +31,7 @@ import com.mirth.connect.donkey.server.event.DeployedStateEvent;
 import com.mirth.connect.donkey.server.event.ErrorEvent;
 import com.mirth.connect.donkey.server.event.EventType;
 import com.mirth.connect.donkey.server.event.MessageEvent;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.model.ServerEvent;
 import com.mirth.connect.model.filters.EventFilter;
 import com.mirth.connect.server.ExtensionLoader;
@@ -42,6 +43,14 @@ import com.mirth.connect.server.util.SqlConfig;
 
 public class DefaultEventController extends EventController {
     private Logger logger = LogManager.getLogger(this.getClass());
+
+    /**
+     * Dedicated logger for ErrorEvent dispatches. Every connector/transformer that catches
+     * an exception and dispatches an ErrorEvent (HTTP/TCP/JMS/JDBC sender, response transformer,
+     * etc.) is funneled through this logger so mirth.log carries a record of every error
+     * surfaced in the in-app Server Log.
+     */
+    private static final Logger eventErrorLogger = LogManager.getLogger("event.error");
 
     private static EventController instance = null;
 
@@ -123,6 +132,7 @@ public class DefaultEventController extends EventController {
             if (event instanceof MessageEvent) {
                 queues = messageEventQueues;
             } else if (event instanceof ErrorEvent) {
+                logErrorEvent((ErrorEvent) event);
                 queues = errorEventQueues;
             } else if (event instanceof DeployedStateEvent) {
                 queues = deployedStateEventQueues;
@@ -139,6 +149,36 @@ public class DefaultEventController extends EventController {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Writes a structured one-line ERROR entry to mirth.log for every ErrorEvent. The caller
+     * thread typically already has channel/connector/message MDC set (via LogContext); the
+     * scopes opened here back-fill any keys the caller didn't set (and harmlessly overwrite
+     * with identical values when they did).
+     */
+    private void logErrorEvent(ErrorEvent event) {
+        // Opt-in (log.errorevent.enabled). When off, connector/transformer errors stay out of
+        // mirth.log (legacy behavior); they remain visible in the in-app Server Log.
+        if (!LogContext.isErrorEventLoggingEnabled()) {
+            return;
+        }
+        try (LogContext.Scope channelScope = event.getChannelId() != null
+                                             ? LogContext.channel(event.getChannelId(), null) : null;
+             LogContext.Scope connectorScope = (event.getMetaDataId() != null && event.getConnectorName() != null)
+                                              ? LogContext.connector(event.getConnectorName(), event.getMetaDataId()) : null;
+             LogContext.Scope messageScope = event.getMessageId() != null
+                                            ? LogContext.message(event.getMessageId()) : null) {
+            String msg = event.getCustomMessage();
+            if (msg == null) {
+                msg = event.getType() != null ? event.getType().toString() : "Error event";
+            }
+            if (event.getThrowable() != null) {
+                eventErrorLogger.error(msg, event.getThrowable());
+            } else {
+                eventErrorLogger.error(msg);
+            }
         }
     }
 

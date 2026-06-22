@@ -13,6 +13,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 
+import com.mirth.connect.donkey.server.channel.LogContext;
+
 public abstract class ChannelTask implements Callable<Void> {
 
     protected String channelId;
@@ -51,7 +53,8 @@ public abstract class ChannelTask implements Callable<Void> {
     @Override
     public final Void call() throws Exception {
         String originalThreadName = Thread.currentThread().getName();
-        try {
+        try (LogContext.Scope channelScope = LogContext.channel(channelId, null);
+             LogContext.Scope connectorScope = metaDataId != null ? LogContext.connector(null, metaDataId) : null) {
             if (metaDataId != null) {
                 Thread.currentThread().setName("Channel " + getClass().getSimpleName() + " Thread on (" + channelId + ") connector (" + metaDataId + ") < " + originalThreadName);
             } else {
@@ -62,6 +65,7 @@ public abstract class ChannelTask implements Callable<Void> {
                 handler = new ChannelTaskHandler();
             }
 
+            // Catch is inside the resource scopes so handler.taskErrored() logs with channel+connector MDC.
             try {
                 handler.taskStarted(channelId, metaDataId);
                 execute();

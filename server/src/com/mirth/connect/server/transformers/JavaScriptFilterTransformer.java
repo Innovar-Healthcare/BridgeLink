@@ -25,6 +25,7 @@ import com.mirth.connect.donkey.server.channel.Channel;
 import com.mirth.connect.donkey.server.channel.Connector;
 import com.mirth.connect.donkey.server.channel.DestinationConnector;
 import com.mirth.connect.donkey.server.channel.FilterTransformerResult;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.server.channel.SourceConnector;
 import com.mirth.connect.donkey.server.channel.components.FilterTransformer;
 import com.mirth.connect.donkey.server.channel.components.FilterTransformerException;
@@ -195,6 +196,9 @@ public class JavaScriptFilterTransformer implements FilterTransformer {
         @Override
         public FilterTransformerResult doCall() throws Exception {
             Logger scriptLogger = LogManager.getLogger("filter");
+            try (LogContext.Scope channelScope = LogContext.channel(connector.getChannelId(), connector.getChannel() != null ? connector.getChannel().getName() : null);
+                 LogContext.Scope connectorScope = LogContext.connector(connectorName, connector.getMetaDataId());
+                 LogContext.Scope messageScope = LogContext.message(message.getMessageId())) {
             // Use an array to store the phase, otherwise java and javascript end up referencing two different objects.
             String[] phase = { new String() };
 
@@ -227,27 +231,41 @@ public class JavaScriptFilterTransformer implements FilterTransformer {
 
                     return new FilterTransformerResult(!(Boolean) Context.jsToJava(result, java.lang.Boolean.class), transformedData);
                 } catch (Throwable t) {
+                    int errorLine = -1;
+                    String errorDetails = null;
                     if (t instanceof RhinoException) {
+                        RhinoException re = (RhinoException) t;
+                        errorLine = re.lineNumber();
+                        errorDetails = re.details();
                         try {
                             String script = CompiledScriptCache.getInstance().getSourceScript(scriptId);
-                            int linenumber = ((RhinoException) t).lineNumber();
-                            String errorReport = JavaScriptUtil.getSourceCode(script, linenumber, 0);
-                            t = new MirthJavascriptTransformerException((RhinoException) t, connector.getChannelId(), connectorName, 0, phase[0].toUpperCase(), errorReport);
+                            String errorReport = JavaScriptUtil.getSourceCode(script, errorLine, 0);
+                            t = new MirthJavascriptTransformerException(re, connector.getChannelId(), connectorName, 0, phase[0].toUpperCase(), errorReport);
                         } catch (Exception ee) {
-                            t = new MirthJavascriptTransformerException((RhinoException) t, connector.getChannelId(), connectorName, 0, phase[0].toUpperCase(), null);
+                            t = new MirthJavascriptTransformerException(re, connector.getChannelId(), connectorName, 0, phase[0].toUpperCase(), null);
                         }
                     }
 
-                    if (phase[0].equals("filter")) {
-                        eventController.dispatchEvent(new ErrorEvent(message.getChannelId(), message.getMetaDataId(), message.getMessageId(), ErrorEventType.FILTER, connectorName, null, "Error evaluating filter", t));
-                        throw new FilterTransformerException(t.getMessage(), t, ErrorMessageBuilder.buildErrorMessage(ErrorEventType.FILTER.toString(), "Error evaluating filter", t));
-                    } else {
-                        eventController.dispatchEvent(new ErrorEvent(message.getChannelId(), message.getMetaDataId(), message.getMessageId(), ErrorEventType.TRANSFORMER, connectorName, null, "Error evaluating transformer", t));
-                        throw new FilterTransformerException(t.getMessage(), t, ErrorMessageBuilder.buildErrorMessage(ErrorEventType.TRANSFORMER.toString(), "Error evaluating transformer", t));
+                    String errPhase = phase[0].isEmpty() ? "UNKNOWN" : phase[0].toUpperCase();
+                    String oneLineMsg = "Error evaluating " + (phase[0].isEmpty() ? "script" : phase[0])
+                            + (errorDetails != null ? ": " + errorDetails : "");
+
+                    // Logging is done by DefaultEventController.dispatchEvent when the ErrorEvent
+                    // is dispatched below — that centralizes error logging across all connectors.
+                    // We keep scriptPhase/scriptLine in MDC so the central log line carries them.
+                    try (LogContext.Scope scriptScope = LogContext.script(errPhase, errorLine)) {
+                        if (phase[0].equals("filter")) {
+                            eventController.dispatchEvent(new ErrorEvent(message.getChannelId(), message.getMetaDataId(), message.getMessageId(), ErrorEventType.FILTER, connectorName, null, oneLineMsg, t));
+                            throw new FilterTransformerException(t.getMessage(), t, ErrorMessageBuilder.buildErrorMessage(ErrorEventType.FILTER.toString(), "Error evaluating filter", t));
+                        } else {
+                            eventController.dispatchEvent(new ErrorEvent(message.getChannelId(), message.getMetaDataId(), message.getMessageId(), ErrorEventType.TRANSFORMER, connectorName, null, oneLineMsg, t));
+                            throw new FilterTransformerException(t.getMessage(), t, ErrorMessageBuilder.buildErrorMessage(ErrorEventType.TRANSFORMER.toString(), "Error evaluating transformer", t));
+                        }
                     }
                 } finally {
                     Context.exit();
                 }
+            }
             }
         }
     }

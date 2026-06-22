@@ -1,8 +1,8 @@
 /*
  * Copyright (c) Mirth Corporation. All rights reserved.
- * 
+ *
  * http://www.mirthcorp.com
- * 
+ *
  * The software in this package is published under the terms of the MPL license a copy of which has
  * been included with this distribution in the LICENSE.txt file.
  */
@@ -10,8 +10,11 @@
 package com.mirth.connect.plugins.serverlog;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 import javax.swing.JComponent;
 
@@ -27,10 +30,20 @@ public class ServerLogClient extends DashboardTabPlugin {
     private ServerLogPanel serverLogPanel;
     private LinkedList<ServerLogItem> serverLogs;
     private static final ServerLogItem unauthorizedLog = new ServerLogItem("You are not authorized to view the server log.");
-    private int currentServerLogSize;
+
+    // The fields below are touched from the Swing EDT (via resetServerLogSize) and from the
+    // dashboard's background polling thread (via prepareData/update). `volatile` ensures safe
+    // publication across threads. Compound updates of `serverLogs` itself still go through
+    // synchronized(this).
+    private volatile int currentServerLogSize;
     private boolean receivedNewLogs;
-    private Long lastLogId;
+    private volatile Long lastLogId;
     private String currentServerId;
+
+    // The set of channel IDs currently highlighted on the dashboard. Empty means "no filter — show
+    // everything from the unified server buffer". When this set changes we drop the local buffer
+    // and reset lastLogId so the next fetch returns a fresh view of the new selection.
+    private volatile Set<String> selectedChannelIds = Collections.emptySet();
 
     public ServerLogClient(String name) {
         super(name);
@@ -45,14 +58,10 @@ public class ServerLogClient extends DashboardTabPlugin {
     }
 
     public void resetServerLogSize(int newServerLogSize) {
-
-        // the log size is always set to 100 on the server.
-        // on the client side, the max size is 99.  whenever that changes, only update the client side logs. the logs on the server will always be intact.
-        // Q. Does this log size affect all the channels? - Yes, it should.
-
-        // update (refresh) log only if the new logsize got smaller.
+        // The log size is always set to 100 on the server (per-buffer).
+        // On the client side, the max size is 99. When the user reduces it we only need to trim
+        // the local buffer; the server-side buffers are untouched.
         if (newServerLogSize < currentServerLogSize) {
-            // if log size got reduced...  remove that much extra LastRows.
             synchronized (this) {
                 while (newServerLogSize < serverLogs.size()) {
                     serverLogs.removeLast();
@@ -60,24 +69,40 @@ public class ServerLogClient extends DashboardTabPlugin {
             }
             serverLogPanel.updateTable(serverLogs);
         }
-
-        // reset currentServerLogSize.
         currentServerLogSize = newServerLogSize;
     }
 
     @Override
     public void prepareData() throws ClientException {
+        prepareData(null);
+    }
+
+    @Override
+    public void prepareData(List<DashboardStatus> statuses) throws ClientException {
         receivedNewLogs = false;
+
+        // Track which channels are selected on the dashboard. If the selection changed since the
+        // last poll, drop the local buffer and reset lastLogId so we re-fetch the relevant slice
+        // (otherwise we'd miss items whose IDs are below the previous lastLogId).
+        Set<String> nextSelection = extractChannelIds(statuses);
+        if (!nextSelection.equals(selectedChannelIds)) {
+            selectedChannelIds = nextSelection;
+            synchronized (this) {
+                serverLogs.clear();
+            }
+            lastLogId = null;
+        }
 
         if (!serverLogPanel.isPaused()) {
             List<ServerLogItem> serverLogReceived = new ArrayList<ServerLogItem>();
-            //get logs from server
             try {
-                serverLogReceived = PlatformUI.MIRTH_FRAME.mirthClient.getServlet(ServerLogServletInterface.class).getServerLogs(currentServerLogSize, lastLogId);
+                // null/empty channelIds → server returns from the unified buffer (legacy view).
+                // non-empty → server returns the requested channels + system rows merged.
+                Set<String> channelFilter = selectedChannelIds.isEmpty() ? null : selectedChannelIds;
+                serverLogReceived = PlatformUI.MIRTH_FRAME.mirthClient.getServlet(ServerLogServletInterface.class).getServerLogs(currentServerLogSize, lastLogId, channelFilter);
             } catch (ClientException e) {
                 if (e instanceof ForbiddenException) {
                     LinkedList<ServerLogItem> unauthorizedLogs = new LinkedList<ServerLogItem>();
-                    // Add the unauthorized log message if it's not already there.
                     if (serverLogs.isEmpty() || !serverLogs.getLast().equals(unauthorizedLog)) {
                         unauthorizedLogs.add(unauthorizedLog);
                     }
@@ -108,14 +133,26 @@ public class ServerLogClient extends DashboardTabPlugin {
         }
     }
 
-    @Override
-    public void prepareData(List<DashboardStatus> statuses) throws ClientException {
-        prepareData();
+    private static Set<String> extractChannelIds(List<DashboardStatus> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<String> ids = new HashSet<String>();
+        for (DashboardStatus status : statuses) {
+            if (status != null && status.getChannelId() != null) {
+                ids.add(status.getChannelId());
+            }
+        }
+        return ids.isEmpty() ? Collections.<String>emptySet() : ids;
     }
 
-    // used for setting actions to be called for updating when there is no status selected
     @Override
     public void update() {
+        update(null);
+    }
+
+    @Override
+    public void update(List<DashboardStatus> statuses) {
         boolean serverIdChanged = false;
         String serverId = null;
         for (DashboardTablePlugin plugin : LoadedExtensions.getInstance().getDashboardTablePlugins().values()) {
@@ -130,17 +167,8 @@ public class ServerLogClient extends DashboardTabPlugin {
         }
 
         if (!serverLogPanel.isPaused() && (receivedNewLogs || serverIdChanged)) {
-            // for mirth.log, channel being selected does not matter. display either way.
             serverLogPanel.updateTable(serverLogs);
         }
-    }
-
-    // used for setting actions to be called for updating when there is a status selected
-    public void update(List<DashboardStatus> statuses) {
-
-        // Mirth Server Log is irrelevant with Channel Status.  so just call the default update() method.
-        update();
-
     }
 
     @Override
@@ -148,17 +176,14 @@ public class ServerLogClient extends DashboardTabPlugin {
         return serverLogPanel;
     }
 
-    // used for starting processes in the plugin when the program is started
     @Override
     public void start() {}
 
-    // used for stopping processes in the plugin when the program is exited
     @Override
     public void stop() {
         reset();
     }
 
-    // Called when establishing a new session for the user.
     @Override
     public void reset() {
         clearLog();

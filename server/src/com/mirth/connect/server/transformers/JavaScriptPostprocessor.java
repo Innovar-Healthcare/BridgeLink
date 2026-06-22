@@ -159,7 +159,7 @@ public class JavaScriptPostprocessor implements PostProcessor {
                     debugger.setVisible(true);
                 }
             }
-            return JavaScriptUtil.executePostprocessorScripts(this, message);
+            return JavaScriptUtil.executePostprocessorScripts(this, message, channel.getName());
         }
     }
 }
