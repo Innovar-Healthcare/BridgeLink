@@ -919,6 +919,9 @@ public class HttpReceiverTest {
     public void testSendResponseDefaultStatusCodeWhenNoResponseSelected() throws Exception {
         TestHttpServletResponse servletResponse = new TestHttpServletResponse();
         Request baseRequest = mock(Request.class);
+        // Required stub — present in every other sendResponse test
+        when(baseRequest.getHeaders("Accept-Encoding"))
+                .thenReturn(Collections.enumeration(Collections.emptyList()));
 
         props.setResponseContentType("text/plain");
         props.setResponseStatusCode("");
