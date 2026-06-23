@@ -196,8 +196,8 @@
 		<ant antfile="${server}/build.xml" dir="${server}" target="test-run"/>
 		<ant antfile="${client}/ant-build.xml" dir="${client}" target="test-run"/>
 		<ant antfile="${cli}/build.xml" dir="${cli}" target="test-run"/>
-		<ant antfile="${custom-extensions}/dynamic-lookup-gateway/build.xml" dir="${custom-extensions}/dynamic-lookup-gateway" target="test-run"/>
-		<ant antfile="${custom-extensions}/message-trends/build.xml" dir="${custom-extensions}/message-trends" target="test-run"/>
+		<ant antfile="build.xml" dir="${custom-extensions}/dynamic-lookup-gateway" target="test-run"/>
+		<ant antfile="build.xml" dir="${custom-extensions}/message-trends" target="test-run"/>
 	</target>
 
 	<target name="test-run-and-aggregate" depends="test-run" description="Run all tests and aggregate reports">
