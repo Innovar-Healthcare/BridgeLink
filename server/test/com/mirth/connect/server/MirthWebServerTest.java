@@ -736,14 +736,13 @@ public class MirthWebServerTest {
         invokeInstallerHandler(handler, baseRequest, request, response);
 
         verify(response).reset();
-        verify(response).setStatus(org.apache.commons.httpclient.HttpStatus.SC_INTERNAL_SERVER_ERROR);
+        verify(response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
     }
 
     private Object newInstallerHandlerInstance(File file) throws Exception {
-        java.lang.reflect.Field unsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
-        unsafeField.setAccessible(true);
-        sun.misc.Unsafe unsafe = (sun.misc.Unsafe) unsafeField.get(null);
-        MirthWebServer outer = (MirthWebServer) unsafe.allocateInstance(MirthWebServer.class);
+        // Use a Mockito mock instead of sun.misc.Unsafe.allocateInstance to avoid
+        // bypassing constructors and to remain compatible with Java 17+ encapsulation.
+        MirthWebServer outer = mock(MirthWebServer.class);
 
         Class<?> handlerClass = null;
         for (Class<?> c : MirthWebServer.class.getDeclaredClasses()) {
