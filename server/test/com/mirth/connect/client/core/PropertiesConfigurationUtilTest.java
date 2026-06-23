@@ -11,6 +11,7 @@ package com.mirth.connect.client.core;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -135,6 +136,29 @@ public class PropertiesConfigurationUtilTest {
         file.delete();
     }
     
+    /**
+     * CVE-2026-45205 regression guard: a self-referencing property must not cause an infinite loop.
+     * The {@code @Test(timeout = 5000)} annotation is the primary guard — if commons-configuration2
+     * ever regresses to the old infinite-interpolation behavior, this test will fail within 5 seconds
+     * rather than hanging forever. Any exception thrown by the interpolation engine is acceptable;
+     * the critical assertion is that the test completes within the timeout.
+     */
+    @Test(timeout = 5000)
+    public void testRecursivePropertyResolution() throws Exception {
+        PropertiesConfiguration config = PropertiesConfigurationUtil.create();
+        config.setProperty("key", "${key}");
+        // CVE-2026-45205: before fix, this hung infinitely; after 2.12.0 fix, throws or returns safely
+        try {
+            String value = config.getString("key");
+            // If it returns without throwing, the value must be finite (not an infinite expansion)
+            assertNotNull(value);
+        } catch (Exception e) {
+            // Any exception (IllegalStateException, ConfigurationRuntimeException, etc.) is acceptable
+            // The critical guarantee is that the test completes within 5 seconds (timeout above)
+            assertNotNull(e.getMessage());
+        }
+    }
+
     @Test
     public void testCreateReloadingBuilderCommaDelimited() throws Exception {
         File file = new File(UUID.randomUUID().toString());

@@ -855,4 +855,32 @@ public class MirthWebServerTest {
         dir.deleteOnExit();
         return dir;
     }
+
+    // ===== Jetty 12.0.33 API compatibility tests (D-06) =====
+
+    /**
+     * Jetty 12.0.33 MimeTypes API compatibility: confirms that {@link MimeTypes#getMimeByExtension}
+     * correctly resolves HTML content-type — the same API used by InstallerFileHandler to set
+     * content-type headers for static files served by MirthWebServer.
+     */
+    @Test
+    public void testJetty1200MimeTypesHtmlResolution() {
+        MimeTypes mimeTypes = new MimeTypes();
+        String contentType = mimeTypes.getMimeByExtension("index.html");
+        assertNotNull("MimeTypes.getMimeByExtension must return a non-null value for .html", contentType);
+        assertTrue("Content-type for .html must contain 'html'", contentType.contains("html"));
+    }
+
+    /**
+     * Jetty 12.0.33 MimeTypes API compatibility: confirms that {@link MimeTypes#getMimeByExtension}
+     * correctly resolves CSS content-type. The SwaggerUiFilter in MirthWebServer delegates content-type
+     * lookup to Jetty's MimeTypes for static swagger assets.
+     */
+    @Test
+    public void testJetty1200MimeTypesCssResolution() {
+        MimeTypes mimeTypes = new MimeTypes();
+        String contentType = mimeTypes.getMimeByExtension("swagger-ui.css");
+        assertNotNull("MimeTypes.getMimeByExtension must return a non-null value for .css", contentType);
+        assertTrue("Content-type for .css must contain 'css'", contentType.contains("css"));
+    }
 }
