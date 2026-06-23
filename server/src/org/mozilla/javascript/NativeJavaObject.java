@@ -34,24 +34,6 @@ public class NativeJavaObject
 
     public NativeJavaObject() { }
 
-    /**
-     * Compatibility shim: Rhino 1.7.15+ requires NativeJavaObject.init to be called during
-     * Context.initStandardObjects(). This method delegates to JavaIterableIterator.init
-     * via reflection so the vendored source remains compatible without importing the inner class.
-     */
-    static void init(ScriptableObject scope, boolean sealed) {
-        try {
-            Class<?> iterClass = Class.forName(
-                "org.mozilla.javascript.NativeJavaObject$JavaIterableIterator");
-            java.lang.reflect.Method initMethod = iterClass.getDeclaredMethod(
-                "init", ScriptableObject.class, boolean.class);
-            initMethod.setAccessible(true);
-            initMethod.invoke(null, scope, sealed);
-        } catch (Exception e) {
-            // Inner class not present in this Rhino version — safe to ignore
-        }
-    }
-
     public NativeJavaObject(Scriptable scope, Object javaObject,
                             Class<?> staticType)
     {
