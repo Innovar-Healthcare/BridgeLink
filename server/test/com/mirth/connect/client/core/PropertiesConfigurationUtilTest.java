@@ -137,7 +137,7 @@ public class PropertiesConfigurationUtilTest {
     }
     
     /**
-     * CVE-2026-45205 regression guard: a self-referencing property must not cause an infinite loop.
+     * CVE-2024-29131 regression guard: a self-referencing property must not cause an infinite loop.
      * The {@code @Test(timeout = 5000)} annotation is the primary guard — if commons-configuration2
      * ever regresses to the old infinite-interpolation behavior, this test will fail within 5 seconds
      * rather than hanging forever. Any exception thrown by the interpolation engine is acceptable;
@@ -147,7 +147,7 @@ public class PropertiesConfigurationUtilTest {
     public void testRecursivePropertyResolution() throws Exception {
         PropertiesConfiguration config = PropertiesConfigurationUtil.create();
         config.setProperty("key", "${key}");
-        // CVE-2026-45205: before fix, this hung infinitely; after 2.12.0 fix, throws or returns safely
+        // CVE-2024-29131: before fix, this hung infinitely; after 2.12.0 fix, throws or returns safely
         try {
             String value = config.getString("key");
             // If it returns without throwing, the value must be finite (not an infinite expansion)
