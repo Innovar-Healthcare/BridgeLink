@@ -39,6 +39,16 @@
 	<target name="build" depends="compile">
 		<mkdir dir="${dist}" />
 
+		<!--
+		  NOTE (IRT-1055): The manager Class-Path below references rhino-1.7.13.jar (stock Rhino).
+		  The server module ships a BridgeLink-patched Rhino compiled from vendored source under
+		  server/src/org/mozilla/javascript/ (NativeBoolean, NativeDate, XMLObjectImpl, NativeJavaObject).
+		  The manager intentionally runs against stock Rhino 1.7.13 because the manager UI does not
+		  execute server-side JavaScript — it only renders channel XML/JSON configuration.  The patched
+		  Rhino is only needed where the server evaluates JavaScript rules.  If the manager ever gains
+		  JavaScript evaluation features, replace manager-lib/rhino-1.7.13.jar with the patched build
+		  (e.g., rhino-1.7.13-bridgelink.jar produced by the server build target).
+		-->
 		<jar destfile="${dist}/${manager.jar}" basedir="${classes}">
 			<manifest>
 				<attribute name="Manifest-Version" value="1.0" />
