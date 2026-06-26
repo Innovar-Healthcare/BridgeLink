@@ -163,67 +163,17 @@
         <antcall target="install-to-server-setup"/>
 
         <!-- Package everything in dist/ into a zip file -->
-        <zip destfile="${dist.dir}/${plugin.name}.zip" basedir="${dist.dir}">
-            <exclude name="${plugin.name}.zip"/> <!-- Avoid zipping the zip itself -->
+        <mkdir dir="${package_install.dir}"/>
+        <zip destfile="${package_install.dir}/${plugin.package.name}.zip" encoding="UTF-8" level="9" zip64Mode="never">
+            <zipfileset dir="${dist.dir}" prefix="${plugin.path}/"/>
         </zip>
 
         <echo message="Built, signed, installed, and zipped ${plugin.name}"/>
+
+        <!-- Auto deploy if deploy-mirth.sh exists -->
+        <exec executable="bash" dir="${basedir}" failonerror="false">
+            <arg value="deploy-mirth.sh"/>
+        </exec>
     </target>
-	
-	<target name="eclipse-classpath">
-	    <!-- Collect per-root so we can emit relative paths -->
-	    <path id="server.jars">
-	        <fileset dir="${server.lib}" includes="**/*.jar"/>
-	    </path>
-	    <path id="client.jars">
-	        <fileset dir="${client.lib}" includes="**/*.jar"/>
-	    </path>
-	    <path id="plugin.jars">
-	        <fileset dir="${plugin.lib}" includes="**/*.jar"/>
-	    </path>
-
-	    <!-- Emit entries with paths relative to the project (these props are already relative: ../../...) -->
-	    <pathconvert pathsep="${line.separator}" property="server.jar.entries" refid="server.jars">
-	        <mapper type="regexp"
-	                from="^.*[\\/](.+)$"
-	                to="    &lt;classpathentry kind=&quot;lib&quot; path=&quot;${server.lib}/\1&quot;/&gt;"/>
-	    </pathconvert>
-
-	    <pathconvert pathsep="${line.separator}" property="client.jar.entries" refid="client.jars">
-	        <mapper type="regexp"
-	                from="^.*[\\/](.+)$"
-	                to="    &lt;classpathentry kind=&quot;lib&quot; path=&quot;${client.lib}/\1&quot;/&gt;"/>
-	    </pathconvert>
-
-	    <pathconvert pathsep="${line.separator}" property="plugin.jar.entries" refid="plugin.jars">
-	        <mapper type="regexp"
-	                from="^.*[\\/](.+)$"
-	                to="    &lt;classpathentry kind=&quot;lib&quot; path=&quot;${plugin.lib}/\1&quot;/&gt;"/>
-	    </pathconvert>
-
-	    <echo file=".classpath"><![CDATA[<?xml version="1.0" encoding="UTF-8"?>
-	<classpath>
-	    <!-- Source folders (match Ant) -->
-    	<classpathentry kind="src" path="shared/src/main/java"/>
-		<classpathentry kind="src" path="server/src/main/java"/>
-		<classpathentry kind="src" path="client/src/main/java"/>
-
-	    <!-- Output -->
-	    <classpathentry kind="output" path="build/classes"/>
-
-	    <!-- JRE -->
-	    <classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-
-	    <!-- Mirth class folders -->
-	    <classpathentry kind="lib" path="${server.classes.dir}"/>
-	    <classpathentry kind="lib" path="${client.classes.dir}"/>
-
-	${server.jar.entries}
-	${client.jar.entries}
-	${plugin.jar.entries}
-	</classpath>
-	]]></echo>
-	</target>
-
 
 </project>
