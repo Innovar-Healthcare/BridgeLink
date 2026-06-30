@@ -52,12 +52,7 @@ public class MessageTrendsService {
 	/** Replace Rollup Window */
 	public int replaceRollupWindow(Date startTs, int bucketSizeMinutes, List<MessageStatisticsTimeseries> list) {
 		ensureInit();
-		try {
-			return dao.replaceRollupWindow(serverId, startTs, bucketSizeMinutes, list);
-		} catch (Exception e) {
-			logger.warn("Failed to replace rollup window", e);
-			return 0;
-		}
+		return dao.replaceRollupWindow(serverId, startTs, bucketSizeMinutes, list);
 	}
 
 	/** Query statistics for a specific channel (all connectors collapsed). */
