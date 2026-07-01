@@ -1976,10 +1976,12 @@ public class DonkeyEngineController implements EngineController {
                         t = e.getCause();
                     }
 
-                    if (LogContext.isErrorEventLoggingEnabled()) {
-                        logger.error("Error running channel deploy script", t);
+                    try (LogContext.Scope channelScope = LogContext.channel(channelId, channel.getName())) {
+                        if (LogContext.isErrorEventLoggingEnabled()) {
+                            logger.error("Error running channel deploy script", t);
+                        }
+                        eventController.dispatchEvent(new ErrorEvent(channelModel.getId(), null, null, ErrorEventType.DEPLOY_SCRIPT, null, null, "Error running channel deploy script", t));
                     }
-                    eventController.dispatchEvent(new ErrorEvent(channelModel.getId(), null, null, ErrorEventType.DEPLOY_SCRIPT, null, null, "Error running channel deploy script", t));
                     throw new DeployException("Failed to deploy channel " + channelId + ".", e);
                 }
 
@@ -2144,8 +2146,10 @@ public class DonkeyEngineController implements EngineController {
                         t = e.getCause();
                     }
 
-                    eventController.dispatchEvent(new ErrorEvent(channelId, null, null, ErrorEventType.UNDEPLOY_SCRIPT, null, null, "Error running channel undeploy script", t));
-                    logger.error("Error executing undeploy script for channel " + channelId + ".", e);
+                    try (LogContext.Scope channelScope = LogContext.channel(channelId, channel.getName())) {
+                        eventController.dispatchEvent(new ErrorEvent(channelId, null, null, ErrorEventType.UNDEPLOY_SCRIPT, null, null, "Error running channel undeploy script", t));
+                        logger.error("Error executing undeploy script for channel " + channelId + ".", e);
+                    }
                 
                 }
 	            
