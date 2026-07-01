@@ -28,6 +28,7 @@ import com.mirth.connect.donkey.model.message.Status;
 import com.mirth.connect.donkey.server.ConnectorTaskException;
 import com.mirth.connect.donkey.server.channel.DestinationConnector;
 import com.mirth.connect.donkey.server.event.ConnectionStatusEvent;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.server.event.ErrorEvent;
 import com.mirth.connect.donkey.util.ThreadUtils;
 import com.mirth.connect.server.controllers.ConfigurationController;
@@ -181,6 +182,9 @@ public class FileDispatcher extends DestinationConnector {
             responseStatusMessage = "File successfully written: " + fileDispatcherProperties.toURIString();
             responseStatus = Status.SENT;
         } catch (Exception e) {
+            if (LogContext.isErrorEventLoggingEnabled()) {
+                logger.error("Error writing file", e);
+            }
             eventController.dispatchEvent(new ErrorEvent(getChannelId(), getMetaDataId(), connectorMessage.getMessageId(), ErrorEventType.DESTINATION_CONNECTOR, getDestinationName(), connectorProperties.getName(), "Error writing file", e));
             responseStatusMessage = ErrorMessageBuilder.buildErrorResponse("Error writing file", e);
             responseError = ErrorMessageBuilder.buildErrorMessage(connectorProperties.getName(), "Error writing file", e);

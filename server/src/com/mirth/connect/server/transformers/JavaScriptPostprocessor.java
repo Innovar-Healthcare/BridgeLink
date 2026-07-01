@@ -24,6 +24,7 @@ import com.mirth.connect.donkey.model.message.Message;
 import com.mirth.connect.donkey.model.message.Response;
 import com.mirth.connect.donkey.server.channel.Channel;
 import com.mirth.connect.donkey.server.channel.components.PostProcessor;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.server.event.ErrorEvent;
 import com.mirth.connect.model.codetemplates.ContextType;
 import com.mirth.connect.server.MirthJavascriptTransformerException;
@@ -127,6 +128,9 @@ public class JavaScriptPostprocessor implements PostProcessor {
                 t = e.getCause();
             }
 
+            if (LogContext.isErrorEventLoggingEnabled()) {
+                logger.error("Error running postprocessor scripts", t);
+            }
             eventController.dispatchEvent(new ErrorEvent(message.getChannelId(), null, message.getMessageId(), ErrorEventType.POSTPROCESSOR_SCRIPT, null, null, "Error running postprocessor scripts", t));
             throw new DonkeyException(t, ErrorMessageBuilder.buildErrorMessage(ErrorEventType.POSTPROCESSOR_SCRIPT.toString(), "Error running postprocessor scripts", t));
         }

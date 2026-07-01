@@ -245,10 +245,14 @@ public class JavaScriptResponseTransformer implements ResponseTransformer {
                     String oneLineMsg = "Error evaluating response transformer"
                             + (errorDetails != null ? ": " + errorDetails : "");
 
-                    // Logging is centralized in DefaultEventController.dispatchEvent. We open a
-                    // script scope so scriptPhase/scriptLine MDC keys are present on the
-                    // resulting log line.
+                    // Opt-in error logging (log.errorevent.enabled). Logged here (inside the script
+                    // scope, so scriptPhase/scriptLine are on the line) when enabled; when disabled,
+                    // DestinationConnector logs the response-transformer failure instead (legacy
+                    // behavior). The ErrorEvent is dispatched regardless for the in-app Server Log.
                     try (LogContext.Scope scriptScope = LogContext.script("RESPONSE", errorLine)) {
+                        if (LogContext.isErrorEventLoggingEnabled()) {
+                            scriptLogger.error(oneLineMsg, t);
+                        }
                         eventController.dispatchEvent(new ErrorEvent(connectorMessage.getChannelId(), connectorMessage.getMetaDataId(), connectorMessage.getMessageId(), ErrorEventType.RESPONSE_TRANSFORMER, connectorName, null, oneLineMsg, t));
                         throw new ResponseTransformerException(t.getMessage(), t, ErrorMessageBuilder.buildErrorMessage(ErrorEventType.RESPONSE_TRANSFORMER.toString(), "Error evaluating response transformer", t));
                     }

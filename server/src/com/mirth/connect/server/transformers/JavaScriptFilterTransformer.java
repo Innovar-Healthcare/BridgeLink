@@ -250,10 +250,13 @@ public class JavaScriptFilterTransformer implements FilterTransformer {
                     String oneLineMsg = "Error evaluating " + (phase[0].isEmpty() ? "script" : phase[0])
                             + (errorDetails != null ? ": " + errorDetails : "");
 
-                    // Logging is done by DefaultEventController.dispatchEvent when the ErrorEvent
-                    // is dispatched below — that centralizes error logging across all connectors.
-                    // We keep scriptPhase/scriptLine in MDC so the central log line carries them.
+                    // Opt-in error logging (log.errorevent.enabled). The script scope puts
+                    // scriptPhase/scriptLine on the line. The ErrorEvent is still dispatched below
+                    // for the in-app Server Log and alerts regardless of the toggle.
                     try (LogContext.Scope scriptScope = LogContext.script(errPhase, errorLine)) {
+                        if (LogContext.isErrorEventLoggingEnabled()) {
+                            scriptLogger.error(oneLineMsg, t);
+                        }
                         if (phase[0].equals("filter")) {
                             eventController.dispatchEvent(new ErrorEvent(message.getChannelId(), message.getMetaDataId(), message.getMessageId(), ErrorEventType.FILTER, connectorName, null, oneLineMsg, t));
                             throw new FilterTransformerException(t.getMessage(), t, ErrorMessageBuilder.buildErrorMessage(ErrorEventType.FILTER.toString(), "Error evaluating filter", t));

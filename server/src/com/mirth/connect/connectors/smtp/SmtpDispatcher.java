@@ -34,6 +34,7 @@ import com.mirth.connect.donkey.model.message.attachment.AttachmentHandlerProvid
 import com.mirth.connect.donkey.server.ConnectorTaskException;
 import com.mirth.connect.donkey.server.channel.DestinationConnector;
 import com.mirth.connect.donkey.server.event.ConnectionStatusEvent;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.server.event.ErrorEvent;
 import com.mirth.connect.server.controllers.ConfigurationController;
 import com.mirth.connect.server.controllers.ControllerFactory;
@@ -277,6 +278,9 @@ public class SmtpDispatcher extends DestinationConnector {
             responseStatus = Status.SENT;
             responseStatusMessage = "Email sent successfully.";
         } catch (Exception e) {
+            if (LogContext.isErrorEventLoggingEnabled()) {
+                logger.error("Error sending email message", e);
+            }
             eventController.dispatchEvent(new ErrorEvent(getChannelId(), getMetaDataId(), connectorMessage.getMessageId(), ErrorEventType.DESTINATION_CONNECTOR, getDestinationName(), connectorProperties.getName(), "Error sending email message", e));
             responseStatusMessage = ErrorMessageBuilder.buildErrorResponse("Error sending email message", e);
             responseError = ErrorMessageBuilder.buildErrorMessage(connectorProperties.getName(), "Error sending email message", e);

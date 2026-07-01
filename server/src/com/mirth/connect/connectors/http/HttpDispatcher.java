@@ -107,6 +107,7 @@ import com.mirth.connect.donkey.model.message.Status;
 import com.mirth.connect.donkey.server.ConnectorTaskException;
 import com.mirth.connect.donkey.server.channel.DestinationConnector;
 import com.mirth.connect.donkey.server.event.ConnectionStatusEvent;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.server.event.ErrorEvent;
 import com.mirth.connect.donkey.util.Base64Util;
 import com.mirth.connect.server.controllers.ConfigurationController;
@@ -419,11 +420,17 @@ public class HttpDispatcher extends DestinationConnector {
             if (statusCode < HttpStatus.SC_BAD_REQUEST) {
                 responseStatus = Status.SENT;
             } else {
+                if (LogContext.isErrorEventLoggingEnabled()) {
+                    logger.error("Received error response from HTTP server.");
+                }
                 eventController.dispatchEvent(new ErrorEvent(getChannelId(), getMetaDataId(), connectorMessage.getMessageId(), ErrorEventType.DESTINATION_CONNECTOR, getDestinationName(), connectorProperties.getName(), "Received error response from HTTP server.", null));
                 responseStatusMessage = ErrorMessageBuilder.buildErrorResponse("Received error response from HTTP server.", null);
                 responseError = ErrorMessageBuilder.buildErrorMessage(connectorProperties.getName(), responseData, null);
             }
         } catch (Throwable t) {
+            if (LogContext.isErrorEventLoggingEnabled()) {
+                logger.error("Error connecting to HTTP server.", t);
+            }
             eventController.dispatchEvent(new ErrorEvent(getChannelId(), getMetaDataId(), connectorMessage.getMessageId(), ErrorEventType.DESTINATION_CONNECTOR, getDestinationName(), connectorProperties.getName(), "Error connecting to HTTP server.", t));
             responseStatusMessage = ErrorMessageBuilder.buildErrorResponse("Error connecting to HTTP server", t);
             responseError = ErrorMessageBuilder.buildErrorMessage(connectorProperties.getName(), "Error connecting to HTTP server", t);
