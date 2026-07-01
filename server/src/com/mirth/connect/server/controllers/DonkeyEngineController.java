@@ -1976,12 +1976,11 @@ public class DonkeyEngineController implements EngineController {
                         t = e.getCause();
                     }
 
-                    try (LogContext.Scope channelScope = LogContext.channel(channelId, channel.getName())) {
-                        if (LogContext.isErrorEventLoggingEnabled()) {
-                            logger.error("Error running channel deploy script", t);
-                        }
-                        eventController.dispatchEvent(new ErrorEvent(channelModel.getId(), null, null, ErrorEventType.DEPLOY_SCRIPT, null, null, "Error running channel deploy script", t));
-                    }
+                    // Deploy-script failures are already logged by JavaScriptUtil (detailed error)
+                    // and by the ChannelTask error handler (deploy outcome, with channel context),
+                    // so we don't log again here. The ErrorEvent is still dispatched for alerts /
+                    // the in-app Server Log.
+                    eventController.dispatchEvent(new ErrorEvent(channelModel.getId(), null, null, ErrorEventType.DEPLOY_SCRIPT, null, null, "Error running channel deploy script", t));
                     throw new DeployException("Failed to deploy channel " + channelId + ".", e);
                 }
 

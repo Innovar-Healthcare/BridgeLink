@@ -14,6 +14,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 
 import com.mirth.connect.donkey.server.channel.LogContext;
+import com.mirth.connect.model.Channel;
+import com.mirth.connect.server.controllers.ChannelController;
 
 public abstract class ChannelTask implements Callable<Void> {
 
@@ -53,7 +55,21 @@ public abstract class ChannelTask implements Callable<Void> {
     @Override
     public final Void call() throws Exception {
         String originalThreadName = Thread.currentThread().getName();
-        try (LogContext.Scope channelScope = LogContext.channel(channelId, null);
+
+        // Best-effort channel name so admin-task error logging (deploy/undeploy/start/stop, logged
+        // via LoggingTaskHandler) carries channelName instead of the channel GUID. Failures here
+        // must never break task execution, so swallow any lookup error.
+        String channelName = null;
+        try {
+            Channel channelModel = ChannelController.getInstance().getChannelById(channelId);
+            if (channelModel != null) {
+                channelName = channelModel.getName();
+            }
+        } catch (Exception ignore) {
+            // ignore — the name is only used for log context
+        }
+
+        try (LogContext.Scope channelScope = LogContext.channel(channelId, channelName);
              LogContext.Scope connectorScope = metaDataId != null ? LogContext.connector(null, metaDataId) : null) {
             if (metaDataId != null) {
                 Thread.currentThread().setName("Channel " + getClass().getSimpleName() + " Thread on (" + channelId + ") connector (" + metaDataId + ") < " + originalThreadName);
