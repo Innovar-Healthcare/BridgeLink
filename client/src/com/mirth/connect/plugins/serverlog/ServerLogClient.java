@@ -38,6 +38,11 @@ public class ServerLogClient extends DashboardTabPlugin {
     private volatile int currentServerLogSize;
     private boolean receivedNewLogs;
     private volatile Long lastLogId;
+
+    // Highest log id present when the user last clicked "Clear Log". Entries with an id <= this are
+    // suppressed on subsequent fetches, so re-selecting a channel — which resets lastLogId to re-pull
+    // the channel's slice — can't resurface cleared entries (IRT-1257). Null = nothing cleared.
+    private volatile Long clearedLogId;
     private String currentServerId;
 
     // The set of channel IDs currently highlighted on the dashboard. Empty means "no filter — show
@@ -53,6 +58,9 @@ public class ServerLogClient extends DashboardTabPlugin {
     }
 
     public void clearLog() {
+        // Remember the current watermark so cleared entries stay cleared even when a later channel
+        // re-selection resets lastLogId and re-fetches the full server-side buffer (IRT-1257).
+        clearedLogId = lastLogId;
         serverLogs.clear();
         serverLogPanel.updateTable(null);
     }
@@ -123,10 +131,17 @@ public class ServerLogClient extends DashboardTabPlugin {
 
                 synchronized (this) {
                     for (int i = serverLogReceived.size() - 1; i >= 0; i--) {
+                        ServerLogItem item = serverLogReceived.get(i);
+                        // Skip entries the user already cleared (IRT-1257). A channel re-selection
+                        // resets lastLogId and re-pulls the full buffer, which would otherwise
+                        // resurface them. Items with no id (e.g. the unauthorized notice) are kept.
+                        if (clearedLogId != null && item.getId() != null && item.getId() <= clearedLogId) {
+                            continue;
+                        }
                         while (currentServerLogSize <= serverLogs.size()) {
                             serverLogs.removeLast();
                         }
-                        serverLogs.addFirst(serverLogReceived.get(i));
+                        serverLogs.addFirst(item);
                     }
                 }
             }
@@ -186,6 +201,10 @@ public class ServerLogClient extends DashboardTabPlugin {
 
     @Override
     public void reset() {
+        // New session: server log ids restart when the server restarts, so forget the fetch
+        // watermark before clearing — otherwise a stale clearedLogId would filter out the fresh
+        // session's entries. clearLog() then sets clearedLogId from the (now null) lastLogId.
+        lastLogId = null;
         clearLog();
     }
 
