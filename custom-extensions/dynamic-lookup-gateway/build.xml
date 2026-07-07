@@ -28,8 +28,8 @@
             </classpath>
         </javac>
 
-        <!-- Compile server -->
-        <javac srcdir="server" destdir="${classes.dir}/server" includeantruntime="false" release="17">
+        <!-- Compile server (main sources only — exclude test/java to avoid pulling in test deps) -->
+        <javac srcdir="server/src/main/java" destdir="${classes.dir}/server" includeantruntime="false" release="17">
             <classpath>
                 <pathelement path="${classes.dir}/shared"/>
                 <pathelement path="${server.classes.dir}"/>
@@ -150,6 +150,77 @@
 
         <echo message="Installed plugin to ${server.setup.extensions}/${plugin.name}" />
         <echo message="Installed dynamic-lookup.properties to ${server.setup.conf}" />
+    </target>
+
+    <!-- ================================================================== -->
+    <!-- Test targets (IRT-1056: JUnit coverage improvement)                -->
+    <!-- ================================================================== -->
+
+    <property name="testlib.dir"      value="testlib"/>
+    <property name="test.src.dir"     value="server/src/test/java"/>
+    <property name="test.classes.dir" value="${build.dir}/test-classes"/>
+
+    <!-- JaCoCo classpath (reuse server's JaCoCo JARs) -->
+    <path id="jacoco.classpath.dlg">
+        <fileset dir="${server.lib}/ant">
+            <include name="org.jacoco.ant-0.8.8.jar"/>
+            <include name="org.jacoco.core-0.8.8.jar"/>
+            <include name="org.jacoco.report-0.8.8.jar"/>
+            <include name="org.jacoco.agent-0.8.8.jar"/>
+            <include name="asm-9.2.jar"/>
+            <include name="asm-tree-9.2.jar"/>
+            <include name="asm-commons-9.2.jar"/>
+        </fileset>
+    </path>
+    <taskdef uri="antlib:org.jacoco.ant"
+             resource="org/jacoco/ant/antlib.xml"
+             classpathref="jacoco.classpath.dlg"/>
+
+    <target name="test-compile" depends="compile">
+        <mkdir dir="${test.classes.dir}"/>
+        <javac srcdir="${test.src.dir}" destdir="${test.classes.dir}"
+               includeantruntime="false" release="17">
+            <classpath>
+                <fileset dir="${testlib.dir}"        includes="**/*.jar"/>
+                <fileset dir="${server.lib}"         includes="**/*.jar"/>
+                <fileset dir="${plugin.lib}"         includes="**/*.jar"/>
+                <pathelement path="${classes.dir}/shared"/>
+                <pathelement path="${classes.dir}/server"/>
+                <pathelement path="${server.classes.dir}"/>
+            </classpath>
+        </javac>
+    </target>
+
+    <target name="test-run" depends="test-compile">
+        <mkdir dir="junit-reports"/>
+        <mkdir dir="code-coverage-reports"/>
+        <jacoco:coverage destfile="code-coverage-reports/jacoco.exec"
+                         xmlns:jacoco="antlib:org.jacoco.ant"
+                         exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader">
+            <junit haltonfailure="false" fork="true" forkmode="perTest">
+                <jvmarg value="--add-opens=java.base/java.util=ALL-UNNAMED"/>
+                <jvmarg value="--add-opens=java.base/java.lang=ALL-UNNAMED"/>
+                <classpath>
+                    <fileset dir="${testlib.dir}"        includes="**/*.jar"/>
+                    <fileset dir="${server.lib}"         includes="**/*.jar"/>
+                    <fileset dir="${plugin.lib}"         includes="**/*.jar"/>
+                    <pathelement path="${classes.dir}/shared"/>
+                    <pathelement path="${classes.dir}/server"/>
+                    <pathelement path="${server.classes.dir}"/>
+                    <pathelement path="${test.classes.dir}"/>
+                </classpath>
+                <formatter type="xml"/>
+                <batchtest todir="junit-reports">
+                    <fileset dir="${test.classes.dir}" includes="**/*Test.class"/>
+                </batchtest>
+            </junit>
+        </jacoco:coverage>
+        <junitreport todir="junit-reports">
+            <fileset dir="junit-reports">
+                <include name="TEST-*.xml"/>
+            </fileset>
+            <report format="frames" todir="junit-html"/>
+        </junitreport>
     </target>
 
     <target name="build" depends="clean, jar">
