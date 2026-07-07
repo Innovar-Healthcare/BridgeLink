@@ -48,6 +48,7 @@ import com.mirth.connect.donkey.server.ConnectorTaskException;
 import com.mirth.connect.donkey.server.channel.DestinationConnector;
 import com.mirth.connect.donkey.server.controllers.MessageController;
 import com.mirth.connect.donkey.server.event.ConnectionStatusEvent;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.server.event.ErrorEvent;
 import com.mirth.connect.donkey.util.Base64Util;
 import com.mirth.connect.donkey.util.DonkeyElement;
@@ -139,6 +140,9 @@ public class DocumentDispatcher extends DestinationConnector {
 
             responseStatus = Status.SENT;
         } catch (Exception e) {
+            if (LogContext.isErrorEventLoggingEnabled()) {
+                logger.error("Error writing document", e);
+            }
             eventController.dispatchEvent(new ErrorEvent(getChannelId(), getMetaDataId(), connectorMessage.getMessageId(), ErrorEventType.DESTINATION_CONNECTOR, getDestinationName(), connectorProperties.getName(), "Error writing document", e));
             responseStatusMessage = ErrorMessageBuilder.buildErrorResponse("Error writing document", e);
             responseError = ErrorMessageBuilder.buildErrorMessage(connectorProperties.getName(), "Error writing document", e);

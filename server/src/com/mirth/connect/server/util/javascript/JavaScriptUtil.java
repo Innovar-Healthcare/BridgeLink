@@ -42,6 +42,7 @@ import com.mirth.connect.donkey.model.message.Response;
 import com.mirth.connect.donkey.model.message.Status;
 import com.mirth.connect.donkey.model.message.attachment.AttachmentException;
 import com.mirth.connect.donkey.server.ConnectorTaskException;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.util.Base64Util;
 import com.mirth.connect.model.Channel;
 import com.mirth.connect.model.ServerEvent;
@@ -111,12 +112,12 @@ public class JavaScriptUtil {
         String processedMessage = message.getRawData();
         Object result = null;
 
-        try {
+        try (LogContext.Scope outerChannelScope = LogContext.channel(channelId, channelName)) {
             result = execute(new JavaScriptTask<Object>(contextFactory, ScriptController.ATTACHMENT_SCRIPT_KEY, channelId, channelName) {
                 @Override
                 public Object doCall() throws Exception {
                     Logger scriptLogger = LogManager.getLogger(ScriptController.ATTACHMENT_SCRIPT_KEY.toLowerCase());
-                    try {
+                    try (LogContext.Scope channelScope = LogContext.channel(channelId, channelName)) {
                         Scriptable scope = JavaScriptScopeUtil.getAttachmentScope(getContextFactory(), scriptLogger, channelId, channelName, finalMessage, attachments, isBinary);
                         return JavaScriptUtil.executeScript(this, ScriptController.getScriptId(ScriptController.ATTACHMENT_SCRIPT_KEY, channelId), scope, null, null);
                     } finally {
@@ -170,6 +171,12 @@ public class JavaScriptUtil {
      * 
      */
     public static String executePreprocessorScripts(JavaScriptTask<Object> task, ConnectorMessage message, Map<String, Integer> destinationIdMap, MirthScopeProvider scopeProvider) throws Exception {
+        return executePreprocessorScripts(task, message, destinationIdMap, scopeProvider, null);
+    }
+
+    public static String executePreprocessorScripts(JavaScriptTask<Object> task, ConnectorMessage message, Map<String, Integer> destinationIdMap, MirthScopeProvider scopeProvider, String channelName) throws Exception {
+        try (LogContext.Scope channelScope = LogContext.channel(message.getChannelId(), channelName);
+             LogContext.Scope messageScope = LogContext.message(message.getMessageId())) {
         String processedMessage = null;
         String globalResult = message.getRaw().getContent();
         Logger scriptLogger = LogManager.getLogger(ScriptController.PREPROCESSOR_SCRIPT_KEY.toLowerCase());
@@ -240,6 +247,7 @@ public class JavaScriptUtil {
         }
 
         return processedMessage;
+        }
     }
 
     /**
@@ -271,6 +279,12 @@ public class JavaScriptUtil {
      * @throws Exception
      */
     public static Response executePostprocessorScripts(JavaScriptTask<Object> task, Message message) throws Exception {
+        return executePostprocessorScripts(task, message, null);
+    }
+
+    public static Response executePostprocessorScripts(JavaScriptTask<Object> task, Message message, String channelName) throws Exception {
+        try (LogContext.Scope channelScope = LogContext.channel(message.getChannelId(), channelName);
+             LogContext.Scope messageScope = LogContext.message(message.getMessageId())) {
         Logger scriptLogger = LogManager.getLogger(ScriptController.POSTPROCESSOR_SCRIPT_KEY.toLowerCase());
 
         Response channelResponse = null;
@@ -312,6 +326,7 @@ public class JavaScriptUtil {
         }
 
         return response;
+        }
     }
 
     private static Response getPostprocessorResponse(Object result) {
@@ -378,12 +393,12 @@ public class JavaScriptUtil {
      * @throws JavaScriptExecutorException
      */
     public static void executeChannelDebugDeployScript(MirthContextFactory contextFactory, final String scriptId, final String scriptType, final String channelId, final String channelName, MirthScopeProvider scopeProvider) throws InterruptedException, JavaScriptExecutorException {
-        try {
+        try (LogContext.Scope outerChannelScope = LogContext.channel(channelId, channelName)) {
             execute(new JavaScriptTask<Object>(contextFactory, scriptType, channelId, channelName) {
                 @Override
                 public Object doCall() throws Exception {
                     Logger scriptLogger = LogManager.getLogger(scriptType.toLowerCase());
-                    try {
+                    try (LogContext.Scope channelScope = LogContext.channel(channelId, channelName)) {
                         Scriptable scope = JavaScriptScopeUtil.getDeployScope(getContextFactory(), scriptLogger, channelId, channelName);
                         scopeProvider.setScope(scope);
                         JavaScriptUtil.executeScript(this, scriptId, scope, channelId, null);
@@ -409,12 +424,12 @@ public class JavaScriptUtil {
      * @throws JavaScriptExecutorException
      */
     public static void executeChannelDeployScript(MirthContextFactory contextFactory, final String scriptId, final String scriptType, final String channelId, final String channelName) throws InterruptedException, JavaScriptExecutorException {
-        try {
+        try (LogContext.Scope outerChannelScope = LogContext.channel(channelId, channelName)) {
             execute(new JavaScriptTask<Object>(contextFactory, scriptType, channelId, channelName) {
                 @Override
                 public Object doCall() throws Exception {
                     Logger scriptLogger = LogManager.getLogger(scriptType.toLowerCase());
-                    try {
+                    try (LogContext.Scope channelScope = LogContext.channel(channelId, channelName)) {
                         Scriptable scope = JavaScriptScopeUtil.getDeployScope(getContextFactory(), scriptLogger, channelId, channelName);
                         JavaScriptUtil.executeScript(this, scriptId, scope, channelId, null);
                         return null;
@@ -439,12 +454,12 @@ public class JavaScriptUtil {
      * @throws JavaScriptExecutorException
      */
     public static void executeChannelUndeployScript(MirthContextFactory contextFactory, final String scriptId, final String scriptType, final String channelId, final String channelName) throws InterruptedException, JavaScriptExecutorException {
-        try {
+        try (LogContext.Scope outerChannelScope = LogContext.channel(channelId, channelName)) {
             execute(new JavaScriptTask<Object>(contextFactory, scriptType, channelId, channelName) {
                 @Override
                 public Object doCall() throws Exception {
                     Logger scriptLogger = LogManager.getLogger(scriptType.toLowerCase());
-                    try {
+                    try (LogContext.Scope channelScope = LogContext.channel(channelId, channelName)) {
                         Scriptable scope = JavaScriptScopeUtil.getUndeployScope(getContextFactory(), scriptLogger, channelId, channelName);
                         JavaScriptUtil.executeScript(this, scriptId, scope, channelId, null);
                         return null;
@@ -471,12 +486,12 @@ public class JavaScriptUtil {
      * @throws JavaScriptExecutorException
      */
     public static void executeChannelDebugUndeployScript(MirthContextFactory contextFactory, final String scriptId, final String scriptType, final String channelId, final String channelName, MirthScopeProvider scopeProvider) throws InterruptedException, JavaScriptExecutorException {
-        try {
+        try (LogContext.Scope outerChannelScope = LogContext.channel(channelId, channelName)) {
             execute(new JavaScriptTask<Object>(contextFactory, scriptType, channelId, channelName) {
                 @Override
                 public Object doCall() throws Exception {
                     Logger scriptLogger = LogManager.getLogger(scriptType.toLowerCase());
-                    try {
+                    try (LogContext.Scope channelScope = LogContext.channel(channelId, channelName)) {
                         Scriptable scope = JavaScriptScopeUtil.getUndeployScope(getContextFactory(), scriptLogger, channelId, channelName);
                         scopeProvider.setScope(scope);
                         JavaScriptUtil.executeScript(this, scriptId, scope, channelId, null);

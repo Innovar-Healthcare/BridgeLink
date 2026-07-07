@@ -1933,12 +1933,14 @@ public class Channel implements Runnable {
 
     @Override
     public void run() {
-        try {
-            do {
-                processSourceQueue(Constants.SOURCE_QUEUE_POLL_TIMEOUT_MILLIS);
-            } while (isActive() && !stopSourceQueue);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        try (LogContext.Scope channelScope = LogContext.channel(channelId, name)) {
+            try {
+                do {
+                    processSourceQueue(Constants.SOURCE_QUEUE_POLL_TIMEOUT_MILLIS);
+                } while (isActive() && !stopSourceQueue);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

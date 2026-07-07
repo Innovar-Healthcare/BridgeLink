@@ -105,6 +105,7 @@ import com.mirth.commons.encryption.Output;
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.PropertiesConfigurationUtil;
 import com.mirth.connect.donkey.model.DatabaseConstants;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.server.data.DonkeyStatisticsUpdater;
 import com.mirth.connect.donkey.util.DonkeyElement;
 import com.mirth.connect.model.Channel;
@@ -196,6 +197,8 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
     private static final String HTTPS_SERVER_PROTOCOLS = "https.server.protocols";
     private static final String HTTPS_CIPHER_SUITES = "https.ciphersuites";
     private static final String STARTUP_DEPLOY = "server.startupdeploy";
+    private static final String LOG_CHANNEL_CONTEXT_ENABLED = "log.channelcontext.enabled";
+    private static final String LOG_ERROR_EVENT_ENABLED = "log.errorevent.enabled";
     private static final String API_BYPASSWORD = "server.api.bypassword";
     private static final String STATS_UPDATE_INTERVAL = "donkey.statsupdateinterval";
     private static final String RHINO_LANGUAGE_VERSION = "rhino.languageversion";
@@ -343,6 +346,16 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             if (StringUtils.isNotBlank(deploy)) {
                 startupDeploy = Boolean.parseBoolean(deploy);
             }
+
+            /*
+             * Channel-aware logging toggles (opt-in; default false preserves legacy behavior).
+             * Both are read here and pushed into the donkey module's LogContext, which cannot read
+             * mirth.properties directly. LogContext is the single source of truth consulted by
+             * LogContext/ArrayAppender (channel context) and by DefaultEventController +
+             * DestinationConnector (error-event logging).
+             */
+            LogContext.setEnabled(mirthConfig.getBoolean(LOG_CHANNEL_CONTEXT_ENABLED, false));
+            LogContext.setErrorEventLoggingEnabled(mirthConfig.getBoolean(LOG_ERROR_EVENT_ENABLED, false));
 
             // Check for server GUID and generate a new one if it doesn't exist
             File serverIdFile = new File(getApplicationDataDir(), "server.id");

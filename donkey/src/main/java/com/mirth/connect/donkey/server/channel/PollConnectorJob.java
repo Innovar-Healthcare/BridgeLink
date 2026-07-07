@@ -45,8 +45,11 @@ public class PollConnectorJob implements InterruptableJob {
                     String originalThreadName = thread.getName();
 
                     try {
-                        thread.setName(pollConnector.getConnectorProperties().getName() + " Polling Thread on " + pollConnector.getChannel().getName() + " (" + pollConnector.getChannelId() + ") < " + originalThreadName);
-                        pollConnector.poll();
+                        try (LogContext.Scope channelScope = LogContext.channel(pollConnector.getChannelId(), pollConnector.getChannel().getName());
+                             LogContext.Scope connectorScope = LogContext.connector(pollConnector.getConnectorProperties().getName(), 0)) {
+                            thread.setName(pollConnector.getConnectorProperties().getName() + " Polling Thread on " + pollConnector.getChannel().getName() + " (" + pollConnector.getChannelId() + ") < " + originalThreadName);
+                            pollConnector.poll();
+                        }
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     } finally {

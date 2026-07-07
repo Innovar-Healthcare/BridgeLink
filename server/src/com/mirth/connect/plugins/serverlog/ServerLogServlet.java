@@ -10,6 +10,7 @@
 package com.mirth.connect.plugins.serverlog;
 
 import java.util.List;
+import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.core.Context;
@@ -27,7 +28,7 @@ public class ServerLogServlet extends MirthServlet implements ServerLogServletIn
     }
 
     @Override
-    public List<ServerLogItem> getServerLogs(int fetchSize, Long lastLogId) {
-        return provider.getServerLogs(fetchSize, lastLogId);
+    public List<ServerLogItem> getServerLogs(int fetchSize, Long lastLogId, Set<String> channelIds) {
+        return provider.getServerLogs(fetchSize, lastLogId, channelIds);
     }
 }
