@@ -42,18 +42,13 @@ public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsT
 
 	@Override
 	public int replaceRollupWindow(String serverId, Date startTs, int bucketSizeMinutes, List<MessageStatisticsTimeseries> list) {
-		SqlSession session = sqlSessionManager.openSession();
-
-		boolean commitSuccess = false;
 		try {
 			if (serverId == null) {
 				throw new IllegalArgumentException("serverId cannot be null");
 			}
-
 			if (startTs == null) {
 				throw new IllegalArgumentException("startTs cannot be null");
 			}
-
 			if (list == null) {
 				throw new IllegalArgumentException("List of rollup rows cannot be null");
 			}
@@ -73,7 +68,6 @@ public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsT
 				// shallow copy
 				MessageStatisticsTimeseries c = new MessageStatisticsTimeseries(r);
 				c.setConnectorId(ConnectorIdNormalizer.toDb(c.getConnectorId()));
-
 				dbRows.add(c);
 			}
 
@@ -82,27 +76,71 @@ public class MyBatisMessageStatisticsTimeseriesDao implements MessageStatisticsT
 			params.put("ts", startTs);
 			params.put("bucketSizeMinutes", bucketSizeMinutes);
 
-			int deleted = session.delete(NS + ".deleteRollupWindow", params);
+			if (dbType == DatabaseType.MYSQL) {
+				// MySQL InnoDB acquires gap locks on DELETE under REPEATABLE READ, causing
+				// deadlocks when two nodes concurrently replace the same window. Splitting
+				// into two separate transactions releases the gap lock before the INSERT,
+				// so concurrent writers serialize on a record lock instead of deadlocking.
+				deleteInOwnTx(params);
+				return dbRows.isEmpty() ? 0 : insertInOwnTx(dbRows);
+			} else {
+				// Postgres and others: single atomic transaction.
+				// Postgres uses ON CONFLICT DO UPDATE in the mapper.
+				return deleteAndInsertInOneTx(params, dbRows);
+			}
+		} catch (RuntimeException e) {
+			logger.error("Failed to replace rollup window", e);
+			debugPrintRows(list);
+			throw e;
+		}
+	}
 
+	private void deleteInOwnTx(Map<String, Object> params) {
+		SqlSession session = sqlSessionManager.openSession();
+		boolean committed = false;
+		try {
+			session.delete(NS + ".deleteRollupWindow", params);
+			session.commit();
+			committed = true;
+		} finally {
+			if (!committed) {
+				try { session.rollback(); } catch (Exception ignored) {}
+			}
+			session.close();
+		}
+	}
+
+	private int insertInOwnTx(List<MessageStatisticsTimeseries> dbRows) {
+		SqlSession session = sqlSessionManager.openSession();
+		boolean committed = false;
+		try {
+			int inserted = session.insert(NS + ".insertRollupRows", dbRows);
+			session.commit();
+			committed = true;
+			return inserted;
+		} finally {
+			if (!committed) {
+				try { session.rollback(); } catch (Exception ignored) {}
+			}
+			session.close();
+		}
+	}
+
+	private int deleteAndInsertInOneTx(Map<String, Object> params, List<MessageStatisticsTimeseries> dbRows) {
+		SqlSession session = sqlSessionManager.openSession();
+		boolean committed = false;
+		try {
+			session.delete(NS + ".deleteRollupWindow", params);
 			int inserted = 0;
 			if (!dbRows.isEmpty()) {
 				inserted = session.insert(NS + ".insertRollupRows", dbRows);
 			}
-
 			session.commit();
-			commitSuccess = true;
-
-			return inserted; // rows written
-		} catch (Exception e) {
-			logger.error("Failed to replace rollup window", e);
-			debugPrintRows(list);
-			return 0;
+			committed = true;
+			return inserted;
 		} finally {
-			if (!commitSuccess) {
-				try {
-					session.rollback();
-				} catch (Exception ignored) {
-				}
+			if (!committed) {
+				try { session.rollback(); } catch (Exception ignored) {}
 			}
 			session.close();
 		}

@@ -170,7 +170,7 @@ public class ChannelControllerTests {
             try {
                 long localChannelId = ChannelController.getInstance().getLocalChannelId(channelId);
                 connection = TestUtils.getConnection();
-                statement = connection.prepareStatement("DELETE FROM d_ms" + localChannelId);
+                statement = connection.prepareStatement("DELETE FROM D_MS" + localChannelId);
                 statement.executeUpdate();
                 statement.close();
 
@@ -178,7 +178,7 @@ public class ChannelControllerTests {
                 String statsServerId = "testserverid";
 
                 for (Integer metaDataId : new Integer[] { null, 0, 1 }) {
-                    statement = connection.prepareStatement("INSERT INTO d_ms" + localChannelId + " (metadata_id, server_id, received, filtered, sent, error) VALUES (?,?,?,?,?,?)");
+                    statement = connection.prepareStatement("INSERT INTO D_MS" + localChannelId + " (metadata_id, server_id, received, filtered, sent, error) VALUES (?,?,?,?,?,?)");
                     if (metaDataId != null) {
                         statement.setInt(1, metaDataId);
                     } else {

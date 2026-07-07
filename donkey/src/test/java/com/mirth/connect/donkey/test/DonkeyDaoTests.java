@@ -184,7 +184,7 @@ public class DonkeyDaoTests {
 
             try {
                 connection = TestUtils.getConnection();
-                statement = connection.prepareStatement("SELECT * FROM d_m" + localChannelId + " WHERE id = ?");
+                statement = connection.prepareStatement("SELECT * FROM D_M" + localChannelId + " WHERE id = ?");
                 statement.setLong(1, message.getMessageId());
                 result = statement.executeQuery();
 
@@ -265,7 +265,7 @@ public class DonkeyDaoTests {
                 }
 
                 connection = TestUtils.getConnection();
-                statement = connection.prepareStatement("SELECT * FROM d_mm" + localChannelId + " WHERE id = ? AND message_id = ?");
+                statement = connection.prepareStatement("SELECT * FROM D_MM" + localChannelId + " WHERE id = ? AND message_id = ?");
                 statement.setLong(1, connectorMessage.getMetaDataId());
                 statement.setLong(2, connectorMessage.getMessageId());
                 result = statement.executeQuery();
@@ -558,7 +558,7 @@ public class DonkeyDaoTests {
                 // Assert that the send attempts were updated
                 long localChannelId = ChannelController.getInstance().getLocalChannelId(channel.getChannelId());
                 connection = TestUtils.getConnection();
-                statement = connection.prepareStatement("SELECT send_attempts FROM d_mm" + localChannelId + " WHERE message_id = ? AND id = ?");
+                statement = connection.prepareStatement("SELECT send_attempts FROM D_MM" + localChannelId + " WHERE message_id = ? AND id = ?");
                 statement.setLong(1, sourceMessage.getMessageId());
                 statement.setLong(2, sourceMessage.getMetaDataId());
                 result = statement.executeQuery();
@@ -988,31 +988,31 @@ public class DonkeyDaoTests {
             long localChannelId = ChannelController.getInstance().getLocalChannelId(channel.getChannelId());
             connection = TestUtils.getConnection();
 
-            statement = connection.prepareStatement("SELECT * FROM d_m" + localChannelId);
+            statement = connection.prepareStatement("SELECT * FROM D_M" + localChannelId);
             result = statement.executeQuery();
             assertFalse(result.next());
             result.close();
             statement.close();
 
-            statement = connection.prepareStatement("SELECT * FROM d_mm" + localChannelId);
+            statement = connection.prepareStatement("SELECT * FROM D_MM" + localChannelId);
             result = statement.executeQuery();
             assertFalse(result.next());
             result.close();
             statement.close();
 
-            statement = connection.prepareStatement("SELECT * FROM d_mc" + localChannelId);
+            statement = connection.prepareStatement("SELECT * FROM D_MC" + localChannelId);
             result = statement.executeQuery();
             assertFalse(result.next());
             result.close();
             statement.close();
 
-            statement = connection.prepareStatement("SELECT * FROM d_mcm" + localChannelId);
+            statement = connection.prepareStatement("SELECT * FROM D_MCM" + localChannelId);
             result = statement.executeQuery();
             assertFalse(result.next());
             result.close();
             statement.close();
 
-            statement = connection.prepareStatement("SELECT * FROM d_ma" + localChannelId);
+            statement = connection.prepareStatement("SELECT * FROM D_MA" + localChannelId);
             result = statement.executeQuery();
             assertFalse(result.next());
             result.close();
@@ -1072,7 +1072,7 @@ public class DonkeyDaoTests {
                 connection = TestUtils.getConnection();
 
                 // Assert that the channel was inserted
-                statement = connection.prepareStatement("SELECT * FROM d_channels WHERE channel_id = ? AND local_channel_id = ?");
+                statement = connection.prepareStatement("SELECT * FROM D_CHANNELS WHERE channel_id = ? AND local_channel_id = ?");
                 statement.setString(1, tempChannelId);
                 statement.setLong(2, nextId);
                 result = statement.executeQuery();
@@ -1202,7 +1202,7 @@ public class DonkeyDaoTests {
                 connection = TestUtils.getConnection();
 
                 // Assert that the channel was deleted
-                statement = connection.prepareStatement("SELECT * FROM d_channels WHERE channel_id = ? AND local_channel_id = ?");
+                statement = connection.prepareStatement("SELECT * FROM D_CHANNELS WHERE channel_id = ? AND local_channel_id = ?");
                 statement.setString(1, channelId);
                 statement.setLong(2, localChannelIds.get(channelId));
                 result = statement.executeQuery();
@@ -1211,6 +1211,11 @@ public class DonkeyDaoTests {
                 TestUtils.close(statement);
 
                 result = connection.getMetaData().getTables(null, null, "d_m%", null);
+                if (!result.next()) {
+                    result = connection.getMetaData().getTables(null, null, "D_M%", null);
+                } else {
+                    result.beforeFirst();
+                }
 
                 while (result.next()) {
                     String name = result.getString("TABLE_NAME").toLowerCase();
@@ -1367,7 +1372,7 @@ public class DonkeyDaoTests {
             // Assert that the maximum local channel ID matches the one returned from the DAO
             try {
                 connection = TestUtils.getConnection();
-                statement = connection.prepareStatement("SELECT MAX(local_channel_id) FROM d_channels");
+                statement = connection.prepareStatement("SELECT MAX(local_channel_id) FROM D_CHANNELS");
                 result = statement.executeQuery();
                 result.next();
                 maxId = result.getLong(1);
@@ -1395,7 +1400,7 @@ public class DonkeyDaoTests {
                     connection = TestUtils.getConnection();
 
                     // Assert that the maximum local channel ID matches the one returned from the DAO
-                    statement = connection.prepareStatement("SELECT MAX(local_channel_id) FROM d_channels");
+                    statement = connection.prepareStatement("SELECT MAX(local_channel_id) FROM D_CHANNELS");
                     result = statement.executeQuery();
                     result.next();
                     maxId = result.getLong(1);
@@ -1457,7 +1462,7 @@ public class DonkeyDaoTests {
 
                 try {
                     connection = TestUtils.getConnection();
-                    statement = connection.prepareStatement("INSERT INTO d_channels (channel_id, local_channel_id) VALUES (?, ?)");
+                    statement = connection.prepareStatement("INSERT INTO D_CHANNELS (channel_id, local_channel_id) VALUES (?, ?)");
                     statement.setString(1, tempChannelId);
                     statement.setLong(2, localChannelIds.get(tempChannelId));
                     statement.executeUpdate();
@@ -1475,7 +1480,7 @@ public class DonkeyDaoTests {
 
             try {
                 connection = TestUtils.getConnection();
-                statement = connection.prepareStatement("SELECT * FROM d_channels");
+                statement = connection.prepareStatement("SELECT * FROM D_CHANNELS");
                 result = statement.executeQuery();
 
                 while (result.next()) {
@@ -1507,7 +1512,7 @@ public class DonkeyDaoTests {
                 connection = TestUtils.getConnection();
 
                 for (String channelId : localChannelIds.keySet()) {
-                    statement = connection.prepareStatement("DELETE FROM d_channels WHERE channel_id = ? AND local_channel_id = ?");
+                    statement = connection.prepareStatement("DELETE FROM D_CHANNELS WHERE channel_id = ? AND local_channel_id = ?");
                     statement.setString(1, channelId);
                     statement.setLong(2, localChannelIds.get(channelId));
                     statement.executeUpdate();
@@ -1548,7 +1553,7 @@ public class DonkeyDaoTests {
             try {
                 // Assert that the maximum local channel ID matches the one returned from the DAO
                 connection = TestUtils.getConnection();
-                statement = connection.prepareStatement("SELECT MAX(id) FROM d_m" + localChannelId);
+                statement = connection.prepareStatement("SELECT MAX(id) FROM D_M" + localChannelId);
                 result = statement.executeQuery();
                 result.next();
                 maxId = result.getLong(1);
@@ -1574,7 +1579,7 @@ public class DonkeyDaoTests {
                 try {
                     // Assert that the maximum local channel ID matches the one returned from the DAO
                     connection = TestUtils.getConnection();
-                    statement = connection.prepareStatement("SELECT MAX(id) FROM d_m" + localChannelId);
+                    statement = connection.prepareStatement("SELECT MAX(id) FROM D_M" + localChannelId);
                     result = statement.executeQuery();
                     result.next();
                     maxId = result.getLong(1);

@@ -1,6 +1,9 @@
 
 # /
 
+# Extension testlib/ directories contain binary JARs copied from server/testlib/ — not committed
+custom-extensions/*/testlib/
+
 .idea
 **/*.iml
 .vscode/

@@ -11,11 +11,15 @@ package com.mirth.connect.util;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.Test;
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.Script;
+import org.mozilla.javascript.Scriptable;
 
 import com.mirth.connect.util.JavaScriptSharedUtil.ExprPart;
 
@@ -170,5 +174,59 @@ public class JavaScriptSharedUtilTest {
         expected.add(new ExprPart("#@$%.^&*(", "#@$%.^&*("));
 
         assertArrayEquals(expected.toArray(), JavaScriptSharedUtil.getExpressionParts(expression).toArray());
+    }
+
+    // ===== Rhino 1.7.15.1 compatibility tests (D-07) =====
+
+    @Test
+    public void testContextEnterExit() {
+        Context cx = Context.enter();
+        try {
+            assertNotNull(cx);
+            Scriptable scope = cx.initStandardObjects();
+            assertNotNull(scope);
+        } finally {
+            Context.exit();
+        }
+    }
+
+    @Test
+    public void testJsonParseSerialization() {
+        Context cx = Context.enter();
+        try {
+            Scriptable scope = cx.initStandardObjects();
+            Object result = cx.evaluateString(scope, "JSON.stringify({a:1})", "test", 1, null);
+            assertEquals("{\"a\":1}", Context.toString(result));
+        } finally {
+            Context.exit();
+        }
+    }
+
+    @Test
+    public void testScriptCompilationCache() {
+        Context cx = Context.enter();
+        try {
+            Scriptable scope = cx.initStandardObjects();
+            Script script = cx.compileString("1 + 1", "test", 1, null);
+            Object r1 = script.exec(cx, scope);
+            Object r2 = script.exec(cx, scope);
+            assertEquals(Context.toNumber(r1), Context.toNumber(r2), 0.0);
+        } finally {
+            Context.exit();
+        }
+    }
+
+    @Test
+    public void testJavaInterop() {
+        Context cx = Context.enter();
+        try {
+            Scriptable scope = cx.initStandardObjects();
+            // Use a Java String literal (not a JS number) to avoid float coercion (42 → "42.0")
+            Object result = cx.evaluateString(scope,
+                "java.lang.String.valueOf('hello')", "test", 1, null);
+            assertEquals("hello", Context.toString(result));
+        } finally {
+            Context.exit();
+        }
     }
 }

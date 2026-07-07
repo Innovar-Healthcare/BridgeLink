@@ -372,7 +372,7 @@ public class DestinationConnectorTests {
                     if (queueNull || !queueEnabled || queueSendFirst) {
                         // Assert that the sent content was stored
                         long localChannelId = ChannelController.getInstance().getLocalChannelId(channel.getChannelId());
-                        statement = connection.prepareStatement("SELECT * FROM d_mc" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
+                        statement = connection.prepareStatement("SELECT * FROM D_MC" + localChannelId + " WHERE message_id = ? AND metadata_id = ? AND content_type = ?");
                         statement.setLong(1, dispatchResult.getMessageId());
                         statement.setInt(2, 1);
                         statement.setInt(3, ContentType.SENT.getContentTypeCode());
@@ -528,7 +528,7 @@ public class DestinationConnectorTests {
                     if (tempClass.messageId == 0) {
                         continue;
                     }
-                    statement = connection.prepareStatement("SELECT * FROM d_mm" + localChannelId + " WHERE message_id = ? AND id = ? AND status = ?");
+                    statement = connection.prepareStatement("SELECT * FROM D_MM" + localChannelId + " WHERE message_id = ? AND id = ? AND status = ?");
                     statement.setLong(1, tempClass.messageId);
                     statement.setInt(2, 1);
                     statement.setString(3, String.valueOf(Status.PENDING.getStatusCode()));
@@ -546,7 +546,7 @@ public class DestinationConnectorTests {
                 assertTrue(responseTransformer.isTransformed());
 
                 // Assert that the message status was updated to SENT
-                statement = connection.prepareStatement("SELECT * FROM d_mm" + localChannelId + " WHERE message_id = ? AND id = ? AND status = ?");
+                statement = connection.prepareStatement("SELECT * FROM D_MM" + localChannelId + " WHERE message_id = ? AND id = ? AND status = ?");
                 statement.setLong(1, tempClass.messageId);
                 statement.setInt(2, 1);
                 statement.setString(3, String.valueOf(Status.SENT.getStatusCode()));

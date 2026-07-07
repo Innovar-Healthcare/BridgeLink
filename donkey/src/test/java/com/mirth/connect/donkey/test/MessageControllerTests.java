@@ -113,7 +113,7 @@ public class MessageControllerTests {
                 // Assert that the Message was inserted into the database
                 try {
                     connection = TestUtils.getConnection();
-                    statement = connection.prepareStatement("SELECT * FROM d_m" + localChannelId + " WHERE id = ?");
+                    statement = connection.prepareStatement("SELECT * FROM D_M" + localChannelId + " WHERE id = ?");
                     statement.setLong(1, sourceMessage.getMessageId());
                     result = statement.executeQuery();
                     assertTrue(result.next());
