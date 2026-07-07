@@ -120,42 +120,38 @@ public class GitOperations {
             return files;
         }
 
-        RevWalk revWalk = new RevWalk(repo);
-        RevCommit commit = revWalk.parseCommit(lastCommitId);
-        RevTree tree = commit.getTree();
+        try (RevWalk revWalk = new RevWalk(repo);
+             TreeWalk treeWalk = new TreeWalk(repo)) {
 
-        // Walk through tree
-        TreeWalk treeWalk = new TreeWalk(repo);
-        treeWalk.addTree(tree);
-        treeWalk.setRecursive(false);
-        treeWalk.setFilter(PathFilter.create(path));
+            RevCommit commit = revWalk.parseCommit(lastCommitId);
+            RevTree tree = commit.getTree();
 
-        while (treeWalk.next()) {
-            if (treeWalk.isSubtree()) {
-                treeWalk.enterSubtree();
-            } else {
-                try {
-                    String fileName = treeWalk.getNameString();
-                    String filePath = treeWalk.getPathString();
+            treeWalk.addTree(tree);
+            treeWalk.setRecursive(false);
+            treeWalk.setFilter(PathFilter.create(path));
 
-                    // Read file content from Git object
-                    ObjectId objectId = treeWalk.getObjectId(0);
-                    ObjectLoader loader = repo.open(objectId);
-                    byte[] content = loader.getBytes();
+            while (treeWalk.next()) {
+                if (treeWalk.isSubtree()) {
+                    treeWalk.enterSubtree();
+                } else {
+                    try {
+                        String fileName = treeWalk.getNameString();
+                        String filePath = treeWalk.getPathString();
 
-                    // Get last commit for this file
-                    String commitId = lastCommitId.getName();
+                        ObjectId objectId = treeWalk.getObjectId(0);
+                        ObjectLoader loader = repo.open(objectId);
+                        byte[] content = loader.getBytes();
 
-                    files.add(new CommittedFile(fileName, filePath, content, commitId));
+                        String commitId = lastCommitId.getName();
 
-                } catch (Exception e) {
-                    logger.error("Failed to read file: {}", treeWalk.getPathString(), e);
+                        files.add(new CommittedFile(fileName, filePath, content, commitId));
+
+                    } catch (Exception e) {
+                        logger.error("Failed to read file: {}", treeWalk.getPathString(), e);
+                    }
                 }
             }
         }
-
-        revWalk.close();
-        treeWalk.close();
 
         logger.info("Read {} files from directory: {}", files.size(), directory);
         return files;
@@ -221,6 +217,10 @@ public class GitOperations {
      * @throws IOException     if I/O error occurs
      */
     public List<CommitMetaData> getFileHistory(String filePath) throws GitAPIException, IOException {
+        return getFileHistory(filePath, 0);
+    }
+
+    public List<CommitMetaData> getFileHistory(String filePath, int maxCount) throws GitAPIException, IOException {
 
         if (filePath == null || filePath.trim().isEmpty()) {
             throw new IllegalArgumentException("File path cannot be null or empty");
@@ -231,8 +231,10 @@ public class GitOperations {
         List<CommitMetaData> history = new ArrayList<>();
         Repository repo = git.getRepository();
 
-        // Get commit history for specific file
         LogCommand logCommand = git.log().add(repo.resolve(Constants.HEAD)).addPath(filePath);
+        if (maxCount > 0) {
+            logCommand.setMaxCount(maxCount);
+        }
 
         Iterable<RevCommit> commits = logCommand.call();
 

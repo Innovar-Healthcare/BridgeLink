@@ -667,22 +667,23 @@ public class VersionHistoryService {
      * @throws IllegalArgumentException if ID is invalid
      */
     public List<CommitMetaData> getLibraryHistory(String id) throws GitNotConnectedException, GitOperationException, IllegalArgumentException {
+        return getLibraryHistory(id, 0);
+    }
 
-        logger.info("getLibraryHistory: id={}", id);
+    public List<CommitMetaData> getLibraryHistory(String id, int limit) throws GitNotConnectedException, GitOperationException, IllegalArgumentException {
 
-        // Validate
+        logger.info("getLibraryHistory: id={}, limit={}", id, limit);
+
         validateId(id);
 
-        // Check Git availability
         if (!gitRepositoryService.isGitAvailable()) {
             String reason = gitRepositoryService.getGitUnavailableReason();
             logger.error("Git not available: {}", reason);
             throw new GitNotConnectedException("Git is not available: " + reason);
         }
 
-        // Get repository and history
         LibraryRepository repository = gitRepositoryService.getLibraryRepository();
-        List<CommitMetaData> history = repository.getHistory(id);
+        List<CommitMetaData> history = repository.getHistory(id, limit);
 
         logger.info("Retrieved {} commits for library: {}", history.size(), id);
         return history;
@@ -698,8 +699,12 @@ public class VersionHistoryService {
      * @throws IllegalArgumentException if ID is invalid
      */
     public List<CommitMetaData> getChannelHistory(String id) throws GitNotConnectedException, GitOperationException, IllegalArgumentException {
+        return getChannelHistory(id, 0);
+    }
 
-        logger.info("getChannelHistory: id={}", id);
+    public List<CommitMetaData> getChannelHistory(String id, int limit) throws GitNotConnectedException, GitOperationException, IllegalArgumentException {
+
+        logger.info("getChannelHistory: id={}, limit={}", id, limit);
 
         validateId(id);
 
@@ -710,7 +715,7 @@ public class VersionHistoryService {
         }
 
         ChannelRepository repository = gitRepositoryService.getChannelRepository();
-        List<CommitMetaData> history = repository.getHistory(id);
+        List<CommitMetaData> history = repository.getHistory(id, limit);
 
         logger.info("Retrieved {} commits for channel: {}", history.size(), id);
         return history;
@@ -726,8 +731,12 @@ public class VersionHistoryService {
      * @throws IllegalArgumentException if ID is invalid
      */
     public List<CommitMetaData> getCodeTemplateHistory(String id) throws GitNotConnectedException, GitOperationException, IllegalArgumentException {
+        return getCodeTemplateHistory(id, 0);
+    }
 
-        logger.info("getCodeTemplateHistory: id={}", id);
+    public List<CommitMetaData> getCodeTemplateHistory(String id, int limit) throws GitNotConnectedException, GitOperationException, IllegalArgumentException {
+
+        logger.info("getCodeTemplateHistory: id={}, limit={}", id, limit);
 
         validateId(id);
 
@@ -738,15 +747,19 @@ public class VersionHistoryService {
         }
 
         CodeTemplateRepository repository = gitRepositoryService.getCodeTemplateRepository();
-        List<CommitMetaData> history = repository.getHistory(id);
+        List<CommitMetaData> history = repository.getHistory(id, limit);
 
         logger.info("Retrieved {} commits for code template: {}", history.size(), id);
         return history;
     }
 
     public List<CommitMetaData> getGlobalScriptsHistory(String id) throws GitNotConnectedException, GitOperationException, IllegalArgumentException {
+        return getGlobalScriptsHistory(id, 0);
+    }
 
-        logger.info("getGlobalScriptsHistory: id={}", id);
+    public List<CommitMetaData> getGlobalScriptsHistory(String id, int limit) throws GitNotConnectedException, GitOperationException, IllegalArgumentException {
+
+        logger.info("getGlobalScriptsHistory: id={}, limit={}", id, limit);
 
         validateId(id);
 
@@ -757,7 +770,7 @@ public class VersionHistoryService {
         }
 
         GlobalScriptRepository repository = gitRepositoryService.getGlobalScriptRepository();
-        List<CommitMetaData> history = repository.getHistory(id);
+        List<CommitMetaData> history = repository.getHistory(id, limit);
 
         logger.info("Retrieved {} commits for global scripts: {}", history.size(), id);
         return history;

@@ -86,15 +86,16 @@ public class VersionHistoryServiceClient {
      * @throws ClientException if channel not found or Git error occurs
      */
     public List<CommitMetaData> loadChannelHistory(String channelId) throws ClientException {
+        return loadChannelHistory(channelId, 0);
+    }
+
+    public List<CommitMetaData> loadChannelHistory(String channelId, int limit) throws ClientException {
         try {
-            // 1. Make the call
-            String jsonResponse = getServlet().getHistory(channelId, VersionControlConstants.MODE_CHANNEL);
+            String jsonResponse = getServlet().getHistory(channelId, VersionControlConstants.MODE_CHANNEL, limit);
             return JsonUtils.fromJsonList(jsonResponse, CommitMetaData.class);
         } catch (ClientException e) {
-            // 2. Rethrow ClientException with parsed ErrorResponse if available
             throw rethrowParsedClientError(e, true);
         } catch (Exception e) {
-            // 3. JSON serialization or unexpected errors
             throw new ClientException("Failed to load channel history", e);
         }
     }
@@ -310,12 +311,16 @@ public class VersionHistoryServiceClient {
      * @throws ClientException if code template not found or Git error occurs
      */
     public List<CommitMetaData> loadCodeTemplateHistory(String codeTemplateId) throws ClientException {
+        return loadCodeTemplateHistory(codeTemplateId, 0);
+    }
+
+    public List<CommitMetaData> loadCodeTemplateHistory(String codeTemplateId, int limit) throws ClientException {
         if (StringUtils.isBlank(codeTemplateId)) {
             throw new ClientException("Code template ID cannot be null or empty");
         }
 
         try {
-            String jsonResponse = getServlet().getHistory(codeTemplateId, VersionControlConstants.MODE_CODE_TEMPLATE);
+            String jsonResponse = getServlet().getHistory(codeTemplateId, VersionControlConstants.MODE_CODE_TEMPLATE, limit);
             return JsonUtils.fromJsonList(jsonResponse, CommitMetaData.class);
         } catch (ClientException e) {
             throw rethrowParsedClientError(e, true);
@@ -475,8 +480,12 @@ public class VersionHistoryServiceClient {
      * @throws ClientException if Git error occurs or global scripts not found
      */
     public List<CommitMetaData> loadGlobalScriptsHistory() throws ClientException {
+        return loadGlobalScriptsHistory(0);
+    }
+
+    public List<CommitMetaData> loadGlobalScriptsHistory(int limit) throws ClientException {
         try {
-            String jsonResponse = getServlet().getHistory("scripts", VersionControlConstants.MODE_GLOBAL_SCRIPTS);
+            String jsonResponse = getServlet().getHistory("scripts", VersionControlConstants.MODE_GLOBAL_SCRIPTS, limit);
             return JsonUtils.fromJsonList(jsonResponse, CommitMetaData.class);
         } catch (ClientException e) {
             throw rethrowParsedClientError(e, true);
@@ -719,9 +728,9 @@ public class VersionHistoryServiceClient {
      * @return List of commit metadata entries (newest first)
      * @throws ClientException if item not found or Git is not connected
      */
-    public List<CommitMetaData> getHistory(String id, String mode) throws ClientException {
+    public List<CommitMetaData> getHistory(String id, String mode, int limit) throws ClientException {
         try {
-            String jsonResponse = getServlet().getHistory(id, mode);
+            String jsonResponse = getServlet().getHistory(id, mode, limit);
             return JsonUtils.fromJsonList(jsonResponse, CommitMetaData.class);
         } catch (ClientException e) {
             throw rethrowParsedClientError(e, true);
