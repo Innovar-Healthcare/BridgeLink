@@ -56,8 +56,8 @@ public class ImportLookupGroupRequest {
             throw new IllegalArgumentException("Cache policy must be either 'LRU' or 'FIFO'.");
         }
 
-        if (group.getCacheSize() <= 0) {
-            throw new IllegalArgumentException("Cache size must be greater than zero.");
+        if (group.getCacheSize() < 0) {
+            throw new IllegalArgumentException("Cache size must not be negative.");
         }
 
         if (values != null && values.size() > 100_000) {

@@ -249,6 +249,11 @@
     	</zip>
 
         <echo message="Built, signed, installed, and zipped ${plugin.name}"/>
+
+        <!-- Auto deploy if .env exists and DEPLOY_ENABLED=true -->
+        <exec executable="bash" dir="${basedir}" failonerror="false">
+            <arg value="deploy-mirth.sh"/>
+        </exec>
     </target>
 
 </project>

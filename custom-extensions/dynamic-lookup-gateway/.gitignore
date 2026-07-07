@@ -1,2 +1,5 @@
 # Build output
 /build/
+
+# Local deploy config
+.env
