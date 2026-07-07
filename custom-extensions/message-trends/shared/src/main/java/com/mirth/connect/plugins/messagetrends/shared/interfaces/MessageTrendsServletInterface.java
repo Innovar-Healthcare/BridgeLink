@@ -88,7 +88,8 @@ public interface MessageTrendsServletInterface extends BaseServletInterface {
 	@MirthOperation(
 	    name = "getChannelStatistics",
 	    display = "Get channel time series statistics",
-	    permission = PERMISSION_ACCESS
+	    permission = PERMISSION_ACCESS,
+		auditable = false
 	)
 	public String getChannelStatistics(
 			@Param("channelId") 
@@ -165,7 +166,8 @@ public interface MessageTrendsServletInterface extends BaseServletInterface {
 	@MirthOperation(
 	    name = "getConnectorStatistics",
 	    display = "Get connector time series statistics",
-	    permission = PERMISSION_ACCESS
+	    permission = PERMISSION_ACCESS,
+		auditable = false
 	)
 	public String getConnectorStatistics(
 			@Param("channelId") 
@@ -250,7 +252,8 @@ public interface MessageTrendsServletInterface extends BaseServletInterface {
 	@MirthOperation(
 	    name = "getServerStatistics",
 	    display = "Get server time series statistics",
-	    permission = PERMISSION_ACCESS
+	    permission = PERMISSION_ACCESS,
+		auditable = false
 	)
 	public String getServerStatistics(
 			@Param("startTime")
@@ -294,7 +297,8 @@ public interface MessageTrendsServletInterface extends BaseServletInterface {
 	@MirthOperation(
 	    name = "getAvailableIntervals",
 	    display = "Get available time intervals",
-	    permission = PERMISSION_ACCESS
+	    permission = PERMISSION_ACCESS,
+		auditable = false
 	)
 	public String getAvailableIntervals() throws ClientException;
 
