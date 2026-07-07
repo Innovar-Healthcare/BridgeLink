@@ -18,6 +18,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.List;
+import java.util.Set;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
@@ -51,6 +52,7 @@ public interface ServerLogServletInterface extends BaseServletInterface {
     @MirthOperation(name = "getMirthServerLogs", display = "View Server Log", permission = PERMISSION_VIEW, type = ExecuteType.ASYNC, auditable = false)
     public List<ServerLogItem> getServerLogs(// @formatter:off
             @Param("fetchSize") @Parameter(description = "Specifies the maximum number of log items to return.", required = true, schema = @Schema(defaultValue = "100")) @QueryParam("fetchSize") int fetchSize,
-            @Param("lastLogId") @Parameter(description = "The last log ID the client retrieved. Only log items with a greater ID will be returned.") @QueryParam("lastLogId") Long lastLogId) throws ClientException;
+            @Param("lastLogId") @Parameter(description = "The last log ID the client retrieved. Only log items with a greater ID will be returned.") @QueryParam("lastLogId") Long lastLogId,
+            @Param("channelId") @Parameter(description = "If supplied, only entries for the listed channels (plus channel-less system entries) are returned. Repeat the parameter for multiple channels. Omit to fetch all entries.") @QueryParam("channelId") Set<String> channelIds) throws ClientException;
     // @formatter:on
 }

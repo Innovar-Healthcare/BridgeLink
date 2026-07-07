@@ -30,6 +30,7 @@ import com.mirth.connect.donkey.server.Constants;
 import com.mirth.connect.donkey.server.channel.DestinationConnector;
 import com.mirth.connect.donkey.server.channel.DispatchResult;
 import com.mirth.connect.donkey.server.event.ConnectionStatusEvent;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.server.event.ErrorEvent;
 import com.mirth.connect.server.controllers.ConfigurationController;
 import com.mirth.connect.server.controllers.ControllerFactory;
@@ -168,6 +169,9 @@ public class VmDispatcher extends DestinationConnector {
             responseStatus = Status.SENT;
             responseStatusMessage = "Message routed successfully to channel id: " + targetChannelId;
         } catch (Throwable e) {
+            if (LogContext.isErrorEventLoggingEnabled()) {
+                logger.error("Error routing message to channel id: " + targetChannelId, e);
+            }
             eventController.dispatchEvent(new ErrorEvent(currentChannelId, getMetaDataId(), message.getMessageId(), ErrorEventType.DESTINATION_CONNECTOR, getDestinationName(), connectorProperties.getName(), "Error routing message to channel id: " + targetChannelId, e));
             responseStatusMessage = ErrorMessageBuilder.buildErrorResponse("Error routing message to channel id: " + targetChannelId, e);
             responseError = ErrorMessageBuilder.buildErrorMessage(connectorProperties.getName(), "Error routing message to channel id: " + targetChannelId, e);

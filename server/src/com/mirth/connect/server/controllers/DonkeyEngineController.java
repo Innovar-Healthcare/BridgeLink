@@ -85,6 +85,7 @@ import com.mirth.connect.donkey.server.channel.components.PreProcessor;
 import com.mirth.connect.donkey.server.data.DonkeyDao;
 import com.mirth.connect.donkey.server.data.buffered.BufferedDaoFactory;
 import com.mirth.connect.donkey.server.data.passthru.PassthruDaoFactory;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.server.event.ErrorEvent;
 import com.mirth.connect.donkey.server.event.EventDispatcher;
 import com.mirth.connect.donkey.server.message.DataType;
@@ -1975,6 +1976,10 @@ public class DonkeyEngineController implements EngineController {
                         t = e.getCause();
                     }
 
+                    // Deploy-script failures are already logged by JavaScriptUtil (detailed error)
+                    // and by the ChannelTask error handler (deploy outcome, with channel context),
+                    // so we don't log again here. The ErrorEvent is still dispatched for alerts /
+                    // the in-app Server Log.
                     eventController.dispatchEvent(new ErrorEvent(channelModel.getId(), null, null, ErrorEventType.DEPLOY_SCRIPT, null, null, "Error running channel deploy script", t));
                     throw new DeployException("Failed to deploy channel " + channelId + ".", e);
                 }
@@ -2140,8 +2145,10 @@ public class DonkeyEngineController implements EngineController {
                         t = e.getCause();
                     }
 
-                    eventController.dispatchEvent(new ErrorEvent(channelId, null, null, ErrorEventType.UNDEPLOY_SCRIPT, null, null, "Error running channel undeploy script", t));
-                    logger.error("Error executing undeploy script for channel " + channelId + ".", e);
+                    try (LogContext.Scope channelScope = LogContext.channel(channelId, channel.getName())) {
+                        eventController.dispatchEvent(new ErrorEvent(channelId, null, null, ErrorEventType.UNDEPLOY_SCRIPT, null, null, "Error running channel undeploy script", t));
+                        logger.error("Error executing undeploy script for channel " + channelId + ".", e);
+                    }
                 
                 }
 	            
