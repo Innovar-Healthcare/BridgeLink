@@ -12,11 +12,12 @@ package com.mirth.connect.server.api.servlets;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -29,6 +30,7 @@ import java.util.Set;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.core.SecurityContext;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -91,6 +93,11 @@ public class ChannelGroupServletTest extends ServletTestBase {
     @Before
     public void beforeTest() {
         servlet = new TestChannelGroupServlet(request, mock(SecurityContext.class));
+    }
+
+    @After
+    public void afterTest() throws Exception {
+        doReturn(true).when(mockChannelController).updateChannelGroups(anySet(), anySet(), anyBoolean());
     }
 
     // ========== getChannelGroups ==========
@@ -162,19 +169,11 @@ public class ChannelGroupServletTest extends ServletTestBase {
         assertTrue(result);
     }
 
-    @Test
+    @Test(expected = MirthApiException.class)
     public void testUpdateChannelGroupsControllerException() throws Exception {
-        when(mockChannelController.updateChannelGroups(anySet(), anySet(), anyBoolean()))
-                .thenThrow(new ControllerException("update error"));
-        try {
-            servlet.updateChannelGroups(new HashSet<>(), new HashSet<>(), false);
-            fail("Expected an exception to be thrown");
-        } catch (Exception e) {
-            // Expected: ControllerException thrown by mock, either wrapped as MirthApiException
-            // by the servlet's catch block, or propagated directly at runtime
-        } finally {
-            when(mockChannelController.updateChannelGroups(anySet(), anySet(), anyBoolean())).thenReturn(true);
-        }
+        doThrow(new ControllerException("update error")).when(mockChannelController)
+                .updateChannelGroups(anySet(), anySet(), anyBoolean());
+        servlet.updateChannelGroups(new HashSet<>(), new HashSet<>(), false);
     }
 
     /**

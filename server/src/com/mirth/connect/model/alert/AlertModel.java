@@ -121,7 +121,7 @@ public class AlertModel implements Serializable, Migratable, Purgable {
     public Map<String, Object> getPurgedProperties() {
         Map<String, Object> purgedProperties = new HashMap<String, Object>();
         purgedProperties.put("id", id);
-        purgedProperties.put("nameChars", PurgeUtil.countChars(name));
+        purgedProperties.put("nameChars", name != null ? PurgeUtil.countChars(name) : 0);
         purgedProperties.put("enabled", enabled);
         if (trigger instanceof Purgable) {
             purgedProperties.put("trigger", ((Purgable) trigger).getPurgedProperties());

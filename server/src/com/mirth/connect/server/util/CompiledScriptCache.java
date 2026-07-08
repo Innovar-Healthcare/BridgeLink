@@ -47,8 +47,12 @@ public class CompiledScriptCache {
 
     public void putCompiledScript(String id, Script compiledScript, String sourceScript) {
         logger.debug("adding script to cache");
-        compiledScripts.put(id, compiledScript);
-        sourceScripts.put(id, sourceScript);
+        if (compiledScript != null) {
+            compiledScripts.put(id, compiledScript);
+        }
+        if (sourceScript != null) {
+            sourceScripts.put(id, sourceScript);
+        }
     }
 
     public void removeCompiledScript(String id) {
