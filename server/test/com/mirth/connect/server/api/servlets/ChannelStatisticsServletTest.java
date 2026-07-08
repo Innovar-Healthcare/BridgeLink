@@ -18,6 +18,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import org.junit.Before;
+import org.mockito.Mockito;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -91,6 +94,11 @@ public class ChannelStatisticsServletTest extends ServletTestBase {
 
         doNothing().when(mockChannelController).resetStatistics(any(), any());
         doNothing().when(mockChannelController).resetAllStatistics();
+    }
+
+    @Before
+    public void beforeTest() {
+        Mockito.clearInvocations(mockChannelController, mockEngineController, mockConfigController);
     }
 
     // ========== getStatistics (list) ==========

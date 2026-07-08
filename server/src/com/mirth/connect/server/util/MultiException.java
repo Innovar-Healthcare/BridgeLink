@@ -33,8 +33,15 @@ public class MultiException extends Exception {
      */
     public void add(Throwable t) {
         if (t != null) {
-            throwables.add(t);
-            addSuppressed(t);
+            if (t instanceof MultiException) {
+                for (Throwable inner : ((MultiException) t).throwables) {
+                    throwables.add(inner);
+                    addSuppressed(inner);
+                }
+            } else {
+                throwables.add(t);
+                addSuppressed(t);
+            }
         }
     }
     

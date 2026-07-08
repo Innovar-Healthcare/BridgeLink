@@ -18,10 +18,14 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import org.junit.After;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -141,6 +145,13 @@ public class CodeTemplateServletTest extends ServletTestBase {
     @Before
     public void beforeTest() {
         servlet = new TestCodeTemplateServlet(request, mock(SecurityContext.class));
+        Mockito.clearInvocations(mockCodeTemplateController);
+    }
+
+    @After
+    public void afterTest() throws Exception {
+        doReturn(true).when(mockCodeTemplateController).updateLibraries(any(), any(), anyBoolean());
+        doReturn(true).when(mockCodeTemplateController).updateCodeTemplate(any(), any(), anyBoolean());
     }
 
     // ========== getCodeTemplateLibraries ==========
@@ -215,13 +226,9 @@ public class CodeTemplateServletTest extends ServletTestBase {
 
     @Test(expected = MirthApiException.class)
     public void testUpdateCodeTemplateLibrariesControllerException() throws Exception {
-        when(mockCodeTemplateController.updateLibraries(any(), any(), anyBoolean()))
-                .thenThrow(new ControllerException("update error"));
-        try {
-            servlet.updateCodeTemplateLibraries(new ArrayList<>(), false);
-        } finally {
-            when(mockCodeTemplateController.updateLibraries(any(), any(), anyBoolean())).thenReturn(true);
-        }
+        doThrow(new ControllerException("update error")).when(mockCodeTemplateController)
+                .updateLibraries(any(), any(), anyBoolean());
+        servlet.updateCodeTemplateLibraries(new ArrayList<>(), false);
     }
 
     // ========== getCodeTemplates ==========
@@ -304,13 +311,9 @@ public class CodeTemplateServletTest extends ServletTestBase {
 
     @Test(expected = MirthApiException.class)
     public void testUpdateCodeTemplateControllerException() throws Exception {
-        when(mockCodeTemplateController.updateCodeTemplate(any(), any(), anyBoolean()))
-                .thenThrow(new ControllerException("update error"));
-        try {
-            servlet.updateCodeTemplate(TEMPLATE_ID1, new CodeTemplate(TEMPLATE_ID1), false);
-        } finally {
-            when(mockCodeTemplateController.updateCodeTemplate(any(), any(), anyBoolean())).thenReturn(true);
-        }
+        doThrow(new ControllerException("update error")).when(mockCodeTemplateController)
+                .updateCodeTemplate(any(), any(), anyBoolean());
+        servlet.updateCodeTemplate(TEMPLATE_ID1, new CodeTemplate(TEMPLATE_ID1), false);
     }
 
     // ========== removeCodeTemplate ==========
