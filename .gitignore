@@ -13,6 +13,8 @@ donkey/donkey-test
 .sonar
 **/junit-reports
 **/code-coverage-reports
+**/junit-html
+**/jacoco-html
 .DS_Store
 
 # /client/
