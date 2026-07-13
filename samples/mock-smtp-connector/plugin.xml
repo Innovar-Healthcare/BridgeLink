@@ -1,0 +1,7 @@
+<pluginMetaData path="mock-smtp">
+	<name>Mock SMTP Connector</name>
+	<author>Innovar Healthcare</author>
+	<pluginVersion>1.0.0</pluginVersion>
+	<mirthVersion>26.6.0</mirthVersion>
+	<description>Sample webadmin-enabled connector extension (IRT-1422). Demonstrates the declarative WebAdmin plugin UI: a mock destination connector, a webadmin/webadmin.json manifest, and an action servlet.</description>
+</pluginMetaData>

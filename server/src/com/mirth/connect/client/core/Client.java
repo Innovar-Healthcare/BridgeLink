@@ -68,6 +68,7 @@ import com.mirth.commons.encryption.KeyEncryptor;
 import com.mirth.connect.client.core.Operation.ExecuteType;
 import com.mirth.connect.client.core.api.BaseServletInterface;
 import com.mirth.connect.client.core.api.InvocationHandlerRecorder;
+import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.client.core.api.providers.MetaDataSearchParamConverterProvider.MetaDataSearch;
 import com.mirth.connect.client.core.api.servlets.AlertServletInterface;
 import com.mirth.connect.client.core.api.servlets.ChannelGroupServletInterface;
@@ -2628,8 +2629,30 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     }
 
     /**
+     * Returns webadmin UI manifest entries for all installed and enabled extensions that carry a
+     * webadmin/webadmin.json. The response is plain JSON.
+     *
+     * @see ExtensionServletInterface#getWebAdminManifests
+     */
+    @Override
+    public RawContent getWebAdminManifests() throws ClientException {
+        return getServlet(ExtensionServletInterface.class).getWebAdminManifests();
+    }
+
+    /**
+     * Returns the default connector properties XML for a transport declared by the named
+     * extension. The response is raw XML.
+     *
+     * @see ExtensionServletInterface#getWebAdminConnectorDefaults
+     */
+    @Override
+    public javax.ws.rs.core.Response getWebAdminConnectorDefaults(String extensionName, String transportName) throws ClientException {
+        return getServlet(ExtensionServletInterface.class).getWebAdminConnectorDefaults(extensionName, transportName);
+    }
+
+    /**
      * Returns the enabled status of an extension.
-     * 
+     *
      * @see ExtensionServletInterface#isExtensionEnabled
      */
     @Override

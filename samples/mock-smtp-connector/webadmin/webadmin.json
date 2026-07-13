@@ -1,0 +1,152 @@
+{
+  "manifestVersion": 1,
+  "minWebAdminVersion": "26.3.0",
+  "connectorPanels": [
+    {
+      "mode": "destination",
+      "transportName": "Mock SMTP Sender",
+      "sections": [
+        {
+          "title": "SMTP Connection",
+          "fields": [
+            {
+              "key": "smtpHost",
+              "type": "text",
+              "label": "SMTP Host",
+              "tooltip": "Hostname or IP address of the SMTP server.",
+              "validation": [{ "rule": "required" }]
+            },
+            {
+              "key": "smtpPort",
+              "type": "number",
+              "label": "SMTP Port",
+              "validation": [
+                { "rule": "required" },
+                { "rule": "min", "value": 1 },
+                { "rule": "max", "value": 65535 }
+              ]
+            },
+            {
+              "key": "encryption",
+              "type": "select",
+              "label": "Encryption",
+              "options": [
+                { "value": "none", "label": "None" },
+                { "value": "TLS", "label": "STARTTLS" },
+                { "value": "SSL", "label": "SSL" }
+              ]
+            },
+            {
+              "key": "timeout",
+              "type": "number",
+              "label": "Send Timeout (ms)",
+              "validation": [{ "rule": "min", "value": 0 }]
+            }
+          ]
+        },
+        {
+          "title": "Authentication",
+          "fields": [
+            {
+              "key": "authentication",
+              "type": "checkbox",
+              "label": "Use Authentication"
+            },
+            {
+              "key": "username",
+              "type": "text",
+              "label": "Username",
+              "visibleWhen": { "field": "authentication", "op": "truthy" },
+              "validation": [{ "rule": "required" }]
+            },
+            {
+              "key": "password",
+              "type": "secret",
+              "label": "Password",
+              "visibleWhen": { "field": "authentication", "op": "truthy" }
+            }
+          ]
+        },
+        {
+          "title": "Message",
+          "fields": [
+            {
+              "key": "to",
+              "type": "text",
+              "label": "To Address",
+              "placeholder": "recipient@example.com"
+            },
+            {
+              "key": "from",
+              "type": "text",
+              "label": "From Address",
+              "placeholder": "sender@example.com",
+              "validation": [
+                {
+                  "rule": "pattern",
+                  "pattern": "^[^@\\s]+@[^@\\s]+$",
+                  "message": "From Address must be a valid email address."
+                }
+              ]
+            },
+            { "key": "subject", "type": "text", "label": "Subject" },
+            {
+              "key": "html",
+              "type": "radio",
+              "label": "Body Format",
+              "options": [
+                { "value": "false", "label": "Plain Text" },
+                { "value": "true", "label": "HTML" }
+              ]
+            },
+            { "key": "body", "type": "textarea", "label": "Body Template" }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "label": "Test Connection",
+          "endpoint": "/extensions/mock-smtp/webadmin/actions/test-connection",
+          "method": "POST",
+          "confirm": "Send a test connection request to the configured SMTP server?"
+        }
+      ]
+    }
+  ],
+  "settingsPanels": [
+    {
+      "tabKey": "mock-smtp",
+      "tabLabel": "Mock SMTP",
+      "sections": [
+        {
+          "title": "Global SMTP Defaults",
+          "fields": [
+            {
+              "key": "defaultFrom",
+              "type": "text",
+              "label": "Default From Address",
+              "defaultValue": "noreply@example.com"
+            },
+            {
+              "key": "auditEnabled",
+              "type": "checkbox",
+              "label": "Audit Outbound Mail",
+              "defaultValue": "false"
+            },
+            {
+              "key": "retentionDays",
+              "type": "number",
+              "label": "Audit Retention (days)",
+              "defaultValue": "30",
+              "enabledWhen": { "field": "auditEnabled", "op": "truthy" },
+              "validation": [
+                { "rule": "min", "value": 1 },
+                { "rule": "max", "value": 365 }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
