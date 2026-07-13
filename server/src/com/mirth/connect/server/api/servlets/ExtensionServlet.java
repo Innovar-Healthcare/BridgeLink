@@ -9,8 +9,15 @@
 
 package com.mirth.connect.server.api.servlets;
 
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 
@@ -19,14 +26,40 @@ import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.SecurityContext;
+import javax.xml.XMLConstants;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.api.MirthApiException;
+import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.client.core.api.servlets.ExtensionServletInterface;
+import com.mirth.connect.donkey.model.channel.ConnectorPluginProperties;
+import com.mirth.connect.donkey.model.channel.ConnectorProperties;
+import com.mirth.connect.donkey.model.channel.DestinationConnectorProperties;
+import com.mirth.connect.donkey.model.channel.DestinationConnectorPropertiesInterface;
+import com.mirth.connect.donkey.model.channel.SourceConnectorProperties;
+import com.mirth.connect.donkey.model.channel.SourceConnectorPropertiesInterface;
+import com.mirth.connect.donkey.server.Constants;
+import com.mirth.connect.donkey.util.DonkeyElement;
 import com.mirth.connect.model.ConnectorMetaData;
 import com.mirth.connect.model.MetaData;
 import com.mirth.connect.model.PluginMetaData;
 import com.mirth.connect.model.ServerEvent.Outcome;
+import com.mirth.connect.model.converters.ObjectXMLSerializer;
 import com.mirth.connect.server.api.DontCheckAuthorized;
 import com.mirth.connect.server.api.MirthServlet;
 import com.mirth.connect.server.controllers.ControllerFactory;
@@ -35,7 +68,10 @@ import com.mirth.connect.server.controllers.ExtensionController.InstallationResu
 
 public class ExtensionServlet extends MirthServlet implements ExtensionServletInterface {
 
+    private static final String WEBADMIN_MANIFEST_PATH = "webadmin" + File.separator + "webadmin.json";
+
     private static final ExtensionController extensionController = ControllerFactory.getFactory().createExtensionController();
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public ExtensionServlet(@Context HttpServletRequest request, @Context SecurityContext sc) {
         super(request, sc);
@@ -98,6 +134,96 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
     }
 
     @Override
+    public RawContent getWebAdminManifests() {
+        /*
+         * Prefer plugin metadata when a plugin and a connector share an install path, so the
+         * entry's name matches how the extension is keyed by GET /extensions/plugins/.
+         */
+        Map<String, MetaData> metaDataByPath = new LinkedHashMap<String, MetaData>();
+        for (MetaData metaData : extensionController.getPluginMetaData().values()) {
+            metaDataByPath.putIfAbsent(metaData.getPath(), metaData);
+        }
+        for (MetaData metaData : extensionController.getConnectorMetaData().values()) {
+            metaDataByPath.putIfAbsent(metaData.getPath(), metaData);
+        }
+
+        File extensionsDir = new File(getExtensionsPath());
+        ObjectNode responseNode = objectMapper.createObjectNode();
+        ArrayNode entriesNode = responseNode.putArray("entries");
+
+        for (MetaData metaData : metaDataByPath.values()) {
+            if (!extensionController.isExtensionEnabled(metaData.getName())) {
+                continue;
+            }
+
+            File manifestFile = getGuardedWebAdminManifestFile(extensionsDir, metaData.getPath());
+            if (manifestFile == null || !manifestFile.isFile()) {
+                continue;
+            }
+
+            /*
+             * The manifest is passed through verbatim; the engine does not validate its contents.
+             * An unparseable file is served as "manifest": null.
+             */
+            JsonNode manifestNode;
+            try {
+                manifestNode = objectMapper.readTree(FileUtils.readFileToString(manifestFile, StandardCharsets.UTF_8));
+                if (manifestNode == null || manifestNode.isMissingNode()) {
+                    manifestNode = NullNode.getInstance();
+                }
+            } catch (IOException e) {
+                manifestNode = NullNode.getInstance();
+            }
+
+            ObjectNode entryNode = entriesNode.addObject();
+            entryNode.put("name", metaData.getName());
+            entryNode.put("path", metaData.getPath());
+            entryNode.put("version", metaData.getPluginVersion());
+            entryNode.set("manifest", manifestNode);
+        }
+
+        try {
+            return new RawContent(objectMapper.writeValueAsString(responseNode));
+        } catch (IOException e) {
+            throw new MirthApiException(e);
+        }
+    }
+
+    @Override
+    public RawContent getWebAdminConnectorDefaults(String extensionName, String transportName) {
+        MetaData extension = extensionController.getPluginMetaData().get(extensionName);
+        if (extension == null) {
+            extension = extensionController.getConnectorMetaData().get(extensionName);
+        }
+        if (extension == null || !extensionController.isExtensionEnabled(extension.getName())) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
+
+        File manifestFile = getGuardedWebAdminManifestFile(new File(getExtensionsPath()), extension.getPath());
+        if (manifestFile == null || !manifestFile.isFile()) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
+
+        // The transport must be declared by the named extension itself
+        ConnectorMetaData connectorMetaData = extensionController.getConnectorMetaDataByTransportName(transportName);
+        if (connectorMetaData == null || !Objects.equals(connectorMetaData.getPath(), extension.getPath())) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
+
+        try {
+            Object instance = Class.forName(connectorMetaData.getSharedClassName()).getDeclaredConstructor().newInstance();
+            if (!(instance instanceof ConnectorProperties)) {
+                throw new MirthApiException(Status.NOT_FOUND);
+            }
+            return new RawContent(toConnectorPropertiesXml((ConnectorProperties) instance));
+        } catch (MirthApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new MirthApiException(e);
+        }
+    }
+
+    @Override
     public boolean isExtensionEnabled(String extensionName) {
         return extensionController.isExtensionEnabled(extensionName);
     }
@@ -134,6 +260,107 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
             extensionController.updatePluginProperties(extensionName, properties);
         } catch (ControllerException e) {
             throw new MirthApiException(e);
+        }
+    }
+
+    protected String getExtensionsPath() {
+        return ExtensionController.getExtensionsPath();
+    }
+
+    private int getDefaultQueueBufferSize() {
+        try {
+            Integer queueBufferSize = ControllerFactory.getFactory().createConfigurationController().getServerSettings().getQueueBufferSize();
+            if (queueBufferSize != null && queueBufferSize > 0) {
+                return queueBufferSize;
+            }
+        } catch (Exception e) {
+            // Fall through to the donkey default
+        }
+        return Constants.DEFAULT_QUEUE_BUFFER_SIZE;
+    }
+
+    /**
+     * Resolves an extension's webadmin manifest file, guarding against paths that traverse outside
+     * the extensions directory. Returns null when the resolved file escapes the directory.
+     */
+    private File getGuardedWebAdminManifestFile(File extensionsDir, String extensionPath) {
+        try {
+            String canonicalExtensionsDir = extensionsDir.getCanonicalPath();
+            File manifestFile = new File(new File(extensionsDir, extensionPath), WEBADMIN_MANIFEST_PATH);
+            if (!manifestFile.getCanonicalPath().startsWith(canonicalExtensionsDir + File.separator)) {
+                return null;
+            }
+            return manifestFile;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Serializes freshly instantiated connector properties into the same form they take when
+     * embedded in a channel: a root <properties> element carrying class and version attributes.
+     */
+    private String toConnectorPropertiesXml(ConnectorProperties properties) throws Exception {
+        /*
+         * Client-created channels always carry a pluginProperties element (the Swing client sets
+         * an empty set); serialize the same form so defaults match saved channel XML.
+         */
+        if (properties.getPluginProperties() == null) {
+            properties.setPluginProperties(new HashSet<ConnectorPluginProperties>());
+        }
+
+        /*
+         * The Swing client replaces a zero queue buffer size with the server's configured default
+         * before displaying defaults (ConnectorPanel); do the same so served defaults match.
+         */
+        if (properties instanceof SourceConnectorPropertiesInterface) {
+            SourceConnectorProperties sourceProperties = ((SourceConnectorPropertiesInterface) properties).getSourceConnectorProperties();
+            if (sourceProperties != null && sourceProperties.getQueueBufferSize() <= 0) {
+                sourceProperties.setQueueBufferSize(getDefaultQueueBufferSize());
+            }
+        }
+        if (properties instanceof DestinationConnectorPropertiesInterface) {
+            DestinationConnectorProperties destinationProperties = ((DestinationConnectorPropertiesInterface) properties).getDestinationConnectorProperties();
+            if (destinationProperties != null && destinationProperties.getQueueBufferSize() <= 0) {
+                destinationProperties.setQueueBufferSize(getDefaultQueueBufferSize());
+            }
+        }
+
+        String xml = ObjectXMLSerializer.getInstance().serialize(properties);
+        DonkeyElement element = new DonkeyElement(xml);
+        // The standalone root node name is exactly what XStream emits as the class attribute
+        element.setAttribute("class", element.getNodeName());
+        element.setNodeName("properties");
+        stripStructuralWhitespace(element.getElement());
+
+        TransformerFactory transformerFactory = TransformerFactory.newInstance();
+        transformerFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+        transformerFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
+        Transformer transformer = transformerFactory.newTransformer();
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+        transformer.setOutputProperty(OutputKeys.INDENT, "no");
+        StringWriter writer = new StringWriter();
+        transformer.transform(new DOMSource(element.getElement()), new StreamResult(writer));
+        return writer.toString();
+    }
+
+    private void stripStructuralWhitespace(Node node) {
+        boolean hasElementChild = false;
+        NodeList children = node.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            if (children.item(i).getNodeType() == Node.ELEMENT_NODE) {
+                hasElementChild = true;
+                break;
+            }
+        }
+
+        for (int i = children.getLength() - 1; i >= 0; i--) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.TEXT_NODE && hasElementChild && StringUtils.isBlank(child.getNodeValue())) {
+                node.removeChild(child);
+            } else if (child.getNodeType() == Node.ELEMENT_NODE) {
+                stripStructuralWhitespace(child);
+            }
         }
     }
 }

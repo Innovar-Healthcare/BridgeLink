@@ -40,6 +40,7 @@ import com.mirth.connect.client.core.Permissions;
 import com.mirth.connect.client.core.api.BaseServletInterface;
 import com.mirth.connect.client.core.api.MirthOperation;
 import com.mirth.connect.client.core.api.Param;
+import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.model.ConnectorMetaData;
 import com.mirth.connect.model.MetaData;
 import com.mirth.connect.model.PluginMetaData;
@@ -100,6 +101,23 @@ public interface ExtensionServletInterface extends BaseServletInterface {
             @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
                     @ExampleObject(name = "pluginMetaData", ref = "../apiexamples/plugin_metadata_map_json") }) })
     public Map<String, PluginMetaData> getPluginMetaData() throws ClientException;
+
+    @GET
+    @Path("/_webadmin")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Returns webadmin UI manifest entries for all installed and enabled extensions that carry a webadmin/webadmin.json. Plain JSON response, not the standard serialized envelope.")
+    @MirthOperation(name = "getWebAdminManifests", display = "Get webadmin extension manifests", auditable = false)
+    public RawContent getWebAdminManifests() throws ClientException;
+
+    @GET
+    @Path("/{extensionName}/webadmin/defaults/{transportName}")
+    @Produces(MediaType.APPLICATION_XML)
+    @Operation(summary = "Returns the default connector properties XML for a transport declared by the named extension. Raw XML response, not the standard serialized envelope. Returns 404 when the extension is missing, disabled, has no webadmin manifest, or does not declare the transport.")
+    @MirthOperation(name = "getWebAdminConnectorDefaults", display = "Get webadmin connector defaults", auditable = false)
+    public RawContent getWebAdminConnectorDefaults(// @formatter:off
+            @Param("extensionName") @Parameter(description = "The name of the extension declaring the transport.", required = true) @PathParam("extensionName") String extensionName,
+            @Param("transportName") @Parameter(description = "The transport name of the connector to instantiate defaults for.", required = true) @PathParam("transportName") String transportName) throws ClientException;
+    // @formatter:on
 
     @GET
     @Path("/{extensionName}/enabled")
