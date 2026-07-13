@@ -135,7 +135,7 @@ public class ExtensionWebAdminDefaultsTest extends ServletTestBase {
 
     @Test
     public void testDefaultsRootForm() throws Exception {
-        Element actualRoot = parse(servlet.getWebAdminConnectorDefaults(PLUGIN_NAME, CONNECTOR_NAME).getContent());
+        Element actualRoot = parse(fetchDefaults(PLUGIN_NAME));
 
         assertEquals("properties", actualRoot.getNodeName());
         assertEquals(SHARED_CLASS, actualRoot.getAttribute("class"));
@@ -145,8 +145,7 @@ public class ExtensionWebAdminDefaultsTest extends ServletTestBase {
 
     @Test
     public void testDefaultsMatchContractFixture() throws Exception {
-        String actualXml = servlet.getWebAdminConnectorDefaults(PLUGIN_NAME, CONNECTOR_NAME).getContent();
-        Element actualRoot = parse(actualXml);
+        Element actualRoot = parse(fetchDefaults(PLUGIN_NAME));
         Element fixtureRoot = parse(readFixture());
 
         assertEquals(fixtureRoot.getNodeName(), actualRoot.getNodeName());
@@ -154,11 +153,24 @@ public class ExtensionWebAdminDefaultsTest extends ServletTestBase {
     }
 
     @Test
+    public void testDefaultsContentTypePinnedToXml() throws Exception {
+        // Produces admits application/json (WebAdmin sends Accept: application/json), but the
+        // response media type must always be application/xml per the contract
+        javax.ws.rs.core.Response response = servlet.getWebAdminConnectorDefaults(PLUGIN_NAME, CONNECTOR_NAME);
+        assertEquals(javax.ws.rs.core.MediaType.APPLICATION_XML_TYPE, response.getMediaType());
+    }
+
+    @Test
     public void testDefaultsResolvableByConnectorName() throws Exception {
         // The extension is also addressable by its connector metadata name
-        Element actualRoot = parse(servlet.getWebAdminConnectorDefaults(CONNECTOR_NAME, CONNECTOR_NAME).getContent());
+        Element actualRoot = parse(fetchDefaults(CONNECTOR_NAME));
         assertEquals("properties", actualRoot.getNodeName());
         assertEquals(SHARED_CLASS, actualRoot.getAttribute("class"));
+    }
+
+    private String fetchDefaults(String extensionName) {
+        javax.ws.rs.core.Response response = servlet.getWebAdminConnectorDefaults(extensionName, CONNECTOR_NAME);
+        return ((com.mirth.connect.client.core.api.RawContent) response.getEntity()).getContent();
     }
 
     // ========== helpers ==========

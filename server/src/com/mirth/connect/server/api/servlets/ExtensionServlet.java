@@ -24,6 +24,8 @@ import java.util.Set;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.SecurityContext;
 import javax.xml.XMLConstants;
@@ -190,7 +192,7 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
     }
 
     @Override
-    public RawContent getWebAdminConnectorDefaults(String extensionName, String transportName) {
+    public Response getWebAdminConnectorDefaults(String extensionName, String transportName) {
         MetaData extension = extensionController.getPluginMetaData().get(extensionName);
         if (extension == null) {
             extension = extensionController.getConnectorMetaData().get(extensionName);
@@ -215,7 +217,12 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
             if (!(instance instanceof ConnectorProperties)) {
                 throw new MirthApiException(Status.NOT_FOUND);
             }
-            return new RawContent(toConnectorPropertiesXml((ConnectorProperties) instance));
+            /*
+             * The explicit media type pins the response to application/xml even when the client
+             * sent Accept: application/json (which the method's Produces admits to avoid a 406).
+             */
+            RawContent body = new RawContent(toConnectorPropertiesXml((ConnectorProperties) instance));
+            return Response.ok(body, MediaType.APPLICATION_XML_TYPE).build();
         } catch (MirthApiException e) {
             throw e;
         } catch (Exception e) {

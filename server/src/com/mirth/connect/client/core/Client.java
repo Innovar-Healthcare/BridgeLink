@@ -2646,7 +2646,7 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
      * @see ExtensionServletInterface#getWebAdminConnectorDefaults
      */
     @Override
-    public RawContent getWebAdminConnectorDefaults(String extensionName, String transportName) throws ClientException {
+    public javax.ws.rs.core.Response getWebAdminConnectorDefaults(String extensionName, String transportName) throws ClientException {
         return getServlet(ExtensionServletInterface.class).getWebAdminConnectorDefaults(extensionName, transportName);
     }
 

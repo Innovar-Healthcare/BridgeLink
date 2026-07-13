@@ -32,6 +32,7 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 
 import org.glassfish.jersey.media.multipart.FormDataParam;
 
@@ -109,12 +110,17 @@ public interface ExtensionServletInterface extends BaseServletInterface {
     @MirthOperation(name = "getWebAdminManifests", display = "Get webadmin extension manifests", auditable = false)
     public RawContent getWebAdminManifests() throws ClientException;
 
+    /*
+     * Produces declares JSON as well so JSON-accepting clients (the WebAdmin fetch wrapper sends
+     * Accept: application/json) are not rejected with 406; the implementation pins the actual
+     * response Content-Type to application/xml.
+     */
     @GET
     @Path("/{extensionName}/webadmin/defaults/{transportName}")
-    @Produces(MediaType.APPLICATION_XML)
-    @Operation(summary = "Returns the default connector properties XML for a transport declared by the named extension. Raw XML response, not the standard serialized envelope. Returns 404 when the extension is missing, disabled, has no webadmin manifest, or does not declare the transport.")
+    @Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
+    @Operation(summary = "Returns the default connector properties XML for a transport declared by the named extension. Raw XML response (Content-Type application/xml), not the standard serialized envelope. Returns 404 when the extension is missing, disabled, has no webadmin manifest, or does not declare the transport.")
     @MirthOperation(name = "getWebAdminConnectorDefaults", display = "Get webadmin connector defaults", auditable = false)
-    public RawContent getWebAdminConnectorDefaults(// @formatter:off
+    public Response getWebAdminConnectorDefaults(// @formatter:off
             @Param("extensionName") @Parameter(description = "The name of the extension declaring the transport.", required = true) @PathParam("extensionName") String extensionName,
             @Param("transportName") @Parameter(description = "The transport name of the connector to instantiate defaults for.", required = true) @PathParam("transportName") String transportName) throws ClientException;
     // @formatter:on
