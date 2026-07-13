@@ -72,6 +72,13 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
 
     private static final String WEBADMIN_MANIFEST_PATH = "webadmin" + File.separator + "webadmin.json";
 
+    /*
+     * Manifests larger than this are served as "manifest": null instead of being read. WebAdmin's
+     * validator caps manifests at 64KB; this engine-side bound only exists to keep a pathological
+     * file from being read into memory on every listing.
+     */
+    private static final long WEBADMIN_MANIFEST_MAX_BYTES = 1024 * 1024;
+
     private static final ExtensionController extensionController = ControllerFactory.getFactory().createExtensionController();
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -169,9 +176,13 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
              */
             JsonNode manifestNode;
             try {
-                manifestNode = objectMapper.readTree(FileUtils.readFileToString(manifestFile, StandardCharsets.UTF_8));
-                if (manifestNode == null || manifestNode.isMissingNode()) {
+                if (manifestFile.length() > WEBADMIN_MANIFEST_MAX_BYTES) {
                     manifestNode = NullNode.getInstance();
+                } else {
+                    manifestNode = objectMapper.readTree(FileUtils.readFileToString(manifestFile, StandardCharsets.UTF_8));
+                    if (manifestNode == null || manifestNode.isMissingNode()) {
+                        manifestNode = NullNode.getInstance();
+                    }
                 }
             } catch (IOException e) {
                 manifestNode = NullNode.getInstance();
@@ -213,15 +224,16 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
         }
 
         try {
-            Object instance = Class.forName(connectorMetaData.getSharedClassName()).getDeclaredConstructor().newInstance();
-            if (!(instance instanceof ConnectorProperties)) {
+            Class<?> sharedClass = Class.forName(connectorMetaData.getSharedClassName());
+            if (!ConnectorProperties.class.isAssignableFrom(sharedClass)) {
                 throw new MirthApiException(Status.NOT_FOUND);
             }
+            ConnectorProperties instance = (ConnectorProperties) sharedClass.getDeclaredConstructor().newInstance();
             /*
              * The explicit media type pins the response to application/xml even when the client
              * sent Accept: application/json (which the method's Produces admits to avoid a 406).
              */
-            RawContent body = new RawContent(toConnectorPropertiesXml((ConnectorProperties) instance));
+            RawContent body = new RawContent(toConnectorPropertiesXml(instance));
             return Response.ok(body, MediaType.APPLICATION_XML_TYPE).build();
         } catch (MirthApiException e) {
             throw e;
@@ -291,6 +303,9 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
      * the extensions directory. Returns null when the resolved file escapes the directory.
      */
     private File getGuardedWebAdminManifestFile(File extensionsDir, String extensionPath) {
+        if (StringUtils.isBlank(extensionPath)) {
+            return null;
+        }
         try {
             String canonicalExtensionsDir = extensionsDir.getCanonicalPath();
             File manifestFile = new File(new File(extensionsDir, extensionPath), WEBADMIN_MANIFEST_PATH);

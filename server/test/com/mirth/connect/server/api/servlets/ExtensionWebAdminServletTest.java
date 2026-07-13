@@ -145,6 +145,26 @@ public class ExtensionWebAdminServletTest extends ServletTestBase {
     }
 
     @Test
+    public void testPathEscapeGuardAbsolutePath() throws Exception {
+        File outside = new File(tempFolder.getRoot(), "abs/webadmin");
+        FileUtils.writeStringToFile(new File(outside, "webadmin.json"), "{\"manifestVersion\":1}", StandardCharsets.UTF_8);
+
+        stubExtension(PLUGIN_NAME, CONNECTOR_NAME, new File(tempFolder.getRoot(), "abs").getAbsolutePath(), true);
+
+        JsonNode actual = objectMapper.readTree(servlet.getWebAdminManifests().getContent());
+        assertEquals(0, actual.get("entries").size());
+    }
+
+    @Test
+    public void testEmptyEntriesWhenNoExtensionsInstalled() throws Exception {
+        when(mockExtensionController.getPluginMetaData()).thenReturn(new HashMap<>());
+        when(mockExtensionController.getConnectorMetaData()).thenReturn(new HashMap<>());
+
+        JsonNode actual = objectMapper.readTree(servlet.getWebAdminManifests().getContent());
+        assertEquals(0, actual.get("entries").size());
+    }
+
+    @Test
     public void testConnectorOnlyExtensionUsesConnectorMetaData() throws Exception {
         writeManifest(EXTENSION_PATH, "{\"manifestVersion\":1}");
 

@@ -1,5 +1,11 @@
 /*
+ *
  * Copyright (c) Innovar Healthcare. All rights reserved.
+ *
+ * https://www.innovarhealthcare.com
+ *
+ * The software in this package is published under the terms of the MPL license a copy of which has
+ * been included with this distribution in the LICENSE.txt file.
  *
  * Sample extension for the declarative WebAdmin plugin UI (IRT-1422). The field names below MUST
  * exactly match the field keys declared in webadmin/webadmin.json — the engine's channel
