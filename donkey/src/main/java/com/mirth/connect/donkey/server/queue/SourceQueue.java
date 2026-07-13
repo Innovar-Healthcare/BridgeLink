@@ -54,6 +54,17 @@ public class SourceQueue extends ConnectorMessageQueue {
             if (connectorMessage == null) {
                 fillBuffer();
                 connectorMessage = pollFirstValue();
+
+                /*
+                 * The buffer is still empty even though size claims there are queued messages.
+                 * The in-memory count has drifted from the database (e.g. an invalidate raced an
+                 * in-flight message), so re-sync it. Otherwise the dashboard shows a phantom
+                 * queued count and this thread hot-spins, querying the database on every poll.
+                 */
+                if (connectorMessage == null && size > 0) {
+                    updateSize();
+                    eventDispatcher.dispatchEvent(new MessageEvent(channelId, metaDataId, MessageEventType.QUEUED, (long) size(), true));
+                }
             }
 
             /*
