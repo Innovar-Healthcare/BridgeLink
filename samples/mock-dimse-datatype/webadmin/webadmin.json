@@ -1,0 +1,99 @@
+{
+  "manifestVersion": 2,
+  "dataTypes": [
+    {
+      "name": "MockDIMSE",
+      "displayName": "Mock DIMSE",
+      "isBinary": true,
+      "defaultAttachmentHandler": "com.mirth.connect.server.attachments.dicom.DICOMAttachmentHandlerProvider",
+      "propertyGroups": [
+        {
+          "group": "serialization",
+          "fields": [
+            {
+              "key": "transferSyntax",
+              "type": "select",
+              "label": "Transfer Syntax",
+              "tooltip": "DICOM transfer syntax expected on inbound associations.",
+              "options": [
+                {
+                  "value": "implicitLittleEndian",
+                  "label": "Implicit VR Little Endian"
+                },
+                {
+                  "value": "explicitLittleEndian",
+                  "label": "Explicit VR Little Endian"
+                }
+              ]
+            },
+            {
+              "key": "decodePixelData",
+              "type": "checkbox",
+              "label": "Decode Pixel Data",
+              "tooltip": "Decode the PixelData element when converting to XML."
+            },
+            {
+              "key": "maxPduLength",
+              "type": "number",
+              "label": "Max PDU Length",
+              "tooltip": "Maximum protocol data unit length in bytes.",
+              "visibleWhen": {
+                "field": "decodePixelData",
+                "op": "truthy"
+              },
+              "validation": [
+                {
+                  "rule": "min",
+                  "value": 1024
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "group": "batch",
+          "fields": [
+            {
+              "key": "splitType",
+              "type": "select",
+              "label": "Split Batch By",
+              "tooltip": "Select the method for splitting the batch message. This option has no effect unless Process Batch is enabled in the connector.",
+              "options": [
+                {
+                  "value": "Association",
+                  "label": "Association"
+                },
+                {
+                  "value": "JavaScript",
+                  "label": "JavaScript"
+                }
+              ]
+            },
+            {
+              "key": "batchScript",
+              "type": "javascript",
+              "label": "JavaScript",
+              "tooltip": "Enter JavaScript that splits the batch, and returns the next message. This script has access to 'reader', a Java BufferedReader, to read the incoming data stream.",
+              "visibleWhen": {
+                "field": "splitType",
+                "op": "eq",
+                "value": "JavaScript"
+              }
+            }
+          ]
+        },
+        {
+          "group": "responseValidation",
+          "fields": [
+            {
+              "key": "successOnAccept",
+              "type": "checkbox",
+              "label": "Successful on C-STORE Accept",
+              "tooltip": "Treat an accepted C-STORE response as a successful message response."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
