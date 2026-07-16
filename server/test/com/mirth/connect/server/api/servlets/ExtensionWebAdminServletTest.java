@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import javax.servlet.http.HttpServletRequest;
@@ -94,10 +95,26 @@ public class ExtensionWebAdminServletTest extends ServletTestBase {
 
     @Test
     public void testManifestListMatchesContractFixture() throws Exception {
+        // The fixture (contract Revision 3) carries one entry per fixture extension; stub each
+        // as an installed and enabled plugin, in fixture order (the endpoint preserves it)
         JsonNode fixture = readManifestListFixture();
-        writeManifest(EXTENSION_PATH, objectMapper.writeValueAsString(fixture.get("entries").get(0).get("manifest")));
 
-        stubExtension(PLUGIN_NAME, CONNECTOR_NAME, EXTENSION_PATH, true);
+        Map<String, PluginMetaData> pluginMap = new LinkedHashMap<>();
+        for (JsonNode entry : fixture.get("entries")) {
+            String name = entry.get("name").asText();
+            String path = entry.get("path").asText();
+            writeManifest(path, objectMapper.writeValueAsString(entry.get("manifest")));
+
+            PluginMetaData pluginMetaData = new PluginMetaData();
+            pluginMetaData.setName(name);
+            pluginMetaData.setPath(path);
+            pluginMetaData.setPluginVersion(entry.get("version").asText());
+            pluginMap.put(name, pluginMetaData);
+            when(mockExtensionController.isExtensionEnabled(name)).thenReturn(true);
+        }
+
+        when(mockExtensionController.getPluginMetaData()).thenReturn(pluginMap);
+        when(mockExtensionController.getConnectorMetaData()).thenReturn(new HashMap<>());
 
         JsonNode actual = objectMapper.readTree(servlet.getWebAdminManifests().getContent());
         assertEquals(fixture, actual);
