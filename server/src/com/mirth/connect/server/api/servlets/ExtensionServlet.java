@@ -16,6 +16,7 @@ import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -59,9 +60,12 @@ import com.mirth.connect.donkey.server.Constants;
 import com.mirth.connect.donkey.util.DonkeyElement;
 import com.mirth.connect.model.ConnectorMetaData;
 import com.mirth.connect.model.MetaData;
+import com.mirth.connect.model.PluginClass;
 import com.mirth.connect.model.PluginMetaData;
 import com.mirth.connect.model.ServerEvent.Outcome;
 import com.mirth.connect.model.converters.ObjectXMLSerializer;
+import com.mirth.connect.model.datatype.DataTypeProperties;
+import com.mirth.connect.plugins.DataTypeServerPlugin;
 import com.mirth.connect.server.api.DontCheckAuthorized;
 import com.mirth.connect.server.api.MirthServlet;
 import com.mirth.connect.server.controllers.ControllerFactory;
@@ -243,6 +247,49 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
     }
 
     @Override
+    public Response getWebAdminDataTypeDefaults(String extensionName, String dataTypeName) {
+        MetaData extension = extensionController.getPluginMetaData().get(extensionName);
+        if (extension == null) {
+            extension = extensionController.getConnectorMetaData().get(extensionName);
+        }
+        if (extension == null || !extensionController.isExtensionEnabled(extension.getName())) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
+
+        File manifestFile = getGuardedWebAdminManifestFile(new File(getExtensionsPath()), extension.getPath());
+        if (manifestFile == null || !manifestFile.isFile()) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
+
+        /*
+         * The data type must be declared by the named extension itself: the loaded plugin's class
+         * must be one of the extension's registered server classes. Only the already-loaded plugin
+         * instance is used — never a caller-supplied class name.
+         */
+        DataTypeServerPlugin dataTypePlugin = extensionController.getDataTypePlugins().get(dataTypeName);
+        if (dataTypePlugin == null || !declaresServerClass(extension, dataTypePlugin.getClass().getName())) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
+
+        try {
+            DataTypeProperties properties = dataTypePlugin.getDefaultProperties();
+            if (properties == null) {
+                throw new MirthApiException(Status.NOT_FOUND);
+            }
+            /*
+             * The explicit media type pins the response to application/xml even when the client
+             * sent Accept: application/json (which the method's Produces admits to avoid a 406).
+             */
+            RawContent body = new RawContent(toRetaggedXml(properties, "dataTypeProperties"));
+            return Response.ok(body, MediaType.APPLICATION_XML_TYPE).build();
+        } catch (MirthApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new MirthApiException(e);
+        }
+    }
+
+    @Override
     public boolean isExtensionEnabled(String extensionName) {
         return extensionController.isExtensionEnabled(extensionName);
     }
@@ -348,11 +395,20 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
             }
         }
 
-        String xml = ObjectXMLSerializer.getInstance().serialize(properties);
+        return toRetaggedXml(properties, "properties");
+    }
+
+    /**
+     * Serializes an instance with XStream and retags the root element to the given neutral name,
+     * moving the class name XStream emitted as the root into a class attribute — the same form
+     * the instance takes when embedded in a channel.
+     */
+    private String toRetaggedXml(Object instance, String rootName) throws Exception {
+        String xml = ObjectXMLSerializer.getInstance().serialize(instance);
         DonkeyElement element = new DonkeyElement(xml);
         // The standalone root node name is exactly what XStream emits as the class attribute
         element.setAttribute("class", element.getNodeName());
-        element.setNodeName("properties");
+        element.setNodeName(rootName);
         stripStructuralWhitespace(element.getElement());
 
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
@@ -364,6 +420,25 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
         StringWriter writer = new StringWriter();
         transformer.transform(new DOMSource(element.getElement()), new StreamResult(writer));
         return writer.toString();
+    }
+
+    /**
+     * Whether the extension's plugin metadata declares the given class as one of its server
+     * classes. Connector-only extensions declare no server plugin classes.
+     */
+    private boolean declaresServerClass(MetaData extension, String className) {
+        if (!(extension instanceof PluginMetaData)) {
+            return false;
+        }
+        List<PluginClass> serverClasses = ((PluginMetaData) extension).getServerClasses();
+        if (serverClasses != null) {
+            for (PluginClass serverClass : serverClasses) {
+                if (serverClass != null && Objects.equals(serverClass.getName(), className)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void stripStructuralWhitespace(Node node) {
