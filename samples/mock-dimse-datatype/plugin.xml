@@ -1,0 +1,12 @@
+<pluginMetaData path="mock-dimse-datatype">
+	<name>Mock DIMSE Data Type</name>
+	<author>Innovar Healthcare</author>
+	<pluginVersion>1.0.0</pluginVersion>
+	<mirthVersion>26.6.0</mirthVersion>
+	<description>Sample webadmin-enabled data type extension (IRT-1442). Demonstrates the declarative WebAdmin dataTypes contribution kind: a mock DIMSE data type whose defaults are served by GET /extensions/{name}/webadmin/datatype-defaults/{dataTypeName}.</description>
+	<serverClasses>
+		<string>com.innovarhealthcare.connect.plugins.mockdimse.MockDIMSEDataTypeServerPlugin</string>
+	</serverClasses>
+	<library type="SHARED" path="mock-dimse-datatype-shared.jar" />
+	<library type="SERVER" path="mock-dimse-datatype-server.jar" />
+</pluginMetaData>
