@@ -1726,6 +1726,8 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
         String username = properties.getProperty("username");
         String password = properties.getProperty("password");
         String to = properties.getProperty("toAddress");
+        String cc = properties.getProperty("ccAddress");
+        String bcc = properties.getProperty("bccAddress");
         String from = properties.getProperty("fromAddress");
 
         int port = -1;
@@ -1796,6 +1798,16 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
         try {
             for (String toAddress : StringUtils.split(to, ",")) {
                 email.addTo(toAddress);
+            }
+            if (StringUtils.isNotBlank(cc)) {
+                for (String ccAddress : StringUtils.split(cc, ",")) {
+                    email.addCc(ccAddress);
+                }
+            }
+            if (StringUtils.isNotBlank(bcc)) {
+                for (String bccAddress : StringUtils.split(bcc, ",")) {
+                    email.addBcc(bccAddress);
+                }
             }
 
             email.setFrom(from);

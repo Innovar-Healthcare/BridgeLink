@@ -293,7 +293,7 @@ public class ReferenceListFactory {
         // Logging and alerts references
         addReference(new ParameterizedCodeReference(CONTEXT_GLOBAL, Category.LOGGING_AND_ALERTS.toString(), "Log an Info Statement", "Outputs the message to the system info log.", "logger.info('${message}');"));
         addReference(new ParameterizedCodeReference(CONTEXT_GLOBAL, Category.LOGGING_AND_ALERTS.toString(), "Log an Error Statement", "Outputs the message to the system error log.", "logger.error('${message}');"));
-        addReference(new ParameterizedCodeReference(CONTEXT_GLOBAL, Category.LOGGING_AND_ALERTS.toString(), "Send an Email", "Sends an alert email using the alert SMTP properties.", "var ${smtpConn} = SMTPConnectionFactory.createSMTPConnection();\n${smtpConn}.send('${to}', '${cc}', '${from}', '${subject}', '${body}', '${charset}');"));
+        addReference(new ParameterizedCodeReference(CONTEXT_GLOBAL, Category.LOGGING_AND_ALERTS.toString(), "Send an Email", "Sends an alert email using the alert SMTP properties.", "var ${smtpConn} = SMTPConnectionFactory.createSMTPConnection();\n${smtpConn}.send('${to}', '${cc}', '${bcc}', '${from}', '${subject}', '${body}', '${charset}');"));
         addReference(new ParameterizedCodeReference(CONTEXT_CHANNEL, Category.LOGGING_AND_ALERTS.toString(), "Trigger an Alert", "Trigger a custom alert for the current channel.", "alerts.sendAlert('${message}');"));
 
         // Database references
