@@ -958,7 +958,7 @@ public class SmtpSender extends ConnectorSettingsPanel {
     }
 
     private void initLayout() {
-        setLayout(new MigLayout("insets 0 8 0 8, novisualpadding, gap 12 6", "[][]6[]", "[][]4[]4[][][]4[]4[]4[][][][][][][][]4[]4[][][]"));
+        setLayout(new MigLayout("insets 0 8 0 8, novisualpadding, gap 12 6", "[][]6[]", "[][]4[]4[][][]4[]4[]4[][][][][][]4[]4[]4[]4[][][]"));
 
         add(smtpHostLabel, "right");
         add(smtpHostField, "w 200!, sx, split 2");

@@ -234,8 +234,8 @@ public class SMTPConnection {
      *            A string representing a list of e-mail addresses to copy the message to (separated
      *            by ",").
      * @param bccList
-     *            A string representing a comma-separated list of e-mail addresses to privately copy
-     *            the message to.
+     *            A string representing a list of e-mail addresses to blind copy the message to
+     *            (separated by ",").
      * @param from
      *            The FROM field to use for the e-mail message.
      * @param subject

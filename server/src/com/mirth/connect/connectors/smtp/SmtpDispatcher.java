@@ -207,12 +207,10 @@ public class SmtpDispatcher extends DestinationConnector {
                 email.addTo(to);
             }
 
-            // Currently unused
             for (String cc : StringUtils.split(smtpDispatcherProperties.getCc(), ",")) {
                 email.addCc(cc);
             }
 
-            // Currently unused
             for (String bcc : StringUtils.split(smtpDispatcherProperties.getBcc(), ",")) {
                 email.addBcc(bcc);
             }
