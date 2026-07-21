@@ -1301,13 +1301,13 @@
 
 	<path id="jacoco.classpath">
 		<fileset dir="lib/ant">
-			<include name="org.jacoco.ant-0.8.8.jar"/>
-			<include name="org.jacoco.core-0.8.8.jar"/>
-			<include name="org.jacoco.report-0.8.8.jar"/>
-			<include name="org.jacoco.agent-0.8.8.jar"/>
-			<include name="asm-9.2.jar"/>
-			<include name="asm-tree-9.2.jar"/>
-			<include name="asm-commons-9.2.jar"/>
+			<include name="org.jacoco.ant-0.8.15.jar"/>
+			<include name="org.jacoco.core-0.8.15.jar"/>
+			<include name="org.jacoco.report-0.8.15.jar"/>
+			<include name="org.jacoco.agent-0.8.15.jar"/>
+			<include name="asm-9.10.1.jar"/>
+			<include name="asm-tree-9.10.1.jar"/>
+			<include name="asm-commons-9.10.1.jar"/>
 		</fileset>
 	</path>
 
@@ -1328,7 +1328,7 @@
 		<mkdir dir="${junit-html}" />
 
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
-			<junit haltonfailure="false" fork="true" forkmode="perTest">
+			<junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="perTest">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 <!--				&lt;!&ndash;Uncomment the following and add additional dashes in front of the arguments to allow Java 9+-->
@@ -1377,6 +1377,8 @@
 
 		<!-- Automatically generate JaCoCo HTML report after tests -->
 		<antcall target="jacoco-report"/>
+
+		<fail if="test.failed" message="Unit tests failed - see junit-reports/"/>
 	</target>
 
 	<target name="jacoco-report" depends="init">
