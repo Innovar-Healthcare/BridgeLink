@@ -153,13 +153,13 @@
     <!-- JaCoCo classpath (reuse server's JaCoCo JARs) -->
     <path id="jacoco.classpath.mt">
         <fileset dir="${server.lib}/ant">
-            <include name="org.jacoco.ant-0.8.8.jar"/>
-            <include name="org.jacoco.core-0.8.8.jar"/>
-            <include name="org.jacoco.report-0.8.8.jar"/>
-            <include name="org.jacoco.agent-0.8.8.jar"/>
-            <include name="asm-9.2.jar"/>
-            <include name="asm-tree-9.2.jar"/>
-            <include name="asm-commons-9.2.jar"/>
+            <include name="org.jacoco.ant-0.8.15.jar"/>
+            <include name="org.jacoco.core-0.8.15.jar"/>
+            <include name="org.jacoco.report-0.8.15.jar"/>
+            <include name="org.jacoco.agent-0.8.15.jar"/>
+            <include name="asm-9.10.1.jar"/>
+            <include name="asm-tree-9.10.1.jar"/>
+            <include name="asm-commons-9.10.1.jar"/>
         </fileset>
     </path>
     <taskdef uri="antlib:org.jacoco.ant"
@@ -187,7 +187,7 @@
         <jacoco:coverage destfile="code-coverage-reports/jacoco.exec"
                          xmlns:jacoco="antlib:org.jacoco.ant"
                          exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader">
-            <junit haltonfailure="false" fork="true" forkmode="perTest">
+            <junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="perTest">
                 <jvmarg value="--add-opens=java.base/java.util=ALL-UNNAMED"/>
                 <jvmarg value="--add-opens=java.base/java.lang=ALL-UNNAMED"/>
                 <classpath>
@@ -211,6 +211,8 @@
             </fileset>
             <report format="frames" todir="junit-html"/>
         </junitreport>
+
+        <fail if="test.failed" message="Unit tests failed - see junit-reports/"/>
     </target>
 
     <target name="build" depends="clean, jar">

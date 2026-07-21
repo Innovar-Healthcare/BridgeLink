@@ -91,13 +91,13 @@
 
 	<path id="jacoco.classpath">
 		<fileset dir="${server}/lib/ant">
-			<include name="org.jacoco.ant-0.8.8.jar"/>
-			<include name="org.jacoco.core-0.8.8.jar"/>
-			<include name="org.jacoco.report-0.8.8.jar"/>
-			<include name="org.jacoco.agent-0.8.8.jar"/>
-			<include name="asm-9.2.jar"/>
-			<include name="asm-tree-9.2.jar"/>
-			<include name="asm-commons-9.2.jar"/>
+			<include name="org.jacoco.ant-0.8.15.jar"/>
+			<include name="org.jacoco.core-0.8.15.jar"/>
+			<include name="org.jacoco.report-0.8.15.jar"/>
+			<include name="org.jacoco.agent-0.8.15.jar"/>
+			<include name="asm-9.10.1.jar"/>
+			<include name="asm-tree-9.10.1.jar"/>
+			<include name="asm-commons-9.10.1.jar"/>
 		</fileset>
 	</path>
 
@@ -119,7 +119,7 @@
 		</exec>
 
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
-			<junit haltonfailure="false" fork="true" forkmode="once" dir="${basedir}">
+			<junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="once" dir="${basedir}">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 				<jvmarg value="--add-opens=java.base/sun.misc=ALL-UNNAMED"/>
@@ -232,6 +232,8 @@
 
 		<!-- Automatically generate JaCoCo HTML report after tests -->
 		<antcall target="jacoco-report"/>
+
+		<fail if="test.failed" message="Unit tests failed - see junit-reports/"/>
 	</target>
 
 	<target name="jacoco-report" depends="init" description="Generate JaCoCo code coverage reports">
@@ -425,7 +427,7 @@
 		</exec>
 
 		<jacoco:coverage destfile="${db.code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader">
-			<junit haltonfailure="false" fork="true" forkmode="perBatch" dir="${basedir}">
+			<junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="perBatch" dir="${basedir}">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 				<jvmarg value="--add-opens=java.base/sun.misc=ALL-UNNAMED"/>
@@ -566,6 +568,8 @@
 		<echo message="JUnit Report: ${db.junit-html}/index.html"/>
 		<echo message="Coverage Report: ${db.jacoco-html}/index.html"/>
 		<echo message="========================================"/>
+
+		<fail if="test.failed" message="Unit tests failed - see junit-reports/"/>
 	</target>
 
 	<target name="test-run-db" depends="test-compile, docker-start-db" description="Run tests against a specific database (auto-starts database)">

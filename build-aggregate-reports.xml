@@ -22,13 +22,13 @@
 	<!-- JaCoCo libraries -->
 	<path id="jacoco.classpath">
 		<fileset dir="${server.dir}/lib/ant">
-			<include name="org.jacoco.ant-0.8.8.jar"/>
-			<include name="org.jacoco.core-0.8.8.jar"/>
-			<include name="org.jacoco.report-0.8.8.jar"/>
-			<include name="org.jacoco.agent-0.8.8.jar"/>
-			<include name="asm-9.2.jar"/>
-			<include name="asm-tree-9.2.jar"/>
-			<include name="asm-commons-9.2.jar"/>
+			<include name="org.jacoco.ant-0.8.15.jar"/>
+			<include name="org.jacoco.core-0.8.15.jar"/>
+			<include name="org.jacoco.report-0.8.15.jar"/>
+			<include name="org.jacoco.agent-0.8.15.jar"/>
+			<include name="asm-9.10.1.jar"/>
+			<include name="asm-tree-9.10.1.jar"/>
+			<include name="asm-commons-9.10.1.jar"/>
 		</fileset>
 	</path>
 

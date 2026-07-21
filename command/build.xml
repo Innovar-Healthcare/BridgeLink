@@ -76,13 +76,13 @@
 
 	<path id="jacoco.classpath">
 		<fileset dir="${server}/lib/ant">
-			<include name="org.jacoco.ant-0.8.8.jar"/>
-			<include name="org.jacoco.core-0.8.8.jar"/>
-			<include name="org.jacoco.report-0.8.8.jar"/>
-			<include name="org.jacoco.agent-0.8.8.jar"/>
-			<include name="asm-9.2.jar"/>
-			<include name="asm-tree-9.2.jar"/>
-			<include name="asm-commons-9.2.jar"/>
+			<include name="org.jacoco.ant-0.8.15.jar"/>
+			<include name="org.jacoco.core-0.8.15.jar"/>
+			<include name="org.jacoco.report-0.8.15.jar"/>
+			<include name="org.jacoco.agent-0.8.15.jar"/>
+			<include name="asm-9.10.1.jar"/>
+			<include name="asm-tree-9.10.1.jar"/>
+			<include name="asm-commons-9.10.1.jar"/>
 		</fileset>
 	</path>
 
@@ -97,7 +97,7 @@
 		<mkdir dir="${code-coverage-reports}" />
 		
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
-			<junit haltonfailure="false" fork="true" forkmode="once">
+			<junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="once">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 				<jvmarg value="--add-opens=java.base/sun.misc=ALL-UNNAMED"/>
@@ -119,5 +119,7 @@
 				</batchtest>
 			</junit>
 		</jacoco:coverage>
+
+		<fail if="test.failed" message="Unit tests failed - see junit-reports/"/>
 	</target>
 </project>
