@@ -1210,48 +1210,75 @@
 		<!-- compile the source -->
 		<mkdir dir="${test_classes}" />
 
+		<!-- Unit A (D-01/D-02): release="17" checks the test tree's API surface against ct.sym,
+		     closing the "test code silently uses 21+ APIs" gap ahead of the JDK 17/21/25 CI
+		     matrix (Plan 16-04). NO compilerarg elements are permitted here: javac hard-rejects
+		     the release flag combined with the add-exports/add-opens flags into java.base
+		     (JDK-8308399, empirically verified in 16-RESEARCH.md Pitfall 2).
+		     Any future test that needs a JDK-internal API (sun.*/com.sun.*) at compile time must
+		     be added to Unit A's excludes here AND to quarantine Unit B's explicit include list
+		     below: until then it fails loudly in this unit (D-03 self-policing).
+		     Currently Unit A has NO excludes: the quarantine list is empty. Verified this session
+		     (16-RESEARCH.md Finding 1 / Pitfall 3): zero test files import sun.*/com.sun.* classes;
+		     the internal-package mentions in KeyEncryptorTest/WebStartServletTest/
+		     ObjectXMLSerializerTest are string literals only (XML fixtures, a JNLP template, and
+		     a provider-name argument), none of which require the add-exports flag to compile.
+		     Do NOT pre-populate this list from assumption. -->
+		<javac srcdir="${test}" destdir="${test_classes}" debug="on" includeAntRuntime="false" release="17">
+			<classpath refid="testclasspath" />
+		</javac>
+
+		<!-- Unit B (D-01/D-02/D-03): quarantine scaffold for tests that genuinely need
+		     JDK-internal APIs at compile time. Uses source/target (not release) because javac
+		     permits the add-exports/add-opens flags into java.base only under source/target
+		     compilation (see Unit A comment above for the exact rejection). The include list
+		     below is explicit and currently EMPTY: the placeholder include matches no real file,
+		     so this unit compiles 0 source files today (verified: no current test needs it). Ant
+		     semantics trap: a javac with zero nested include elements compiles EVERYTHING, so the
+		     placeholder is required, not optional. When a test is quarantined, exclude it from
+		     Unit A above and replace the placeholder line below with an explicit include element
+		     naming that one file's path (no wildcards). -->
 		<javac srcdir="${test}" destdir="${test_classes}" debug="on" includeAntRuntime="false" source="17" target="17">
 			<classpath refid="testclasspath" />
-<!--			 Uncomment the following and add additional dashes in front of the arguments to allow Java 9+-->
-							<compilerarg value="--add-modules" />
-							<compilerarg value="java.sql.rowset" />
-							<compilerarg value="--add-exports" />
-							<compilerarg value="java.sql.rowset/com.sun.rowset=ALL-UNNAMED" />
-						<compilerarg value="--add-exports" />
-						<compilerarg value="java.base/com.sun.crypto.provider=ALL-UNNAMED" />
-						<compilerarg value="--add-exports" />
-						<compilerarg value="java.base/sun.security.provider=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.lang=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.lang.reflect=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.math=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.net=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.security=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.security.cert=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.text=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.util=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/sun.security.pkcs=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/sun.security.rsa=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/sun.security.x509=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.desktop/java.awt=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.desktop/java.awt.color=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.desktop/java.awt.font=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.xml/com.sun.org.apache.xalan.internal.xsltc.trax=ALL-UNNAMED" />
-
+			<include name="**/__quarantine_placeholder__/*.java" />
+			<compilerarg value="--add-modules" />
+			<compilerarg value="java.sql.rowset" />
+			<compilerarg value="--add-exports" />
+			<compilerarg value="java.sql.rowset/com.sun.rowset=ALL-UNNAMED" />
+			<compilerarg value="--add-exports" />
+			<compilerarg value="java.base/com.sun.crypto.provider=ALL-UNNAMED" />
+			<compilerarg value="--add-exports" />
+			<compilerarg value="java.base/sun.security.provider=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.lang=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.lang.reflect=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.math=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.net=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.security=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.security.cert=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.text=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.util=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/sun.security.pkcs=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/sun.security.rsa=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/sun.security.x509=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.desktop/java.awt=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.desktop/java.awt.color=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.desktop/java.awt.font=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.xml/com.sun.org.apache.xalan.internal.xsltc.trax=ALL-UNNAMED" />
 		</javac>
 
 		<copy todir="${test_classes}">
