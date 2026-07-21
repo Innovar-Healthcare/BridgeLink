@@ -14,7 +14,9 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -71,6 +73,7 @@ public class CodeTemplateHistoryDialogWithTaskPane extends JDialog {
 
     private CommitMetaDataTable tblCommitMetaData;
     private JScrollPane historyScrollPane;
+    private JComboBox<Integer> commitLimitCombo;
 
     private final String codeTemplateId;
     private JPopupMenu popupMenu;
@@ -218,6 +221,10 @@ public class CodeTemplateHistoryDialogWithTaskPane extends JDialog {
         });
 
         historyScrollPane = new JScrollPane(tblCommitMetaData);
+
+        commitLimitCombo = new JComboBox<>(new Integer[]{5, 10, 20, 50, 100, 200, 500});
+        commitLimitCombo.setSelectedItem(10);
+        commitLimitCombo.addActionListener(e -> loadHistory(false));
     }
 
     /**
@@ -283,8 +290,10 @@ public class CodeTemplateHistoryDialogWithTaskPane extends JDialog {
         add(taskPaneWrapper, "growy, spany");
 
         // History panel on the right
-        historyPanel.setLayout(new MigLayout("insets 0 10 10 10, novisualpadding, hidemode 3, fill", "[grow]", "[grow]"));
-        historyPanel.add(historyScrollPane, "grow, push");
+        historyPanel.setLayout(new MigLayout("insets 0 10 10 10, novisualpadding, hidemode 3, fill, gap 4", "[grow][]", "[]2[grow]"));
+        historyPanel.add(new JLabel("Show last:"), "split 2");
+        historyPanel.add(commitLimitCombo, "wrap 2");
+        historyPanel.add(historyScrollPane, "span 2, grow, push");
 
         add(historyPanel, "grow, push");
     }
@@ -445,7 +454,8 @@ public class CodeTemplateHistoryDialogWithTaskPane extends JDialog {
         @Override
         protected List<CommitMetaData> doInBackground() throws Exception {
             logger.debug("Loading history for code template: {}", codeTemplateId);
-            return VersionHistoryServiceClient.getInstance().loadCodeTemplateHistory(codeTemplateId);
+            int limit = (Integer) commitLimitCombo.getSelectedItem();
+            return VersionHistoryServiceClient.getInstance().loadCodeTemplateHistory(codeTemplateId, limit);
         }
 
         @Override

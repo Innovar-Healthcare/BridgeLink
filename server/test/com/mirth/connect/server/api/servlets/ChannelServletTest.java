@@ -12,6 +12,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import org.mockito.Mockito;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -165,6 +167,7 @@ public class ChannelServletTest extends ServletTestBase {
     @Before
     public void beforeTest() {
         channelServlet = new TestChannelServlet(request, mock(SecurityContext.class));
+        Mockito.clearInvocations(engineControllerMock, channelControllerMock);
     }
 
     @Test

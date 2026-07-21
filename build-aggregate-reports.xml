@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="mirth-aggregate-reports" default="aggregate-test-reports" basedir=".">
+
+	<description>
+		Aggregates JUnit test reports and JaCoCo coverage reports from multiple modules
+		(Donkey and Server) into unified HTML reports.
+	</description>
+
+	<!-- Module directories -->
+	<property name="donkey.dir" value="${basedir}/donkey"/>
+	<property name="server.dir" value="${basedir}/server"/>
+	<property name="dlg.dir"    value="${basedir}/custom-extensions/dynamic-lookup-gateway"/>
+	<property name="mt.dir"     value="${basedir}/custom-extensions/message-trends"/>
+
+	<!-- Aggregated report directories -->
+	<property name="aggregate.dir" value="${basedir}/aggregate-reports"/>
+	<property name="aggregate.junit.xml" value="${aggregate.dir}/junit-xml"/>
+	<property name="aggregate.junit.html" value="${aggregate.dir}/junit-html"/>
+	<property name="aggregate.jacoco.exec" value="${aggregate.dir}/jacoco-exec"/>
+	<property name="aggregate.jacoco.html" value="${aggregate.dir}/jacoco-html"/>
+
+	<!-- JaCoCo libraries -->
+	<path id="jacoco.classpath">
+		<fileset dir="${server.dir}/lib/ant">
+			<include name="org.jacoco.ant-0.8.8.jar"/>
+			<include name="org.jacoco.core-0.8.8.jar"/>
+			<include name="org.jacoco.report-0.8.8.jar"/>
+			<include name="org.jacoco.agent-0.8.8.jar"/>
+			<include name="asm-9.2.jar"/>
+			<include name="asm-tree-9.2.jar"/>
+			<include name="asm-commons-9.2.jar"/>
+		</fileset>
+	</path>
+
+	<taskdef uri="antlib:org.jacoco.ant"
+			 resource="org/jacoco/ant/antlib.xml"
+			 classpathref="jacoco.classpath"/>
+
+	<!-- ========================================================================= -->
+	<!-- Clean Aggregated Reports                                                  -->
+	<!-- ========================================================================= -->
+
+	<target name="clean-aggregate-reports" description="Clean aggregated test reports">
+		<delete dir="${aggregate.dir}"/>
+		<echo message="Aggregated reports cleaned"/>
+	</target>
+
+	<!-- ========================================================================= -->
+	<!-- Aggregate JUnit Test Reports                                              -->
+	<!-- ========================================================================= -->
+
+	<target name="aggregate-junit-reports" description="Aggregate JUnit test reports from all modules">
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="Aggregating JUnit Test Reports"/>
+		<echo message="========================================"/>
+
+		<!-- Create directories -->
+		<mkdir dir="${aggregate.junit.xml}"/>
+		<mkdir dir="${aggregate.junit.html}"/>
+
+		<!-- Copy all JUnit XML reports from Donkey module -->
+		<echo message="Collecting Donkey test reports..."/>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey.dir}/junit-reports">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+
+		<!-- Copy all JUnit XML reports from Donkey multi-database tests -->
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey.dir}/junit-reports-derby">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey.dir}/junit-reports-postgres">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey.dir}/junit-reports-mysql">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey.dir}/junit-reports-sqlserver">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${donkey.dir}/junit-reports-oracle">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+
+		<!-- Copy all JUnit XML reports from Server module -->
+		<echo message="Collecting Server test reports..."/>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${server.dir}/junit-reports">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+
+		<!-- Copy all JUnit XML reports from extension modules (IRT-1056) -->
+		<echo message="Collecting Dynamic Lookup Gateway test reports..."/>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${dlg.dir}/junit-reports" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+
+		<echo message="Collecting Message Trends test reports..."/>
+		<copy todir="${aggregate.junit.xml}" failonerror="false">
+			<fileset dir="${mt.dir}/junit-reports" erroronmissingdir="false">
+				<include name="TEST-*.xml"/>
+			</fileset>
+		</copy>
+
+		<!-- Generate aggregated HTML report -->
+		<echo message="Generating aggregated HTML report..."/>
+		<junitreport todir="${aggregate.junit.xml}">
+			<fileset dir="${aggregate.junit.xml}">
+				<include name="TEST-*.xml"/>
+			</fileset>
+			<report format="frames" todir="${aggregate.junit.html}">
+				<param name="TITLE" expression="BridgeLink - All Modules Test Report"/>
+			</report>
+		</junitreport>
+
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="JUnit Aggregation Complete!"/>
+		<echo message="========================================"/>
+		<echo message="Report location: ${aggregate.junit.html}/index.html"/>
+		<echo message=""/>
+	</target>
+
+	<!-- ========================================================================= -->
+	<!-- Aggregate JaCoCo Coverage Reports                                         -->
+	<!-- ========================================================================= -->
+
+	<target name="aggregate-jacoco-reports" description="Aggregate JaCoCo coverage reports from all modules">
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="Aggregating JaCoCo Coverage Reports"/>
+		<echo message="========================================"/>
+
+		<!-- Create directories -->
+		<mkdir dir="${aggregate.jacoco.exec}"/>
+		<mkdir dir="${aggregate.jacoco.html}"/>
+
+		<!-- Merge all JaCoCo execution data files -->
+		<echo message="Merging coverage data..."/>
+		<jacoco:merge destfile="${aggregate.jacoco.exec}/merged.exec" xmlns:jacoco="antlib:org.jacoco.ant">
+			<!-- Donkey coverage data -->
+			<fileset dir="${donkey.dir}" includes="code-coverage-reports/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${donkey.dir}" includes="code-coverage-reports-derby/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${donkey.dir}" includes="code-coverage-reports-postgres/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${donkey.dir}" includes="code-coverage-reports-mysql/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${donkey.dir}" includes="code-coverage-reports-sqlserver/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${donkey.dir}" includes="code-coverage-reports-oracle/jacoco.exec" erroronmissingdir="false"/>
+
+			<!-- Server coverage data -->
+			<fileset dir="${server.dir}" includes="code-coverage-reports/jacoco.exec" erroronmissingdir="false"/>
+
+			<!-- Extension coverage data (IRT-1056) -->
+			<fileset dir="${dlg.dir}" includes="code-coverage-reports/jacoco.exec" erroronmissingdir="false"/>
+			<fileset dir="${mt.dir}"  includes="code-coverage-reports/jacoco.exec" erroronmissingdir="false"/>
+		</jacoco:merge>
+
+		<!-- Generate aggregated coverage report -->
+		<echo message="Generating aggregated coverage report..."/>
+		<jacoco:report xmlns:jacoco="antlib:org.jacoco.ant">
+			<executiondata>
+				<file file="${aggregate.jacoco.exec}/merged.exec"/>
+			</executiondata>
+
+			<structure name="BridgeLink - All Modules">
+				<!-- Donkey classes and sources -->
+				<group name="Donkey Module">
+					<classfiles>
+						<fileset dir="${donkey.dir}/classes" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+					</classfiles>
+					<sourcefiles encoding="UTF-8">
+						<fileset dir="${donkey.dir}/src/main/java" erroronmissingdir="false"/>
+					</sourcefiles>
+				</group>
+
+				<!-- Server classes and sources -->
+				<group name="Server Module">
+					<classfiles>
+						<fileset dir="${server.dir}/classes" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+					</classfiles>
+					<sourcefiles encoding="UTF-8">
+						<fileset dir="${server.dir}/src" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+					</sourcefiles>
+				</group>
+
+				<!-- Dynamic Lookup Gateway extension (IRT-1056) -->
+				<group name="Dynamic Lookup Gateway">
+					<classfiles>
+						<fileset dir="${dlg.dir}/build/classes/server" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+						<fileset dir="${dlg.dir}/build/classes/shared" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+					</classfiles>
+					<sourcefiles encoding="UTF-8">
+						<fileset dir="${dlg.dir}/server/src/main/java" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+						<fileset dir="${dlg.dir}/shared/src/main/java" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+					</sourcefiles>
+				</group>
+
+				<!-- Message Trends extension (IRT-1056) -->
+				<group name="Message Trends">
+					<classfiles>
+						<fileset dir="${mt.dir}/build/classes/server" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+						<fileset dir="${mt.dir}/build/classes/shared" erroronmissingdir="false">
+							<include name="**/*.class"/>
+						</fileset>
+					</classfiles>
+					<sourcefiles encoding="UTF-8">
+						<fileset dir="${mt.dir}/server/src/main/java" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+						<fileset dir="${mt.dir}/shared/src/main/java" erroronmissingdir="false">
+							<include name="**/*.java"/>
+						</fileset>
+					</sourcefiles>
+				</group>
+			</structure>
+
+			<html destdir="${aggregate.jacoco.html}"/>
+			<xml destfile="${aggregate.jacoco.exec}/jacoco-report.xml"/>
+			<csv destfile="${aggregate.jacoco.exec}/jacoco-report.csv"/>
+		</jacoco:report>
+
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="JaCoCo Aggregation Complete!"/>
+		<echo message="========================================"/>
+		<echo message="Report location: ${aggregate.jacoco.html}/index.html"/>
+		<echo message=""/>
+	</target>
+
+	<!-- ========================================================================= -->
+	<!-- Aggregate All Reports                                                      -->
+	<!-- ========================================================================= -->
+
+	<target name="aggregate-test-reports"
+	        depends="aggregate-junit-reports, aggregate-jacoco-reports"
+	        description="Aggregate both JUnit and JaCoCo reports from all modules">
+		<echo message=""/>
+		<echo message="=========================================="/>
+		<echo message="All Reports Aggregated Successfully!"/>
+		<echo message="=========================================="/>
+		<echo message=""/>
+		<echo message="JUnit Test Report:"/>
+		<echo message="  ${aggregate.junit.html}/index.html"/>
+		<echo message=""/>
+		<echo message="JaCoCo Coverage Report:"/>
+		<echo message="  ${aggregate.jacoco.html}/index.html"/>
+		<echo message=""/>
+		<echo message="=========================================="/>
+	</target>
+
+	<!-- ========================================================================= -->
+	<!-- Generate Test Summary                                                      -->
+	<!-- ========================================================================= -->
+
+	<target name="test-summary" description="Display test summary statistics">
+		<echo message=""/>
+		<echo message="========================================"/>
+		<echo message="Test Summary"/>
+		<echo message="========================================"/>
+
+		<exec executable="bash" outputproperty="test.count">
+			<arg value="-c"/>
+			<arg value="find ${aggregate.junit.xml} -name 'TEST-*.xml' 2>/dev/null | wc -l | tr -d ' '"/>
+		</exec>
+
+		<echo message="Total test suites aggregated: ${test.count}"/>
+		<echo message=""/>
+		<echo message="Module breakdown:"/>
+		<echo message="  - Donkey module reports"/>
+		<echo message="  - Server module reports"/>
+		<echo message=""/>
+		<echo message="View aggregated reports at:"/>
+		<echo message="  ${aggregate.junit.html}/index.html"/>
+		<echo message="========================================"/>
+	</target>
+
+</project>

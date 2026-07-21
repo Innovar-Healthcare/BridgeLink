@@ -1,0 +1,18 @@
+<connectorMetaData path="mock-smtp">
+	<name>Mock SMTP Sender</name>
+	<author>Innovar Healthcare</author>
+	<pluginVersion>1.0.0</pluginVersion>
+	<mirthVersion>26.6.0</mirthVersion>
+	<description>Mock SMTP destination used to demonstrate engine-served WebAdmin connector panels (IRT-1422). Performs no real I/O.</description>
+	<clientClassName>com.mirth.connect.connectors.mocksmtp.MockSmtpConnectorPanel</clientClassName>
+	<serverClassName>com.mirth.connect.connectors.mocksmtp.MockSmtpDispatcher</serverClassName>
+	<sharedClassName>com.mirth.connect.connectors.mocksmtp.MockSmtpDispatcherProperties</sharedClassName>
+	<library type="CLIENT" path="mock-smtp-client.jar" />
+	<library type="SHARED" path="mock-smtp-shared.jar" />
+	<library type="SERVER" path="mock-smtp-server.jar" />
+	<apiProvider type="SERVLET_INTERFACE" name="com.mirth.connect.connectors.mocksmtp.MockSmtpServletInterface" />
+	<apiProvider type="SERVER_CLASS" name="com.mirth.connect.connectors.mocksmtp.MockSmtpServlet" />
+	<transformers></transformers>
+	<protocol>mocksmtp</protocol>
+	<type>DESTINATION</type>
+</connectorMetaData>

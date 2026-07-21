@@ -919,6 +919,9 @@ public class HttpReceiverTest {
     public void testSendResponseDefaultStatusCodeWhenNoResponseSelected() throws Exception {
         TestHttpServletResponse servletResponse = new TestHttpServletResponse();
         Request baseRequest = mock(Request.class);
+        // Required stub — present in every other sendResponse test
+        when(baseRequest.getHeaders("Accept-Encoding"))
+                .thenReturn(Collections.enumeration(Collections.emptyList()));
 
         props.setResponseContentType("text/plain");
         props.setResponseStatusCode("");
@@ -1055,6 +1058,23 @@ public class HttpReceiverTest {
     /**
      * Creates a fully mocked Request for createRequestMessage tests.
      */
+    // ===== Jetty 12.0.33 HttpURI API compatibility test (D-06) =====
+
+    /**
+     * Jetty 12.0.33 API compatibility: confirms that {@link HttpURI} correctly reports
+     * whether a URI is absolute (scheme-present) vs relative — the API used by
+     * {@link HttpReceiver#populateSourceMap} to build the request URL for the source map.
+     * Exercises the Jetty 12.0.33 {@code HttpURI.isAbsolute()} method.
+     */
+    @Test
+    public void testJetty1200HttpUriIsAbsoluteApi() {
+        HttpURI absoluteUri = HttpURI.build("http://localhost:8080/api/channels").asImmutable();
+        assertTrue("URI with scheme must be absolute", absoluteUri.isAbsolute());
+
+        HttpURI relativeUri = HttpURI.build("/api/channels").asImmutable();
+        assertFalse("URI without scheme must not be absolute", relativeUri.isAbsolute());
+    }
+
     private Request createMockRequest(String method, String contentType, byte[] body) throws Exception {
         Request request = mock(Request.class);
         when(request.getMethod()).thenReturn(method);

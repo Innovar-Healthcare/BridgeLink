@@ -736,14 +736,13 @@ public class MirthWebServerTest {
         invokeInstallerHandler(handler, baseRequest, request, response);
 
         verify(response).reset();
-        verify(response).setStatus(org.apache.commons.httpclient.HttpStatus.SC_INTERNAL_SERVER_ERROR);
+        verify(response).setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
     }
 
     private Object newInstallerHandlerInstance(File file) throws Exception {
-        java.lang.reflect.Field unsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
-        unsafeField.setAccessible(true);
-        sun.misc.Unsafe unsafe = (sun.misc.Unsafe) unsafeField.get(null);
-        MirthWebServer outer = (MirthWebServer) unsafe.allocateInstance(MirthWebServer.class);
+        // Use a Mockito mock instead of sun.misc.Unsafe.allocateInstance to avoid
+        // bypassing constructors and to remain compatible with Java 17+ encapsulation.
+        MirthWebServer outer = mock(MirthWebServer.class);
 
         Class<?> handlerClass = null;
         for (Class<?> c : MirthWebServer.class.getDeclaredClasses()) {
@@ -854,5 +853,33 @@ public class MirthWebServerTest {
         dir.mkdirs();
         dir.deleteOnExit();
         return dir;
+    }
+
+    // ===== Jetty 12.0.33 API compatibility tests (D-06) =====
+
+    /**
+     * Jetty 12.0.33 MimeTypes API compatibility: confirms that {@link MimeTypes#getMimeByExtension}
+     * correctly resolves HTML content-type — the same API used by InstallerFileHandler to set
+     * content-type headers for static files served by MirthWebServer.
+     */
+    @Test
+    public void testJetty1200MimeTypesHtmlResolution() {
+        MimeTypes mimeTypes = new MimeTypes();
+        String contentType = mimeTypes.getMimeByExtension("index.html");
+        assertNotNull("MimeTypes.getMimeByExtension must return a non-null value for .html", contentType);
+        assertTrue("Content-type for .html must contain 'html'", contentType.contains("html"));
+    }
+
+    /**
+     * Jetty 12.0.33 MimeTypes API compatibility: confirms that {@link MimeTypes#getMimeByExtension}
+     * correctly resolves CSS content-type. The SwaggerUiFilter in MirthWebServer delegates content-type
+     * lookup to Jetty's MimeTypes for static swagger assets.
+     */
+    @Test
+    public void testJetty1200MimeTypesCssResolution() {
+        MimeTypes mimeTypes = new MimeTypes();
+        String contentType = mimeTypes.getMimeByExtension("swagger-ui.css");
+        assertNotNull("MimeTypes.getMimeByExtension must return a non-null value for .css", contentType);
+        assertTrue("Content-type for .css must contain 'css'", contentType.contains("css"));
     }
 }

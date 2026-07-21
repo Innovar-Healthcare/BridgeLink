@@ -265,7 +265,7 @@ public class CodeTemplate implements Serializable, Migratable, Purgable, Cacheab
     public Map<String, Object> getPurgedProperties() {
         Map<String, Object> purgedProperties = new HashMap<String, Object>();
         purgedProperties.put("id", id);
-        purgedProperties.put("nameChars", PurgeUtil.countChars(name));
+        purgedProperties.put("nameChars", name != null ? PurgeUtil.countChars(name) : 0);
         purgedProperties.put("lastModified", lastModified);
         purgedProperties.put("contextSet", contextSet);
         CodeTemplateFunctionDefinition functionDefinition = getFunctionDefinition();

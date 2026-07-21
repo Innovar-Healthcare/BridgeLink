@@ -572,7 +572,7 @@ public class FileReceiverTest {
         TestFileReceiver receiver = createReceiver(fileDirectory, false, true, FileReceiverProperties.SORT_BY_NAME, null);
         receiver.poll();
 
-        verify(receiver.logger, times(1)).warn(any());
+        verify(receiver.logger, times(1)).trace(any());
         assertTrue(receiver.rawMessages.size() == expectedMessageCount);
     }
 

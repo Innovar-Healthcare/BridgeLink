@@ -23,6 +23,7 @@ import com.mirth.connect.donkey.model.event.ErrorEventType;
 import com.mirth.connect.donkey.model.message.ConnectorMessage;
 import com.mirth.connect.donkey.server.channel.Channel;
 import com.mirth.connect.donkey.server.channel.components.PreProcessor;
+import com.mirth.connect.donkey.server.channel.LogContext;
 import com.mirth.connect.donkey.server.event.ErrorEvent;
 import com.mirth.connect.model.codetemplates.ContextType;
 import com.mirth.connect.server.MirthJavascriptTransformerException;
@@ -130,6 +131,9 @@ public class JavaScriptPreprocessor implements PreProcessor {
                 t = e.getCause();
             }
 
+            if (LogContext.isErrorEventLoggingEnabled()) {
+                logger.error("Error running preprocessor scripts", t);
+            }
             eventController.dispatchEvent(new ErrorEvent(message.getChannelId(), null, message.getMessageId(), ErrorEventType.PREPROCESSOR_SCRIPT, null, null, "Error running preprocessor scripts", t));
             throw new DonkeyException(t, ErrorMessageBuilder.buildErrorMessage(ErrorEventType.PREPROCESSOR_SCRIPT.toString(), "Error running preprocessor scripts", t));
         }
@@ -169,7 +173,7 @@ public class JavaScriptPreprocessor implements PreProcessor {
                     debugger.setVisible(true);
                 }
             }
-            return JavaScriptUtil.executePreprocessorScripts(this, message, channel.getSourceConnector().getDestinationIdMap(), this.scopeProvider);
+            return JavaScriptUtil.executePreprocessorScripts(this, message, channel.getSourceConnector().getDestinationIdMap(), this.scopeProvider, channel.getName());
         }
     }
 }

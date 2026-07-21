@@ -55,16 +55,20 @@ public class ServerLogProvider implements ServicePlugin {
         initialize();
     }
 
-    public synchronized void newServerLogReceived(String level, Date date, String threadName, String category, String lineNumber, String message, String throwableInformation) {
+    public synchronized void newServerLogReceived(String level, Date date, String threadName, String category, String lineNumber, String message, String throwableInformation, String channelId) {
         if (logController != null) {
-            logController.addLogItem(new ServerLogItem(serverId, logId, level, date, threadName, category, lineNumber, message, throwableInformation));
+            logController.addLogItem(new ServerLogItem(serverId, logId, level, date, threadName, category, lineNumber, message, throwableInformation, channelId));
             logId++;
         }
     }
 
     public List<ServerLogItem> getServerLogs(int fetchSize, Long lastLogId) {
+        return getServerLogs(fetchSize, lastLogId, null);
+    }
+
+    public List<ServerLogItem> getServerLogs(int fetchSize, Long lastLogId, java.util.Set<String> channelIds) {
         if (logController != null) {
-            return logController.getServerLogs(fetchSize, lastLogId);
+            return logController.getServerLogs(fetchSize, lastLogId, channelIds);
         } else {
             return new ArrayList<ServerLogItem>();
         }

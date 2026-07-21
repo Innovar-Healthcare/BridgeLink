@@ -20,6 +20,7 @@ public enum Status {
     private Status() {}
 
     static Status fromDonkeyStatus(com.mirth.connect.donkey.model.message.Status status) {
+        if (status == null) return null;
         switch (status) {
             case RECEIVED:
                 return RECEIVED;
