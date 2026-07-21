@@ -200,6 +200,15 @@ public class Mirth extends Thread {
         }
     }
 
+    private void checkDerbyJavaVersion() {
+        String dbType = configurationController.getDatabaseType();
+
+        if (derbyPreflightBlocks(dbType, Runtime.version().feature())) {
+            logger.error(DERBY_JAVA_ERROR_MSG);
+            System.exit(1);
+        }
+    }
+
     private void checkRunningAsRoot() {
         // JVM flag takes precedence over mirth.properties
         String sysProp = System.getProperty("server.allowRoot");
@@ -386,6 +395,10 @@ public class Mirth extends Thread {
 
         // Refresh the in-memory config in case the configuration controller changed it
         configurationController.updatePropertiesConfiguration(mirthProperties);
+
+        // Derby/Java-21 startup preflight (JAVA-04) — DB type is authoritative here,
+        // after any MP_DATABASE/env overrides applied by initializeDatabaseSettings()
+        checkDerbyJavaVersion();
 
         try {
             int maxRetry = configurationController.getDatabaseSettings().getDatabaseConnectionMaxRetry();
