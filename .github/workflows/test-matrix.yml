@@ -1,0 +1,49 @@
+# Dedicated JDK 17/21/25 test matrix (JAVA-03).
+# Sibling of build_bridgelink.yml (which stays untouched, D-05) — this workflow
+# runs the unsigned build + full test suite + coverage as three parallel,
+# independent legs (D-07) so a failing test turns its own leg red honestly
+# (Plan 16-03 wired failureproperty + <fail> into the junit targets).
+name: Test matrix (JDK 17/21/25)
+
+on:
+  push:
+    branches: [feature/26.9.x, bridgelink_development]
+  pull_request:
+    branches: [feature/26.9.x, bridgelink_development]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['17', '21', '25']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'zulu'
+          java-package: 'jdk+fx'
+
+      - name: Build Bridgelink - unsigned
+        working-directory: server
+        run: ant -f mirth-build.xml -DdisableSigning=true
+
+      - name: Test + aggregate coverage
+        working-directory: server
+        run: ant -f mirth-build.xml test-run-and-aggregate
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-jdk${{ matrix.java }}
+          path: |
+            aggregate-reports/
+            server/junit-reports/
+            donkey/junit-reports/
