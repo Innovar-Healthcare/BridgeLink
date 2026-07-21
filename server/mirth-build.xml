@@ -138,8 +138,13 @@
 		     full suite a second time and, since Plan 16-03 wired failureproperty/<fail> into the
 		     junit targets, a single failing test would abort the build step before the dedicated
 		     test step ever runs). Default (no property set) preserves existing behavior for
-		     build_bridgelink.yml and any other caller. -->
-		<antcall target="test-run" unless="skip.build.tests" />
+		     build_bridgelink.yml and any other caller. antcall itself has no if/unless attribute
+		     (Ant limitation), so the guard lives on the wrapper target instead. -->
+		<antcall target="build-run-tests" />
+	</target>
+
+	<target name="build-run-tests" unless="skip.build.tests">
+		<antcall target="test-run" />
 	</target>
 
 	<target name="dist" depends="build-manager, build-cli, build-webadmin">
