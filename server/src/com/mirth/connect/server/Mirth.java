@@ -151,6 +151,21 @@ public class Mirth extends Thread {
         BLOCK, WARN, OK
     }
 
+    // Package-private (not private, like ROOT_CHECK_ERROR_MSG) so DerbyPreflightTest can
+    // assert the exact verbatim IRT-1488 text — message verbatim-ness IS the requirement.
+    static final String DERBY_JAVA_ERROR_MSG =
+        "embedded Derby requires Java 21+ as of 26.9; upgrade Java or switch to an external database";
+
+    /**
+     * Pure evaluate method for the Derby/Java-21 startup preflight (JAVA-04).
+     * Unconditional per D-11: no WARN state, no override flag — blocks iff the
+     * configured database is Derby (case-insensitive) and the running JVM is below
+     * feature version 21 (Derby 10.17 requires Java SE 21+).
+     */
+    static boolean derbyPreflightBlocks(String databaseType, int javaFeatureVersion) {
+        return "derby".equalsIgnoreCase(databaseType) && javaFeatureVersion < 21;
+    }
+
     RootCheckResult evaluateRootCheck(String osName, String userName, boolean isWindowsAdmin, boolean allowRoot) {
         boolean isPrivileged;
         if (osName.toLowerCase().contains("win")) {
