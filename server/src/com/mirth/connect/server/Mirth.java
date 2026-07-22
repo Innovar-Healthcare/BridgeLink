@@ -201,7 +201,12 @@ public class Mirth extends Thread {
     }
 
     private void checkDerbyJavaVersion() {
-        String dbType = configurationController.getDatabaseType();
+        // mirth.properties is the authoritative source for the database type: getDatabaseType()
+        // reads the same key, and container MP_DATABASE overrides rewrite mirth.properties
+        // before the JVM starts. Reading it here keeps the preflight runnable before the
+        // shutdown hook is registered (exiting after registration would run shutdown()
+        // against uninitialized subsystems — see IRT-1488 / 16-REVIEW WR-05).
+        String dbType = mirthProperties.getString("database");
 
         if (derbyPreflightBlocks(dbType, Runtime.version().feature())) {
             logger.error(DERBY_JAVA_ERROR_MSG);
@@ -297,6 +302,11 @@ public class Mirth extends Thread {
 
             checkRunningAsRoot();
             checkNoNewPrivs();
+
+            // Derby/Java-21 startup preflight (JAVA-04) — must run BEFORE the shutdown
+            // hook is registered below, so an abort exits cleanly (same pattern as
+            // checkRunningAsRoot above)
+            checkDerbyJavaVersion();
 
             // Initialize TLS system properties as early as possible, because otherwise they will be cached
             if (System.getProperty("jdk.tls.ephemeralDHKeySize") == null) {
@@ -395,10 +405,6 @@ public class Mirth extends Thread {
 
         // Refresh the in-memory config in case the configuration controller changed it
         configurationController.updatePropertiesConfiguration(mirthProperties);
-
-        // Derby/Java-21 startup preflight (JAVA-04) — DB type is authoritative here,
-        // after any MP_DATABASE/env overrides applied by initializeDatabaseSettings()
-        checkDerbyJavaVersion();
 
         try {
             int maxRetry = configurationController.getDatabaseSettings().getDatabaseConnectionMaxRetry();
