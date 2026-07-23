@@ -48,7 +48,14 @@
       <requestHeaderSize>8192</requestHeaderSize>
       <staticResources>
         <com.mirth.connect.connectors.http.HttpStaticResource>
-          <contextPath>/smokectx/data</contextPath>
+          <!-- Rule 1 bug fix (plan 18.2-03): HttpReceiver.java prepends the connector's own
+               contextPath ("/smokectx") to this value (resourceContextPath = contextPath +
+               resourceContextPath — HttpReceiver.java line 274), so this must be the
+               RELATIVE sub-path ("/data"), not the full absolute path. The wave-1 fixture
+               committed "/smokectx/data" here, which resolved to "/smokectx/smokectx/data"
+               and made JettyRegressionTest's B1 assertion see an empty (channel fall-through)
+               body instead of the resource content. -->
+          <contextPath>/data</contextPath>
           <resourceType>CUSTOM</resourceType>
           <value>smoke-ctx-resource-content</value>
           <contentType>text/x-smoke</contentType>
