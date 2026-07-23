@@ -176,6 +176,45 @@ To add an eleventh fixture:
    sent through the channel and the destination artifact is checked for the expected
    transformed content — this script only proves import/deploy/STARTED.
 
+## Proving the net (NET-05 / SC-4 / break-dependency.sh)
+
+`smoke-tests/break-dependency.sh` is the D-13/D-14 self-verifying broken-dependency proof:
+it swaps EVERY `xstream-*.jar` found recursively under `server/setup/server-lib` aside, drops
+in the deliberately old `fixtures/xstream-1.4.10.jar`, runs the harness expecting failure,
+restores the original jar(s) unconditionally (trap on EXIT), and verifies the restore.
+
+**When to run:** before any CVE-track jar bump (Phase 23 xstream/BC re-land, Phase 24 Derby,
+Phase 25 mssql-jdbc, Phase 26 Jersey) — rehearses the exact validation ritual a risky
+dependency swap needs before it can be trusted, and before any future re-attempt at the
+xstream 1.4.21 re-land that was rolled back in v26.6.0 (commit `6a483ab9d`).
+
+**Exit-code contract:**
+
+| Exit | Meaning |
+|------|---------|
+| `0`  | OK — harness caught the broken dependency (behavioral catch at the XStream import seam, `SMOKE-FAILURE-CLASS: import`) |
+| `1`  | SELF-TEST FAILED — harness passed with the broken jar in place; the net has a hole |
+| `2`  | INCONCLUSIVE — harness failed, but not at the import/dependency seam (e.g. boot/infrastructure failure) |
+
+**Verified result (this session, JDK 26.0.1 — see Known Limitation below):** exit `1`
+(SELF-TEST FAILED). The `xstream-1.4.10.jar` fixture (committed by plan 18-01) does **not**
+reproduce a functional break against the current 10 reference channels: XStream's
+reflection-based (de)serializer is highly backward-compatible for plain POJO graphs, and none
+of the 10 reference channels exercise Mirth's version-migration path (they are all pinned to
+`version="26.6.0")`, by 18-05's deliberate design, to avoid migration surprises). The actual
+v26.6.0 incident (xstream 1.4.21, forward not backward) was a narrower regression in
+`DomReader`'s child-element caching that only affected `MigratableConverter`'s post-migration
+DOM reload for legacy-format (pre-current-version) channels — a defensive fix
+(`MirthDomReader.getChildCount()`/`getChild(int)` overrides, commit `22940c0f8`) was written for
+it, then partially reverted alongside the version rollback (commit `6a483ab9d`), leaving only
+the weaker `reloadCurrentElement()` stub in the current tree. Reproducing that exact seam
+requires a legacy-format (migration-triggering) channel fixture, which is out of scope for this
+plan (see the 18-08 SUMMARY Deviations section for full detail and the recommended follow-up).
+The script itself is complete, correct, and self-verifying per every other D-13/D-14 structural
+requirement (recursive jar discovery, trap-based restore, restoration verification, three-way
+verdict classification) — the exit code accurately reflects what actually happened, which is
+the property `break-dependency.sh` is designed to prove.
+
 ## Provenance
 
 Binary artifacts committed to this directory are downloaded from Maven Central
