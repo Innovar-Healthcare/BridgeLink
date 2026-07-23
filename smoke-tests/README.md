@@ -129,8 +129,9 @@ never included in the measured duration.
 
 ## Add a channel
 
-The 12 committed fixtures in `smoke-tests/channels/` cover every stock connector type
-(NET-01): `http-test.xml`, `tcp-mllp-test.xml`, `file-test.xml`, `jdbc-test.xml`,
+The registry has grown to 20 committed fixtures in `smoke-tests/channels/` (channel IDs
+`00000001` through `00000020`). The original 12 (Phase 18, NET-01) cover every stock
+connector type: `http-test.xml`, `tcp-mllp-test.xml`, `file-test.xml`, `jdbc-test.xml`,
 `vm-test.xml`, `js-test.xml`, `smtp-test.xml`, `soap-test.xml`, `dicom-test.xml`,
 `doc-writer-test.xml` (the last one carries two Document Writer destinations — PDF and
 RTF — the Phase 22 OpenPDF/OpenRTF fidelity baseline, D-08), plus the two
@@ -138,14 +139,17 @@ RTF — the Phase 22 OpenPDF/OpenRTF fidelity baseline, D-08), plus the two
 versioned schema 3.6.0) and `legacy-migration-3-4-test.xml` (plan 18-10, channel root
 versioned schema 3.4.0) — see "Proving the net" below for why this pair is structurally
 different from the other ten and must never be "fixed" to the current schema version.
+Phase 18.1 (NET-06, channel IDs `00000013`-`00000020`) added 8 more fixtures slicing the
+HTTP connector's parameter surface into per-cluster channels — see "Parameter-coverage
+pattern (18.1)" below for the slicing rule and the reusable pattern for the next connector.
 
-To add a thirteenth fixture:
+To add a 21st fixture:
 
 1. **Author the channel XML** under `smoke-tests/channels/<name>-test.xml`. Follow the
    existing fixtures' conventions:
-   - Fixed, human-assigned sequential channel ID (`00000013-0000-0000-0000-000000000013`
-     — continue the sequence; `...0011` and `...0012` are taken by the two
-     `legacy-migration-*` fixtures).
+   - Fixed, human-assigned sequential channel ID (`00000021-0000-0000-0000-000000000021`
+     — continue the sequence; IDs `00000001`-`00000020` are taken by the 12 Phase 18
+     fixtures plus the 8 Phase 18.1 HTTP parameter-coverage fixtures).
    - `<description>` ends with "Test-only; never deploy to production."
    - Every ephemeral port/path is a `${VARNAME}` placeholder, never a hardcoded value.
    - A real transformer step (JavaScript Step, `com.mirth.connect.plugins.javascriptstep.JavaScriptStep`)
@@ -176,7 +180,7 @@ To add a thirteenth fixture:
    index position in both arrays — the script pairs them positionally for status/STARTED
    polling and error messages).
 4. **Verify**: `smoke-tests/run-smoke-test.sh --deploy-only` should exit 0 twice
-   consecutively with your new channel reaching STARTED alongside the existing 12.
+   consecutively with your new channel reaching STARTED alongside the existing 20.
 5. **Wire assertions**: 18-07's pump/assert driver is where the actual HL7v2 message gets
    sent through the channel and the destination artifact is checked for the expected
    transformed content — this script only proves import/deploy/STARTED.
