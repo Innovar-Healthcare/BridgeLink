@@ -10,7 +10,7 @@
     <properties class="com.mirth.connect.connectors.tcp.TcpReceiverProperties" version="26.6.0">
       <pluginProperties/>
       <listenerConnectorProperties version="26.6.0">
-        <host>0.0.0.0</host>
+        <host>127.0.0.1</host>
         <port>${MLLP_PORT}</port>
       </listenerConnectorProperties>
       <sourceConnectorProperties version="26.6.0">
