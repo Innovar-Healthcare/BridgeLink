@@ -4,6 +4,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -19,6 +20,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.zip.GZIPInputStream;
 
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
@@ -66,6 +68,17 @@ public class HttpParamsTest extends SmokeTestBase {
     private static final String BINARY_SEND_ID = "00000020-0000-0000-0000-000000000020";
 
     private static final HttpClient CLIENT = HttpClient.newHttpClient();
+
+    /**
+     * IRT-828 (NET-07): a second, HTTP/1.1-pinned client for every Content-Length/gzip
+     * assertion. Content-Length vs. chunked-transfer semantics are HTTP/1.1 concepts —
+     * HTTP/2 multiplexes over frames and does not expose an equivalent header in the same
+     * way, so pinning the version keeps the CL assertions unambiguous (Pitfall 3). Does NOT
+     * replace {@link #CLIENT} above — existing methods are untouched.
+     */
+    private static final HttpClient CL_CLIENT = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
 
     private static String httpResponsePort;
     private static String httpXmlBodyPort;
@@ -151,6 +164,98 @@ public class HttpParamsTest extends SmokeTestBase {
         assertEquals("smoke-static-content", response.body());
         assertTrue("Static resource Content-Type should start with text/x-smoke",
                 response.headers().firstValue("Content-Type").orElse("").startsWith("text/x-smoke"));
+    }
+
+    /**
+     * IRT-828-1 (NET-07): small CUSTOM static resource — Content-Length present, equal to
+     * the actual body byte count, on an HTTP/1.1-pinned client. Same fixture/resource as
+     * {@link #staticResource()} above; this method adds the CL assertion that test does not
+     * make.
+     */
+    @Test
+    public void staticResourceContentLengthSmall() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + httpResponsePort + "/static/smoke"))
+                .timeout(Duration.ofSeconds(15))
+                .GET()
+                .build();
+        HttpResponse<byte[]> response = CL_CLIENT.send(request, BodyHandlers.ofByteArray());
+        assertEquals(200, response.statusCode());
+        long contentLength = response.headers().firstValueAsLong("Content-Length").orElse(-1);
+        assertEquals("Content-Length must equal actual body bytes (IRT-828-1)",
+                response.body().length, contentLength);
+        assertEquals("smoke-static-content", new String(response.body(), StandardCharsets.UTF_8));
+    }
+
+    /**
+     * IRT-828-2 (NET-07), THE regression case: a 40960-byte CUSTOM static resource — above
+     * the ~30720-byte early-commit threshold where pre-fix Jetty 12 committed the response
+     * before the full Content-Length could be computed, corrupting the header. Content-Length
+     * must be present and equal to both the known fixture size and the actual body length.
+     */
+    @Test
+    public void staticResourceContentLengthLarge() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + httpResponsePort + "/static/large"))
+                .timeout(Duration.ofSeconds(15))
+                .GET()
+                .build();
+        HttpResponse<byte[]> response = CL_CLIENT.send(request, BodyHandlers.ofByteArray());
+        assertEquals(200, response.statusCode());
+        long contentLength = response.headers().firstValueAsLong("Content-Length").orElse(-1);
+        assertEquals("Content-Length must equal actual body bytes (IRT-828-2 regression case)",
+                response.body().length, contentLength);
+        assertEquals("Large CUSTOM static resource must be exactly 40960 bytes (>30720 early-commit threshold)",
+                40960, response.body().length);
+    }
+
+    /**
+     * IRT-828-3 (NET-07): gzip tolerance rule against the same 40960-byte resource. Never
+     * assert "Content-Length must be absent" (Pitfall 5) — if present it must equal the
+     * COMPRESSED body length, and the gunzipped body must decompress back to the original
+     * 40960 bytes. {@code java.net.http} sends no {@code Accept-Encoding} by default and
+     * never auto-decompresses (Assumption A1) — explicit header, manual decompression here.
+     */
+    @Test
+    public void staticResourceGzip() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + httpResponsePort + "/static/large"))
+                .timeout(Duration.ofSeconds(15))
+                .header("Accept-Encoding", "gzip")
+                .GET()
+                .build();
+        HttpResponse<byte[]> response = CL_CLIENT.send(request, BodyHandlers.ofByteArray());
+        assertEquals(200, response.statusCode());
+        assertEquals("gzip", response.headers().firstValue("Content-Encoding").orElse(null));
+
+        response.headers().firstValueAsLong("Content-Length").ifPresent(len ->
+                assertEquals("If present, Content-Length must equal the COMPRESSED body length (never absent-only assumption)",
+                        response.body().length, len));
+
+        byte[] plain;
+        try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(response.body()))) {
+            plain = gzip.readAllBytes();
+        }
+        assertEquals("Gunzipped body must decompress back to the original 40960 bytes",
+                40960, plain.length);
+    }
+
+    /**
+     * IRT-828-4 (NET-07): FILE resourceType — the resource value is a filesystem path the
+     * harness pre-creates at 102400 bytes ({@code STATIC_FILE_PATH}, run-smoke-test.sh
+     * {@code allocate_work_dirs()}). Content-Length must be present, equal to the known size,
+     * and equal to the actual body length.
+     */
+    @Test
+    public void staticResourceFile() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + httpResponsePort + "/static/file"))
+                .timeout(Duration.ofSeconds(15))
+                .GET()
+                .build();
+        HttpResponse<byte[]> response = CL_CLIENT.send(request, BodyHandlers.ofByteArray());
+        assertEquals(200, response.statusCode());
+        long contentLength = response.headers().firstValueAsLong("Content-Length").orElse(-1);
+        assertEquals("Content-Length must equal actual body bytes (IRT-828-4)",
+                response.body().length, contentLength);
+        assertEquals("FILE static resource must be exactly 102400 bytes",
+                102400, response.body().length);
     }
 
     /**
