@@ -192,6 +192,8 @@ donkey/donkey-test
 /donkey/nbdist
 /donkey/test_classes
 /donkey/junit-reports
+/donkey/derby.log
+/donkey/${dir.base}/
 
 # /donkey/conf/
 
