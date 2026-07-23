@@ -267,6 +267,30 @@ public class RestClient {
         return getStatisticField(channelId, "error");
     }
 
+    /**
+     * Received-message count wrapper (plan 18.1-01), needed for the D-08 negative-auth "no
+     * message created" assertion — a 401 rejection at the security handler must leave this
+     * count unchanged.
+     */
+    public long getReceivedCount(String channelId) throws IOException, InterruptedException {
+        return getStatisticField(channelId, "received");
+    }
+
+    /**
+     * Raw messages-with-content wrapper (plan 18.1-01), needed for the D-06 timeout-signature
+     * assertion in plan 18.1-05: the timeout message's error content must contain
+     * {@code SocketTimeoutException} (18.1-RESEARCH.md Pattern 4 item 3). Returns the raw
+     * response body — no parsing; callers substring-assert.
+     */
+    public String getMessagesWithContent(String channelId) throws IOException, InterruptedException {
+        String url = baseUrl + "/channels/" + channelId + "/messages?includeContent=true&limit=10";
+        HttpResponse<String> response = httpClient.send(newJsonGetBuilder(url).build(), HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) {
+            throw new IOException("GET " + url + " failed: HTTP " + response.statusCode());
+        }
+        return response.body();
+    }
+
     private long getStatisticField(String channelId, String field) throws IOException, InterruptedException {
         String url = baseUrl + "/channels/" + channelId + "/statistics";
         HttpResponse<String> response = httpClient.send(newJsonGetBuilder(url).build(), HttpResponse.BodyHandlers.ofString());
