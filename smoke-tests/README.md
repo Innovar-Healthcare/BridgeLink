@@ -129,21 +129,23 @@ never included in the measured duration.
 
 ## Add a channel
 
-The 11 committed fixtures in `smoke-tests/channels/` cover every stock connector type
+The 12 committed fixtures in `smoke-tests/channels/` cover every stock connector type
 (NET-01): `http-test.xml`, `tcp-mllp-test.xml`, `file-test.xml`, `jdbc-test.xml`,
 `vm-test.xml`, `js-test.xml`, `smtp-test.xml`, `soap-test.xml`, `dicom-test.xml`,
 `doc-writer-test.xml` (the last one carries two Document Writer destinations — PDF and
-RTF — the Phase 22 OpenPDF/OpenRTF fidelity baseline, D-08), plus
-`legacy-migration-test.xml` (plan 18-09) — see "Proving the net" below for why this
-eleventh fixture is structurally different from the other ten and must never be
-"fixed" to the current schema version.
+RTF — the Phase 22 OpenPDF/OpenRTF fidelity baseline, D-08), plus the two
+`legacy-migration-*` fixtures — `legacy-migration-test.xml` (plan 18-09, channel root
+versioned schema 3.6.0) and `legacy-migration-3-4-test.xml` (plan 18-10, channel root
+versioned schema 3.4.0) — see "Proving the net" below for why this pair is structurally
+different from the other ten and must never be "fixed" to the current schema version.
 
-To add a twelfth fixture:
+To add a thirteenth fixture:
 
 1. **Author the channel XML** under `smoke-tests/channels/<name>-test.xml`. Follow the
    existing fixtures' conventions:
-   - Fixed, human-assigned sequential channel ID (`00000012-0000-0000-0000-000000000012`
-     — continue the sequence; `...0011` is now taken by `legacy-migration-test.xml`).
+   - Fixed, human-assigned sequential channel ID (`00000013-0000-0000-0000-000000000013`
+     — continue the sequence; `...0011` and `...0012` are taken by the two
+     `legacy-migration-*` fixtures).
    - `<description>` ends with "Test-only; never deploy to production."
    - Every ephemeral port/path is a `${VARNAME}` placeholder, never a hardcoded value.
    - A real transformer step (JavaScript Step, `com.mirth.connect.plugins.javascriptstep.JavaScriptStep`)
@@ -174,7 +176,7 @@ To add a twelfth fixture:
    index position in both arrays — the script pairs them positionally for status/STARTED
    polling and error messages).
 4. **Verify**: `smoke-tests/run-smoke-test.sh --deploy-only` should exit 0 twice
-   consecutively with your new channel reaching STARTED alongside the existing 11.
+   consecutively with your new channel reaching STARTED alongside the existing 12.
 5. **Wire assertions**: 18-07's pump/assert driver is where the actual HL7v2 message gets
    sent through the channel and the destination artifact is checked for the expected
    transformed content — this script only proves import/deploy/STARTED.
@@ -206,54 +208,78 @@ overridable via the `BREAK_FIXTURE_JAR` environment variable, e.g.:
 BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.21.jar smoke-tests/break-dependency.sh
 ```
 
-**Verified result (plan 18-09, JDK 26.0.1 — locally available JDK clearing the Phase 16
-Derby preflight): exit `1` (SELF-TEST FAILED) for BOTH available fixtures, even after adding
-`legacy-migration-test.xml` (a genuinely legacy schema-`3.6.0` channel export, plan 18-09's
-11th fixture, that exercises `Channel.migrateX()`/`MigratableConverter`/`MirthDomReader` on
-every harness run — see "Add a channel" above):**
+**Verified result (plan 18-10, JDK 26.0.1 — locally available JDK clearing the Phase 16
+Derby preflight, 2026-07-23): exit `0` (harness caught the broken dependency) on the FIRST
+authorized fixture tried, `BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.21.jar` paired
+with the new `legacy-migration-3-4-test.xml` (channel root versioned schema 3.4.0, plan
+18-10's 12th fixture). No fallback to the `1.4.10` default fixture and no transformer/filter
+escalation were needed. Verdict tail:**
 
-1. **`xstream-1.4.10.jar` (the D-14-specified, 18-01-committed fixture)** — does not reproduce
-   a functional break, exactly as plan 18-08 found: XStream's reflection-based (de)serializer
-   is highly backward-compatible for plain POJO graphs, and a *downgrade* does not reproduce a
-   *forward*-upgrade regression class.
-2. **`xstream-1.4.21.jar` (the literal v26.6.0 rollback version — plan 18-09's contingency
-   fixture, downloaded from Maven Central and SHA-1-verified, see Provenance below)** — swap
-   confirmed loaded (`server-stdout.log` shows the JVM's `SunUnsafeReflectionProvider` warning
-   referencing `xstream-1.4.21.jar` by path), yet `legacy-migration-test.xml` still imports,
-   migrates, deploys, and reaches STARTED cleanly — 51/51 assertions pass unchanged.
+```
+INFO: Harness exit code: 1
+OK: harness caught the broken dependency (behavioral catch at the XStream import seam)
+--- import-stage failure excerpt ---
+SMOKE-FAILURE-CLASS: import
+INVALID CHANNEL (import degraded): legacy-migration-3-4-test (00000012-0000-0000-0000-000000000012)
+-------------------------------------
+INFO: Restoring original xstream jar(s)...
+OK: Restoration verified: all 1 original xstream jar(s) back in place, fixture jar removed.
+```
 
-**Root cause of why even the migration-triggering fixture doesn't reproduce the incident:**
-`MigratableConverter.migrateElement()` only invokes `Migratable.migrate3_5_0(element)` — the
-exact method commit `22940c0f8` names as removing `codeTemplateLibraries` and adding
-`exportData` (the DOM mutation that the `22940c0f8`/`6a483ab9d` regression's reload bug
-affected) — when `MigrationUtil.compareVersions(elementVersion, "3.5.0") < 0`, i.e. only for
-elements versioned **strictly older than 3.5.0**. `legacy-migration-test.xml` (like the
+Notably, in the SAME broken-jar run, `legacy-migration-test.xml` (the 3.6.0-rooted fixture,
+already `>= 3.5.0`) imported, migrated, deployed, and reached STARTED cleanly — while
+`legacy-migration-3-4-test.xml` (channel root at schema 3.4.0) degraded to `InvalidChannel`
+and was absent from `GET /channels/statuses`. This is the exact differential the gap
+analysis below predicted: only a channel root versioned `< 3.5.0` forces
+`Channel.migrate3_5_0()` to run, and only that mutation-then-reload sequence trips on the
+broken xstream jar.
+
+**Root cause history — why `legacy-migration-test.xml` alone (plan 18-09) could not catch
+this regression class:** `MigratableConverter.migrateElement()` only invokes
+`Migratable.migrate3_5_0(element)` — the exact method commit `22940c0f8` names as removing
+`codeTemplateLibraries` and adding `exportData` (the DOM mutation that the
+`22940c0f8`/`6a483ab9d` regression's reload bug affected) — when
+`MigrationUtil.compareVersions(elementVersion, "3.5.0") < 0`, i.e. only for elements
+versioned **strictly older than 3.5.0**. `legacy-migration-test.xml` (like the
 `XStreamSeamTest` fixture it was extracted from) is versioned `3.6.0` — already `>= 3.5.0` —
-so `migrate3_5_0()` never runs for it, and the specific DOM-mutation-then-reload sequence the
-regression affected is never exercised. `3.6.0` was the only fixture this plan's `<action>`
-authorized (`XStreamSeamTest.knownOldFormatChannelXmlDeserializes` proves it migrates cleanly
-on the shipped xstream, avoiding the separate, pre-existing `ImportConverter3_0_0` NPE that
-18-08 hit with a hand-crafted pre-3.0.0-format channel) — a fixture versioned `< 3.5.0` was
-out of this plan's authorized scope and is the concrete, actionable follow-up.
+so `migrate3_5_0()` never ran for it, and the specific DOM-mutation-then-reload sequence the
+regression affected was never exercised. `3.6.0` was the only fixture plan 18-09's
+`<action>` authorized (`XStreamSeamTest.knownOldFormatChannelXmlDeserializes` proves it
+migrates cleanly on the shipped xstream, avoiding the separate, pre-existing
+`ImportConverter3_0_0` NPE that 18-08 hit with a hand-crafted pre-3.0.0-format channel) — a
+fixture versioned `< 3.5.0` was out of plan 18-09's authorized scope, and plan 18-09 recorded
+an honest negative (`1.4.10` downgrade does not reproduce a functional break either — see
+below) pending exactly this follow-up.
 
-**Status: NET-05 / SC-4 is NOT closed by this plan.** `legacy-migration-test.xml` is real,
-valuable infrastructure — every harness run now genuinely exercises the migration
-seam-adjacent code path (`migrate3_6_0` through `migrate26_3_0`, all still real DOM-mutating
-migration steps) — but it does not reach the specific `migrate3_5_0` mutation the actual
-incident depended on. Both authorized fixtures (`1.4.10` downgrade, `1.4.21` literal rollback
-version) are exercised and neither produces a `SELF-TEST FAILED` -> caught transition. Per
-D-13 (never fabricate a false "caught" result), this is recorded as an honest negative
-finding, matching plan 18-08's precedent. **Recommended follow-up:** a fixture versioned
-`< 3.5.0` (still `>= 3.0.0`, still carrying an explicit `version` attribute to avoid the
-`ImportConverter3_0_0` NPE path) paired with the `xstream-1.4.21.jar` fixture already
-committed here, ideally timed with Phase 23's actual xstream 1.4.21 re-land.
+**Why `legacy-migration-3-4-test.xml` (plan 18-10) exists and closes the gap:** its `<channel>`
+root is versioned schema 3.4.0 — chosen `>= 3.0.0` so the `ImportConverter3_0_0` NPE boundary
+is never entered, and `< 3.5.0` so `Channel.migrate3_5_0()` runs unconditionally on every
+import. Every nested element (sourceConnector, transformer, filter, properties, etc.)
+deliberately stays at schema 3.6.0 — `Transformer.migrate3_5_0()`/`Filter.migrate3_5_0()`
+call `removeChild("steps")`/`removeChild("rules")` and would NPE on the post-3.5-shaped
+`<elements/>` bodies if their own version attributes were downgraded too. The channel-root
+migration alone is sufficient to reproduce the exact `22940c0f8`/`6a483ab9d` seam.
 
-The script itself is complete, correct, and self-verifying per every other D-13/D-14
-structural requirement (recursive jar discovery, generalized `BREAK_FIXTURE_JAR` override,
-trap-based restore keyed on `$(basename "${FIXTURE_JAR}")` so no fixture is ever left in the
-tree, restoration verification, three-way verdict classification) — the exit code accurately
-reflects what actually happened for both fixtures tried, which is the property
-`break-dependency.sh` is designed to prove.
+**`xstream-1.4.10.jar` (the D-14-specified, 18-01-committed default fixture)** was not
+needed for this run — the `1.4.21` fixture (Step 1 of the plan's authorized sequence)
+caught the regression on the first attempt. Per plan 18-08/18-09's prior findings,
+`1.4.10` (a downgrade) is not expected to reproduce a forward-upgrade regression class;
+this remains documented but was not re-tested since `1.4.21` already produced the
+required evidence.
+
+**Status: NET-05 / SC-4 IS closed by plan 18-10.** `break-dependency.sh` with
+`BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.21.jar` now records a genuine,
+self-verifying behavioral catch (`SMOKE-FAILURE-CLASS: import`) at the exact seam the
+v26.6.0 xstream rollback (commit `22940c0f8`, reverted in `6a483ab9d`) broke, with
+`legacy-migration-3-4-test.xml` as the trip-wire. This is the recorded SC-4 evidence
+gating Phase 23's xstream 1.4.21 re-land.
+
+The script itself is complete, correct, and self-verifying per every D-13/D-14 structural
+requirement (recursive jar discovery, generalized `BREAK_FIXTURE_JAR` override, trap-based
+restore keyed on `$(basename "${FIXTURE_JAR}")` so no fixture is ever left in the tree,
+restoration verification, three-way verdict classification) — the exit code accurately
+reflects what actually happened, which is the property `break-dependency.sh` is designed to
+prove.
 
 ## Provenance
 
