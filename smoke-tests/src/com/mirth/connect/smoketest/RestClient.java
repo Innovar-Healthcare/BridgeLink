@@ -15,6 +15,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -27,6 +28,7 @@ import javax.json.JsonValue;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509ExtendedTrustManager;
 import javax.net.ssl.X509TrustManager;
 
 /**
@@ -176,9 +178,33 @@ public class RestClient {
     // Message pump
     // ------------------------------------------------------------------
 
-    /** POST a raw message body to the channel's non-listener injection endpoint. */
+    /**
+     * Convenience for single-destination channels — every 18-05 fixture except
+     * {@code doc-writer-test.xml} has exactly one destination at metaDataId 1.
+     */
     public void processMessage(String channelId, String rawBody) throws IOException, InterruptedException {
-        HttpRequest request = newRequestBuilder(baseUrl + "/channels/" + channelId + "/messages")
+        processMessage(channelId, rawBody, List.of(1));
+    }
+
+    /**
+     * POST a raw message body to the channel's non-listener injection endpoint, explicitly
+     * targeting {@code destinationMetaDataIds}.
+     *
+     * <p><b>Rule 1 fix (plan 18-07):</b> omitting the {@code destinationMetaDataId} query
+     * parameter does NOT mean "all destinations" the way the equivalent Java client API's
+     * {@code null} does — {@code Channel.createAndStoreSourceMessage()}
+     * (donkey/.../channel/Channel.java) only falls back to "all destinations in the channel"
+     * when {@code RawMessage.getDestinationMetaDataIds()} is {@code null}; Jersey injects an
+     * EMPTY {@code Set<Integer>} (never {@code null}) for a collection-typed
+     * {@code @QueryParam} with no matching query string entries, so every message pumped via
+     * the bare endpoint silently routed to ZERO destinations and stalled at TRANSFORMED
+     * forever — discovered here via a live single-message REST pump + message-detail
+     * inspection (no destination connectorMessage was ever created). Every 18-07 caller must
+     * now pass its channel's real destination metaDataId(s) explicitly.
+     */
+    public void processMessage(String channelId, String rawBody, Collection<Integer> destinationMetaDataIds) throws IOException, InterruptedException {
+        HttpRequest request = newRequestBuilder(baseUrl + "/channels/" + channelId + "/messages"
+                        + destinationMetaDataIdQuery(destinationMetaDataIds))
                 .header("Content-Type", "text/plain")
                 .POST(HttpRequest.BodyPublishers.ofString(rawBody, StandardCharsets.UTF_8))
                 .build();
@@ -186,6 +212,45 @@ public class RestClient {
         int code = response.statusCode();
         if (code != 200 && code != 201) {
             throw new IOException("processMessage failed for channel " + channelId + ": HTTP " + code
+                    + " body=" + response.body());
+        }
+    }
+
+    /** Convenience for single-destination channels (see {@link #processMessage(String, String)}). */
+    public void processMessageBytes(String channelId, byte[] rawBytes) throws IOException, InterruptedException {
+        processMessageBytes(channelId, rawBytes, List.of(1));
+    }
+
+    /**
+     * Binary-safe variant of {@link #processMessage(String, String, Collection)} for channels
+     * whose inbound data type is binary (e.g. DICOM, plan 18-07's dicom-test.xml).
+     *
+     * <p><b>Rule 1 fix (plan 18-07 — supersedes an earlier ISO-8859-1 raw-passthrough
+     * attempt):</b> an ISO-8859-1 byte&lt;-&gt;char round trip preserves every byte over the
+     * wire (verified independently), but {@code DICOMSerializer.toXML(String)}
+     * (server/src/.../plugins/datatypes/dicom/DICOMSerializer.java) does NOT treat the raw
+     * message string as a direct Latin-1 byte dump — it decodes it as Base64
+     * ({@code Base64InputStream} wrapping {@code getBytesUsAscii(source)}), matching
+     * {@code DICOMConverter}'s own {@code toDICOM()} encode path
+     * ({@code StringUtils.newStringUsAscii(Base64Util.encodeBase64(...))}). Discovered live: an
+     * ISO-8859-1 passthrough produced a byte-for-byte-correct stored raw message (confirmed via
+     * message-detail inspection) that STILL failed with
+     * {@code DicomCodingException: Not a DICOM Stream}, because the serializer expected
+     * Base64-encoded ASCII text, not a raw byte dump. Base64 is pure US-ASCII, so the encoded
+     * string is safe to send through the plain {@code text/plain} (UTF-8) endpoint with no
+     * charset concerns at all.
+     */
+    public void processMessageBytes(String channelId, byte[] rawBytes, Collection<Integer> destinationMetaDataIds) throws IOException, InterruptedException {
+        String base64Body = java.util.Base64.getEncoder().encodeToString(rawBytes);
+        HttpRequest request = newRequestBuilder(baseUrl + "/channels/" + channelId + "/messages"
+                        + destinationMetaDataIdQuery(destinationMetaDataIds))
+                .header("Content-Type", "text/plain")
+                .POST(HttpRequest.BodyPublishers.ofString(base64Body, StandardCharsets.UTF_8))
+                .build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        int code = response.statusCode();
+        if (code != 200 && code != 201) {
+            throw new IOException("processMessageBytes failed for channel " + channelId + ": HTTP " + code
                     + " body=" + response.body());
         }
     }
@@ -302,6 +367,23 @@ public class RestClient {
         return Json.createArrayBuilder().add(v).build();
     }
 
+    /** Builds a {@code ?destinationMetaDataId=1&destinationMetaDataId=2...} query suffix (empty string if the collection is empty/null — callers should prefer being explicit, see {@link #processMessage(String, String, Collection)}). */
+    private static String destinationMetaDataIdQuery(Collection<Integer> destinationMetaDataIds) {
+        if (destinationMetaDataIds == null || destinationMetaDataIds.isEmpty()) {
+            return "";
+        }
+        StringBuilder query = new StringBuilder("?");
+        boolean first = true;
+        for (Integer id : destinationMetaDataIds) {
+            if (!first) {
+                query.append('&');
+            }
+            query.append("destinationMetaDataId=").append(id);
+            first = false;
+        }
+        return query.toString();
+    }
+
     private HttpRequest.Builder newRequestBuilder(String url) {
         return HttpRequest.newBuilder(URI.create(url))
                 .header("X-Requested-With", "OpenAPI")
@@ -316,11 +398,23 @@ public class RestClient {
      * T-18-14 (accepted): trust-all SSLContext, scoped to the harness talking to its own
      * ephemeral 127.0.0.1 server with a per-boot self-signed certificate. Test-only — this
      * class lives outside shipped code and is never wired into a runtime classpath.
+     *
+     * <p><b>Rule 1 fix (plan 18-07):</b> {@code java.net.http.HttpClient} internally wraps a
+     * plain (non-extended) {@link X509TrustManager} with its own endpoint-identification logic
+     * that still enforces a certificate SAN check even when
+     * {@code SSLParameters.setEndpointIdentificationAlgorithm("")} is set — the auto-generated
+     * self-signed keystore cert has no Subject Alternative Names, so every live connection
+     * failed with {@code SSLHandshakeException: (certificate_unknown) No subject alternative
+     * names present} (discovered here — 18-06's StubSelfTest never actually exercised
+     * {@code RestClient.login()} against a live server). Implementing
+     * {@link X509ExtendedTrustManager} directly (including its {@code SSLEngine}/{@code Socket}
+     * overloads) makes {@code HttpClient} trust the custom manager's own accept-everything logic
+     * instead of layering its own SAN check on top.
      */
     private static SSLContext trustAllSslContext() {
         try {
             SSLContext sslContext = SSLContext.getInstance("TLS");
-            TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
+            TrustManager[] trustAllCerts = new TrustManager[] { new X509ExtendedTrustManager() {
                 @Override
                 public void checkClientTrusted(X509Certificate[] chain, String authType) {
                     // test-only: accept all
@@ -328,6 +422,26 @@ public class RestClient {
 
                 @Override
                 public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                    // test-only: accept all
+                }
+
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType, java.net.Socket socket) {
+                    // test-only: accept all
+                }
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType, java.net.Socket socket) {
+                    // test-only: accept all
+                }
+
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType, javax.net.ssl.SSLEngine engine) {
+                    // test-only: accept all
+                }
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType, javax.net.ssl.SSLEngine engine) {
                     // test-only: accept all
                 }
 

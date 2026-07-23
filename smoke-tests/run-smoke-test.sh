@@ -115,13 +115,22 @@ info()  { echo -e "${YELLOW}INFO${NC}: $1"; }
 hr()    { echo "------------------------------------------------------------"; }
 
 # ---------------------------------------------------------------------------
-# Duration reporting — printed on every exit path (feeds D-04's <=10min target)
+# Duration reporting — printed on every exit path, and enforces the D-04 <=10-minute-per-run
+# ceiling (measured on the harness alone: boot-start -> teardown-complete, excluding the
+# one-time `ant mirth-build.xml` distribution build — Pitfall 11, that build is a separate,
+# out-of-band prerequisite step never timed here).
 # ---------------------------------------------------------------------------
+DURATION_LIMIT_SECONDS=600
+
 report_duration() {
     local end_epoch duration
     end_epoch=$(date +%s)
     duration=$((end_epoch - START_EPOCH))
-    echo "HARNESS DURATION: ${duration}s"
+    echo "HARNESS DURATION: ${duration}s (limit ${DURATION_LIMIT_SECONDS}s)"
+    if [[ ${duration} -gt ${DURATION_LIMIT_SECONDS} ]]; then
+        echo "SMOKE-FAILURE-CLASS: duration"
+        fail "Harness duration ${duration}s exceeded the ${DURATION_LIMIT_SECONDS}s D-04 ceiling"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -164,6 +173,21 @@ preflight() {
     pass "mirth-server-launcher.jar present"
 
     mkdir -p "${HARNESS_LOG_DIR}"
+
+    # Rule 1 fix (plan 18-07): server/setup/logs/mirth.log lives at a FIXED path (log4j2's
+    # RollingFile appender, not per-run dir.appdata) and simply keeps appending across every
+    # harness invocation — unlike Derby's appdata, it is never fresh per run. The L3 scan
+    # (scan_mirth_log) reads this file's ENTIRE current content on every run, so a stale ERROR
+    # line from a PAST run (already fixed in code) would still fail today's run, and two
+    # consecutive runs could never be judged independently (D-04's "twice consecutively" bar).
+    # Archive any leftover log from an interrupted prior run (matching cleanup()'s own
+    # archive-before-wipe pattern) then start this run with a clean file.
+    local existing_log="${SERVER_SETUP}/logs/mirth.log"
+    if [[ -f "${existing_log}" ]]; then
+        mkdir -p "${SERVER_SETUP}/logs"
+        cp "${existing_log}" "${HARNESS_LOG_DIR}/mirth-preexisting-$(date -u +"%Y%m%dT%H%M%SZ").log" 2>/dev/null || true
+        : > "${existing_log}"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -641,9 +665,143 @@ import_deploy() {
     verify_no_invalid_channels
     wait_for_started
     wait_for_listener_ports
+    clear_statistics
 
     pass "Import/deploy stage complete: all ${#CHANNEL_IDS[@]} channels STARTED"
 }
+
+# Rule 1 fix (plan 18-07): wait_for_listener_ports() above sends a real plain HTTP GET
+# straight at the http-test channel's own listener port (its readiness probe) — Mirth's HTTP
+# Receiver treats ANY request landing on that port as a message to process, and an empty GET
+# body fails HL7v2 parsing, silently recording one ERROR-status message before the JUnit
+# driver ever pumps anything. Clearing statistics for every deployed channel here — right
+# after import/deploy finishes, right before the driver's L1 (zero-ERROR) assertions run —
+# gives 18-07's per-channel three-level assertions a clean slate that reflects only the
+# driver's own pumped messages, not this stage's own infrastructure side effect.
+clear_statistics() {
+    hr
+    info "Clearing channel statistics (removes the wait_for_listener_ports() HTTP readiness-probe artifact before the driver runs)..."
+    local http_code body
+    body=$(mktemp)
+    http_code=$(curl -s -k -b "${COOKIE_JAR}" \
+        -X POST "${API}/channels/_clearAllStatistics" \
+        -H "X-Requested-With: OpenAPI" \
+        -o "${body}" -w "%{http_code}")
+    if [[ "${http_code}" != "200" && "${http_code}" != "204" ]]; then
+        cat "${body}"; rm -f "${body}"
+        fatal "Clearing channel statistics failed (HTTP ${http_code})"
+    fi
+    rm -f "${body}"
+    pass "Channel statistics cleared"
+}
+
+# ---------------------------------------------------------------------------
+# Stage: driver — JUnit pump/assert driver (plan 18-06/18-07, D-02/D-08).
+#
+# `ant -f smoke-tests/build.xml test-run` is invoked with every harness port/path as a `-D`
+# Ant property; build.xml's test-run target forwards each as a JVM sysproperty to the forked
+# JUnit process, which SmokeTestBase reads (NativePumpChannelsTest/StubChannelsTest). The ant
+# invocation is guarded by an `if` so `set -e` does not abort the script on a driver failure —
+# we need to print the SMOKE-FAILURE-CLASS marker and junit summary before failing loudly.
+# ---------------------------------------------------------------------------
+run_driver() {
+    hr
+    info "Running JUnit pump/assert driver (ant -f smoke-tests/build.xml test-run)..."
+
+    local driver_log
+    driver_log="$(mktemp)"
+
+    if ant -f "${SCRIPT_DIR}/build.xml" test-run \
+        -Dsmoke.setup.dir="${SERVER_SETUP}" \
+        -DHTTPS_PORT="${HTTPS_PORT}" \
+        -DHTTP_LISTENER_PORT="${HTTP_LISTENER_PORT}" \
+        -DMLLP_PORT="${MLLP_PORT}" \
+        -DSMTP_PORT="${SMTP_PORT}" \
+        -DSOAP_URL="${SOAP_URL}" \
+        -DSCP_PORT="${SCP_PORT}" \
+        -DSQLITE_PATH="${SQLITE_PATH}" \
+        -DIN_DIR="${IN_DIR}" \
+        -DOUT_DIR="${OUT_DIR}" \
+        > "${driver_log}" 2>&1; then
+        pass "JUnit pump/assert driver passed"
+    else
+        echo "SMOKE-FAILURE-CLASS: assert"
+        info "Driver output (last 150 lines):"
+        tail -n 150 "${driver_log}" || true
+        if [[ -d "${SCRIPT_DIR}/junit-reports" ]]; then
+            info "junit-reports/ summary:"
+            grep -h "<testsuite " "${SCRIPT_DIR}/junit-reports"/*.xml 2>/dev/null || true
+        fi
+        rm -f "${driver_log}"
+        fail "JUnit pump/assert driver failed — see junit-reports/ and the output above"
+        copy_junit_reports
+        return 1
+    fi
+
+    rm -f "${driver_log}"
+    copy_junit_reports
+}
+
+# Copies junit-reports/*.xml alongside mirth.log in smoke-tests/out/ for CI artifact upload
+# (18-08). A no-op (with an info line, not a failure) if the driver never produced reports.
+copy_junit_reports() {
+    if [[ -d "${SCRIPT_DIR}/junit-reports" ]] && compgen -G "${SCRIPT_DIR}/junit-reports/*.xml" > /dev/null; then
+        local ts dest
+        ts=$(date -u +"%Y%m%dT%H%M%SZ")
+        dest="${HARNESS_LOG_DIR}/junit-reports-${ts}"
+        mkdir -p "${dest}"
+        cp "${SCRIPT_DIR}/junit-reports"/*.xml "${dest}/" 2>/dev/null || true
+        info "Copied junit-reports to ${dest}/"
+    else
+        info "No junit-reports/*.xml found to copy (driver may not have run)"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Stage: L3 log scan — mirth.log ERROR-line scan filtered through the allowlist (D-08's third
+# assertion level). Comment lines (leading '#') and blank lines in log-allowlist.txt are
+# stripped into a temp pattern file before use, so a justification comment can never
+# accidentally act as a matching pattern (T-18-16 — grep-gate hygiene).
+# ---------------------------------------------------------------------------
+scan_mirth_log() {
+    hr
+    info "L3: scanning mirth.log for ERROR lines not covered by the allowlist..."
+
+    local log_file="${SERVER_SETUP}/logs/mirth.log"
+    if [[ ! -f "${log_file}" ]]; then
+        info "No mirth.log found at ${log_file} — skipping L3 scan"
+        return 0
+    fi
+
+    local allowlist_patterns
+    allowlist_patterns="$(mktemp)"
+    grep -v '^#' "${SCRIPT_DIR}/fixtures/log-allowlist.txt" | grep -v '^[[:space:]]*$' > "${allowlist_patterns}" || true
+
+    local error_lines
+    error_lines="$(mktemp)"
+    grep -E '^ERROR|ERROR \[' "${log_file}" > "${error_lines}" || true
+
+    local surviving
+    if [[ -s "${allowlist_patterns}" ]]; then
+        surviving="$(grep -v -f "${allowlist_patterns}" "${error_lines}" || true)"
+    else
+        surviving="$(cat "${error_lines}")"
+    fi
+
+    rm -f "${allowlist_patterns}" "${error_lines}"
+
+    if [[ -n "${surviving}" ]]; then
+        echo "SMOKE-FAILURE-CLASS: log"
+        echo "--- Unallowlisted ERROR lines in mirth.log ---"
+        echo "${surviving}"
+        echo "-----------------------------------------------"
+        fail "mirth.log contains ERROR lines not covered by fixtures/log-allowlist.txt"
+        return 1
+    fi
+
+    pass "L3 log scan clean (no unallowlisted ERROR lines in mirth.log)"
+}
+
 
 # ---------------------------------------------------------------------------
 # Stage: teardown / cleanup — trap on EXIT (Pitfall 3: unconditional, always runs)
@@ -735,10 +893,14 @@ import_deploy
 
 if [[ ${DEPLOY_ONLY} -eq 1 ]]; then
     info "--deploy-only: stopping after import/deploy, proceeding to teardown"
+    exit 0
 fi
 
-# Later plans (18-06/18-07) insert the message pump/assert driver here, gated on
-# `[[ ${DEPLOY_ONLY} -eq 0 ]]`. Plan 18-05 proves boot -> health -> import -> deploy
-# -> STARTED -> teardown.
+# Driver (plan 18-06/18-07, D-02/D-08) + L3 log scan (D-08's third assertion level) — both use
+# fail() (record-and-continue), not fatal() (abort-immediately), so a failure in either stage
+# still lets the other run and lets teardown/duration-reporting happen before the final
+# PASS/FAIL banner (cleanup() below checks FAIL_COUNT).
+run_driver || true
+scan_mirth_log || true
 
 exit 0
