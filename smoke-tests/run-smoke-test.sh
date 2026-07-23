@@ -44,7 +44,7 @@ usage() {
     echo "                   'not yet supported' message (see D-03 / Phase 24)."
     echo "  --boot-only      Stop after the health check succeeds; tear down immediately."
     echo "                   Skips the import/deploy stage and everything after it."
-    echo "  --deploy-only    Boot + import + deploy all 12 reference channels, then tear"
+    echo "  --deploy-only    Boot + import + deploy all 15 reference channels, then tear"
     echo "                   down (no message pump/assert driver — that's 18-06/18-07)."
     echo "                   Mutually exclusive with --boot-only."
     echo "  --help           Show this message and exit 0."
@@ -222,11 +222,16 @@ allocate_ports() {
     SMTP_PORT=$(free_port)
     SCP_PORT=$(free_port)
     SOAP_PORT=$(free_port)
+    # 18.1-02: HTTP connector parameter-coverage fixtures (NET-06).
+    HTTP_RESPONSE_PORT=$(free_port)
+    HTTP_XMLBODY_PORT=$(free_port)
+    HTTP_BINARY_PORT=$(free_port)
     # SOAP_URL is derived, not a raw port — the Web Service Sender fixture (soap-test.xml)
     # substitutes ${SOAP_URL} directly (D-07: Endpoint.publish stub target).
     SOAP_URL="http://127.0.0.1:${SOAP_PORT}/smoketest"
-    export HTTP_PORT HTTPS_PORT MLLP_PORT HTTP_LISTENER_PORT SMTP_PORT SCP_PORT SOAP_PORT SOAP_URL
-    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL})"
+    export HTTP_PORT HTTPS_PORT MLLP_PORT HTTP_LISTENER_PORT SMTP_PORT SCP_PORT SOAP_PORT SOAP_URL \
+        HTTP_RESPONSE_PORT HTTP_XMLBODY_PORT HTTP_BINARY_PORT
+    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -248,7 +253,8 @@ allocate_work_dirs() {
     # Per-channel subdirectories the fixtures' placeholders resolve into.
     mkdir -p "${IN_DIR}/file" \
              "${OUT_DIR}/http" "${OUT_DIR}/mllp" "${OUT_DIR}/file" "${OUT_DIR}/vm" \
-             "${OUT_DIR}/js" "${OUT_DIR}/doc"
+             "${OUT_DIR}/js" "${OUT_DIR}/doc" \
+             "${OUT_DIR}/http-response" "${OUT_DIR}/http-xmlbody" "${OUT_DIR}/http-binary"
 
     export IN_DIR OUT_DIR SQLITE_PATH
     pass "Channel work dir allocated: ${CHANNEL_WORK_DIR} (IN_DIR/OUT_DIR/SQLITE_PATH exported)"
@@ -297,6 +303,7 @@ launch_server() {
             --add-opens=java.base/java.net=ALL-UNNAMED \
             --add-opens=java.base/java.security=ALL-UNNAMED \
             --add-opens=java.base/java.security.cert=ALL-UNNAMED \
+            --add-opens=java.sql/java.sql=ALL-UNNAMED \
             --add-opens=java.base/java.text=ALL-UNNAMED \
             --add-opens=java.base/java.util=ALL-UNNAMED \
             --add-opens=java.base/sun.security.pkcs=ALL-UNNAMED \
@@ -369,7 +376,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test)
 CHANNEL_IDS=(
     "00000001-0000-0000-0000-000000000001"
     "00000002-0000-0000-0000-000000000002"
@@ -383,11 +390,15 @@ CHANNEL_IDS=(
     "00000010-0000-0000-0000-000000000010"
     "00000011-0000-0000-0000-000000000011"
     "00000012-0000-0000-0000-000000000012"
+    "00000013-0000-0000-0000-000000000013"
+    "00000014-0000-0000-0000-000000000014"
+    "00000015-0000-0000-0000-000000000015"
 )
 # Explicit envsubst allowlist — exactly the ${VARNAME} placeholders the committed
 # fixtures use. ${DICOMMESSAGE} is a Mirth-internal template variable resolved by
 # the server itself and MUST NOT appear here (envsubst would blank it out).
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR}'
+# 18.1-02 adds HTTP_RESPONSE_PORT/HTTP_XMLBODY_PORT/HTTP_BINARY_PORT (NET-06 fixtures).
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -674,6 +685,32 @@ except Exception:
     if [[ ${attempts} -ge 20 ]]; then
         fatal "TCP/MLLP Listener port ${MLLP_PORT} did not accept connections within 60s"
     fi
+
+    # 18.1-02: probe HTTP_RESPONSE_PORT only (RESEARCH Pitfall 5/11 — this probe runs
+    # before clear_statistics() so its ERROR-status parse artifact is wiped; a bare GET
+    # against the response-cluster fixture hits the parse-ERROR path which hardcodes a
+    # 500 response (HttpReceiver.sendErrorResponse), so accept ANY response code here,
+    # never assert 202 on a probe). HTTP_XMLBODY_PORT and HTTP_BINARY_PORT are
+    # DELIBERATELY NOT probed: an empty probe message would process successfully on
+    # those two channels (XML/RAW datatypes don't reject empty content the way HL7v2
+    # does) and WRITE a destination artifact, corrupting the L2 file assertions the
+    # driver depends on. Their deploy health is already covered by wait_for_started()'s
+    # STARTED-state poll above.
+    attempts=0
+    info "  HTTP Response Listener (port ${HTTP_RESPONSE_PORT})..."
+    while [[ ${attempts} -lt 20 ]]; do
+        code=$(curl -s --max-time 3 --connect-timeout 2 -o /dev/null -w "%{http_code}" \
+            "http://127.0.0.1:${HTTP_RESPONSE_PORT}/" 2>/dev/null || echo "000")
+        if [[ "${code}" != "000" ]]; then
+            pass "  HTTP Response Listener port ${HTTP_RESPONSE_PORT} responding (HTTP ${code})"
+            break
+        fi
+        sleep 3
+        attempts=$((attempts + 1))
+    done
+    if [[ "${code}" == "000" ]]; then
+        fatal "HTTP Response Listener port ${HTTP_RESPONSE_PORT} did not respond within 60s"
+    fi
 }
 
 import_deploy() {
@@ -745,6 +782,9 @@ run_driver() {
         -DSQLITE_PATH="${SQLITE_PATH}" \
         -DIN_DIR="${IN_DIR}" \
         -DOUT_DIR="${OUT_DIR}" \
+        -DHTTP_RESPONSE_PORT="${HTTP_RESPONSE_PORT}" \
+        -DHTTP_XMLBODY_PORT="${HTTP_XMLBODY_PORT}" \
+        -DHTTP_BINARY_PORT="${HTTP_BINARY_PORT}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else
