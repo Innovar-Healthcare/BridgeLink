@@ -156,8 +156,8 @@ channelMap.put('soapSafeContent', soapSafeContent);]]></script>
           <reattachAttachments>true</reattachAttachments>
         </destinationConnectorProperties>
         <wsdlUrl>${SOAP_URL}?wsdl</wsdlUrl>
-        <service>SmokeTestService</service>
-        <port>SmokeTestPort</port>
+        <service>{http://stubs.smoketest.connect.mirth.com/}SmokeTestService</service>
+        <port>{http://stubs.smoketest.connect.mirth.com/}SmokeTestPort</port>
         <operation>receive</operation>
         <locationURI>${SOAP_URL}</locationURI>
         <socketTimeout>30000</socketTimeout>

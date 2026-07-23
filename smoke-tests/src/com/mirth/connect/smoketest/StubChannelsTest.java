@@ -87,7 +87,9 @@ public class StubChannelsTest extends SmokeTestBase {
         rest.processMessage(SOAP_CHANNEL_ID, Hl7Messages.ORU_R01_LF);
         rest.processMessage(JDBC_CHANNEL_ID, Hl7Messages.ORU_R01_LF);
         rest.processMessageBytes(DICOM_CHANNEL_ID, Files.readAllBytes(Paths.get("fixtures", "smoke-test.dcm")));
-        rest.processMessage(DOC_WRITER_CHANNEL_ID, Hl7Messages.ORU_R01_LF);
+        // doc-writer-test.xml has TWO destinations (PDF at metaDataId 1, RTF at metaDataId 2) —
+        // both must be targeted explicitly (Rule 1 fix, see RestClient.processMessage javadoc).
+        rest.processMessage(DOC_WRITER_CHANNEL_ID, Hl7Messages.ORU_R01_LF, java.util.List.of(1, 2));
     }
 
     @Test

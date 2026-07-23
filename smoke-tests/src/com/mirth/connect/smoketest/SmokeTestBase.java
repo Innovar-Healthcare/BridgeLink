@@ -100,8 +100,22 @@ public abstract class SmokeTestBase {
      *   <li>L2 — caller-supplied destination-artifact content check (never byte-exact).</li>
      * </ul>
      * (L3 — the mirth.log ERROR scan — is script-side in run-smoke-test.sh, not here.)
+     *
+     * <p>L1 is poll-with-timeout, not a one-shot check (Pitfall 7 / Rule 1 fix): message
+     * processing is asynchronous ({@code ExecuteType.ASYNC} on the REST injection endpoint —
+     * {@code processMessage}/{@code processMessageBytes} return as soon as the message is
+     * accepted, before the channel finishes processing it), so a one-shot statistics read
+     * immediately after pumping raced the server and produced false "sent count 0" failures.
      */
     protected static void assertThreeLevels(String channelId, int minSent, ThrowingRunnable artifactCheck) throws Exception {
+        pollUntil("Channel " + channelId + " sent count >= " + minSent, 30, () -> {
+            try {
+                return rest.getSentCount(channelId) >= minSent;
+            } catch (Exception e) {
+                return false;
+            }
+        });
+
         long errorCount = rest.getErrorCount(channelId);
         assertEquals("Channel " + channelId + " has ERROR-status messages", 0, errorCount);
 

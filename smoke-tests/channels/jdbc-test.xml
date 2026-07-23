@@ -151,7 +151,7 @@
         <url>jdbc:sqlite:${SQLITE_PATH}</url>
         <username></username>
         <password></password>
-        <query>INSERT INTO dest_records (patient_name, payload) VALUES ('${patientName}', '${message.encodedData}')</query>
+        <query>INSERT INTO dest_records (patient_name, payload) VALUES (${patientName}, ${message.encodedData})</query>
         <useScript>false</useScript>
       </properties>
       <transformer version="26.6.0">

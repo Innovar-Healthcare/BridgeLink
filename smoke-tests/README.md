@@ -65,16 +65,67 @@ D-04).
 5. Health-checks `GET https://127.0.0.1:<HTTPS_PORT>/api/server/version` with
    `X-Requested-With: OpenAPI`, polling with a timeout (no fixed sleeps).
 6. **(skipped by `--boot-only`) Import/deploy stage** — see "Add a channel" below for the
-   full mechanics.
-7. Tears down via a `trap cleanup EXIT`: dumps the mirth.log tail on failure, copies the
+   full mechanics. Ends by clearing all channel statistics (`clear_statistics()`) — the
+   readiness probe in step 6 above (`wait_for_listener_ports()`) sends a real HTTP GET
+   straight at the HTTP Listener channel's own port, which the channel treats as (and
+   fails to parse as) a message; clearing statistics here gives the driver a clean slate.
+7. **(skipped by `--boot-only`/`--deploy-only`) Driver stage** — `ant -f smoke-tests/build.xml
+   test-run`, invoked with every harness port/path as a `-D` property (forwarded to the
+   forked JUnit JVM as sysproperties by `build.xml`). Runs `NativePumpChannelsTest` (HTTP,
+   MLLP, File, VM, JS) and `StubChannelsTest` (SMTP, SOAP, JDBC, DICOM, Document Writer),
+   each asserting D-08's three levels per channel: L1 (SENT count, zero ERROR-status via
+   REST statistics), L2 (destination-artifact content, never byte-exact), L3 below. A driver
+   failure prints `SMOKE-FAILURE-CLASS: assert` plus the junit-reports summary, but does not
+   abort the script — L3 and teardown still run so every stage gets a chance to report.
+8. **(skipped by `--boot-only`/`--deploy-only`) L3 log scan** — scans
+   `server/setup/logs/mirth.log` for `^ERROR|ERROR \[` lines, filtered through
+   `fixtures/log-allowlist.txt` (comment lines and blanks stripped before use — see "Add a
+   channel" below and T-18-16). Any surviving line prints
+   `SMOKE-FAILURE-CLASS: log` and fails the run. Note: `mirth.log` lives at a **fixed path**
+   (log4j2's RollingFile appender, not per-run `dir.appdata`) and would otherwise
+   accumulate across every invocation — `preflight()` archives and truncates it at the
+   start of every run so L3 only ever sees the current run's output and two consecutive
+   runs are judged independently.
+9. Tears down via a `trap cleanup EXIT`: dumps the mirth.log tail on failure, copies the
    full log to `smoke-tests/out/mirth-<timestamp>.log`, sends SIGTERM to the server PID,
    waits, falls back to `kill -9`, deletes the temporary appdata directory, deletes the
    channel work directory and REST session cookie jar, and restores `mirth.properties`
-   from its `.smoke-bak` copy.
+   from its `.smoke-bak` copy. Prints `HARNESS DURATION: <n>s (limit 600s)` on every exit
+   path and fails with `SMOKE-FAILURE-CLASS: duration` if the harness itself (boot through
+   teardown, excluding the one-time distribution build) exceeded the D-04 600s ceiling.
 
 A fresh `dir.appdata` per run means a fresh embedded Derby database every time (no
 `db.lck`/stale-appdata poisoning across consecutive runs — see Pitfall 3 in
 `18-RESEARCH.md`).
+
+### Failure-class markers
+
+Every failure the harness can detect prints one of four `SMOKE-FAILURE-CLASS:` markers,
+so CI logs/grep-based triage can tell at a glance which stage broke:
+
+| Marker | Stage | Meaning |
+|--------|-------|---------|
+| `SMOKE-FAILURE-CLASS: import` | import/deploy | A channel failed to import, degraded to `InvalidChannel` on deploy, or never reached STARTED |
+| `SMOKE-FAILURE-CLASS: assert` | driver | The JUnit pump/assert driver (`NativePumpChannelsTest`/`StubChannelsTest`) reported a test failure or error |
+| `SMOKE-FAILURE-CLASS: log` | L3 log scan | `mirth.log` contains an ERROR line not covered by `fixtures/log-allowlist.txt` |
+| `SMOKE-FAILURE-CLASS: duration` | duration gate | The harness run exceeded the D-04 600-second ceiling |
+
+### Artifacts (`smoke-tests/out/`, gitignored)
+
+Every run leaves behind (for CI artifact upload, 18-08):
+
+- `mirth-<timestamp>.log` — the full server log from that run
+- `mirth-preexisting-<timestamp>.log` — only appears if a prior run's log was found still
+  present at boot (interrupted run that skipped cleanup); archived, never silently dropped
+- `junit-reports-<timestamp>/` — the driver's JUnit XML reports (one file per test class)
+- `server-stdout.log` — raw stdout/stderr from the launched `MirthLauncher` process
+
+### D-04 duration expectation
+
+The harness is expected to complete in low tens of seconds locally (boot + import/deploy +
+driver + teardown) — well under the 600-second (10-minute) D-04 ceiling. The one-time `ant
+mirth-build.xml` distribution build (~1-2 minutes) is a separate prerequisite step and is
+never included in the measured duration.
 
 ## Add a channel
 
