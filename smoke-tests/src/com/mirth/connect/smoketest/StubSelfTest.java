@@ -145,7 +145,11 @@ public class StubSelfTest {
         } finally {
             connection.close();
         }
-        assertEquals("hello-soap-stub", stub.getLastReceivedPayload());
+        // Real JAX-WS mode unmarshals to exactly the payload text; the A2 fallback mode
+        // records the whole raw envelope (no XML parsing, by design) — either way the
+        // recorded content must contain what was sent (D-07: "records the received
+        // envelope body for later L2 assertions").
+        assertTrue(stub.getLastReceivedPayload().contains("hello-soap-stub"));
     }
 
     // ------------------------------------------------------------------
