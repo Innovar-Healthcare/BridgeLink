@@ -34,6 +34,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.mirth.connect.smoketest.stubs.RecordingHttpStub;
+import com.mirth.connect.smoketest.stubs.RecordingHttpStub.RecordedRequest;
 
 /**
  * D-03 dedicated JUnit parameter suite for the HTTP connector's non-default configuration
@@ -297,5 +298,78 @@ public class HttpParamsTest extends SmokeTestBase {
             assertTrue("http-auth-digest destination content should contain the transformed patient token",
                     content.contains(Hl7Messages.EXPECTED_PATIENT));
         });
+    }
+
+    /**
+     * D-09/D-04: sender wire-format assertions against the recording stub — proves the
+     * HTTP Sender actually put the custom header, query param, content type, and (after the
+     * non-preemptive challenge) the correct Basic Authorization header on the wire. The stub
+     * recording IS the L2 artifact for this sender-side channel (StubChannelsTest soap
+     * precedent), so the wire assertions live inside {@link #assertThreeLevels}'s
+     * artifactCheck.
+     */
+    @Test
+    public void senderParams() throws Exception {
+        rest.processMessage(SENDER_PARAMS_ID, Hl7Messages.ORU_R01_LF);
+
+        assertThreeLevels(SENDER_PARAMS_ID, 1, () -> {
+            // Pitfall 2: non-preemptive Basic auth-out sends request #1 bare; only after the
+            // stub's 401+challenge does the sender retry with credentials.
+            pollUntil("stub /auth recorded the bare-then-authorized challenge sequence (>= 2 requests)",
+                    30, () -> stub.getRequests("/auth").size() >= 2);
+
+            List<RecordedRequest> authRequests = stub.getRequests("/auth");
+            RecordedRequest first = authRequests.get(0);
+            RecordedRequest last = authRequests.get(authRequests.size() - 1);
+
+            assertTrue("Non-preemptive auth: request #1 must arrive with NO Authorization header",
+                    !first.headers.containsKey("Authorization"));
+
+            String expectedAuth = "Basic " + Base64.getEncoder()
+                    .encodeToString("smokeuser:smokepass".getBytes(StandardCharsets.UTF_8));
+            assertEquals("Final recorded request must carry the correct Basic Authorization header",
+                    expectedAuth, firstHeader(last, "Authorization"));
+            assertTrue("Recorded request query should contain smokeQ=q1",
+                    last.query != null && last.query.contains("smokeQ=q1"));
+            assertEquals("Custom X-Smoke-Out header should have been recorded",
+                    "out-1811", firstHeader(last, "X-Smoke-Out"));
+            String contentType = firstHeader(last, "Content-Type");
+            assertTrue("Recorded Content-Type should start with application/json",
+                    contentType != null && contentType.startsWith("application/json"));
+            assertTrue("Recorded request body should be non-empty", last.body.length > 0);
+        });
+    }
+
+    /**
+     * D-06: isolated timeout channel — socketTimeout=2000 against the stub's /stall
+     * endpoint (~5s default stall). Does NOT use {@link #assertThreeLevels} (it hard-asserts
+     * zero errors; this channel inverts L1 by design). Asserts errorCount >= 1, exactly one
+     * recorded /stall request (proves dispatch reached the wire — the failure is the
+     * timeout, not a connect refusal), and the D-06 timeout SIGNATURE itself: the message
+     * error content must contain {@code SocketTimeoutException} (RESEARCH Pattern 4 item 3).
+     */
+    @Test
+    public void senderTimeout() throws Exception {
+        rest.processMessage(TIMEOUT_ID, Hl7Messages.ORU_R01_LF);
+
+        pollUntil("timeout channel error count >= 1", 30, () -> {
+            try {
+                return rest.getErrorCount(TIMEOUT_ID) >= 1;
+            } catch (Exception e) {
+                return false;
+            }
+        });
+
+        assertEquals("Exactly one /stall request should have been recorded (dispatch reached the wire)",
+                1, stub.getRequests("/stall").size());
+
+        String messagesWithContent = rest.getMessagesWithContent(TIMEOUT_ID);
+        assertTrue("Timeout message error content should contain the SocketTimeoutException signature (D-06)",
+                messagesWithContent.contains("SocketTimeoutException"));
+    }
+
+    private static String firstHeader(RecordedRequest request, String headerName) {
+        List<String> values = request.headers.get(headerName);
+        return (values == null || values.isEmpty()) ? null : values.get(0);
     }
 }
