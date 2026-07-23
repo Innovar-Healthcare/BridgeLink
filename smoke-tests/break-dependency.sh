@@ -23,9 +23,11 @@ SERVER_LIB="${REPO_ROOT}/server/setup/server-lib"
 # does NOT reproduce a functional break for this codebase (verified empirically in plan
 # 18-08 and reconfirmed in 18-09 -- XStream's reflection-based serializer is highly
 # backward-compatible for plain POJO graphs, and downgrading does not reproduce the
-# forward-upgrade regression class). xstream-1.4.21.jar -- the literal v26.6.0 rollback
-# version -- is the fixture that actually catches the DomReader child-caching regression
-# against the legacy-migration-test.xml fixture (18-09 NET-05/SC-4 break-proof).
+# forward-upgrade regression class). The recorded catch (plan 18-10) pairs
+# BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.21.jar -- the literal v26.6.0 rollback
+# version -- with smoke-tests/channels/legacy-migration-3-4-test.xml, whose channel root at
+# schema 3.4.0 forces Channel.migrate3_5_0(), the DOM-mutation-then-reload seam the
+# regression's DomReader child-caching change broke (NET-05/SC-4 break-proof).
 FIXTURE_JAR="${BREAK_FIXTURE_JAR:-${SCRIPT_DIR}/fixtures/xstream-1.4.10.jar}"
 ASIDE_DIR="$(mktemp -d)/xstream-aside"
 OUT_DIR="${SCRIPT_DIR}/out"
