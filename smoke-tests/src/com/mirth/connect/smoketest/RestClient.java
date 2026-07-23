@@ -434,8 +434,13 @@ public class RestClient {
      * {@link X509ExtendedTrustManager} directly (including its {@code SSLEngine}/{@code Socket}
      * overloads) makes {@code HttpClient} trust the custom manager's own accept-everything logic
      * instead of layering its own SAN check on top.
+     *
+     * <p><b>Plan 18.2-04:</b> package-visible (not {@code private}) so other harness-only test
+     * classes (e.g. {@code WebServerRegressionTest}) can reuse this single factory instead of
+     * duplicating the TLS block. Scope is unchanged: harness&harr;own-server on 127.0.0.1 only —
+     * never point this at an external endpoint.
      */
-    private static SSLContext trustAllSslContext() {
+    static SSLContext trustAllSslContext() {
         try {
             SSLContext sslContext = SSLContext.getInstance("TLS");
             TrustManager[] trustAllCerts = new TrustManager[] { new X509ExtendedTrustManager() {
@@ -481,7 +486,11 @@ public class RestClient {
         }
     }
 
-    private static SSLParameters noHostnameVerificationParameters() {
+    /**
+     * Package-visible per plan 18.2-04 for reuse by sibling harness test classes; same
+     * T-18-14 harness&harr;own-server scope as {@link #trustAllSslContext()}.
+     */
+    static SSLParameters noHostnameVerificationParameters() {
         SSLParameters sslParameters = new SSLParameters();
         sslParameters.setEndpointIdentificationAlgorithm("");
         return sslParameters;
