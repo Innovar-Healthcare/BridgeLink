@@ -17,8 +17,19 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -199,5 +210,92 @@ public class HttpParamsTest extends SmokeTestBase {
 
         assertTrue("HTTP_BINARY listener channel (binary-recv) should have sent at least one message",
                 rest.getSentCount(BINARY_RECV_ID) >= 1);
+    }
+
+    /**
+     * D-07/D-08: Basic listener source-auth — negative sub-case FIRST (wrong credentials,
+     * then no credentials at all), asserting 401 AND zero received messages (the
+     * silently-disabled-auth catch), then the positive sub-case. Statistics were cleared
+     * script-side before the driver ran, so ordering within this single method controls the
+     * before/after comparison (no JUnit method-order dependency).
+     */
+    @Test
+    public void basicAuth() throws Exception {
+        URI listenerUri = URI.create("http://127.0.0.1:" + httpAuthBasicPort + "/");
+
+        HttpResponse<String> wrongCreds = CLIENT.send(HttpRequest.newBuilder(listenerUri)
+                .timeout(Duration.ofSeconds(15))
+                .header("Authorization", "Basic " + Base64.getEncoder()
+                        .encodeToString("smokeuser:WRONG".getBytes(StandardCharsets.UTF_8)))
+                .POST(BodyPublishers.ofString(Hl7Messages.ORU_R01_LF, StandardCharsets.UTF_8))
+                .build(), BodyHandlers.ofString());
+        assertEquals("Wrong Basic credentials must be rejected with 401", 401, wrongCreds.statusCode());
+
+        HttpResponse<String> noCreds = CLIENT.send(HttpRequest.newBuilder(listenerUri)
+                .timeout(Duration.ofSeconds(15))
+                .POST(BodyPublishers.ofString(Hl7Messages.ORU_R01_LF, StandardCharsets.UTF_8))
+                .build(), BodyHandlers.ofString());
+        assertEquals("Missing Authorization header must be rejected with 401", 401, noCreds.statusCode());
+
+        assertEquals("Silently-disabled-auth catch: wrong/missing credentials must create zero messages (D-08)",
+                0, rest.getReceivedCount(AUTH_BASIC_ID));
+
+        HttpResponse<String> correctCreds = CLIENT.send(HttpRequest.newBuilder(listenerUri)
+                .timeout(Duration.ofSeconds(15))
+                .header("Authorization", "Basic " + Base64.getEncoder()
+                        .encodeToString("smokeuser:smokepass".getBytes(StandardCharsets.UTF_8)))
+                .POST(BodyPublishers.ofString(Hl7Messages.ORU_R01_LF, StandardCharsets.UTF_8))
+                .build(), BodyHandlers.ofString());
+        assertTrue("Basic auth positive case expected a 2xx response, got " + correctCreds.statusCode(),
+                correctCreds.statusCode() >= 200 && correctCreds.statusCode() < 300);
+
+        assertThreeLevels(AUTH_BASIC_ID, 1, () -> {
+            Path out = pollForFile(Paths.get(outDir, "http-auth-basic", "output.hl7"), 60);
+            String content = readFile(out);
+            assertTrue("http-auth-basic destination content should contain the transformed patient token",
+                    content.contains(Hl7Messages.EXPECTED_PATIENT));
+        });
+    }
+
+    /**
+     * D-07/D-08, Pitfall 3: Digest listener source-auth. Negative sub-case uses
+     * {@code java.net.http} (no credentials at all — the challenge path rejects
+     * unauthenticated requests without needing Digest support in the driver). Positive
+     * sub-case uses borrowed Apache HttpClient 4.5.13, mirroring {@code HttpDispatcher}'s own
+     * client-side Digest wiring — this exact handshake has never been auto-tested in this
+     * repo before, so a red result here is treated as a potential REAL product finding
+     * (RESEARCH Open Question 2), not automatically a test bug.
+     */
+    @Test
+    public void digestAuth() throws Exception {
+        URI listenerUri = URI.create("http://127.0.0.1:" + httpAuthDigestPort + "/");
+
+        HttpResponse<String> noCreds = CLIENT.send(HttpRequest.newBuilder(listenerUri)
+                .timeout(Duration.ofSeconds(15))
+                .POST(BodyPublishers.ofString(Hl7Messages.ORU_R01_LF, StandardCharsets.UTF_8))
+                .build(), BodyHandlers.ofString());
+        assertEquals("Missing credentials must be rejected with 401 (challenge path)", 401, noCreds.statusCode());
+        assertEquals("Silently-disabled-auth catch: missing credentials must create zero messages (D-08)",
+                0, rest.getReceivedCount(AUTH_DIGEST_ID));
+
+        try (CloseableHttpClient client = HttpClients.createDefault()) {
+            HttpClientContext ctx = HttpClientContext.create();
+            BasicCredentialsProvider creds = new BasicCredentialsProvider();
+            creds.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials("smokeuser", "smokepass"));
+            ctx.setCredentialsProvider(creds);
+            HttpPost post = new HttpPost(listenerUri);
+            post.setEntity(new StringEntity(Hl7Messages.ORU_R01_LF, ContentType.TEXT_PLAIN));
+            try (CloseableHttpResponse response = client.execute(post, ctx)) {
+                assertEquals("Digest positive case (borrowed Apache HttpClient) expected 200",
+                        200, response.getStatusLine().getStatusCode());
+            }
+        }
+
+        assertThreeLevels(AUTH_DIGEST_ID, 1, () -> {
+            Path out = pollForFile(Paths.get(outDir, "http-auth-digest", "output.hl7"), 60);
+            String content = readFile(out);
+            assertTrue("http-auth-digest destination content should contain the transformed patient token",
+                    content.contains(Hl7Messages.EXPECTED_PATIENT));
+        });
     }
 }
