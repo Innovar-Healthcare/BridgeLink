@@ -19,7 +19,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SERVER_LIB="${REPO_ROOT}/server/setup/server-lib"
-FIXTURE_JAR="${SCRIPT_DIR}/fixtures/xstream-1.4.10.jar"
+# BREAK_FIXTURE_JAR is overridable (plan 18-09): the default xstream-1.4.10.jar downgrade
+# does NOT reproduce a functional break for this codebase (verified empirically in plan
+# 18-08 and reconfirmed in 18-09 -- XStream's reflection-based serializer is highly
+# backward-compatible for plain POJO graphs, and downgrading does not reproduce the
+# forward-upgrade regression class). xstream-1.4.21.jar -- the literal v26.6.0 rollback
+# version -- is the fixture that actually catches the DomReader child-caching regression
+# against the legacy-migration-test.xml fixture (18-09 NET-05/SC-4 break-proof).
+FIXTURE_JAR="${BREAK_FIXTURE_JAR:-${SCRIPT_DIR}/fixtures/xstream-1.4.10.jar}"
 ASIDE_DIR="$(mktemp -d)/xstream-aside"
 OUT_DIR="${SCRIPT_DIR}/out"
 EVIDENCE_LOG="${OUT_DIR}/break-proof-harness-run.log"
@@ -82,7 +89,7 @@ restore_jars() {
     fi
     RESTORED=1
     info "Restoring original xstream jar(s)..."
-    rm -f "${TOP_LEVEL_DIR}/xstream-1.4.10.jar"
+    rm -f "${TOP_LEVEL_DIR}/$(basename "${FIXTURE_JAR}")"
     local jar rel dest
     for jar in "${ORIGINAL_JARS[@]}"; do
         rel="${jar#"${SERVER_LIB}"/}"
@@ -104,8 +111,8 @@ for jar in "${ORIGINAL_JARS[@]}"; do
     mkdir -p "$(dirname "${dest}")"
     mv "${jar}" "${dest}"
 done
-cp "${FIXTURE_JAR}" "${TOP_LEVEL_DIR}/xstream-1.4.10.jar"
-info "Swapped in ${FIXTURE_JAR} at ${TOP_LEVEL_DIR}/xstream-1.4.10.jar"
+cp "${FIXTURE_JAR}" "${TOP_LEVEL_DIR}/$(basename "${FIXTURE_JAR}")"
+info "Swapped in ${FIXTURE_JAR} at ${TOP_LEVEL_DIR}/$(basename "${FIXTURE_JAR}")"
 
 # ---------------------------------------------------------------------------
 # Run: expect the harness to FAIL. Capture full output to a log file for the
@@ -158,7 +165,7 @@ for jar in "${ORIGINAL_JARS[@]}"; do
     fi
 done
 
-FIXTURE_LEFTOVER="$(find "${SERVER_LIB}" -name 'xstream-1.4.10.jar' 2>/dev/null || true)"
+FIXTURE_LEFTOVER="$(find "${SERVER_LIB}" -name "$(basename "${FIXTURE_JAR}")" 2>/dev/null || true)"
 if [[ -n "${FIXTURE_LEFTOVER}" ]]; then
     err "Fixture jar still present after restore: ${FIXTURE_LEFTOVER}"
     STILL_MISSING=1

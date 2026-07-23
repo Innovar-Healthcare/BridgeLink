@@ -129,18 +129,21 @@ never included in the measured duration.
 
 ## Add a channel
 
-The 10 committed fixtures in `smoke-tests/channels/` cover every stock connector type
+The 11 committed fixtures in `smoke-tests/channels/` cover every stock connector type
 (NET-01): `http-test.xml`, `tcp-mllp-test.xml`, `file-test.xml`, `jdbc-test.xml`,
 `vm-test.xml`, `js-test.xml`, `smtp-test.xml`, `soap-test.xml`, `dicom-test.xml`,
 `doc-writer-test.xml` (the last one carries two Document Writer destinations — PDF and
-RTF — the Phase 22 OpenPDF/OpenRTF fidelity baseline, D-08).
+RTF — the Phase 22 OpenPDF/OpenRTF fidelity baseline, D-08), plus
+`legacy-migration-test.xml` (plan 18-09) — see "Proving the net" below for why this
+eleventh fixture is structurally different from the other ten and must never be
+"fixed" to the current schema version.
 
-To add an eleventh fixture:
+To add a twelfth fixture:
 
 1. **Author the channel XML** under `smoke-tests/channels/<name>-test.xml`. Follow the
    existing fixtures' conventions:
-   - Fixed, human-assigned sequential channel ID (`00000011-0000-0000-0000-000000000011`
-     — continue the sequence).
+   - Fixed, human-assigned sequential channel ID (`00000012-0000-0000-0000-000000000012`
+     — continue the sequence; `...0011` is now taken by `legacy-migration-test.xml`).
    - `<description>` ends with "Test-only; never deploy to production."
    - Every ephemeral port/path is a `${VARNAME}` placeholder, never a hardcoded value.
    - A real transformer step (JavaScript Step, `com.mirth.connect.plugins.javascriptstep.JavaScriptStep`)
@@ -171,7 +174,7 @@ To add an eleventh fixture:
    index position in both arrays — the script pairs them positionally for status/STARTED
    polling and error messages).
 4. **Verify**: `smoke-tests/run-smoke-test.sh --deploy-only` should exit 0 twice
-   consecutively with your new channel reaching STARTED alongside the existing 10.
+   consecutively with your new channel reaching STARTED alongside the existing 11.
 5. **Wire assertions**: 18-07's pump/assert driver is where the actual HL7v2 message gets
    sent through the channel and the destination artifact is checked for the expected
    transformed content — this script only proves import/deploy/STARTED.
@@ -180,8 +183,8 @@ To add an eleventh fixture:
 
 `smoke-tests/break-dependency.sh` is the D-13/D-14 self-verifying broken-dependency proof:
 it swaps EVERY `xstream-*.jar` found recursively under `server/setup/server-lib` aside, drops
-in the deliberately old `fixtures/xstream-1.4.10.jar`, runs the harness expecting failure,
-restores the original jar(s) unconditionally (trap on EXIT), and verifies the restore.
+in a deliberately incompatible fixture jar, runs the harness expecting failure, restores the
+original jar(s) unconditionally (trap on EXIT), and verifies the restore.
 
 **When to run:** before any CVE-track jar bump (Phase 23 xstream/BC re-land, Phase 24 Derby,
 Phase 25 mssql-jdbc, Phase 26 Jersey) — rehearses the exact validation ritual a risky
@@ -196,24 +199,61 @@ xstream 1.4.21 re-land that was rolled back in v26.6.0 (commit `6a483ab9d`).
 | `1`  | SELF-TEST FAILED — harness passed with the broken jar in place; the net has a hole |
 | `2`  | INCONCLUSIVE — harness failed, but not at the import/dependency seam (e.g. boot/infrastructure failure) |
 
-**Verified result (this session, JDK 26.0.1 — see Known Limitation below):** exit `1`
-(SELF-TEST FAILED). The `xstream-1.4.10.jar` fixture (committed by plan 18-01) does **not**
-reproduce a functional break against the current 10 reference channels: XStream's
-reflection-based (de)serializer is highly backward-compatible for plain POJO graphs, and none
-of the 10 reference channels exercise Mirth's version-migration path (they are all pinned to
-`version="26.6.0")`, by 18-05's deliberate design, to avoid migration surprises). The actual
-v26.6.0 incident (xstream 1.4.21, forward not backward) was a narrower regression in
-`DomReader`'s child-element caching that only affected `MigratableConverter`'s post-migration
-DOM reload for legacy-format (pre-current-version) channels — a defensive fix
-(`MirthDomReader.getChildCount()`/`getChild(int)` overrides, commit `22940c0f8`) was written for
-it, then partially reverted alongside the version rollback (commit `6a483ab9d`), leaving only
-the weaker `reloadCurrentElement()` stub in the current tree. Reproducing that exact seam
-requires a legacy-format (migration-triggering) channel fixture, which is out of scope for this
-plan (see the 18-08 SUMMARY Deviations section for full detail and the recommended follow-up).
-The script itself is complete, correct, and self-verifying per every other D-13/D-14 structural
-requirement (recursive jar discovery, trap-based restore, restoration verification, three-way
-verdict classification) — the exit code accurately reflects what actually happened, which is
-the property `break-dependency.sh` is designed to prove.
+**Fixture jar selection:** `FIXTURE_JAR` defaults to `fixtures/xstream-1.4.10.jar` but is
+overridable via the `BREAK_FIXTURE_JAR` environment variable, e.g.:
+
+```bash
+BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.21.jar smoke-tests/break-dependency.sh
+```
+
+**Verified result (plan 18-09, JDK 26.0.1 — locally available JDK clearing the Phase 16
+Derby preflight): exit `1` (SELF-TEST FAILED) for BOTH available fixtures, even after adding
+`legacy-migration-test.xml` (a genuinely legacy schema-`3.6.0` channel export, plan 18-09's
+11th fixture, that exercises `Channel.migrateX()`/`MigratableConverter`/`MirthDomReader` on
+every harness run — see "Add a channel" above):**
+
+1. **`xstream-1.4.10.jar` (the D-14-specified, 18-01-committed fixture)** — does not reproduce
+   a functional break, exactly as plan 18-08 found: XStream's reflection-based (de)serializer
+   is highly backward-compatible for plain POJO graphs, and a *downgrade* does not reproduce a
+   *forward*-upgrade regression class.
+2. **`xstream-1.4.21.jar` (the literal v26.6.0 rollback version — plan 18-09's contingency
+   fixture, downloaded from Maven Central and SHA-1-verified, see Provenance below)** — swap
+   confirmed loaded (`server-stdout.log` shows the JVM's `SunUnsafeReflectionProvider` warning
+   referencing `xstream-1.4.21.jar` by path), yet `legacy-migration-test.xml` still imports,
+   migrates, deploys, and reaches STARTED cleanly — 51/51 assertions pass unchanged.
+
+**Root cause of why even the migration-triggering fixture doesn't reproduce the incident:**
+`MigratableConverter.migrateElement()` only invokes `Migratable.migrate3_5_0(element)` — the
+exact method commit `22940c0f8` names as removing `codeTemplateLibraries` and adding
+`exportData` (the DOM mutation that the `22940c0f8`/`6a483ab9d` regression's reload bug
+affected) — when `MigrationUtil.compareVersions(elementVersion, "3.5.0") < 0`, i.e. only for
+elements versioned **strictly older than 3.5.0**. `legacy-migration-test.xml` (like the
+`XStreamSeamTest` fixture it was extracted from) is versioned `3.6.0` — already `>= 3.5.0` —
+so `migrate3_5_0()` never runs for it, and the specific DOM-mutation-then-reload sequence the
+regression affected is never exercised. `3.6.0` was the only fixture this plan's `<action>`
+authorized (`XStreamSeamTest.knownOldFormatChannelXmlDeserializes` proves it migrates cleanly
+on the shipped xstream, avoiding the separate, pre-existing `ImportConverter3_0_0` NPE that
+18-08 hit with a hand-crafted pre-3.0.0-format channel) — a fixture versioned `< 3.5.0` was
+out of this plan's authorized scope and is the concrete, actionable follow-up.
+
+**Status: NET-05 / SC-4 is NOT closed by this plan.** `legacy-migration-test.xml` is real,
+valuable infrastructure — every harness run now genuinely exercises the migration
+seam-adjacent code path (`migrate3_6_0` through `migrate26_3_0`, all still real DOM-mutating
+migration steps) — but it does not reach the specific `migrate3_5_0` mutation the actual
+incident depended on. Both authorized fixtures (`1.4.10` downgrade, `1.4.21` literal rollback
+version) are exercised and neither produces a `SELF-TEST FAILED` -> caught transition. Per
+D-13 (never fabricate a false "caught" result), this is recorded as an honest negative
+finding, matching plan 18-08's precedent. **Recommended follow-up:** a fixture versioned
+`< 3.5.0` (still `>= 3.0.0`, still carrying an explicit `version` attribute to avoid the
+`ImportConverter3_0_0` NPE path) paired with the `xstream-1.4.21.jar` fixture already
+committed here, ideally timed with Phase 23's actual xstream 1.4.21 re-land.
+
+The script itself is complete, correct, and self-verifying per every other D-13/D-14
+structural requirement (recursive jar discovery, generalized `BREAK_FIXTURE_JAR` override,
+trap-based restore keyed on `$(basename "${FIXTURE_JAR}")` so no fixture is ever left in the
+tree, restoration verification, three-way verdict classification) — the exit code accurately
+reflects what actually happened for both fixtures tried, which is the property
+`break-dependency.sh` is designed to prove.
 
 ## Provenance
 
@@ -227,6 +267,7 @@ committed. No other new external dependencies are introduced by Phase 18 (see
 | `testlib/greenmail-1.6.15.jar` | 1.6.15 | `cacc939fff36cabc9512644130504ef4f7ef53e8` | SMTP endpoint stub (NET-01 names 1.6.15 explicitly; D-07) |
 | `testlib/greenmail-junit4-1.6.15.jar` | 1.6.15 | `19498174e9b8f832ff629fd568da45c34618a369` | JUnit 4 GreenMail rule/integration for the assertion driver |
 | `fixtures/xstream-1.4.10.jar` | 1.4.10 | `dfecae23647abc9d9fd0416629a4213a3882b101` | Break-dependency fixture (D-13/D-14, plan 18-08) — a deliberately old, incompatible XStream jar. **Never placed on any runtime classpath**; lives under `fixtures/` only. |
+| `fixtures/xstream-1.4.21.jar` | 1.4.21 | `65cb3e7f809b18b9aab43f2338ee5b320f72d7bd` | Break-dependency contingency fixture (D-13/D-14, plan 18-09) — the literal xstream version rolled back in v26.6.0 (commit `6a483ab9d`). Select via `BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.21.jar`. **Never placed on any runtime classpath**; lives under `fixtures/` only. |
 
 GreenMail's transitive `com.sun.mail:jakarta.mail` dependency is intentionally NOT
 downloaded — the shipped `server/setup/server-lib/javax/javax.mail-1.6.2.jar` already

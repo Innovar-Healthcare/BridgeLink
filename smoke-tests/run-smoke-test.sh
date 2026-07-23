@@ -18,9 +18,12 @@
 #
 # Satisfies: NET-01 (D-01/D-03), plan 18-01 must_haves (boot/teardown proven twice
 # consecutively, 127.0.0.1-only bind, fresh keystore/appdata per run). Plan 18-05 adds the
-# import/deploy stage (D-05/D-06): all 10 reference channel fixtures are imported over
+# import/deploy stage (D-05/D-06): all 11 reference channel fixtures are imported over
 # REST, deployed in parallel, and polled to STARTED, with FATAL InvalidChannel detection
-# (the NET-05 break-proof detection mechanism).
+# (the NET-05 break-proof detection mechanism). Plan 18-09 adds the 11th fixture
+# (legacy-migration-test.xml, a genuinely legacy schema-3.6.0 export) so every run also
+# exercises Channel.migrateX()/MigratableConverter/MirthDomReader -- the exact seam behind
+# the v26.6.0 xstream rollback -- closing the NET-05/SC-4 break-proof gap.
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
@@ -38,7 +41,7 @@ usage() {
     echo "                   'not yet supported' message (see D-03 / Phase 24)."
     echo "  --boot-only      Stop after the health check succeeds; tear down immediately."
     echo "                   Skips the import/deploy stage and everything after it."
-    echo "  --deploy-only    Boot + import + deploy all 10 reference channels, then tear"
+    echo "  --deploy-only    Boot + import + deploy all 11 reference channels, then tear"
     echo "                   down (no message pump/assert driver — that's 18-06/18-07)."
     echo "                   Mutually exclusive with --boot-only."
     echo "  --help           Show this message and exit 0."
@@ -363,7 +366,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test)
 CHANNEL_IDS=(
     "00000001-0000-0000-0000-000000000001"
     "00000002-0000-0000-0000-000000000002"
@@ -375,6 +378,7 @@ CHANNEL_IDS=(
     "00000008-0000-0000-0000-000000000008"
     "00000009-0000-0000-0000-000000000009"
     "00000010-0000-0000-0000-000000000010"
+    "00000011-0000-0000-0000-000000000011"
 )
 # Explicit envsubst allowlist — exactly the ${VARNAME} placeholders the committed
 # fixtures use. ${DICOMMESSAGE} is a Mirth-internal template variable resolved by
@@ -424,6 +428,18 @@ substitute_fixtures() {
 
         if [[ ! -f "${src}" ]]; then
             fatal "Missing committed fixture: ${src}"
+        fi
+
+        # legacy-migration-test.xml is DELIBERATELY excluded from both the envsubst pass
+        # (it uses no allowlisted placeholders) and the version-rewrite sed below (plan
+        # 18-09, NET-05/SC-4). This fixture's entire value is being a genuinely old-schema
+        # (version="3.6.0") export -- rewriting its version attributes to the live server
+        # version would silently re-open the NET-05 break-proof hole, since every OTHER
+        # fixture is pinned to the current schema version and never exercises
+        # Channel.migrateX()/MigratableConverter/MirthDomReader. Straight-copy only.
+        if [[ "${name}" == "legacy-migration-test" ]]; then
+            cp "${src}" "${dst}"
+            continue
         fi
 
         envsubst "${ENVSUBST_ALLOWLIST}" < "${src}" > "${dst}.tmp"
