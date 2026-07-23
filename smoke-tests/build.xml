@@ -1,0 +1,115 @@
+<?xml version="1.0"?>
+<!--
+    smoke-tests/build.xml — JUnit assertion driver build (Phase 18, plan 18-06).
+
+    Compiles the smoke-test driver (RestClient, Hl7Messages, D-07 endpoint stubs) and
+    runs its JUnit tests with honest-red exit propagation, following the donkey/build.xml
+    test-run pattern (junit failureproperty + <fail if=...>, donkey/build.xml:108-165,236).
+
+    The driver's classpath BORROWS jars already vendored in the assembled distribution
+    (server/setup/server-lib + server/setup/extensions) rather than duplicating them —
+    the harness must exercise the exact jars BridgeLink ships, and this keeps
+    smoke-tests/ free of new binary dependencies beyond the GreenMail pair committed
+    in 18-01.
+
+    Prerequisite: the distribution must be built first (`ant -f server/mirth-build.xml`)
+    so server/setup/server-lib and server/setup/extensions exist. This target set does
+    NOT build the distribution itself — see smoke.setup.dir below.
+-->
+<project name="smoke-tests" basedir="." default="test-run">
+
+    <!-- Overridable: point at a different assembled distribution's setup/ dir.
+         Default assumes the standard repo layout: smoke-tests/ and server/ are siblings. -->
+    <property name="smoke.setup.dir" value="../server/setup" />
+    <!-- server/testlib (junit + hamcrest) lives beside server/setup, not under it. -->
+    <property name="server.testlib.dir" value="${smoke.setup.dir}/../testlib" />
+
+    <property name="src" value="src" />
+    <property name="build.classes" value="build/classes" />
+    <property name="junit.reports" value="junit-reports" />
+    <!-- Overridable: -Dsmoke.soap.fallback=true forces SoapStub's A2 HttpServer fallback path -->
+    <property name="smoke.soap.fallback" value="false" />
+
+    <target name="check-setup-dir">
+        <available file="${smoke.setup.dir}/server-lib" type="dir" property="setup.dir.present" />
+        <fail unless="setup.dir.present">
+smoke-tests/build.xml: ${smoke.setup.dir}/server-lib not found.
+
+The smoke-test driver borrows jars from the ASSEMBLED distribution (server/setup/).
+Build it first, e.g.:
+    ant -f server/mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true
+
+Then re-run this build, or pass -Dsmoke.setup.dir=/path/to/setup to point at an
+already-built distribution elsewhere.
+        </fail>
+    </target>
+
+    <path id="borrowed.classpath">
+        <!-- javax.mail (SMTP stub — NEVER jakarta.mail, Pitfall 5), javax.json (RestClient's
+             statuses/statistics response parsing), activation, annotation-api, etc. -->
+        <fileset dir="${smoke.setup.dir}/server-lib/javax" includes="*.jar" />
+
+        <!-- SOAP stub: JAX-WS RI + JAXB runtime (Endpoint.publish is not in JDK 11+ core) -->
+        <fileset dir="${smoke.setup.dir}/server-lib/javax/jaxws" includes="*.jar" />
+        <fileset dir="${smoke.setup.dir}/server-lib/javax/jaxws/ext" includes="*.jar" />
+        <fileset dir="${smoke.setup.dir}/server-lib/javax/jaxb" includes="*.jar" />
+        <fileset dir="${smoke.setup.dir}/server-lib/javax/jaxb/ext" includes="*.jar" />
+
+        <!-- JDBC sink: sqlite-jdbc ships server-side (database/) -->
+        <fileset dir="${smoke.setup.dir}/server-lib/database" includes="sqlite-jdbc-*.jar" />
+
+        <!-- DICOM SCP stub: dcm4che tool jars ship in the dicom connector extension.
+             NOTE: 18-RESEARCH.md Pattern 4 names this dir "extensions/dimse/" — the
+             assembled distribution actually names it "extensions/dicom/lib/"
+             (verified against the built server/setup tree). Corrected here (Rule 1). -->
+        <fileset dir="${smoke.setup.dir}/extensions/dicom/lib" includes="*.jar" />
+        <!-- DcmRcv's CLI arg-parsing method references commons-cli in its constant pool. -->
+        <fileset file="${smoke.setup.dir}/server-lib/commons/commons-cli-1.2.jar" />
+
+        <!-- Document Writer fidelity assertions (18-07): PDFBox ships in extensions/doc/lib -->
+        <fileset dir="${smoke.setup.dir}/extensions/doc/lib" includes="pdfbox-*.jar,fontbox-*.jar" />
+
+        <!-- DcmRcv logging (slf4j-api + log4j2 slf4j bridge + log4j2 core/api) -->
+        <fileset dir="${smoke.setup.dir}/server-lib/donkey" includes="slf4j-api-*.jar,log4j-slf4j2-impl-*.jar,log4j-api-*.jar,log4j-core-*.jar,log4j-1.2-api-*.jar" />
+    </path>
+
+    <path id="test.classpath">
+        <path refid="borrowed.classpath" />
+        <fileset dir="testlib" includes="*.jar" />
+        <fileset dir="${server.testlib.dir}" includes="junit-4.13.1.jar,hamcrest-2.2.jar" />
+    </path>
+
+    <target name="clean">
+        <delete dir="build" />
+        <delete dir="${junit.reports}" />
+    </target>
+
+    <target name="compile" depends="check-setup-dir">
+        <mkdir dir="${build.classes}" />
+        <javac srcdir="${src}" destdir="${build.classes}" debug="on" includeAntRuntime="false" release="17">
+            <classpath refid="test.classpath" />
+        </javac>
+    </target>
+
+    <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
+        <mkdir dir="${junit.reports}" />
+        <junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="once" dir="${basedir}">
+            <jvmarg value="--add-opens=java.base/java.util=ALL-UNNAMED" />
+            <jvmarg value="--add-opens=java.base/java.lang=ALL-UNNAMED" />
+            <sysproperty key="smoke.soap.fallback" value="${smoke.soap.fallback}" />
+            <classpath>
+                <path refid="test.classpath" />
+                <pathelement location="${build.classes}" />
+            </classpath>
+            <formatter type="xml" />
+            <batchtest todir="${junit.reports}">
+                <fileset dir="${build.classes}">
+                    <include name="**/*Test.class" />
+                    <exclude name="**/*$*.class" />
+                </fileset>
+            </batchtest>
+        </junit>
+        <fail if="test.failed" message="smoke-tests driver JUnit tests failed - see junit-reports/" />
+    </target>
+
+</project>
