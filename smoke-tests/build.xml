@@ -75,6 +75,12 @@ already-built distribution elsewhere.
 
         <!-- DcmRcv logging (slf4j-api + log4j2 slf4j bridge + log4j2 core/api) -->
         <fileset dir="${smoke.setup.dir}/server-lib/donkey" includes="slf4j-api-*.jar,log4j-slf4j2-impl-*.jar,log4j-api-*.jar,log4j-core-*.jar,log4j-1.2-api-*.jar" />
+
+        <!-- Digest-auth client for http-listener-auth-digest-test (18.1-03): java.net.http
+             has no Digest support, so the driver borrows the same Apache HttpClient 4.5.13
+             stack the dispatcher itself uses client-side for Digest handshakes.
+             commons-logging-1.3.3.jar is already on the path above (PDFBox). -->
+        <fileset dir="${smoke.setup.dir}/server-lib/commons" includes="httpclient-4.5.13.jar,httpcore-4.4.13.jar,commons-codec-*.jar" />
     </path>
 
     <path id="test.classpath">
@@ -116,6 +122,9 @@ already-built distribution elsewhere.
     <property name="HTTP_RESPONSE_PORT" value="" />
     <property name="HTTP_XMLBODY_PORT" value="" />
     <property name="HTTP_BINARY_PORT" value="" />
+    <!-- 18.1-03: HTTP source-auth (Basic/Digest) fixture ports (D-07/NET-06). -->
+    <property name="HTTP_AUTH_BASIC_PORT" value="" />
+    <property name="HTTP_AUTH_DIGEST_PORT" value="" />
 
     <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
         <mkdir dir="${junit.reports}" />
@@ -135,6 +144,8 @@ already-built distribution elsewhere.
             <sysproperty key="HTTP_RESPONSE_PORT" value="${HTTP_RESPONSE_PORT}" />
             <sysproperty key="HTTP_XMLBODY_PORT" value="${HTTP_XMLBODY_PORT}" />
             <sysproperty key="HTTP_BINARY_PORT" value="${HTTP_BINARY_PORT}" />
+            <sysproperty key="HTTP_AUTH_BASIC_PORT" value="${HTTP_AUTH_BASIC_PORT}" />
+            <sysproperty key="HTTP_AUTH_DIGEST_PORT" value="${HTTP_AUTH_DIGEST_PORT}" />
             <classpath>
                 <path refid="test.classpath" />
                 <pathelement location="${build.classes}" />
