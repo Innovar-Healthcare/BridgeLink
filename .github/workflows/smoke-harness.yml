@@ -1,0 +1,67 @@
+# Nightly + manual-dispatch smoke harness matrix (NET-01/02/05, IRT-1491, D-04).
+#
+# Sibling of test-matrix.yml (JAVA-03's unit-test matrix) — this workflow boots the real
+# assembled BridgeLink distribution directly on the runner JVM (smoke-tests/run-smoke-test.sh)
+# across the JDK 17/21/25 matrix, on a schedule (not push/PR — the full pipeline takes
+# minutes, not seconds, so it runs nightly plus on-demand rather than on every push) per D-04.
+name: Smoke harness (JDK 17/21/25)
+
+on:
+  schedule:
+    # 07:00 UTC nightly.
+    - cron: '0 7 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['17', '21', '25']
+    # Job name must contain the raw JDK version (not just "smoke") -- downstream tooling
+    # (this plan's automated verify, gh run view --json jobs) keys on job names containing
+    # 17/21 to confirm which legs went green.
+    name: smoke (${{ matrix.java }})
+    # KNOWN, ALREADY-SHIPPED CROSS-PHASE CONSTRAINT (carried since plan 18-01, reconfirmed by
+    # 18-07 and this plan's live CI run): Phase 16's JAVA-04 Derby/Java-21 preflight
+    # (Mirth.derbyPreflightBlocks) unconditionally aborts embedded-Derby boot below Java 21,
+    # and Phase 18's harness only supports the derby backend (D-03; external DB lands in
+    # Phase 24). The JDK 17 leg is therefore STRUCTURALLY expected to fail at boot until
+    # Phase 24 ships Derby 10.17 + external-DB harness support -- this is not a defect
+    # introduced by this workflow. continue-on-error keeps the JDK 17 leg from turning the
+    # whole run red for a fully understood, already-documented, non-actionable-today gap.
+    continue-on-error: ${{ matrix.java == '17' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'zulu'
+          java-package: 'jdk+fx'
+
+      - name: Build BridgeLink - unsigned
+        working-directory: server
+        run: ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true
+
+      - name: Annotate known JDK 17 / embedded-Derby gap
+        if: matrix.java == '17'
+        run: |
+          echo "::notice title=Known JDK 17 gap::embedded Derby requires Java 21+ (Phase 16 JAVA-04 preflight, shipped and unconditional). Phase 18's harness is derby-only (D-03) until Phase 24 lands external-DB support. This leg is EXPECTED to fail at boot -- continue-on-error keeps it from reddening the run. See 18-01/18-07/18-08 SUMMARY Deviations for full history."
+
+      # Own, separate, timed step -- the script's own "HARNESS DURATION: <n>s" line (boot
+      # through teardown) is the D-04 <=10-minute-per-leg measurement, distinct from the
+      # build step above (Pitfall 11).
+      - name: Run smoke harness
+        run: bash smoke-tests/run-smoke-test.sh
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-jdk${{ matrix.java }}
+          path: smoke-tests/out/**
