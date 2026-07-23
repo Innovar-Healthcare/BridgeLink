@@ -40,6 +40,15 @@ public class SmtpStub {
         return greenMail.getReceivedMessages();
     }
 
+    /**
+     * Delegates to GreenMail's own poll-with-timeout wait (plan 18-07's designated L2 API) —
+     * blocks up to {@code timeoutMs} for {@code count} messages to arrive, returning as soon
+     * as they do (Pitfall 7: no fixed sleeps).
+     */
+    public boolean waitForIncomingEmail(long timeoutMs, int count) {
+        return greenMail.waitForIncomingEmail(timeoutMs, count);
+    }
+
     /** Convenience accessor for a received message's text body. */
     public static String getBody(MimeMessage message) {
         return GreenMailUtil.getBody(message);

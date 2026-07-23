@@ -190,6 +190,31 @@ public class RestClient {
         }
     }
 
+    /**
+     * Binary-safe variant of {@link #processMessage(String, String)} for channels whose inbound
+     * data type is binary (e.g. DICOM, plan 18-07's dicom-test.xml). {@code MessageServletInterface}
+     * only accepts {@code text/plain} String bodies (no raw-bytes REST verb exists) — a plain UTF-8
+     * round-trip would corrupt bytes 0x80-0xFF (2-byte UTF-8 inflation on the wire). Mirth's own raw
+     * message handling for binary data types uses the ISO-8859-1 (Latin-1) charset internally
+     * specifically because it is a bijective 1:1 byte&lt;-&gt;char mapping, so encoding the byte
+     * array as an ISO-8859-1 String — and declaring that charset explicitly on the request — round
+     * trips every byte losslessly. (Rule 2 — missing critical functionality: 18-06's processMessage
+     * assumed UTF-8 text content only.)
+     */
+    public void processMessageBytes(String channelId, byte[] rawBytes) throws IOException, InterruptedException {
+        String rawBody = new String(rawBytes, StandardCharsets.ISO_8859_1);
+        HttpRequest request = newRequestBuilder(baseUrl + "/channels/" + channelId + "/messages")
+                .header("Content-Type", "text/plain; charset=ISO-8859-1")
+                .POST(HttpRequest.BodyPublishers.ofString(rawBody, StandardCharsets.ISO_8859_1))
+                .build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        int code = response.statusCode();
+        if (code != 200 && code != 201) {
+            throw new IOException("processMessageBytes failed for channel " + channelId + ": HTTP " + code
+                    + " body=" + response.body());
+        }
+    }
+
     // ------------------------------------------------------------------
     // Statistics
     // ------------------------------------------------------------------

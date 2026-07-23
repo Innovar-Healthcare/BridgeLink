@@ -29,7 +29,15 @@
           <name>Extract patient name</name>
           <sequenceNumber>0</sequenceNumber>
           <enabled>true</enabled>
-          <script>channelMap.put(&apos;patientName&apos;, msg[&apos;PID&apos;][&apos;PID.5&apos;][&apos;PID.5.1&apos;].toString());</script>
+          <script><![CDATA[channelMap.put('patientName', msg['PID']['PID.5']['PID.5.1'].toString());
+// SOAP envelope note (Rule 1 fix, plan 18-07): the destination's <envelope> template embeds
+// this value inside an XML element (<payload>...</payload>) — raw HL7 content contains an
+// unescaped '&' (MSH-2's own encoding-characters field, '^~\&'), which breaks XML parsing
+// exactly like the doc-writer fixture's original bug (see 18-05 SUMMARY Deviation 2). Compute
+// an HTML/XML-safe copy the same way.
+var rawContent = String(connectorMessage.getRawData());
+var soapSafeContent = rawContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+channelMap.put('soapSafeContent', soapSafeContent);]]></script>
         </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
       </elements>
       <inboundDataType>HL7V2</inboundDataType>
@@ -150,14 +158,13 @@
         <wsdlUrl>${SOAP_URL}?wsdl</wsdlUrl>
         <service>SmokeTestService</service>
         <port>SmokeTestPort</port>
-        <operation>Press Get Operations</operation>
+        <operation>receive</operation>
         <locationURI>${SOAP_URL}</locationURI>
         <socketTimeout>30000</socketTimeout>
         <useAuthentication>false</useAuthentication>
         <username></username>
         <password></password>
-        <envelope>Patient: ${patientName}
-${message.encodedData}</envelope>
+        <envelope>&lt;soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="http://stubs.smoketest.connect.mirth.com/"&gt;&lt;soapenv:Body&gt;&lt;tns:receive&gt;&lt;payload&gt;Patient: ${patientName} ${soapSafeContent}&lt;/payload&gt;&lt;/tns:receive&gt;&lt;/soapenv:Body&gt;&lt;/soapenv:Envelope&gt;</envelope>
         <oneWay>false</oneWay>
         <headers class="linked-hash-map"/>
         <headersVariable></headersVariable>
