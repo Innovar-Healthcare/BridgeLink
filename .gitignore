@@ -643,3 +643,6 @@ donkey/donkey-test
 
 # /webadmin/src/com/mirth/connect/webadmin/utils/
 
+# smoke-tests harness run artifacts (mirth.log copies, per-run scratch) — Phase 18
+/smoke-tests/out/
+
