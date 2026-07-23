@@ -236,13 +236,17 @@ allocate_ports() {
     # fixtures (D-02/D-06/D-09/NET-06). Allocated script-side (envsubst needs it at
     # fixture-import time); bound driver-side by RecordingHttpStub in plan 18.1-05.
     HTTP_STUB_PORT=$(free_port)
+    # 18.2: Jetty regression fixtures (NET-07).
+    HTTP_CTXPATH_PORT=$(free_port)
+    HTTP_LARGE_PORT=$(free_port)
+    HTTP_ERROR500_PORT=$(free_port)
     # SOAP_URL is derived, not a raw port — the Web Service Sender fixture (soap-test.xml)
     # substitutes ${SOAP_URL} directly (D-07: Endpoint.publish stub target).
     SOAP_URL="http://127.0.0.1:${SOAP_PORT}/smoketest"
     export HTTP_PORT HTTPS_PORT MLLP_PORT HTTP_LISTENER_PORT SMTP_PORT SCP_PORT SOAP_PORT SOAP_URL \
         HTTP_RESPONSE_PORT HTTP_XMLBODY_PORT HTTP_BINARY_PORT HTTP_AUTH_BASIC_PORT HTTP_AUTH_DIGEST_PORT \
-        HTTP_STUB_PORT
-    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT}"
+        HTTP_STUB_PORT HTTP_CTXPATH_PORT HTTP_LARGE_PORT HTTP_ERROR500_PORT
+    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -266,10 +270,19 @@ allocate_work_dirs() {
              "${OUT_DIR}/http" "${OUT_DIR}/mllp" "${OUT_DIR}/file" "${OUT_DIR}/vm" \
              "${OUT_DIR}/js" "${OUT_DIR}/doc" \
              "${OUT_DIR}/http-response" "${OUT_DIR}/http-xmlbody" "${OUT_DIR}/http-binary" \
-             "${OUT_DIR}/http-auth-basic" "${OUT_DIR}/http-auth-digest"
+             "${OUT_DIR}/http-auth-basic" "${OUT_DIR}/http-auth-digest" \
+             "${OUT_DIR}/http-ctxpath"
+
+    # 18.2: pre-create the IRT-828 FILE static resource (NET-07). The server JVM reads
+    # this path directly at deploy/request time — no container/bind-mount in this harness
+    # (Pitfall 4). Content is irrelevant; size (102400 bytes) is what plan 18.2-03 asserts.
+    STATIC_FILE_PATH="${CHANNEL_WORK_DIR}/static/large-file.bin"
+    mkdir -p "$(dirname "${STATIC_FILE_PATH}")"
+    head -c 102400 /dev/zero > "${STATIC_FILE_PATH}"
+    export STATIC_FILE_PATH
 
     export IN_DIR OUT_DIR SQLITE_PATH
-    pass "Channel work dir allocated: ${CHANNEL_WORK_DIR} (IN_DIR/OUT_DIR/SQLITE_PATH exported)"
+    pass "Channel work dir allocated: ${CHANNEL_WORK_DIR} (IN_DIR/OUT_DIR/SQLITE_PATH exported, STATIC_FILE_PATH=${STATIC_FILE_PATH})"
 }
 
 # ---------------------------------------------------------------------------
@@ -388,7 +401,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test)
 CHANNEL_IDS=(
     "00000001-0000-0000-0000-000000000001"
     "00000002-0000-0000-0000-000000000002"
@@ -410,6 +423,9 @@ CHANNEL_IDS=(
     "00000018-0000-0000-0000-000000000018"
     "00000019-0000-0000-0000-000000000019"
     "00000020-0000-0000-0000-000000000020"
+    "00000021-0000-0000-0000-000000000021"
+    "00000022-0000-0000-0000-000000000022"
+    "00000023-0000-0000-0000-000000000023"
 )
 # Explicit envsubst allowlist — exactly the ${VARNAME} placeholders the committed
 # fixtures use. ${DICOMMESSAGE} is a Mirth-internal template variable resolved by
@@ -421,7 +437,10 @@ CHANNEL_IDS=(
 # in committed fixture XML and never needs (or risks) allowlisting (Pitfall 6).
 # 18.1-04 adds HTTP_STUB_PORT (sender-params/sender-timeout fixtures target the
 # recording HTTP stub's /auth and /stall contexts, D-02/D-06/D-09/NET-06).
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT}'
+# 18.2 adds HTTP_CTXPATH_PORT/HTTP_LARGE_PORT/HTTP_ERROR500_PORT (Jetty regression
+# fixtures 00000021-23, NET-07) and STATIC_FILE_PATH (the IRT-828 FILE static resource
+# appended to http-listener-response-test.xml, pre-created by allocate_work_dirs()).
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -772,6 +791,12 @@ except Exception:
     if [[ "${code}" == "000" ]]; then
         fatal "HTTP Auth Digest Listener port ${HTTP_AUTH_DIGEST_PORT} did not respond within 60s"
     fi
+
+    # 18.2: HTTP_CTXPATH_PORT, HTTP_LARGE_PORT, and HTTP_ERROR500_PORT are DELIBERATELY
+    # NOT probed here — a bare GET on any of the three Jetty-regression fixtures
+    # (00000021/22/23) creates a real message / writes a destination artifact,
+    # corrupting the L1/L2 assertions plan 18.2-03's driver depends on. Their deploy
+    # health is already covered by wait_for_started()'s STARTED-state poll above.
 }
 
 import_deploy() {
@@ -849,6 +874,9 @@ run_driver() {
         -DHTTP_AUTH_BASIC_PORT="${HTTP_AUTH_BASIC_PORT}" \
         -DHTTP_AUTH_DIGEST_PORT="${HTTP_AUTH_DIGEST_PORT}" \
         -DHTTP_STUB_PORT="${HTTP_STUB_PORT}" \
+        -DHTTP_CTXPATH_PORT="${HTTP_CTXPATH_PORT}" \
+        -DHTTP_LARGE_PORT="${HTTP_LARGE_PORT}" \
+        -DHTTP_ERROR500_PORT="${HTTP_ERROR500_PORT}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else
