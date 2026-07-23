@@ -181,7 +181,146 @@ To add a thirteenth fixture:
    sent through the channel and the destination artifact is checked for the expected
    transformed content — this script only proves import/deploy/STARTED.
 
-## Proving the net (NET-05 / SC-4 / break-dependency.sh)
+## Parameter-coverage pattern (18.1)
+
+Phase 18.1 (NET-06) extended the Phase 18 harness from "one fixture per connector type"
+to "one fixture per parameter cluster" for a single connector (HTTP), taking the fixture
+count from 12 to 20 (channel IDs `00000013` through `00000020`) without touching a single
+byte of `http-test.xml` or the Phase 18 pump/stub test classes. This section is the
+reusable shape: a later TCP/SMTP/JDBC parameter-coverage phase should be planned as "follow
+this pattern", not re-derived from scratch.
+
+### 1. Fixture slicing rule
+
+- **One channel per parameter cluster, not one channel per connector.** Phase 18.1 shipped
+  eight new fixtures for a single connector type: `http-listener-response-test.xml`
+  (response headers/status/content-type/static-resource cluster), `http-datatype-xml-test.xml`
+  (xmlBody+includeMetadata envelope cluster), `http-datatype-binary-recv-test.xml` /
+  `http-datatype-binary-send-test.xml` (binary round-trip, split listener/sender),
+  `http-listener-auth-basic-test.xml` / `http-listener-auth-digest-test.xml` (one fixture
+  per auth type — never share an auth-type cluster across a channel), `http-sender-params-test.xml`
+  (sender headers/query-params/content-type/non-preemptive auth-out), and
+  `http-sender-timeout-test.xml` (isolated timeout case, see below).
+- **The baseline connector fixture is never edited.** `http-test.xml` (channel `00000001`)
+  stayed byte-for-byte untouched across all six plans (verified every plan via
+  `git diff --stat smoke-tests/channels/http-test.xml` returning empty) — so a parameter
+  regression reads as "custom HTTP params broke" (the new fixtures), never "the connector
+  broke" (the baseline). Apply the same rule to the next connector's baseline fixture
+  (`tcp-mllp-test.xml`, `smtp-test.xml`, `jdbc-test.xml`).
+- **Expected-error cases get their OWN channel.** `http-sender-timeout-test.xml` is a
+  single-message, `queueEnabled=false`/`retryCount=0` channel isolated from
+  `http-sender-params-test.xml` specifically so an expected-error exemption (see §3) never
+  shares a channel ID with a zero-error assertion. A shared channel cannot simultaneously
+  assert "zero errors" (every other cluster's L1 check) and "exactly one expected error"
+  (the timeout cluster's own check) without one assertion silently swallowing the other.
+
+### 2. Recording-stub pattern
+
+`RecordingHttpStub` (`smoke-tests/src/com/mirth/connect/smoketest/stubs/RecordingHttpStub.java`,
+built on JDK built-in `com.sun.net.httpserver`, zero new jars — the same pattern as
+`SoapStub`) exposes three contexts on one ephemeral port:
+
+- **`/record`** — record-everything context. Every request (method, path, query, headers,
+  body) is captured into a `RecordedRequest` and appended to a synchronized list, queryable
+  via `getRequests(pathPrefix)`. This is the L2 artifact for sender-side fixtures that have
+  no destination file to poll — the stub recording IS the wire-format proof.
+- **`/auth`** — challenge context for auth-OUT assertions. Issues an explicit 401 +
+  `WWW-Authenticate: Basic` challenge on the bare first request rather than relying on
+  `com.sun.net.httpserver`'s built-in `BasicAuthenticator` — this is load-bearing, not
+  cosmetic: a non-preemptive client (`usePreemptiveAuthentication=false`) sends request #1
+  with NO `Authorization` header and only resends with credentials after seeing the 401
+  challenge, so the stub must issue that challenge itself or the retry (and the header it
+  carries) is never observed.
+- **`/stall`** — timeout context. Sleeps for a configurable duration (constructor arg,
+  default 5000ms in the real timeout fixture, a short 200ms in the self-test) before
+  responding, forcing the client's `socketTimeout` to trip.
+- **Wiring:** the stub's port is allocated **script-side** (`HTTP_STUB_PORT=$(free_port)` in
+  `allocate_ports()`, exported, added to `ENVSUBST_ALLOWLIST`, forwarded to the JUnit driver
+  as a `-D` sysproperty) but **bound driver-side** — `HttpParamsTest`'s own `@BeforeClass`
+  constructs and starts the `RecordingHttpStub` on that port before any message is pumped,
+  and stops it (LIFO, `server.stop(1)` — never `stop(0)`, so an in-flight `/stall` sleep
+  isn't cut off mid-response) after the test class finishes.
+- **Self-test first:** `StubSelfTest` exercises all three contexts (record/challenge/stall)
+  with no live BridgeLink server running at all, before the stub is ever wired into a real
+  channel — proving the stub's own behavior is correct in isolation before it becomes a
+  dependency of the real assertion suite.
+
+### 3. Expected-error exemption mechanics
+
+The timeout cluster (`http-sender-timeout-test.xml`, D-06) was the one case in this phase
+budgeted for a `fixtures/log-allowlist.txt` entry — but **no entry was actually added**.
+Live verification (plan 18.1-05, run twice consecutively) found that `HttpDispatcher`'s
+`logger.error("Error connecting to HTTP server.", t)` call does NOT surface in
+`server/setup/logs/mirth.log` in this environment even though the timeout genuinely fires
+(errorCount rises, exactly one `/stall` request is recorded, and the message's stored error
+content contains `SocketTimeoutException`) — `mirth.log` contained only the four standard
+server-startup INFO lines across both runs, zero ERROR lines of any kind. This resolved
+RESEARCH's Assumption A3 as **false** for this codebase/logging-config combination.
+
+**The mechanics still apply for the next connector cluster that budgets one** (some
+connector's expected-error path may log differently):
+
+- Every entry in `fixtures/log-allowlist.txt` MUST be preceded by a comment naming its
+  owning channel and the decision that added it (e.g. `# http-sender-timeout-test
+  (18.1-05, D-06): expected SocketTimeoutException on /stall dispatch`) — never an
+  unattributed bare pattern.
+- Make the pattern the **narrowest possible match** — the exact log line's distinguishing
+  text (exception class name, connector-specific message), not a blanket `ERROR` or
+  connector-name wildcard.
+- **The safety argument:** each channel's own L1 assertion (`errorCount == 0` for every
+  zero-error cluster) runs independently of the L3 log scan and is never touched by an
+  allowlist entry scoped to a different channel's expected-error line. A narrowly-scoped
+  allowlist entry therefore cannot hide a genuine regression in any OTHER channel — only the
+  one channel whose exact expected-error line matches the pattern is exempted, and that
+  channel's own zero-error assertion (there isn't one, because it's the expected-error
+  channel — see §1) is replaced by the explicit `pollUntil(errorCount >= 1)` +
+  wire-recording-count + message-content-substring checks documented in `HttpParamsTest`.
+- **Derive from reality, never guess:** run the full harness first, capture the exact log
+  line (if any) from a live `mirth.log`, and derive the pattern from that captured line. If,
+  as happened here, no ERROR line appears at all, do not add a speculative entry — document
+  the non-outcome (as this section does) rather than allowlisting something that will never
+  match.
+
+### 4. Wiring checklist for the next connector (TCP/SMTP/JDBC)
+
+Ordered, following the exact sequence this phase used across six plans:
+
+1. **Allocate ports** — add one `$(free_port)` call per new listener/stub port in
+   `allocate_ports()` in `run-smoke-test.sh`, export it alongside the existing exports.
+2. **Export → `ENVSUBST_ALLOWLIST`** — add every new `${VARNAME}` placeholder used by the
+   new fixture XML to `ENVSUBST_ALLOWLIST` (centralized in one place in `run-smoke-test.sh`)
+   — forgetting this step is a hard failure (envsubst leaves the literal `${...}` text in
+   the imported XML, breaking port parsing).
+3. **`CHANNEL_FILES` / `CHANNEL_IDS`** — append the new fixture's base filename and its
+   channel ID (same index position in both arrays) using the next free sequential ID
+   (18.1 continued `00000013`-`00000020`; the next connector phase continues from
+   `00000021`).
+4. **`OUT_DIR` subdirs** — add a work-directory subdirectory in `allocate_work_dirs()` for
+   any new File-Writer-style destination artifact the new fixture writes to.
+5. **Listener probes** — add the new port to `wait_for_listener_ports()` ONLY if the probe
+   is side-effect-free. Auth listeners are safe to probe (the security handler rejects an
+   unauthenticated bare GET with 401 before any message is created — no statistics skew).
+   Success-path listeners (a bare GET that would actually be parsed and processed as a real
+   message) must be left unprobed, with an inline comment explaining why — probing them
+   would create spurious statistics/artifacts that corrupt the L1/L2 assertions the real
+   test later makes.
+6. **`run_driver()` `-D` forwards** — forward every new port/path as a `-D` property to the
+   JUnit driver invocation.
+7. **`build.xml` property/sysproperty pairs** — add a matching `<property name="..."
+   value=""/>` and `<sysproperty>` pair for each new `-D` so the forked JUnit JVM actually
+   receives it.
+8. **New `XxxParamsTest extends SmokeTestBase`** — create it beside the connector's existing
+   pump/stub class (e.g. `TcpParamsTest` beside `NativePumpChannelsTest`'s MLLP coverage),
+   with a LOCAL `requireProperty`-style replica reading the new cluster's `-D` properties in
+   its own `@BeforeClass` — **never** add the new properties to
+   `SmokeTestBase.baseSetUp()`'s required list, which would break every OTHER test class
+   (`NativePumpChannelsTest`, `StubChannelsTest`) when run without them.
+9. **Validate fixture XML shape via `--deploy-only`** — `bash smoke-tests/run-smoke-test.sh
+   --deploy-only` before writing a single assertion. `InvalidChannel` (with a FATAL exit) is
+   the validator for a hand-written `<properties class="...">` block that doesn't match the
+   real class shape — cheaper to catch here than after the assertion driver is built.
+
+
 
 `smoke-tests/break-dependency.sh` is the D-13/D-14 self-verifying broken-dependency proof:
 it swaps EVERY `xstream-*.jar` found recursively under `server/setup/server-lib` aside, drops
