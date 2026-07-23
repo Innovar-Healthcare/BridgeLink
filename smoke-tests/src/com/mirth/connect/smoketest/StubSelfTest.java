@@ -13,7 +13,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Base64;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
@@ -33,6 +35,7 @@ import org.junit.Test;
 
 import com.mirth.connect.smoketest.stubs.DicomScpStub;
 import com.mirth.connect.smoketest.stubs.JdbcSink;
+import com.mirth.connect.smoketest.stubs.RecordingHttpStub;
 import com.mirth.connect.smoketest.stubs.SmtpStub;
 import com.mirth.connect.smoketest.stubs.SoapStub;
 
@@ -189,5 +192,93 @@ public class StubSelfTest {
         // Clean stop: give the OS a moment to release the socket, then confirm no listener remains.
         Thread.sleep(300);
         assertFalse("DICOM SCP port should be closed after stop()", stub.isListening());
+    }
+
+    // ------------------------------------------------------------------
+    // Test 5: RecordingHttpStub (plan 18.1-01) — /record, /auth (401-challenge), /stall
+    // ------------------------------------------------------------------
+
+    @Test
+    public void recordingHttpStubRecordsMethodPathQueryHeadersAndBody() throws Exception {
+        int port = allocatePort();
+        RecordingHttpStub stub = new RecordingHttpStub(port);
+        stub.start();
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/record?smokeQ=q1"))
+                    .header("X-Smoke-Req", "r1")
+                    .POST(HttpRequest.BodyPublishers.ofString("smoke-body")).build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, response.statusCode());
+
+            List<RecordingHttpStub.RecordedRequest> recorded = stub.getRequests("/record");
+            assertEquals(1, recorded.size());
+            RecordingHttpStub.RecordedRequest r = recorded.get(0);
+            assertEquals("POST", r.method);
+            assertEquals("/record", r.path);
+            assertEquals("smokeQ=q1", r.query);
+            assertTrue("Header lookup should be case-insensitive",
+                    r.headers.containsKey("x-smoke-req"));
+            assertEquals("r1", r.headers.get("x-smoke-req").get(0));
+            assertEquals("smoke-body", new String(r.body, StandardCharsets.UTF_8));
+        } finally {
+            stub.stop();
+        }
+    }
+
+    @Test
+    public void recordingHttpStubChallengesThenAcceptsBasicAuth() throws Exception {
+        int port = allocatePort();
+        RecordingHttpStub stub = new RecordingHttpStub(port);
+        stub.start();
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+
+            // Bare request: no Authorization header -> 401 + WWW-Authenticate challenge.
+            HttpRequest bareRequest = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/auth"))
+                    .POST(HttpRequest.BodyPublishers.noBody()).build();
+            HttpResponse<String> bareResponse = client.send(bareRequest, HttpResponse.BodyHandlers.ofString());
+            assertEquals(401, bareResponse.statusCode());
+            String challenge = bareResponse.headers().firstValue("WWW-Authenticate").orElse("");
+            assertTrue("Expected a Basic challenge, got: " + challenge, challenge.startsWith("Basic"));
+
+            // Resend with Authorization header -> 200.
+            String credentials = Base64.getEncoder().encodeToString("smokeuser:smokepass".getBytes(StandardCharsets.UTF_8));
+            HttpRequest authedRequest = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/auth"))
+                    .header("Authorization", "Basic " + credentials)
+                    .POST(HttpRequest.BodyPublishers.noBody()).build();
+            HttpResponse<String> authedResponse = client.send(authedRequest, HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, authedResponse.statusCode());
+
+            List<RecordingHttpStub.RecordedRequest> recorded = stub.getRequests("/auth");
+            assertEquals(2, recorded.size());
+            assertFalse("First request should carry no Authorization header",
+                    recorded.get(0).headers.containsKey("Authorization"));
+            assertTrue("Second request should carry an Authorization header",
+                    recorded.get(1).headers.containsKey("Authorization"));
+        } finally {
+            stub.stop();
+        }
+    }
+
+    @Test
+    public void recordingHttpStubStallsThenResponds() throws Exception {
+        int port = allocatePort();
+        // Short stall (200ms) to keep the self-test fast — the full ~5s stall is exercised by
+        // the real D-06 timeout channel in plan 18.1-05, not here.
+        RecordingHttpStub stub = new RecordingHttpStub(port, 200);
+        stub.start();
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/stall"))
+                    .POST(HttpRequest.BodyPublishers.noBody()).build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, response.statusCode());
+
+            List<RecordingHttpStub.RecordedRequest> recorded = stub.getRequests("/stall");
+            assertEquals(1, recorded.size());
+        } finally {
+            stub.stop();
+        }
     }
 }
