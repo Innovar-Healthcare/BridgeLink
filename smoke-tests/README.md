@@ -129,8 +129,8 @@ never included in the measured duration.
 
 ## Add a channel
 
-The registry has grown to 20 committed fixtures in `smoke-tests/channels/` (channel IDs
-`00000001` through `00000020`). The original 12 (Phase 18, NET-01) cover every stock
+The registry has grown to 23 committed fixtures in `smoke-tests/channels/` (channel IDs
+`00000001` through `00000023`). The original 12 (Phase 18, NET-01) cover every stock
 connector type: `http-test.xml`, `tcp-mllp-test.xml`, `file-test.xml`, `jdbc-test.xml`,
 `vm-test.xml`, `js-test.xml`, `smtp-test.xml`, `soap-test.xml`, `dicom-test.xml`,
 `doc-writer-test.xml` (the last one carries two Document Writer destinations — PDF and
@@ -142,14 +142,36 @@ different from the other ten and must never be "fixed" to the current schema ver
 Phase 18.1 (NET-06, channel IDs `00000013`-`00000020`) added 8 more fixtures slicing the
 HTTP connector's parameter surface into per-cluster channels — see "Parameter-coverage
 pattern (18.1)" below for the slicing rule and the reusable pattern for the next connector.
+Phase 18.2 (NET-07, channel IDs `00000021`-`00000023`) added 3 more fixtures folding the
+IRT-828/831/832 Jetty regressions into the harness — see "Jetty regression coverage
+(18.2)" below for the fixture purposes, the new test classes, and the deferred HTTPS gap:
 
-To add a 21st fixture:
+- `http-listener-contextpath-test.xml` (`00000021`) — IRT-831 strict contextPath-prefix
+  routing: an HTTP Listener with a non-empty source-level `<contextPath>/smokectx</contextPath>`
+  plus a static resource nested under it, proving in-context/sub-path/outside/shared-prefix
+  routing and static-resource-vs-channel precedence.
+- `http-listener-largeresp-test.xml` (`00000022`) — IRT-832 Content-Length correctness on a
+  channel-generated 100KB (102400-byte) response body (JavaScript Writer destination, default
+  200 status).
+- `http-listener-error500-test.xml` (`00000023`) — IRT-832 Content-Length correctness on a
+  fixed `responseStatusCode=500` response with a small known body, proving the message still
+  processes to SENT with zero errors even on a non-2xx response status.
+
+`http-listener-response-test.xml` (the Phase 18.1 response-cluster fixture, channel
+`00000013`) also gained two new `HttpStaticResource` siblings for IRT-828 coverage:
+`/static/large` (CUSTOM, exactly 40960 bytes — the >30720-byte Content-Length regression
+threshold) and `/static/file` (FILE, backed by `${STATIC_FILE_PATH}`, a pre-created
+102400-byte file) — both additive; the pre-existing `/static/smoke` resource was left
+byte-identical.
+
+To add a 24th fixture:
 
 1. **Author the channel XML** under `smoke-tests/channels/<name>-test.xml`. Follow the
    existing fixtures' conventions:
-   - Fixed, human-assigned sequential channel ID (`00000021-0000-0000-0000-000000000021`
-     — continue the sequence; IDs `00000001`-`00000020` are taken by the 12 Phase 18
-     fixtures plus the 8 Phase 18.1 HTTP parameter-coverage fixtures).
+   - Fixed, human-assigned sequential channel ID (`00000024-0000-0000-0000-000000000024`
+     — continue the sequence; IDs `00000001`-`00000023` are taken by the 12 Phase 18
+     fixtures, the 8 Phase 18.1 HTTP parameter-coverage fixtures, and the 3 Phase 18.2
+     Jetty regression fixtures).
    - `<description>` ends with "Test-only; never deploy to production."
    - Every ephemeral port/path is a `${VARNAME}` placeholder, never a hardcoded value.
    - A real transformer step (JavaScript Step, `com.mirth.connect.plugins.javascriptstep.JavaScriptStep`)
@@ -180,7 +202,7 @@ To add a 21st fixture:
    index position in both arrays — the script pairs them positionally for status/STARTED
    polling and error messages).
 4. **Verify**: `smoke-tests/run-smoke-test.sh --deploy-only` should exit 0 twice
-   consecutively with your new channel reaching STARTED alongside the existing 20.
+   consecutively with your new channel reaching STARTED alongside the existing 23.
 5. **Wire assertions**: 18-07's pump/assert driver is where the actual HL7v2 message gets
    sent through the channel and the destination artifact is checked for the expected
    transformed content — this script only proves import/deploy/STARTED.
@@ -297,8 +319,8 @@ Ordered, following the exact sequence this phase used across six plans:
    the imported XML, breaking port parsing).
 3. **`CHANNEL_FILES` / `CHANNEL_IDS`** — append the new fixture's base filename and its
    channel ID (same index position in both arrays) using the next free sequential ID
-   (18.1 continued `00000013`-`00000020`; the next connector phase continues from
-   `00000021`).
+   (18.1 continued `00000013`-`00000020`, 18.2 continued `00000021`-`00000023`; the next
+   connector phase continues from `00000024`).
 4. **`OUT_DIR` subdirs** — add a work-directory subdirectory in `allocate_work_dirs()` for
    any new File-Writer-style destination artifact the new fixture writes to.
 5. **Listener probes** — add the new port to `wait_for_listener_ports()` ONLY if the probe
@@ -423,6 +445,65 @@ restore keyed on `$(basename "${FIXTURE_JAR}")` so no fixture is ever left in th
 restoration verification, three-way verdict classification) — the exit code accurately
 reflects what actually happened, which is the property `break-dependency.sh` is designed to
 prove.
+
+## Jetty regression coverage (18.2)
+
+Phase 18.2 (NET-07) folded six previously-standalone IRT-828/831/832/833/834/835 Jetty
+regression checks (Content-Length correctness and contextPath routing, discovered against
+released images) into this harness, adding two new sibling `*Test` classes rather than
+extending `HttpParamsTest` or `WebServerRegressionTest`'s existing peers — each gets its own
+JUnit report, auto-discovered by `build.xml`'s `batchtest`, no registration required.
+
+- **`JettyRegressionTest`** (connector surface, three new fixtures `00000021`-`00000023`) —
+  `contextPathRouting()` (IRT-831: strict prefix+slash contextPath matching, including the
+  shared-prefix regression case, plus static-resource-under-context precedence),
+  `responseContentLengthLarge()` and `errorResponseContentLength()` (IRT-832: Content-Length/
+  gzip-tolerance correctness on a 100KB generated body and on a fixed 500-status response).
+  `HttpParamsTest` itself also gained four IRT-828 assertions reusing the existing
+  `http-listener-response-test.xml` fixture's two new static resources (small/large/gzip/FILE
+  Content-Length correctness) — see "Add a channel" above for the fixture-level detail.
+- **`WebServerRegressionTest`** (webserver surface — dials the already-booted HTTPS webserver
+  directly, on `HTTPS_PORT`, reusing `RestClient`'s shared trust-all TLS client; no channel
+  deploy) — covers IRT-834 (Swagger UI: index/bundle.js/css/`/api/server/version`
+  Content-Length) and IRT-835 (WebStart JNLP: `/webstart`, bad-param 404, `.jnlp` alias
+  Content-Length) in full, plus IRT-833 for its 404-missing-installer case only.
+
+**IRT-833 disposition (D-A):** only the free 404 case (no `public_html/installers/`
+directory present) is folded in-harness. Full IRT-833 coverage (asserting Content-Length on
+an actual installer download) needs a real installer binary dropped into the distribution's
+`public_html/installers/` directory *before* server boot — the harness boots a single shared
+distribution with no such pre-boot file-drop step, and adding one was judged out of scope for
+an in-harness fixture. That full-installer case continues to live in the standalone,
+Docker-based `regression-scripts/test-irt833-installer-content-length.sh` (see
+`regression-scripts/README.md` for the released-image vs in-harness-HEAD division of labor
+this cross-references). IRT-834/835/831/832/828 are folded here in full; only IRT-833 keeps
+a released-image-only companion script for its full case.
+
+### Deferred: HTTPS-connector fixture (D-B)
+
+An HTTPS Listener fixture (an HTTP Listener channel with the connector's own TLS enabled,
+as opposed to the harness's admin/API `HTTPS_PORT`) is **INFEASIBLE with stock code** and was
+deliberately NOT added in 18.2. `DefaultHttpConfiguration.configureReceiver()` builds a plain
+Jetty `ServerConnector` with no TLS path at all — TLS-terminated HTTP Listener connectors
+require a custom `HttpConfiguration` implementation, which is the commercial SSL-Manager
+plugin's seam, not something stock BridgeLink code exposes. Building a stub TLS
+`HttpConfiguration` solely for this harness was judged out of scope for a regression-coverage
+phase.
+
+A **sender-side** HTTPS case (an HTTP Sender dispatching to a TLS endpoint) is feasible in
+principle but was also deferred — it is not blocked by the same seam, since the sender uses
+the JVM's system-default `SSLContext` rather than a connector-level TLS configuration. If
+pursued in a later phase, the design sketch is: **"HTTP Sender → in-JVM `HttpsServer` stub"**
+— stand up a JDK built-in `com.sun.net.httpserver.HttpsServer` (the same zero-new-jars
+pattern as `RecordingHttpStub`) inside the JUnit driver JVM, bound to an ephemeral port, with
+an `SSLContext` built from a self-signed stub certificate. The load-bearing design detail:
+that self-signed stub cert must be **injected into the server JVM's truststore** before the
+HTTP Sender fixture dispatches to it — the harness's `MirthLauncher` JVM and the JUnit driver
+JVM are separate processes, and the sender's outbound `SSLContext` (system-default) will
+reject an untrusted self-signed cert with no explicit truststore wiring. This truststore-
+injection step is the reason the sender-side case was deferred rather than folded alongside
+the other five IRT tickets in this phase — it needs its own scoped design/verification pass,
+not a quick addition to an existing fixture.
 
 ## Provenance
 
