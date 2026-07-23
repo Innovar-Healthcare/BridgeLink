@@ -1,7 +1,7 @@
 <channel version="26.6.0">
   <id>00000015-0000-0000-0000-000000000015</id>
   <nextMetaDataId>2</nextMetaDataId>
-  <name>HTTP Datatype Binary Receive Test Channel</name>
+  <name>HTTP Datatype Binary Recv Test Channel</name>
   <description>Connector parameter test: HTTP Listener binary receive via default binaryMimeTypes regex classification (application/octet-stream) into a binary File Writer. Test-only; never deploy to production.</description>
   <revision>1</revision>
   <sourceConnector version="26.6.0">

@@ -112,6 +112,10 @@ already-built distribution elsewhere.
     <property name="SQLITE_PATH" value="" />
     <property name="IN_DIR" value="" />
     <property name="OUT_DIR" value="" />
+    <!-- 18.1-02: HTTP connector parameter-coverage fixture ports (NET-06). -->
+    <property name="HTTP_RESPONSE_PORT" value="" />
+    <property name="HTTP_XMLBODY_PORT" value="" />
+    <property name="HTTP_BINARY_PORT" value="" />
 
     <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
         <mkdir dir="${junit.reports}" />
@@ -128,6 +132,9 @@ already-built distribution elsewhere.
             <sysproperty key="SQLITE_PATH" value="${SQLITE_PATH}" />
             <sysproperty key="IN_DIR" value="${IN_DIR}" />
             <sysproperty key="OUT_DIR" value="${OUT_DIR}" />
+            <sysproperty key="HTTP_RESPONSE_PORT" value="${HTTP_RESPONSE_PORT}" />
+            <sysproperty key="HTTP_XMLBODY_PORT" value="${HTTP_XMLBODY_PORT}" />
+            <sysproperty key="HTTP_BINARY_PORT" value="${HTTP_BINARY_PORT}" />
             <classpath>
                 <path refid="test.classpath" />
                 <pathelement location="${build.classes}" />
