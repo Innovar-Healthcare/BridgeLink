@@ -125,6 +125,9 @@ already-built distribution elsewhere.
     <!-- 18.1-03: HTTP source-auth (Basic/Digest) fixture ports (D-07/NET-06). -->
     <property name="HTTP_AUTH_BASIC_PORT" value="" />
     <property name="HTTP_AUTH_DIGEST_PORT" value="" />
+    <!-- 18.1-04: recording HTTP stub target port for sender-params/sender-timeout
+         fixtures (D-02/D-06/D-09/NET-06). -->
+    <property name="HTTP_STUB_PORT" value="" />
 
     <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
         <mkdir dir="${junit.reports}" />
@@ -146,6 +149,7 @@ already-built distribution elsewhere.
             <sysproperty key="HTTP_BINARY_PORT" value="${HTTP_BINARY_PORT}" />
             <sysproperty key="HTTP_AUTH_BASIC_PORT" value="${HTTP_AUTH_BASIC_PORT}" />
             <sysproperty key="HTTP_AUTH_DIGEST_PORT" value="${HTTP_AUTH_DIGEST_PORT}" />
+            <sysproperty key="HTTP_STUB_PORT" value="${HTTP_STUB_PORT}" />
             <classpath>
                 <path refid="test.classpath" />
                 <pathelement location="${build.classes}" />

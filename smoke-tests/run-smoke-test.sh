@@ -26,7 +26,10 @@
 # the v26.6.0 xstream rollback. Plan 18-10 adds the 12th fixture
 # (legacy-migration-3-4-test.xml, a schema-3.4.0 channel root) which forces
 # Channel.migrate3_5_0() -- the exact DOM-mutation-then-reload seam the regression broke --
-# closing the NET-05/SC-4 break-proof gap.
+# closing the NET-05/SC-4 break-proof gap. Plans 18.1-02/03/04 add 8 more fixtures
+# (NET-06, HTTP connector parameter coverage): response/xmlBody/binary-recv clusters,
+# source auth (Basic/Digest), and sender-params/sender-timeout/binary-send -- bringing
+# the total to 20 reference channels.
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
@@ -44,7 +47,7 @@ usage() {
     echo "                   'not yet supported' message (see D-03 / Phase 24)."
     echo "  --boot-only      Stop after the health check succeeds; tear down immediately."
     echo "                   Skips the import/deploy stage and everything after it."
-    echo "  --deploy-only    Boot + import + deploy all 17 reference channels, then tear"
+    echo "  --deploy-only    Boot + import + deploy all 20 reference channels, then tear"
     echo "                   down (no message pump/assert driver — that's 18-06/18-07)."
     echo "                   Mutually exclusive with --boot-only."
     echo "  --help           Show this message and exit 0."
@@ -229,12 +232,17 @@ allocate_ports() {
     # 18.1-03: HTTP source-auth (Basic/Digest) fixtures (D-07/NET-06).
     HTTP_AUTH_BASIC_PORT=$(free_port)
     HTTP_AUTH_DIGEST_PORT=$(free_port)
+    # 18.1-04: recording HTTP stub target port for the sender-params/sender-timeout
+    # fixtures (D-02/D-06/D-09/NET-06). Allocated script-side (envsubst needs it at
+    # fixture-import time); bound driver-side by RecordingHttpStub in plan 18.1-05.
+    HTTP_STUB_PORT=$(free_port)
     # SOAP_URL is derived, not a raw port — the Web Service Sender fixture (soap-test.xml)
     # substitutes ${SOAP_URL} directly (D-07: Endpoint.publish stub target).
     SOAP_URL="http://127.0.0.1:${SOAP_PORT}/smoketest"
     export HTTP_PORT HTTPS_PORT MLLP_PORT HTTP_LISTENER_PORT SMTP_PORT SCP_PORT SOAP_PORT SOAP_URL \
-        HTTP_RESPONSE_PORT HTTP_XMLBODY_PORT HTTP_BINARY_PORT HTTP_AUTH_BASIC_PORT HTTP_AUTH_DIGEST_PORT
-    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT}"
+        HTTP_RESPONSE_PORT HTTP_XMLBODY_PORT HTTP_BINARY_PORT HTTP_AUTH_BASIC_PORT HTTP_AUTH_DIGEST_PORT \
+        HTTP_STUB_PORT
+    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -380,7 +388,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test)
 CHANNEL_IDS=(
     "00000001-0000-0000-0000-000000000001"
     "00000002-0000-0000-0000-000000000002"
@@ -399,6 +407,9 @@ CHANNEL_IDS=(
     "00000015-0000-0000-0000-000000000015"
     "00000016-0000-0000-0000-000000000016"
     "00000017-0000-0000-0000-000000000017"
+    "00000018-0000-0000-0000-000000000018"
+    "00000019-0000-0000-0000-000000000019"
+    "00000020-0000-0000-0000-000000000020"
 )
 # Explicit envsubst allowlist — exactly the ${VARNAME} placeholders the committed
 # fixtures use. ${DICOMMESSAGE} is a Mirth-internal template variable resolved by
@@ -408,7 +419,9 @@ CHANNEL_IDS=(
 # Digest fixture's literal <opaque>smokeopaque</opaque> value deliberately contains no
 # ${...} token, so ${UUID} (the DigestHttpAuthProperties class default) never appears
 # in committed fixture XML and never needs (or risks) allowlisting (Pitfall 6).
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT}'
+# 18.1-04 adds HTTP_STUB_PORT (sender-params/sender-timeout fixtures target the
+# recording HTTP stub's /auth and /stall contexts, D-02/D-06/D-09/NET-06).
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -835,6 +848,7 @@ run_driver() {
         -DHTTP_BINARY_PORT="${HTTP_BINARY_PORT}" \
         -DHTTP_AUTH_BASIC_PORT="${HTTP_AUTH_BASIC_PORT}" \
         -DHTTP_AUTH_DIGEST_PORT="${HTTP_AUTH_DIGEST_PORT}" \
+        -DHTTP_STUB_PORT="${HTTP_STUB_PORT}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else
