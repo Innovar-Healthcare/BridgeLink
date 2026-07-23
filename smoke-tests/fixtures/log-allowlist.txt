@@ -1,0 +1,21 @@
+# log-allowlist.txt
+#
+# Purpose: L3 log-scan exclusion patterns (grep -v -f) for smoke-tests/run-smoke-test.sh
+# and the future JUnit assertion driver (18-05/18-06/18-07). The harness scans
+# server/setup/logs/mirth.log for lines matching `^ERROR|ERROR \[` and treats any
+# surviving match as a failed run. Lines matching a pattern in this file are
+# considered benign/expected and are grepped OUT before the failure check runs.
+#
+# Format: one extended-regex pattern per line (fed to `grep -v -f` with -E semantics
+# via the harness's grep invocation). Blank lines and lines starting with # are
+# ignored by convention (grep -v -f treats a literal `#...` line as a pattern that
+# will simply never match real log output, so comments are harmless as no-ops).
+#
+# Seed state: no known-benign ERROR patterns identified yet for the boot-only
+# harness (Task 2 of 18-01 only exercises boot/health-check/teardown — no channels
+# are deployed, so no channel-level ERROR noise exists to allowlist). Later plans
+# (18-05 channel fixtures, 18-06 pump/assert driver, 18-08 break-dependency) may
+# append entries here as legitimate benign ERROR-level log lines are discovered
+# during real channel execution (e.g. a connector's expected retry-then-succeed
+# logging). Keep this file's provenance comment (this header) intact when adding
+# new entries below it.
