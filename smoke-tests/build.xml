@@ -132,6 +132,9 @@ already-built distribution elsewhere.
     <property name="HTTP_CTXPATH_PORT" value="" />
     <property name="HTTP_LARGE_PORT" value="" />
     <property name="HTTP_ERROR500_PORT" value="" />
+    <!-- 18.3-01: DICOM round-trip channel ports (NET-08). -->
+    <property name="DICOM_LISTENER_PORT" value="" />
+    <property name="DICOM_ROUNDTRIP_SCP_PORT" value="" />
 
     <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
         <mkdir dir="${junit.reports}" />
@@ -157,6 +160,8 @@ already-built distribution elsewhere.
             <sysproperty key="HTTP_CTXPATH_PORT" value="${HTTP_CTXPATH_PORT}" />
             <sysproperty key="HTTP_LARGE_PORT" value="${HTTP_LARGE_PORT}" />
             <sysproperty key="HTTP_ERROR500_PORT" value="${HTTP_ERROR500_PORT}" />
+            <sysproperty key="DICOM_LISTENER_PORT" value="${DICOM_LISTENER_PORT}" />
+            <sysproperty key="DICOM_ROUNDTRIP_SCP_PORT" value="${DICOM_ROUNDTRIP_SCP_PORT}" />
             <classpath>
                 <path refid="test.classpath" />
                 <pathelement location="${build.classes}" />

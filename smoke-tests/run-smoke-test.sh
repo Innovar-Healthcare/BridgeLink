@@ -225,6 +225,10 @@ allocate_ports() {
     SMTP_PORT=$(free_port)
     SCP_PORT=$(free_port)
     SOAP_PORT=$(free_port)
+    # 18.3-01: DICOM round-trip channel (NET-08) — new Mirth DICOM Listener source port
+    # and a dedicated DcmRcv SCP stub port (kept separate from SCP_PORT, Pitfall 7).
+    DICOM_LISTENER_PORT=$(free_port)
+    DICOM_ROUNDTRIP_SCP_PORT=$(free_port)
     # 18.1-02: HTTP connector parameter-coverage fixtures (NET-06).
     HTTP_RESPONSE_PORT=$(free_port)
     HTTP_XMLBODY_PORT=$(free_port)
@@ -245,8 +249,9 @@ allocate_ports() {
     SOAP_URL="http://127.0.0.1:${SOAP_PORT}/smoketest"
     export HTTP_PORT HTTPS_PORT MLLP_PORT HTTP_LISTENER_PORT SMTP_PORT SCP_PORT SOAP_PORT SOAP_URL \
         HTTP_RESPONSE_PORT HTTP_XMLBODY_PORT HTTP_BINARY_PORT HTTP_AUTH_BASIC_PORT HTTP_AUTH_DIGEST_PORT \
-        HTTP_STUB_PORT HTTP_CTXPATH_PORT HTTP_LARGE_PORT HTTP_ERROR500_PORT
-    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT}"
+        HTTP_STUB_PORT HTTP_CTXPATH_PORT HTTP_LARGE_PORT HTTP_ERROR500_PORT \
+        DICOM_LISTENER_PORT DICOM_ROUNDTRIP_SCP_PORT
+    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -401,7 +406,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test)
 CHANNEL_IDS=(
     "00000001-0000-0000-0000-000000000001"
     "00000002-0000-0000-0000-000000000002"
@@ -426,6 +431,7 @@ CHANNEL_IDS=(
     "00000021-0000-0000-0000-000000000021"
     "00000022-0000-0000-0000-000000000022"
     "00000023-0000-0000-0000-000000000023"
+    "00000024-0000-0000-0000-000000000024"
 )
 # Explicit envsubst allowlist — exactly the ${VARNAME} placeholders the committed
 # fixtures use. ${DICOMMESSAGE} is a Mirth-internal template variable resolved by
@@ -440,7 +446,9 @@ CHANNEL_IDS=(
 # 18.2 adds HTTP_CTXPATH_PORT/HTTP_LARGE_PORT/HTTP_ERROR500_PORT (Jetty regression
 # fixtures 00000021-23, NET-07) and STATIC_FILE_PATH (the IRT-828 FILE static resource
 # appended to http-listener-response-test.xml, pre-created by allocate_work_dirs()).
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH}'
+# 18.3-01 adds DICOM_LISTENER_PORT/DICOM_ROUNDTRIP_SCP_PORT (dicom-roundtrip-test.xml,
+# NET-08 round-trip fixture — channel 00000024).
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -826,6 +834,35 @@ except Exception:
             fatal "Jetty-regression listener port ${p} did not accept connections within 60s"
         fi
     done
+
+    # 18.3-01: DICOM Listener readiness probe (NET-08, dicom-roundtrip-test.xml, channel
+    # 00000024). Modeled EXACTLY on the MLLP bare-TCP-connect probe above (socket.connect
+    # + immediate close, no bytes sent) — NOT the HTTP probe. A bare connect+close never
+    # reaches DICOMReceiver/MirthDcmRcv.onCStoreRQ() (that requires a full A-ASSOCIATE-RQ
+    # handshake), so it delivers no C-STORE and creates no spurious message.
+    attempts=0
+    info "  DICOM Listener (port ${DICOM_LISTENER_PORT})..."
+    while [[ ${attempts} -lt 20 ]]; do
+        if python3 -c "
+import socket, sys
+s = socket.socket()
+s.settimeout(2)
+try:
+    s.connect(('127.0.0.1', ${DICOM_LISTENER_PORT}))
+    s.close()
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+" 2>/dev/null; then
+            pass "  DICOM Listener port ${DICOM_LISTENER_PORT} accepting connections"
+            break
+        fi
+        sleep 3
+        attempts=$((attempts + 1))
+    done
+    if [[ ${attempts} -ge 20 ]]; then
+        fatal "DICOM Listener port ${DICOM_LISTENER_PORT} did not accept connections within 60s"
+    fi
 }
 
 import_deploy() {
@@ -906,6 +943,8 @@ run_driver() {
         -DHTTP_CTXPATH_PORT="${HTTP_CTXPATH_PORT}" \
         -DHTTP_LARGE_PORT="${HTTP_LARGE_PORT}" \
         -DHTTP_ERROR500_PORT="${HTTP_ERROR500_PORT}" \
+        -DDICOM_LISTENER_PORT="${DICOM_LISTENER_PORT}" \
+        -DDICOM_ROUNDTRIP_SCP_PORT="${DICOM_ROUNDTRIP_SCP_PORT}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else
