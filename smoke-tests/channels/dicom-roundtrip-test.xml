@@ -86,11 +86,23 @@
                as dicom-test.xml's existing transform does, would NOT change the outbound
                bytes). Tag naming convention ("tag" + 8-hex-digit tag number; PatientName =
                0010,0010 = tag00100010) verified from DICOMSerializer.renameAttrToTag()
-               (server/src/.../plugins/datatypes/dicom/DICOMSerializer.java). The exact E4X
-               write shape against a DICOM-typed msg is ASSUMED (Assumption A2) and can only
-               be runtime-validated in Wave 2 (plan 18.3-02) — the deploy-only pass never
-               runs this transformer. -->
-          <script>msg['tag00100010'] = 'RoundTripPatient';
+               (server/src/.../plugins/datatypes/dicom/DICOMSerializer.java).
+
+               A2 RESOLVED (18.3-02, runtime-validated): plain assignment — both
+               msg['tag00100010'] = '...' and msg.tag00100010 = '...' — REPLACES the whole
+               E4X element node in this Rhino version, silently dropping its tag/vr/len
+               attributes. DICOMSerializer.fromXML()'s renameTagToAttr() only renames an
+               element back to <attr> if it still carries a `tag` attribute matching its own
+               element name; an attribute-less element is left named "tagXXXXXXXX" and
+               ContentHandlerAdapter never recognizes it, so the value is silently dropped
+               during XML->DICOM re-encoding (verified live: the mutated PatientName was
+               completely ABSENT — not merely unchanged — from the object the Sender
+               forwarded). The correct call is `.setChildren(value)`, which replaces only the
+               element's text content and leaves the parent element (and its tag/vr/len
+               attributes) intact — confirmed live via a temporary channelMap dump of
+               msg.toXMLString() before/after this step, since re-run as regression
+               protection would live in DicomRoundTripTest rather than this fixture. -->
+          <script>msg.tag00100010.setChildren('RoundTripPatient');
 channelMap.put('patientName', 'RoundTripPatient');</script>
         </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
       </elements>
