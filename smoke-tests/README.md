@@ -23,7 +23,7 @@ cd server
 ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true
 ```
 
-This produces `server/setup/` (`server-lib/mirth-server.jar`, `mirth-launcher.jar`,
+This produces `server/setup/` (`server-lib/mirth-server.jar`, `mirth-server-launcher.jar`,
 `conf/mirth.properties`, etc.) — the harness never rebuilds it, only boots it.
 
 ## Usage
@@ -39,7 +39,7 @@ smoke-tests/run-smoke-test.sh [--db derby|mysql|postgres|mssql] [--boot-only] [-
   10.17 lands and the JDK-17 leg flips to an external DB.
 - `--boot-only`: stop after the health check succeeds and tear down immediately — proves
   the boot/teardown machinery in isolation (18-01), skipping the import/deploy stage.
-- `--deploy-only`: boot, then import and deploy all 10 reference channel fixtures, poll
+- `--deploy-only`: boot, then import and deploy all 23 reference channel fixtures, poll
   them to STARTED, then tear down (no message pump/assert driver — that's 18-06/18-07).
   Mutually exclusive with `--boot-only`.
 - `--help`: print usage and exit 0.
