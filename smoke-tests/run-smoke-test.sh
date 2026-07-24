@@ -792,11 +792,40 @@ except Exception:
         fatal "HTTP Auth Digest Listener port ${HTTP_AUTH_DIGEST_PORT} did not respond within 60s"
     fi
 
-    # 18.2: HTTP_CTXPATH_PORT, HTTP_LARGE_PORT, and HTTP_ERROR500_PORT are DELIBERATELY
-    # NOT probed here — a bare GET on any of the three Jetty-regression fixtures
-    # (00000021/22/23) creates a real message / writes a destination artifact,
-    # corrupting the L1/L2 assertions plan 18.2-03's driver depends on. Their deploy
-    # health is already covered by wait_for_started()'s STARTED-state poll above.
+    # 18.2: HTTP_CTXPATH_PORT, HTTP_LARGE_PORT, and HTTP_ERROR500_PORT must NOT be
+    # probed with an HTTP request — a bare GET on any of the three Jetty-regression
+    # fixtures (00000021/22/23) creates a real message / writes a destination
+    # artifact, corrupting the L1/L2 assertions plan 18.2-03's driver depends on.
+    # A bare TCP connect-then-close (the MLLP_PORT pattern above) IS side-effect-free
+    # for all three: no HTTP request is parsed, so no message is created and no
+    # statistics/artifacts are skewed. JettyRegressionTest dials these ports one-shot
+    # with no connect-retry, so probe here to close the STARTED-vs-socket-bound race.
+    local p
+    for p in "${HTTP_CTXPATH_PORT}" "${HTTP_LARGE_PORT}" "${HTTP_ERROR500_PORT}"; do
+        attempts=0
+        info "  Jetty-regression listener (port ${p})..."
+        while [[ ${attempts} -lt 20 ]]; do
+            if python3 -c "
+import socket, sys
+s = socket.socket()
+s.settimeout(2)
+try:
+    s.connect(('127.0.0.1', ${p}))
+    s.close()
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+" 2>/dev/null; then
+                pass "  Jetty-regression listener port ${p} accepting connections"
+                break
+            fi
+            sleep 3
+            attempts=$((attempts + 1))
+        done
+        if [[ ${attempts} -ge 20 ]]; then
+            fatal "Jetty-regression listener port ${p} did not accept connections within 60s"
+        fi
+    done
 }
 
 import_deploy() {
