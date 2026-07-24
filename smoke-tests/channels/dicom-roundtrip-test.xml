@@ -1,0 +1,258 @@
+<channel version="26.6.0">
+  <id>00000024-0000-0000-0000-000000000024</id>
+  <nextMetaDataId>2</nextMetaDataId>
+  <name>DICOM Round-Trip Test Channel</name>
+  <description>Connector functional test: DICOM Listener source (inbound C-STORE) + DICOM Sender destination (dedicated DcmRcv SCP stub), non-default DIMSE/PDU tuning on both legs. Test-only; never deploy to production.</description>
+  <revision>1</revision>
+  <sourceConnector version="26.6.0">
+    <metaDataId>0</metaDataId>
+    <name>sourceConnector</name>
+    <properties class="com.mirth.connect.connectors.dimse.DICOMReceiverProperties" version="26.6.0">
+      <pluginProperties/>
+      <listenerConnectorProperties version="26.6.0">
+        <host>127.0.0.1</host>
+        <port>${DICOM_LISTENER_PORT}</port>
+      </listenerConnectorProperties>
+      <sourceConnectorProperties version="26.6.0">
+        <responseVariable>None</responseVariable>
+        <respondAfterProcessing>true</respondAfterProcessing>
+        <processBatch>false</processBatch>
+        <firstResponse>false</firstResponse>
+        <processingThreads>1</processingThreads>
+        <resourceIds class="linked-hash-map">
+          <entry>
+            <string>Default Resource</string>
+            <string>[Default Resource]</string>
+          </entry>
+        </resourceIds>
+        <queueBufferSize>1000</queueBufferSize>
+      </sourceConnectorProperties>
+      <applicationEntity></applicationEntity>
+      <localHost></localHost>
+      <localPort></localPort>
+      <localApplicationEntity></localApplicationEntity>
+      <soCloseDelay>50</soCloseDelay>
+      <releaseTo>5</releaseTo>
+      <requestTo>5</requestTo>
+      <idleTo>60</idleTo>
+      <reaper>10</reaper>
+      <rspDelay>0</rspDelay>
+      <pdv1>false</pdv1>
+      <!-- Non-default per D-03: raw bytes, both != the 16384-byte dcm4che internal default
+           (sentinel "16" -> skipped -> dcm4che default 16384). 8192/32768 genuinely change
+           the negotiated max PDU length (RESEARCH Pitfall 2 — no *1024 conversion here,
+           unlike the dcm4che CLI's own -sndpdulen/-rcvpdulen flags). -->
+      <sndpdulen>8192</sndpdulen>
+      <rcvpdulen>32768</rcvpdulen>
+      <!-- Non-default per D-03 (default "0" = no setMaxOpsPerformed call). -->
+      <async>2</async>
+      <bigEndian>false</bigEndian>
+      <bufSize>1</bufSize>
+      <defts>false</defts>
+      <!-- Blank: Listener's own Storage-Commitment SCP registration (isStgcmtEnabled) is
+           out of scope this phase — stgcmt lives entirely on the Sender leg below. -->
+      <dest></dest>
+      <!-- nativeData=true -> DICOMReceiver.onStart offers ONLY Implicit VR LE
+           (1.2.840.10008.1.2); all four onStart TS lists (only_def_ts/native_le_ts/
+           native_ts/non_retired_ts) are identical {ImplicitVRLittleEndian} arrays
+           (verified directly against DICOMReceiver.java:70-90 this session), so this
+           exercises ONE wired decode knob with a single observable behavior — NOT a
+           distinct NATIVE_LE_TS behavior as 18.3-RESEARCH.md's Parameter Surface /
+           Pitfall 4 incorrectly claims. Exactly one of bigEndian/nativeData/defts is
+           non-default here (defts wins the if/else-if chain if more than one is set). -->
+      <nativeData>true</nativeData>
+      <sorcvbuf>0</sorcvbuf>
+      <sosndbuf>0</sosndbuf>
+      <tcpDelay>true</tcpDelay>
+      <keyPW></keyPW>
+      <keyStore></keyStore>
+      <keyStorePW></keyStorePW>
+      <noClientAuth>true</noClientAuth>
+      <nossl2>true</nossl2>
+      <tls>notls</tls>
+      <trustStore></trustStore>
+      <trustStorePW></trustStorePW>
+    </properties>
+    <transformer version="26.6.0">
+      <elements>
+        <com.mirth.connect.plugins.javascriptstep.JavaScriptStep version="26.6.0">
+          <name>Mutate patient name</name>
+          <sequenceNumber>0</sequenceNumber>
+          <enabled>true</enabled>
+          <!-- D-04's "applied transform landed in the received object" requirement: this
+               mutates the DICOM tag tree itself (not just channelMap), so the re-encoded
+               ${DICOMMESSAGE} the Sender transmits actually differs from the source .dcm
+               file's original PatientName (RESEARCH Pitfall 5 — a channelMap-only write,
+               as dicom-test.xml's existing transform does, would NOT change the outbound
+               bytes). Tag naming convention ("tag" + 8-hex-digit tag number; PatientName =
+               0010,0010 = tag00100010) verified from DICOMSerializer.renameAttrToTag()
+               (server/src/.../plugins/datatypes/dicom/DICOMSerializer.java). The exact E4X
+               write shape against a DICOM-typed msg is ASSUMED (Assumption A2) and can only
+               be runtime-validated in Wave 2 (plan 18.3-02) — the deploy-only pass never
+               runs this transformer. -->
+          <script>msg['tag00100010'] = 'RoundTripPatient';
+channelMap.put('patientName', 'RoundTripPatient');</script>
+        </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
+      </elements>
+      <inboundDataType>DICOM</inboundDataType>
+      <outboundDataType>DICOM</outboundDataType>
+      <inboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+      <outboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+    </transformer>
+    <filter version="26.6.0">
+      <elements/>
+    </filter>
+    <transportName>DICOM Listener</transportName>
+    <mode>SOURCE</mode>
+    <enabled>true</enabled>
+    <waitForPrevious>true</waitForPrevious>
+  </sourceConnector>
+  <destinationConnectors>
+    <connector version="26.6.0">
+      <metaDataId>1</metaDataId>
+      <name>Destination 1</name>
+      <properties class="com.mirth.connect.connectors.dimse.DICOMDispatcherProperties" version="26.6.0">
+        <pluginProperties/>
+        <destinationConnectorProperties version="26.6.0">
+          <queueEnabled>false</queueEnabled>
+          <sendFirst>false</sendFirst>
+          <retryIntervalMillis>10000</retryIntervalMillis>
+          <regenerateTemplate>false</regenerateTemplate>
+          <retryCount>0</retryCount>
+          <rotate>false</rotate>
+          <includeFilterTransformer>false</includeFilterTransformer>
+          <threadCount>1</threadCount>
+          <threadAssignmentVariable></threadAssignmentVariable>
+          <validateResponse>false</validateResponse>
+          <resourceIds class="linked-hash-map">
+            <entry>
+              <string>Default Resource</string>
+              <string>[Default Resource]</string>
+            </entry>
+          </resourceIds>
+          <queueBufferSize>1000</queueBufferSize>
+          <reattachAttachments>true</reattachAttachments>
+        </destinationConnectorProperties>
+        <host>127.0.0.1</host>
+        <!-- Dedicated stub port (Pitfall 7) — NOT the SCP_PORT placeholder dicom-test.xml
+             already uses. Sharing a storage dir/port would race the existing dicom() test's
+             order-dependent received[0] assertion (D-02: dicom-test.xml stays untouched). -->
+        <port>${DICOM_ROUNDTRIP_SCP_PORT}</port>
+        <applicationEntity>SMOKEHARNESS2</applicationEntity>
+        <localHost></localHost>
+        <localPort></localPort>
+        <localApplicationEntity></localApplicationEntity>
+        <template>${DICOMMESSAGE}</template>
+        <acceptTo>5000</acceptTo>
+        <!-- Non-default per D-03 (default "0" = no setMaxOpsInvoked call). -->
+        <async>3</async>
+        <bufSize>1</bufSize>
+        <connectTo>0</connectTo>
+        <!-- Non-default per D-03 (default "med"). -->
+        <priority>high</priority>
+        <passcode></passcode>
+        <pdv1>false</pdv1>
+        <!-- Non-default per D-03: raw bytes, both != the 16384-byte dcm4che internal
+             default (RESEARCH Pitfall 2 — no *1024 conversion, unlike the dcm4che CLI's
+             -sndpdulen/-rcvpdulen flags). Deliberately NOT 16384 (that value equals the
+             internal default and would be a silent no-op even though the setter fires). -->
+        <rcvpdulen>8192</rcvpdulen>
+        <reaper>10</reaper>
+        <releaseTo>5</releaseTo>
+        <rspTo>60</rspTo>
+        <shutdownDelay>1000</shutdownDelay>
+        <sndpdulen>32768</sndpdulen>
+        <soCloseDelay>50</soCloseDelay>
+        <sorcvbuf>0</sorcvbuf>
+        <sosndbuf>0</sosndbuf>
+        <!-- Non-default per D-03 (default false). The storage-commitment N-EVENT-REPORT
+             return path requires the downstream SCP stub to reply on the SAME association
+             (MirthDcmSnd binds no local port and waitForStgCmtResult has no timeout) — this
+             is arranged in plan 18.3-02 (stgCmtReuseFrom on the second stub). -->
+        <stgcmt>true</stgcmt>
+        <tcpDelay>true</tcpDelay>
+        <!-- Non-default per D-03 (default false) — offers Default TS in a separate
+             Presentation Context. -->
+        <ts1>true</ts1>
+        <uidnegrsp>false</uidnegrsp>
+        <username></username>
+        <keyPW></keyPW>
+        <keyStore></keyStore>
+        <keyStorePW></keyStorePW>
+        <noClientAuth>true</noClientAuth>
+        <nossl2>true</nossl2>
+        <tls>notls</tls>
+        <trustStore></trustStore>
+        <trustStorePW></trustStorePW>
+      </properties>
+      <transformer version="26.6.0">
+        <elements/>
+        <inboundDataType>DICOM</inboundDataType>
+        <outboundDataType>DICOM</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+      </transformer>
+      <responseTransformer version="26.6.0">
+        <elements/>
+        <inboundDataType>DICOM</inboundDataType>
+        <outboundDataType>DICOM</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+      </responseTransformer>
+      <filter version="26.6.0">
+        <elements/>
+      </filter>
+      <transportName>DICOM Sender</transportName>
+      <mode>DESTINATION</mode>
+      <enabled>true</enabled>
+      <waitForPrevious>true</waitForPrevious>
+    </connector>
+  </destinationConnectors>
+  <preprocessingScript>return message;</preprocessingScript>
+  <postprocessingScript>return;</postprocessingScript>
+  <deployScript>return;</deployScript>
+  <undeployScript>return;</undeployScript>
+  <properties version="26.6.0">
+    <clearGlobalChannelMap>true</clearGlobalChannelMap>
+    <messageStorageMode>DEVELOPMENT</messageStorageMode>
+    <encryptData>false</encryptData>
+    <encryptAttachments>false</encryptAttachments>
+    <encryptCustomMetaData>false</encryptCustomMetaData>
+    <removeContentOnCompletion>false</removeContentOnCompletion>
+    <removeOnlyFilteredOnCompletion>false</removeOnlyFilteredOnCompletion>
+    <removeAttachmentsOnCompletion>false</removeAttachmentsOnCompletion>
+    <initialState>STARTED</initialState>
+    <storeAttachments>true</storeAttachments>
+    <metaDataColumns>
+      <metaDataColumn>
+        <name>SOURCE</name>
+        <type>STRING</type>
+        <mappingName>message_source</mappingName>
+      </metaDataColumn>
+      <metaDataColumn>
+        <name>TYPE</name>
+        <type>STRING</type>
+        <mappingName>message_type</mappingName>
+      </metaDataColumn>
+    </metaDataColumns>
+    <attachmentProperties version="26.6.0">
+      <type>None</type>
+      <properties/>
+    </attachmentProperties>
+    <resourceIds class="linked-hash-map">
+      <entry>
+        <string>Default Resource</string>
+        <string>[Default Resource]</string>
+      </entry>
+    </resourceIds>
+  </properties>
+  <exportData>
+    <metadata>
+      <enabled>true</enabled>
+      <pruningSettings>
+        <archiveEnabled>true</archiveEnabled>
+        <pruneErroredMessages>false</pruneErroredMessages>
+      </pruningSettings>
+    </metadata>
+  </exportData>
+</channel>
