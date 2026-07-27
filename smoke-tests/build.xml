@@ -135,12 +135,24 @@ already-built distribution elsewhere.
     <!-- 18.3-01: DICOM round-trip channel ports (NET-08). -->
     <property name="DICOM_LISTENER_PORT" value="" />
     <property name="DICOM_ROUNDTRIP_SCP_PORT" value="" />
+    <!-- 18.4-03: DICOM TLS round-trip channel keystore/ports (NET-09). -->
+    <property name="DICOM_TLS_KEYSTORE" value="" />
+    <property name="DICOM_TLS_KEYSTORE_PW" value="" />
+    <property name="DICOM_TLS_AES_LISTENER_PORT" value="" />
+    <property name="DICOM_TLS_AES_SCP_PORT" value="" />
+    <property name="DICOM_TLS_3DES_LISTENER_PORT" value="" />
+    <property name="DICOM_TLS_3DES_SCP_PORT" value="" />
 
     <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
         <mkdir dir="${junit.reports}" />
         <junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="once" dir="${basedir}">
             <jvmarg value="--add-opens=java.base/java.util=ALL-UNNAMED" />
             <jvmarg value="--add-opens=java.base/java.lang=ALL-UNNAMED" />
+            <!-- 18.4-03 (D-04): re-enable 3DES_EDE_CBC for the driver JVM's own DICOM TLS
+                 SCU calls, mirroring the identical overlay applied to the server JVM in
+                 launch_server(). Single '=' (additive override), never '==' (whole-file
+                 replace). -->
+            <jvmarg value="-Djava.security.properties=${basedir}/fixtures/dicom-tls-3des.security" />
             <sysproperty key="smoke.soap.fallback" value="${smoke.soap.fallback}" />
             <sysproperty key="HTTPS_PORT" value="${HTTPS_PORT}" />
             <sysproperty key="HTTP_LISTENER_PORT" value="${HTTP_LISTENER_PORT}" />
@@ -162,6 +174,12 @@ already-built distribution elsewhere.
             <sysproperty key="HTTP_ERROR500_PORT" value="${HTTP_ERROR500_PORT}" />
             <sysproperty key="DICOM_LISTENER_PORT" value="${DICOM_LISTENER_PORT}" />
             <sysproperty key="DICOM_ROUNDTRIP_SCP_PORT" value="${DICOM_ROUNDTRIP_SCP_PORT}" />
+            <sysproperty key="DICOM_TLS_KEYSTORE" value="${DICOM_TLS_KEYSTORE}" />
+            <sysproperty key="DICOM_TLS_KEYSTORE_PW" value="${DICOM_TLS_KEYSTORE_PW}" />
+            <sysproperty key="DICOM_TLS_AES_LISTENER_PORT" value="${DICOM_TLS_AES_LISTENER_PORT}" />
+            <sysproperty key="DICOM_TLS_AES_SCP_PORT" value="${DICOM_TLS_AES_SCP_PORT}" />
+            <sysproperty key="DICOM_TLS_3DES_LISTENER_PORT" value="${DICOM_TLS_3DES_LISTENER_PORT}" />
+            <sysproperty key="DICOM_TLS_3DES_SCP_PORT" value="${DICOM_TLS_3DES_SCP_PORT}" />
             <classpath>
                 <path refid="test.classpath" />
                 <pathelement location="${build.classes}" />

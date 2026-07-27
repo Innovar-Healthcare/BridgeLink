@@ -362,6 +362,7 @@ launch_server() {
     (
         cd "${SERVER_SETUP}"
         exec java \
+            -Djava.security.properties="${SCRIPT_DIR}/fixtures/dicom-tls-3des.security" \
             --add-modules=java.sql.rowset \
             --add-exports=java.base/com.sun.crypto.provider=ALL-UNNAMED \
             --add-exports=java.base/sun.security.provider=ALL-UNNAMED \
@@ -1022,6 +1023,12 @@ run_driver() {
         -DHTTP_ERROR500_PORT="${HTTP_ERROR500_PORT}" \
         -DDICOM_LISTENER_PORT="${DICOM_LISTENER_PORT}" \
         -DDICOM_ROUNDTRIP_SCP_PORT="${DICOM_ROUNDTRIP_SCP_PORT}" \
+        -DDICOM_TLS_KEYSTORE="${DICOM_TLS_KEYSTORE}" \
+        -DDICOM_TLS_KEYSTORE_PW="${DICOM_TLS_KEYSTORE_PW}" \
+        -DDICOM_TLS_AES_LISTENER_PORT="${DICOM_TLS_AES_LISTENER_PORT}" \
+        -DDICOM_TLS_AES_SCP_PORT="${DICOM_TLS_AES_SCP_PORT}" \
+        -DDICOM_TLS_3DES_LISTENER_PORT="${DICOM_TLS_3DES_LISTENER_PORT}" \
+        -DDICOM_TLS_3DES_SCP_PORT="${DICOM_TLS_3DES_SCP_PORT}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else
