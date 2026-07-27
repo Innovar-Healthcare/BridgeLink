@@ -31,6 +31,8 @@ import javax.xml.soap.SOAPConnectionFactory;
 import javax.xml.soap.SOAPMessage;
 import javax.xml.transform.stream.StreamSource;
 
+import org.dcm4che2.tool.dcmsnd.DcmSnd;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.mirth.connect.smoketest.stubs.DicomScpStub;
@@ -192,6 +194,166 @@ public class StubSelfTest {
         // Clean stop: give the OS a moment to release the socket, then confirm no listener remains.
         Thread.sleep(300);
         assertFalse("DICOM SCP port should be closed after stop()", stub.isListening());
+    }
+
+    // ------------------------------------------------------------------
+    // Test 4b: DicomScpStub opt-in TLS extension (18.4-02, Phase 18.4/NET-09,
+    // RESEARCH Pattern 3) — a shared self-signed PKCS12 keystore/truststore is generated
+    // once via keytool for these standalone tests (mirrors RESEARCH Pattern 1, scoped
+    // locally here — the harness's own per-run keystore-gen stage is Plan 03's concern).
+    // ------------------------------------------------------------------
+
+    private static File dicomTlsKeystore;
+    private static final String DICOM_TLS_KEYSTORE_PASSWORD = "smoketest-tls-selftest";
+
+    @BeforeClass
+    public static void generateDicomTlsSelfTestKeystore() throws Exception {
+        File dir = Files.createTempDirectory("smoke-dicom-tls-selftest-keystore").toFile();
+        dicomTlsKeystore = new File(dir, "dicom-tls-selftest.p12");
+        // PKCS12 requires storepass == keypass (never pass -keypass, RESEARCH Pitfall 5).
+        ProcessBuilder pb = new ProcessBuilder(
+                "keytool", "-genkeypair",
+                "-alias", "dicom-tls-selftest",
+                "-keyalg", "RSA", "-keysize", "2048",
+                "-validity", "1",
+                "-dname", "CN=dicom-tls-selftest,O=BridgeLink Smoke Harness",
+                "-keystore", dicomTlsKeystore.getAbsolutePath(),
+                "-storetype", "PKCS12",
+                "-storepass", DICOM_TLS_KEYSTORE_PASSWORD);
+        pb.redirectErrorStream(true);
+        Process proc = pb.start();
+        byte[] output = proc.getInputStream().readAllBytes();
+        int exit = proc.waitFor();
+        assertEquals("keytool keystore generation should succeed: " + new String(output, StandardCharsets.UTF_8),
+                0, exit);
+    }
+
+    /**
+     * Positive proof: after {@code setTls("aes", ...)}, the embedded {@code DcmRcv} actually
+     * completes a mutual-TLS handshake (client cert required both ways — the corrected
+     * {@code noClientAuth=true}/{@code setTlsNeedClientAuth(true)} semantics, RESEARCH D-02
+     * correction) and delivers the file. Also proves {@code setStgCmtReuseFrom} and
+     * {@code setTls} compose — both are set before {@link DicomScpStub#start()}.
+     */
+    @Test
+    public void dicomScpStubTlsAesOptInDeliversFileOverMutualTls() throws Exception {
+        int port = allocatePort();
+        File storageDir = Files.createTempDirectory("smoke-dicom-tls-aes-scp").toFile();
+        DicomScpStub stub = new DicomScpStub(port, "TLSAESSCP", storageDir);
+        stub.setStgCmtReuseFrom(false); // composes with TLS opt-in without conflict
+        stub.setTls("aes", dicomTlsKeystore.getAbsolutePath(), DICOM_TLS_KEYSTORE_PASSWORD,
+                dicomTlsKeystore.getAbsolutePath(), DICOM_TLS_KEYSTORE_PASSWORD);
+        stub.start();
+        try {
+            assertTrue("TLS-enabled DICOM SCP port should accept a TCP connection while running",
+                    stub.isListening());
+
+            DcmSnd dcmSnd = new DcmSnd("TLSAESSCU");
+            dcmSnd.setCalledAET("TLSAESSCP");
+            dcmSnd.setRemoteHost("127.0.0.1");
+            dcmSnd.setRemotePort(port);
+            dcmSnd.addFile(new File("fixtures", "smoke-test.dcm"));
+            dcmSnd.setPriority(0);
+            dcmSnd.setTlsAES_128_CBC();
+            dcmSnd.setKeyStoreURL(dicomTlsKeystore.getAbsolutePath());
+            dcmSnd.setKeyStorePassword(DICOM_TLS_KEYSTORE_PASSWORD);
+            dcmSnd.setTrustStoreURL(dicomTlsKeystore.getAbsolutePath());
+            dcmSnd.setTrustStorePassword(DICOM_TLS_KEYSTORE_PASSWORD);
+            dcmSnd.setTlsNeedClientAuth(true);
+            // dcm4che2's own tlsProtocol default (TLSv1/SSLv3/SSLv2Hello) is entirely
+            // disabled by the JDK's default jdk.tls.disabledAlgorithms policy — mirror
+            // DICOMConfigurationUtil.configureDcmSnd()'s server-side protocol list (found
+            // live via this test, DicomScpStub.java carries the matching SCP-side fix).
+            dcmSnd.setTlsProtocol(new String[] { "TLSv1.3", "TLSv1.2" });
+            dcmSnd.configureTransferCapability();
+            dcmSnd.initTLS();
+            dcmSnd.start();
+            boolean opened = false;
+            try {
+                dcmSnd.open();
+                opened = true;
+                dcmSnd.send();
+            } finally {
+                if (opened) {
+                    dcmSnd.close();
+                }
+                dcmSnd.stop();
+            }
+            assertEquals("aes TLS opt-in round trip should deliver the file over mutual TLS",
+                    dcmSnd.getNumberOfFilesToSend(), dcmSnd.getNumberOfFilesSent());
+
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            File[] received = stub.listReceivedFiles();
+            while (received.length == 0 && System.nanoTime() < deadline) {
+                Thread.sleep(100);
+                received = stub.listReceivedFiles();
+            }
+            assertEquals(1, received.length);
+        } finally {
+            stub.stop();
+        }
+    }
+
+    /**
+     * Negative proof tying Task 1 (D-04 overlay) directly to Task 3's wiring: with the
+     * default JDK policy ({@code 3DES_EDE_CBC} on {@code jdk.tls.disabledAlgorithms}), a
+     * {@code setTls("3des", ...)}-enabled SCP still starts and accepts a bare TCP connection
+     * (the TLS server socket binds fine), but an actual TLS handshake attempt FAILS — this is
+     * exactly why the {@code dicom-tls-3des.security} overlay (Task 1) is required for the
+     * harness's {@code tls=3des} channel, and this test demonstrates the failure mode without
+     * needing to apply that JVM-wide override in-process.
+     */
+    @Test
+    public void dicomScpStubTlsThreeDesOptInStartsButHandshakeFailsWithoutJdkOverlay() throws Exception {
+        int port = allocatePort();
+        File storageDir = Files.createTempDirectory("smoke-dicom-tls-3des-scp").toFile();
+        DicomScpStub stub = new DicomScpStub(port, "TLS3DESSCP", storageDir);
+        stub.setTls("3des", dicomTlsKeystore.getAbsolutePath(), DICOM_TLS_KEYSTORE_PASSWORD,
+                dicomTlsKeystore.getAbsolutePath(), DICOM_TLS_KEYSTORE_PASSWORD);
+        stub.start();
+        try {
+            assertTrue("3des TLS-enabled SCP should still accept a bare TCP connection (TLS server socket bound)",
+                    stub.isListening());
+
+            DcmSnd dcmSnd = new DcmSnd("TLS3DESSCU");
+            dcmSnd.setCalledAET("TLS3DESSCP");
+            dcmSnd.setRemoteHost("127.0.0.1");
+            dcmSnd.setRemotePort(port);
+            dcmSnd.addFile(new File("fixtures", "smoke-test.dcm"));
+            dcmSnd.setPriority(0);
+            dcmSnd.setTls3DES_EDE_CBC();
+            dcmSnd.setKeyStoreURL(dicomTlsKeystore.getAbsolutePath());
+            dcmSnd.setKeyStorePassword(DICOM_TLS_KEYSTORE_PASSWORD);
+            dcmSnd.setTrustStoreURL(dicomTlsKeystore.getAbsolutePath());
+            dcmSnd.setTrustStorePassword(DICOM_TLS_KEYSTORE_PASSWORD);
+            dcmSnd.setTlsNeedClientAuth(true);
+            // dcm4che2's own tlsProtocol default (TLSv1/SSLv3/SSLv2Hello) is entirely
+            // disabled by the JDK's default jdk.tls.disabledAlgorithms policy — mirror
+            // DICOMConfigurationUtil.configureDcmSnd()'s server-side protocol list (found
+            // live via this test, DicomScpStub.java carries the matching SCP-side fix).
+            dcmSnd.setTlsProtocol(new String[] { "TLSv1.3", "TLSv1.2" });
+            dcmSnd.configureTransferCapability();
+            dcmSnd.initTLS();
+            dcmSnd.start();
+            boolean opened = false;
+            Exception handshakeFailure = null;
+            try {
+                dcmSnd.open();
+                opened = true;
+            } catch (Exception e) {
+                handshakeFailure = e;
+            } finally {
+                if (opened) {
+                    dcmSnd.close();
+                }
+                dcmSnd.stop();
+            }
+            assertNotNull("3des handshake should FAIL under the default JDK policy (3DES_EDE_CBC "
+                    + "disabled) -- this is exactly why the D-04 java.security overlay is required "
+                    + "for the harness's tls=3des channel", handshakeFailure);
+        } finally {
+            stub.stop();
+        }
     }
 
     // ------------------------------------------------------------------
