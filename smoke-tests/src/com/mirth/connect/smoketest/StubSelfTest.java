@@ -3,6 +3,7 @@ package com.mirth.connect.smoketest;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
@@ -295,13 +296,26 @@ public class StubSelfTest {
     }
 
     /**
-     * Negative proof tying Task 1 (D-04 overlay) directly to Task 3's wiring: with the
-     * default JDK policy ({@code 3DES_EDE_CBC} on {@code jdk.tls.disabledAlgorithms}), a
+     * Negative/positive proof tying Task 1 (D-04 overlay) directly to Task 3's wiring: with
+     * the default JDK policy ({@code 3DES_EDE_CBC} on {@code jdk.tls.disabledAlgorithms}), a
      * {@code setTls("3des", ...)}-enabled SCP still starts and accepts a bare TCP connection
      * (the TLS server socket binds fine), but an actual TLS handshake attempt FAILS — this is
      * exactly why the {@code dicom-tls-3des.security} overlay (Task 1) is required for the
-     * harness's {@code tls=3des} channel, and this test demonstrates the failure mode without
-     * needing to apply that JVM-wide override in-process.
+     * harness's {@code tls=3des} channel.
+     *
+     * <p><b>Rule 1 fix (found live during Phase 18.4 Plan 04's own full-harness verification
+     * run):</b> {@code smoke-tests/build.xml}'s {@code test-run} target (Plan 03) applies
+     * {@code -Djava.security.properties=.../dicom-tls-3des.security} as a JVM-wide
+     * {@code <jvmarg>} on the WHOLE forked JUnit process — not scoped to any one test class.
+     * When this test runs via the full {@code smoke-tests/run-smoke-test.sh} harness (as
+     * opposed to a standalone/isolated invocation), that overlay is therefore already active
+     * for this test too, and the handshake correctly SUCCEEDS rather than failing — the
+     * original "must fail" assertion was invalidated the first time these two plans' work was
+     * actually exercised together live (Plan 02 wrote this test standalone; Plan 03 never ran
+     * a live harness, only syntax checks). This test now asserts the CORRECT behavior for
+     * whichever JVM context it runs in, preserving Plan 02's original regression-guard intent
+     * (assert failure with no overlay) while also proving the overlay's positive effect when
+     * it IS active (arguably a strictly stronger assertion than before).
      */
     @Test
     public void dicomScpStubTlsThreeDesOptInStartsButHandshakeFailsWithoutJdkOverlay() throws Exception {
@@ -348,9 +362,21 @@ public class StubSelfTest {
                 }
                 dcmSnd.stop();
             }
-            assertNotNull("3des handshake should FAIL under the default JDK policy (3DES_EDE_CBC "
-                    + "disabled) -- this is exactly why the D-04 java.security overlay is required "
-                    + "for the harness's tls=3des channel", handshakeFailure);
+            // The D-04 overlay is applied JVM-wide by build.xml's test-run <jvmarg> (Plan 03)
+            // whenever this test runs via the full harness — detect that rather than assuming
+            // either outcome (Rule 1 fix, see class-level Javadoc above).
+            String securityPropertiesOverlay = System.getProperty("java.security.properties", "");
+            boolean overlayActive = securityPropertiesOverlay.contains("dicom-tls-3des.security");
+            if (overlayActive) {
+                assertNull("3des handshake should SUCCEED when the D-04 java.security overlay is "
+                        + "active (build.xml's test-run jvmarg, Plan 03) -- proves the overlay "
+                        + "genuinely re-enables 3DES for this JVM as well as the server JVM",
+                        handshakeFailure);
+            } else {
+                assertNotNull("3des handshake should FAIL under the default JDK policy (3DES_EDE_CBC "
+                        + "disabled) -- this is exactly why the D-04 java.security overlay is required "
+                        + "for the harness's tls=3des channel", handshakeFailure);
+            }
         } finally {
             stub.stop();
         }
