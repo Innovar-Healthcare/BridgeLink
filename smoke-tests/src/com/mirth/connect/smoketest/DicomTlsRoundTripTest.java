@@ -1,19 +1,18 @@
 package com.mirth.connect.smoketest;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
-import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.security.GeneralSecurityException;
 
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
@@ -116,17 +115,22 @@ public class DicomTlsRoundTripTest extends SmokeTestBase {
     }
 
     /**
-     * Rejected-plaintext probe (SC-3/T-18.4-01, RESEARCH Code Examples): a raw non-TLS byte
-     * stream against both TLS Listener ports must yield connection reset/EOF/timeout, never a
-     * valid DICOM response — catches silent downgrade-to-plaintext.
+     * Falsifiable plaintext-downgrade probe (SC-3/T-18.4-01, closes CR-01): a real, NON-TLS
+     * DICOM association attempt against each TLS-only Listener port must fail to
+     * {@code open()}. Replaces the unsound truncated-byte / read-timeout-as-rejection probe
+     * (code review CR-01) — that probe could not distinguish "TLS rejected me" from
+     * "nothing responded within the timeout," so it would have vacuously passed even if a
+     * port silently served plaintext. This probe is genuinely falsifiable: if either port
+     * ever accepted the plaintext association, {@code open()} would succeed and this test
+     * would go red.
      */
     @Test
     public void plaintextRejectedOnBothTlsListeners() throws Exception {
         int aesListenerPort = Integer.parseInt(requireDicomTlsProperty("DICOM_TLS_AES_LISTENER_PORT"));
         int desListenerPort = Integer.parseInt(requireDicomTlsProperty("DICOM_TLS_3DES_LISTENER_PORT"));
 
-        assertPlaintextRejected(aesListenerPort);
-        assertPlaintextRejected(desListenerPort);
+        assertNonTlsAssociationRejected(aesListenerPort, "aes");
+        assertNonTlsAssociationRejected(desListenerPort, "3des");
     }
 
     /**
@@ -324,25 +328,51 @@ public class DicomTlsRoundTripTest extends SmokeTestBase {
     }
 
     /**
-     * Rejected-plaintext negative probe (SC-3/T-18.4-01 — RESEARCH Code Examples, modeled on
-     * the existing bare-TCP-connect probe pattern in {@code run-smoke-test.sh}'s
-     * {@code wait_for_listener_ports()}). A raw byte sequence that is NOT a valid TLS
-     * ClientHello and NOT a valid A-ASSOCIATE-RQ PDU must yield connection reset/EOF/timeout,
-     * never a valid response — proves the port is TLS-only, catching silent
-     * downgrade-to-plaintext regressions.
+     * Falsifiable non-TLS negative-association probe (SC-3/T-18.4-01, closes CR-01 —
+     * replaces the unsound truncated-byte / read-timeout-as-rejection probe). Mirrors
+     * {@link #driveInboundCStore}'s SCU construction MINUS every TLS setter and MINUS
+     * {@code initTLS()} — a genuinely plaintext SCU. Bounded with short connect/accept
+     * timeouts (SC-4) so a hang cannot reintroduce the old multi-second-per-port wait. If
+     * the TLS-only port ever silently accepted this plaintext association, {@code open()}
+     * would succeed and this assertion would go red — the probe is falsifiable against the
+     * exact regression it exists to catch.
      */
-    private static void assertPlaintextRejected(int tlsPort) throws IOException {
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress("127.0.0.1", tlsPort), 3000);
-            socket.setSoTimeout(3000);
-            socket.getOutputStream().write(new byte[] { 0x01, 0x00, 0x00, 0x00 });
-            int firstByte = socket.getInputStream().read();
-            assertFalse("Expected the TLS-only port " + tlsPort + " to reject a raw plaintext "
-                    + "probe, but it responded with byte " + firstByte + " — possible silent "
-                    + "TLS downgrade regression (T-18.4-01)",
-                    firstByte != -1);
-        } catch (SocketTimeoutException | EOFException expected) {
-            // expected: TLS-only listener drops/hangs on a non-TLS byte stream.
+    private static void assertNonTlsAssociationRejected(int tlsPort, String cipherLabel) throws IOException {
+        DcmSnd plainProbe = new DcmSnd("TLSPLAINPROBE-" + cipherLabel.toUpperCase());
+        plainProbe.setCalling("aes".equals(cipherLabel) ? "PLAINPROBEAES" : "PLAINPROBE3DES");
+        // Matches the TLS round-trip channels' blank Listener applicationEntity (accepts any
+        // called AET, see driveInboundCStore's comment) — the Listener never validates it.
+        plainProbe.setCalledAET("aes".equals(cipherLabel) ? "TLSAESLISTENER" : "TLS3DESLISTENR");
+        plainProbe.setRemoteHost("127.0.0.1");
+        plainProbe.setRemotePort(tlsPort);
+        plainProbe.addFile(SOURCE_FIXTURE);
+        plainProbe.setPriority(0);
+        // Bound the attempt (SC-4) — no setTls*()/initTLS() call below, so this SCU never
+        // attempts a TLS handshake; it is a genuinely plaintext DICOM association.
+        plainProbe.setConnectTimeout(1500);
+        plainProbe.setAcceptTimeout(1500);
+
+        plainProbe.configureTransferCapability();
+        plainProbe.start();
+
+        boolean opened = false;
+        try {
+            plainProbe.open();
+            opened = true;
+            fail("TLS-only Listener port " + tlsPort + " (tls=" + cipherLabel + ") accepted a "
+                    + "PLAINTEXT DICOM association — silent TLS downgrade regression "
+                    + "(T-18.4-01, CR-01)");
+        } catch (Exception expected) {
+            // expected: a TLS-only Listener must refuse a plaintext association attempt —
+            // any exception here (handshake/protocol/IO/timeout) is proof of rejection.
+        } finally {
+            // Only release an association that actually opened (mirrors driveInboundCStore's
+            // opened guard — assoc is null otherwise, and close() would NPE and mask the
+            // real open() result).
+            if (opened) {
+                plainProbe.close();
+            }
+            plainProbe.stop();
         }
     }
 }
