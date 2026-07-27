@@ -34,8 +34,11 @@ import com.mirth.connect.smoketest.stubs.DicomScpStub;
  * ({@code dicom-tls-aes-roundtrip-test.xml} / {@code dicom-tls-3des-roundtrip-test.xml}, Plan
  * 02/03), verifies the deployed channel's Sender forwards the transformed object to a
  * dedicated TLS-configured {@link DicomScpStub}, and positively proves TLS engaged (D-03): the
- * negotiated cipher suite read reflectively from the SCU's own live {@link SSLSession}, PLUS a
- * rejected-plaintext negative probe against both TLS Listener ports.
+ * negotiated cipher suite read reflectively from the SCU's own live {@link SSLSession}. Two
+ * dedicated falsifiable negative tests close out the anti-regression coverage (Plan 05, CR-01/
+ * WR-01): a real non-TLS DICOM association attempt against each TLS-only Listener port (catches
+ * silent downgrade-to-plaintext), and an untrusted-client-cert C-STORE attempt against a
+ * mutual-TLS Listener (independently proves {@code setTlsNeedClientAuth(true)} enforcement).
  *
  * <p>This is a NEW, dedicated class — {@link DicomRoundTripTest} (18.3, plaintext) is untouched
  * (additive per that class's own principle).
@@ -49,12 +52,25 @@ import com.mirth.connect.smoketest.stubs.DicomScpStub;
  * every handshake fails with {@code SSLHandshakeException: No appropriate protocol}, for BOTH
  * aes and 3des.
  *
- * <p><b>Pitfall 1 tell (mutual-auth-not-enforced):</b> the round trip must NOT pass with only
- * one peer's keystore configured. {@code setTlsNeedClientAuth(true)} is set on both the
- * embedded SCU (this class) and the embedded SCP ({@link DicomScpStub#setTls}) — a one-way-TLS
- * misconfiguration would either fail the handshake outright (server requires a client cert
- * that was never presented) or, if silently permissive, still be caught by this test's
- * cipher-suite + files-sent assertions failing rather than a bare "did a file arrive" check.
+ * <p><b>Pitfall 1 tell (mutual-auth-not-enforced) — CORRECTED coverage claim (closes WR-01):</b>
+ * the round trip must NOT pass with only one peer's keystore configured.
+ * {@code setTlsNeedClientAuth(true)} is set on both the embedded SCU (this class) and the
+ * embedded SCP ({@link DicomScpStub#setTls}), but the negotiated cipher suite and files-sent
+ * count in {@code runTlsRoundTrip} are NOT proof that mutual client authentication is enforced
+ * — both are independent of whether the server actually validated the client's certificate, so
+ * a {@code setTlsNeedClientAuth(true)->false} regression would leave every assertion in
+ * {@code runTlsRoundTrip} passing. Mutual-auth enforcement is instead proven independently by
+ * {@link #mutualAuthEnforced_untrustedClientCertRejected()}: an SCU presenting a client
+ * certificate the server does not trust must fail its C-STORE association, which goes red iff
+ * the server stops requiring a trusted client cert.
+ *
+ * <p><b>Rejected-plaintext negative probe — CORRECTED mechanism (closes CR-01):</b> silent
+ * TLS-to-plaintext downgrade of a Listener port is caught by
+ * {@link #plaintextRejectedOnBothTlsListeners()}, which drives a real, genuinely plaintext
+ * {@code DcmSnd} (no TLS setters, no {@code initTLS()}) and asserts {@code open()} fails
+ * against each TLS-only Listener port — NOT by observing a raw-byte read timeout (the prior
+ * mechanism could not distinguish "TLS rejected me" from "nothing responded" and would have
+ * passed vacuously against an actual plaintext-downgrade regression).
  */
 public class DicomTlsRoundTripTest extends SmokeTestBase {
 
