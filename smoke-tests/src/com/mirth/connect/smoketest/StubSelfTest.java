@@ -239,7 +239,7 @@ public class StubSelfTest {
     public void dicomScpStubTlsAesOptInDeliversFileOverMutualTls() throws Exception {
         int port = allocatePort();
         File storageDir = Files.createTempDirectory("smoke-dicom-tls-aes-scp").toFile();
-        DicomScpStub stub = new DicomScpStub(port, "SMOKE_TLS_AES_SCP", storageDir);
+        DicomScpStub stub = new DicomScpStub(port, "TLSAESSCP", storageDir);
         stub.setStgCmtReuseFrom(false); // composes with TLS opt-in without conflict
         stub.setTls("aes", dicomTlsKeystore.getAbsolutePath(), DICOM_TLS_KEYSTORE_PASSWORD,
                 dicomTlsKeystore.getAbsolutePath(), DICOM_TLS_KEYSTORE_PASSWORD);
@@ -248,8 +248,8 @@ public class StubSelfTest {
             assertTrue("TLS-enabled DICOM SCP port should accept a TCP connection while running",
                     stub.isListening());
 
-            DcmSnd dcmSnd = new DcmSnd("SMOKE_TLS_AES_SCU");
-            dcmSnd.setCalledAET("SMOKE_TLS_AES_SCP");
+            DcmSnd dcmSnd = new DcmSnd("TLSAESSCU");
+            dcmSnd.setCalledAET("TLSAESSCP");
             dcmSnd.setRemoteHost("127.0.0.1");
             dcmSnd.setRemotePort(port);
             dcmSnd.addFile(new File("fixtures", "smoke-test.dcm"));
@@ -260,6 +260,11 @@ public class StubSelfTest {
             dcmSnd.setTrustStoreURL(dicomTlsKeystore.getAbsolutePath());
             dcmSnd.setTrustStorePassword(DICOM_TLS_KEYSTORE_PASSWORD);
             dcmSnd.setTlsNeedClientAuth(true);
+            // dcm4che2's own tlsProtocol default (TLSv1/SSLv3/SSLv2Hello) is entirely
+            // disabled by the JDK's default jdk.tls.disabledAlgorithms policy — mirror
+            // DICOMConfigurationUtil.configureDcmSnd()'s server-side protocol list (found
+            // live via this test, DicomScpStub.java carries the matching SCP-side fix).
+            dcmSnd.setTlsProtocol(new String[] { "TLSv1.3", "TLSv1.2" });
             dcmSnd.configureTransferCapability();
             dcmSnd.initTLS();
             dcmSnd.start();
@@ -302,7 +307,7 @@ public class StubSelfTest {
     public void dicomScpStubTlsThreeDesOptInStartsButHandshakeFailsWithoutJdkOverlay() throws Exception {
         int port = allocatePort();
         File storageDir = Files.createTempDirectory("smoke-dicom-tls-3des-scp").toFile();
-        DicomScpStub stub = new DicomScpStub(port, "SMOKE_TLS_3DES_SCP", storageDir);
+        DicomScpStub stub = new DicomScpStub(port, "TLS3DESSCP", storageDir);
         stub.setTls("3des", dicomTlsKeystore.getAbsolutePath(), DICOM_TLS_KEYSTORE_PASSWORD,
                 dicomTlsKeystore.getAbsolutePath(), DICOM_TLS_KEYSTORE_PASSWORD);
         stub.start();
@@ -310,8 +315,8 @@ public class StubSelfTest {
             assertTrue("3des TLS-enabled SCP should still accept a bare TCP connection (TLS server socket bound)",
                     stub.isListening());
 
-            DcmSnd dcmSnd = new DcmSnd("SMOKE_TLS_3DES_SCU");
-            dcmSnd.setCalledAET("SMOKE_TLS_3DES_SCP");
+            DcmSnd dcmSnd = new DcmSnd("TLS3DESSCU");
+            dcmSnd.setCalledAET("TLS3DESSCP");
             dcmSnd.setRemoteHost("127.0.0.1");
             dcmSnd.setRemotePort(port);
             dcmSnd.addFile(new File("fixtures", "smoke-test.dcm"));
@@ -322,6 +327,11 @@ public class StubSelfTest {
             dcmSnd.setTrustStoreURL(dicomTlsKeystore.getAbsolutePath());
             dcmSnd.setTrustStorePassword(DICOM_TLS_KEYSTORE_PASSWORD);
             dcmSnd.setTlsNeedClientAuth(true);
+            // dcm4che2's own tlsProtocol default (TLSv1/SSLv3/SSLv2Hello) is entirely
+            // disabled by the JDK's default jdk.tls.disabledAlgorithms policy — mirror
+            // DICOMConfigurationUtil.configureDcmSnd()'s server-side protocol list (found
+            // live via this test, DicomScpStub.java carries the matching SCP-side fix).
+            dcmSnd.setTlsProtocol(new String[] { "TLSv1.3", "TLSv1.2" });
             dcmSnd.configureTransferCapability();
             dcmSnd.initTLS();
             dcmSnd.start();
