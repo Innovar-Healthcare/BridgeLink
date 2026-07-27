@@ -229,6 +229,12 @@ allocate_ports() {
     # and a dedicated DcmRcv SCP stub port (kept separate from SCP_PORT, Pitfall 7).
     DICOM_LISTENER_PORT=$(free_port)
     DICOM_ROUNDTRIP_SCP_PORT=$(free_port)
+    # 18.4-03: DICOM TLS round-trip channels (NET-09) — dedicated Listener/SCP ports per
+    # cipher (aes/3des), kept separate from the plaintext DICOM ports above (Pitfall 7).
+    DICOM_TLS_AES_LISTENER_PORT=$(free_port)
+    DICOM_TLS_AES_SCP_PORT=$(free_port)
+    DICOM_TLS_3DES_LISTENER_PORT=$(free_port)
+    DICOM_TLS_3DES_SCP_PORT=$(free_port)
     # 18.1-02: HTTP connector parameter-coverage fixtures (NET-06).
     HTTP_RESPONSE_PORT=$(free_port)
     HTTP_XMLBODY_PORT=$(free_port)
@@ -250,8 +256,9 @@ allocate_ports() {
     export HTTP_PORT HTTPS_PORT MLLP_PORT HTTP_LISTENER_PORT SMTP_PORT SCP_PORT SOAP_PORT SOAP_URL \
         HTTP_RESPONSE_PORT HTTP_XMLBODY_PORT HTTP_BINARY_PORT HTTP_AUTH_BASIC_PORT HTTP_AUTH_DIGEST_PORT \
         HTTP_STUB_PORT HTTP_CTXPATH_PORT HTTP_LARGE_PORT HTTP_ERROR500_PORT \
-        DICOM_LISTENER_PORT DICOM_ROUNDTRIP_SCP_PORT
-    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT}"
+        DICOM_LISTENER_PORT DICOM_ROUNDTRIP_SCP_PORT \
+        DICOM_TLS_AES_LISTENER_PORT DICOM_TLS_AES_SCP_PORT DICOM_TLS_3DES_LISTENER_PORT DICOM_TLS_3DES_SCP_PORT
+    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT} DICOM_TLS_AES_LISTENER=${DICOM_TLS_AES_LISTENER_PORT} DICOM_TLS_AES_SCP=${DICOM_TLS_AES_SCP_PORT} DICOM_TLS_3DES_LISTENER=${DICOM_TLS_3DES_LISTENER_PORT} DICOM_TLS_3DES_SCP=${DICOM_TLS_3DES_SCP_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -291,6 +298,37 @@ allocate_work_dirs() {
 }
 
 # ---------------------------------------------------------------------------
+# Stage: generate_dicom_tls_keystore — 18.4-03 (NET-09, D-02 corrected): mints ONE
+# shared self-signed PKCS12 keystore/truststore per run via keytool (there is no
+# pre-existing keytool machinery in this harness to reuse — the server's own
+# "keystore per run" is its in-process BC JCEKS admin-HTTPS cert, a different
+# mechanism entirely). The same file is used as BOTH keyStore and trustStore on
+# every TLS peer (Listener, Sender, SCU driver, SCP stub). Lives under
+# CHANNEL_WORK_DIR so the existing cleanup() rm -rf tears it down with everything
+# else. PKCS12 requires the store password and key password to match (JDK 9+
+# keytool constraint) — never pass a separate key-password flag (Pitfall 5).
+# ---------------------------------------------------------------------------
+generate_dicom_tls_keystore() {
+    hr
+    info "Generating shared DICOM TLS PKCS12 keystore/truststore..."
+    DICOM_TLS_KEYSTORE="${CHANNEL_WORK_DIR}/dicom-tls-shared.p12"
+    DICOM_TLS_KEYSTORE_PW="smoketest-$(date +%s)"
+
+    keytool -genkeypair \
+        -alias dicom-tls-smoke \
+        -keyalg RSA -keysize 2048 \
+        -validity 7 \
+        -dname "CN=dicom-tls-smoke,O=BridgeLink Smoke Harness" \
+        -keystore "${DICOM_TLS_KEYSTORE}" \
+        -storetype PKCS12 \
+        -storepass "${DICOM_TLS_KEYSTORE_PW}" \
+        > /dev/null 2>&1
+
+    export DICOM_TLS_KEYSTORE DICOM_TLS_KEYSTORE_PW
+    pass "Generated shared PKCS12 keystore: ${DICOM_TLS_KEYSTORE}"
+}
+
+# ---------------------------------------------------------------------------
 # Stage: patch_properties — sed -i.smoke-bak in place; restored in cleanup (Pitfall 3)
 # T-18-01: shipped default http.host/https.host = 0.0.0.0 — a CI runner must not
 # expose the admin API on all interfaces, so bind 127.0.0.1 only.
@@ -324,6 +362,7 @@ launch_server() {
     (
         cd "${SERVER_SETUP}"
         exec java \
+            -Djava.security.properties="${SCRIPT_DIR}/fixtures/dicom-tls-3des.security" \
             --add-modules=java.sql.rowset \
             --add-exports=java.base/com.sun.crypto.provider=ALL-UNNAMED \
             --add-exports=java.base/sun.security.provider=ALL-UNNAMED \
@@ -406,7 +445,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test)
 CHANNEL_IDS=(
     "00000001-0000-0000-0000-000000000001"
     "00000002-0000-0000-0000-000000000002"
@@ -432,6 +471,8 @@ CHANNEL_IDS=(
     "00000022-0000-0000-0000-000000000022"
     "00000023-0000-0000-0000-000000000023"
     "00000024-0000-0000-0000-000000000024"
+    "00000025-0000-0000-0000-000000000025"
+    "00000026-0000-0000-0000-000000000026"
 )
 # Explicit envsubst allowlist — exactly the ${VARNAME} placeholders the committed
 # fixtures use. ${DICOMMESSAGE} is a Mirth-internal template variable resolved by
@@ -448,7 +489,12 @@ CHANNEL_IDS=(
 # appended to http-listener-response-test.xml, pre-created by allocate_work_dirs()).
 # 18.3-01 adds DICOM_LISTENER_PORT/DICOM_ROUNDTRIP_SCP_PORT (dicom-roundtrip-test.xml,
 # NET-08 round-trip fixture — channel 00000024).
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT}'
+# 18.4-03 adds DICOM_TLS_KEYSTORE/DICOM_TLS_KEYSTORE_PW (the shared PKCS12 keystore from
+# generate_dicom_tls_keystore()) and DICOM_TLS_AES_LISTENER_PORT/DICOM_TLS_AES_SCP_PORT/
+# DICOM_TLS_3DES_LISTENER_PORT/DICOM_TLS_3DES_SCP_PORT (dicom-tls-aes-roundtrip-test.xml/
+# dicom-tls-3des-roundtrip-test.xml, NET-09 mutual-TLS round-trip fixtures — channels
+# 00000025/00000026).
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -863,6 +909,38 @@ except Exception:
     if [[ ${attempts} -ge 20 ]]; then
         fatal "DICOM Listener port ${DICOM_LISTENER_PORT} did not accept connections within 60s"
     fi
+
+    # 18.4-03: DICOM TLS Listener readiness probes (NET-09, dicom-tls-aes-roundtrip-test.xml/
+    # dicom-tls-3des-roundtrip-test.xml, channels 00000025/00000026). Same bare-TCP-connect
+    # pattern as the plaintext DICOM probe above — these ports are TLS-only, so a bare TCP
+    # connect+close confirms the listener bound WITHOUT attempting a plaintext DICOM
+    # association (that would just fail the TLS handshake, which is fine, but sending any
+    # bytes here is unnecessary and the plain connect/close is sufficient and side-effect-free).
+    for p in "${DICOM_TLS_AES_LISTENER_PORT}" "${DICOM_TLS_3DES_LISTENER_PORT}"; do
+        attempts=0
+        info "  DICOM TLS Listener (port ${p})..."
+        while [[ ${attempts} -lt 20 ]]; do
+            if python3 -c "
+import socket, sys
+s = socket.socket()
+s.settimeout(2)
+try:
+    s.connect(('127.0.0.1', ${p}))
+    s.close()
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+" 2>/dev/null; then
+                pass "  DICOM TLS Listener port ${p} accepting connections"
+                break
+            fi
+            sleep 3
+            attempts=$((attempts + 1))
+        done
+        if [[ ${attempts} -ge 20 ]]; then
+            fatal "DICOM TLS Listener port ${p} did not accept connections within 60s"
+        fi
+    done
 }
 
 import_deploy() {
@@ -945,6 +1023,12 @@ run_driver() {
         -DHTTP_ERROR500_PORT="${HTTP_ERROR500_PORT}" \
         -DDICOM_LISTENER_PORT="${DICOM_LISTENER_PORT}" \
         -DDICOM_ROUNDTRIP_SCP_PORT="${DICOM_ROUNDTRIP_SCP_PORT}" \
+        -DDICOM_TLS_KEYSTORE="${DICOM_TLS_KEYSTORE}" \
+        -DDICOM_TLS_KEYSTORE_PW="${DICOM_TLS_KEYSTORE_PW}" \
+        -DDICOM_TLS_AES_LISTENER_PORT="${DICOM_TLS_AES_LISTENER_PORT}" \
+        -DDICOM_TLS_AES_SCP_PORT="${DICOM_TLS_AES_SCP_PORT}" \
+        -DDICOM_TLS_3DES_LISTENER_PORT="${DICOM_TLS_3DES_LISTENER_PORT}" \
+        -DDICOM_TLS_3DES_SCP_PORT="${DICOM_TLS_3DES_SCP_PORT}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else
@@ -1099,6 +1183,7 @@ configure_db
 preflight
 allocate_ports
 allocate_work_dirs
+generate_dicom_tls_keystore
 patch_properties
 launch_server
 
