@@ -79,6 +79,14 @@ public class DicomTlsRoundTripTest extends SmokeTestBase {
     };
 
     /**
+     * WR-01 mutual-auth negative test (Task 2): password for the freshly-generated,
+     * never-registered self-signed client keystore used to realize "no server-trusted
+     * client cert." PKCS12 requires storepass == keypass — never pass a separate key
+     * password (RESEARCH Pitfall 5).
+     */
+    private static final String UNTRUSTED_CLIENT_KEYSTORE_PASSWORD = "smoketest-untrusted-tls";
+
+    /**
      * Local replica of {@code SmokeTestBase}'s private {@code requireProperty} /
      * {@code DicomRoundTripTest}'s {@code requireDicomProperty} — deliberately NOT added to
      * {@link SmokeTestBase#baseSetUp()}, so other test classes keep running unmodified without
@@ -131,6 +139,33 @@ public class DicomTlsRoundTripTest extends SmokeTestBase {
 
         assertNonTlsAssociationRejected(aesListenerPort, "aes");
         assertNonTlsAssociationRejected(desListenerPort, "3des");
+    }
+
+    /**
+     * WR-01 falsifiable negative probe: an SCU that presents a client certificate NOT in the
+     * server's truststore must fail its C-STORE association against a mutual-TLS Listener
+     * that enforces {@code setTlsNeedClientAuth(true)}. The probe SCU still trusts the
+     * server (its truststore is the SAME shared {@code DICOM_TLS_KEYSTORE} the Listener's
+     * keystore comes from), so a failure here is caused SPECIFICALLY by the server refusing
+     * an untrusted client identity — independent of cipher-suite negotiation or
+     * files-sent, which is why {@code runTlsRoundTrip}'s positive assertions cannot catch a
+     * {@code setTlsNeedClientAuth(true)->false} regression (closes WR-01). Because
+     * {@code DcmSnd.initTLS()} requires a loadable keystore, "no server-trusted client
+     * cert" is realized as a freshly-generated, never-registered self-signed keystore. One
+     * cipher leg (aes) is sufficient — mutual-auth enforcement is cipher-independent — to
+     * stay inside the SC-4 duration budget.
+     */
+    @Test
+    public void mutualAuthEnforced_untrustedClientCertRejected() throws Exception {
+        String sharedKeystore = requireDicomTlsProperty("DICOM_TLS_KEYSTORE");
+        String sharedKeystorePw = requireDicomTlsProperty("DICOM_TLS_KEYSTORE_PW");
+        int listenerPort = Integer.parseInt(requireDicomTlsProperty("DICOM_TLS_AES_LISTENER_PORT"));
+
+        File untrustedKeystore = generateUntrustedClientKeystore();
+
+        assertMutualAuthRejectsUntrustedClientCert(listenerPort,
+                untrustedKeystore.getAbsolutePath(), UNTRUSTED_CLIENT_KEYSTORE_PASSWORD,
+                sharedKeystore, sharedKeystorePw);
     }
 
     /**
@@ -373,6 +408,109 @@ public class DicomTlsRoundTripTest extends SmokeTestBase {
                 plainProbe.close();
             }
             plainProbe.stop();
+        }
+    }
+
+    /**
+     * Generates a fresh, self-signed PKCS12 keystore that is NEVER added to the shared
+     * {@code DICOM_TLS_KEYSTORE} the Listener trusts (WR-01) — mirrors {@code StubSelfTest}'s
+     * {@code generateDicomTlsSelfTestKeystore()} keytool invocation pattern. Lives under a
+     * dedicated {@link Files#createTempDirectory}, never committed (only under
+     * {@code smoke-tests/}-relative temp paths, never checked in).
+     */
+    private static File generateUntrustedClientKeystore() throws IOException, InterruptedException {
+        File dir = Files.createTempDirectory("smoke-dicom-tls-untrusted-client-keystore").toFile();
+        File keystoreFile = new File(dir, "untrusted-client.p12");
+        // PKCS12 requires storepass == keypass — never pass a separate -keypass (Pitfall 5).
+        ProcessBuilder pb = new ProcessBuilder(
+                "keytool", "-genkeypair",
+                "-alias", "dicom-tls-untrusted-client",
+                "-keyalg", "RSA", "-keysize", "2048",
+                "-validity", "1",
+                "-dname", "CN=dicom-tls-untrusted-client,O=BridgeLink Smoke Harness (untrusted)",
+                "-keystore", keystoreFile.getAbsolutePath(),
+                "-storetype", "PKCS12",
+                "-storepass", UNTRUSTED_CLIENT_KEYSTORE_PASSWORD);
+        pb.redirectErrorStream(true);
+        Process proc = pb.start();
+        byte[] output = proc.getInputStream().readAllBytes();
+        int exit = proc.waitFor();
+        if (exit != 0) {
+            throw new IOException("keytool untrusted-client-cert keystore generation failed "
+                    + "(exit " + exit + "): " + new String(output, StandardCharsets.UTF_8));
+        }
+        return keystoreFile;
+    }
+
+    /**
+     * WR-01 falsifiable mutual-auth negative probe. Configures an SCU exactly like
+     * {@link #driveInboundCStore} (cipher, {@code setTlsNeedClientAuth(true)},
+     * {@code setTlsProtocol}, {@code initTLS()} before {@code start()}/{@code open()})
+     * EXCEPT the keystore is the untrusted, never-registered self-signed cert while the
+     * truststore remains the shared keystore the Listener's own cert comes from — so the
+     * SCU still trusts the server, and the ONLY broken trust direction is server-side
+     * client-cert validation. Asserts the association/C-STORE fails; a redundant
+     * files-sent-count assertion covers the case where a handshake were ever silently
+     * permitted despite the untrusted cert (independent of cipher-suite/files-sent, per
+     * WR-01). FALSIFIABLE: a {@code setTlsNeedClientAuth(true)->false} regression on the
+     * Listener would let this untrusted cert through, and this probe would go red.
+     */
+    private static void assertMutualAuthRejectsUntrustedClientCert(int listenerPort,
+            String untrustedKeystore, String untrustedKeystorePw,
+            String trustedKeystore, String trustedKeystorePw) throws IOException {
+        DcmSnd untrustedProbe = new DcmSnd("TLSUNTRUSTEDPROBE-AES");
+        untrustedProbe.setCalling("UNTRUSTEDCLIENT");
+        untrustedProbe.setCalledAET("TLSAESLISTENER");
+        untrustedProbe.setRemoteHost("127.0.0.1");
+        untrustedProbe.setRemotePort(listenerPort);
+        untrustedProbe.addFile(SOURCE_FIXTURE);
+        untrustedProbe.setPriority(0);
+
+        // One cipher leg (aes) is sufficient — mutual-auth enforcement is cipher-independent.
+        untrustedProbe.setTlsAES_128_CBC();
+        // Untrusted client identity: keyStore is the fresh self-signed cert the Listener
+        // never saw; trustStore is the SHARED keystore, so the SCU still trusts the
+        // server — the only broken trust direction is server->client validation (WR-01).
+        untrustedProbe.setKeyStoreURL(untrustedKeystore);
+        untrustedProbe.setKeyStorePassword(untrustedKeystorePw);
+        untrustedProbe.setTrustStoreURL(trustedKeystore);
+        untrustedProbe.setTrustStorePassword(trustedKeystorePw);
+        untrustedProbe.setTlsNeedClientAuth(true);
+        untrustedProbe.setTlsProtocol(new String[] { "TLSv1.3", "TLSv1.2" });
+        // Bound the attempt (SC-4) so a hung handshake cannot reintroduce a multi-second wait.
+        untrustedProbe.setConnectTimeout(1500);
+        untrustedProbe.setAcceptTimeout(1500);
+
+        untrustedProbe.configureTransferCapability();
+        try {
+            untrustedProbe.initTLS();
+        } catch (GeneralSecurityException e) {
+            throw new IOException("Failed to initialize TLS for the untrusted-client-cert probe", e);
+        }
+        untrustedProbe.start();
+
+        boolean opened = false;
+        try {
+            untrustedProbe.open();
+            opened = true;
+            untrustedProbe.send();
+            assertNotEquals("A client cert NOT in the server truststore must NOT be able to "
+                    + "complete a C-STORE against a mutual-TLS Listener enforcing "
+                    + "setTlsNeedClientAuth(true) — silent client-auth-not-enforced "
+                    + "regression (T-18.4-02, closes WR-01)",
+                    untrustedProbe.getNumberOfFilesToSend(), untrustedProbe.getNumberOfFilesSent());
+        } catch (Exception expected) {
+            // expected: the server must reject an untrusted client certificate — most
+            // likely the TLS handshake itself fails during open() (setTlsNeedClientAuth(true)
+            // requires a server-trusted client cert during the handshake); if the handshake
+            // were ever silently permitted, the assertion above still fails red instead.
+        } finally {
+            // Only release an association that actually opened (mirrors driveInboundCStore's
+            // opened guard).
+            if (opened) {
+                untrustedProbe.close();
+            }
+            untrustedProbe.stop();
         }
     }
 }
