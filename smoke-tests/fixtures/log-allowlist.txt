@@ -19,3 +19,14 @@
 # during real channel execution (e.g. a connector's expected retry-then-succeed
 # logging). Keep this file's provenance comment (this header) intact when adding
 # new entries below it.
+
+# 25.1-03 (SC-3, IRT-1541): the legacy-negative fixture (channel 00000030,
+# file-sftp-legacy-negative-test.xml) is DELIBERATELY EXPECTED to fail algorithm
+# negotiation against the legacy-only SFTP server on every poll attempt (D-07's
+# falsifiable negative proof) — FileReceiver.poll() logs this as
+# "Error polling in channel: <id>" (ERROR level). Scoped to this ONE channel ID only
+# (never a bare "Error polling in channel" pattern) so an unrelated File/SFTP
+# connector's genuine poll failure on any OTHER channel still fails the L3 scan.
+# Only ever matches when SFTP_LEGACY_PORT is active (external break-then-fix driver);
+# harmless no-op on an ordinary run-smoke-test.sh invocation.
+Error polling in channel: 00000030-0000-0000-0000-000000000030

@@ -1,5 +1,6 @@
 package com.mirth.connect.smoketest;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -9,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
+import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -36,11 +38,17 @@ public class SftpParamsTest extends SmokeTestBase {
     private static final String MODERN_PASSWORD_ID = "00000027-0000-0000-0000-000000000027";
     private static final String KEY_AUTH_ID = "00000028-0000-0000-0000-000000000028";
     private static final String KNOWN_HOSTS_ID = "00000029-0000-0000-0000-000000000029";
+    private static final String LEGACY_NEGATIVE_ID = "00000030-0000-0000-0000-000000000030";
+    private static final String LEGACY_WORKAROUND_ID = "00000031-0000-0000-0000-000000000031";
 
     private static String sftpModernPort;
     private static String sftpKeyPath;
     private static String sftpKnownHostsPath;
     private static String sftpUploadDir;
+    /** 25.1-03 (SC-3, IRT-1541): empty when no external break-then-fix driver is running. */
+    private static String sftpLegacyPort;
+    private static String sftpLegacyUploadDir;
+    private static String mirthLogPath;
 
     @BeforeClass
     public static void sftpParamsSetUp() throws Exception {
@@ -48,8 +56,18 @@ public class SftpParamsTest extends SmokeTestBase {
         sftpKeyPath = requireSftpProperty("SFTP_KEY_PATH");
         sftpKnownHostsPath = requireSftpProperty("SFTP_KNOWN_HOSTS_PATH");
         sftpUploadDir = requireSftpProperty("SFTP_UPLOAD_DIR");
+        // Deliberately NOT requireSftpProperty: both may be legitimately empty (ordinary
+        // harness runs with no external legacy driver) — the two legacy @Test methods below
+        // self-skip via Assume.assumeTrue rather than failing the whole suite.
+        sftpLegacyPort = System.getProperty("SFTP_LEGACY_PORT", "");
+        sftpLegacyUploadDir = System.getProperty("SFTP_LEGACY_UPLOAD_DIR", "");
+        mirthLogPath = System.getProperty("MIRTH_LOG_PATH", "");
 
         seedAll();
+    }
+
+    private static boolean legacyLegActive() {
+        return sftpLegacyPort != null && !sftpLegacyPort.isEmpty();
     }
 
     /**
@@ -76,13 +94,21 @@ public class SftpParamsTest extends SmokeTestBase {
      * 3000ms, pollOnStart=true), proving the READ half of the round trip.
      */
     private static void seedAll() throws IOException {
-        seed("input-modern.hl7");
-        seed("input-keyauth.hl7");
-        seed("input-knownhosts.hl7");
+        seed(sftpUploadDir, "input-modern.hl7");
+        seed(sftpUploadDir, "input-keyauth.hl7");
+        seed(sftpUploadDir, "input-knownhosts.hl7");
+
+        // 25.1-03 (SC-3, IRT-1541): only the legacy-workaround leg needs a seed file — the
+        // legacy-negative leg is EXPECTED to never successfully connect, so seeding its input
+        // file would be pointless (and the legacy server's upload dir may not even be bind
+        // mounted/writable from this JVM if the external driver didn't provide one).
+        if (legacyLegActive() && sftpLegacyUploadDir != null && !sftpLegacyUploadDir.isEmpty()) {
+            seed(sftpLegacyUploadDir, "input-legacy-workaround.hl7");
+        }
     }
 
-    private static void seed(String fileName) throws IOException {
-        Path seedFile = Paths.get(sftpUploadDir, fileName);
+    private static void seed(String uploadDir, String fileName) throws IOException {
+        Path seedFile = Paths.get(uploadDir, fileName);
         Files.write(seedFile, Hl7Messages.ORU_R01_LF.getBytes(StandardCharsets.UTF_8),
                 StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
     }
@@ -144,5 +170,97 @@ public class SftpParamsTest extends SmokeTestBase {
             assertTrue("SFTP known-hosts destination content should contain the transformed patient token",
                     content.contains(Hl7Messages.EXPECTED_PATIENT));
         });
+    }
+
+    /**
+     * D-07 negative leg (SC-3, IRT-1541): against the legacy-only server (regression-scripts/
+     * docker-compose.test-irt1541.yml, offering ONLY the algorithm families jsch 2.28.5's
+     * hardened defaults exclude), the File Reader's DEFAULT (empty) {@code
+     * configurationSettings} must FAIL algorithm negotiation on every poll attempt.
+     *
+     * <p>Self-skips via {@link Assume#assumeTrue} when {@code SFTP_LEGACY_PORT} is unset — this
+     * leg only ever runs under the external break-then-fix driver
+     * ({@code regression-scripts/test-irt1541-jsch-sftp-upgrade.sh}), never a plain
+     * {@code run-smoke-test.sh} invocation.
+     *
+     * <p><b>Why this asserts the mirth.log signature instead of {@code getErrorCount()}:</b>
+     * {@code FileReceiver.poll()} (server/src/.../file/FileReceiver.java) catches the
+     * connection failure at the file-LISTING stage — before any message is ever dispatched to
+     * the channel — and only {@code logger.error()}s it; no per-message ERROR-status
+     * statistics entry is created. "Sent count stayed at 0" alone would not distinguish an
+     * algorithm-negotiation failure from any other connect failure (D-07 falsifiability
+     * requirement — the same class-specific-signature discipline
+     * {@code smoke-tests/break-dependency.sh} established), so this asserts the log contains
+     * the SPECIFIC {@code JSchAlgoNegoFailException} / "Algorithm negotiation fail:" signature.
+     */
+    @Test
+    public void legacyDefaultFailsAlgoNego() throws Exception {
+        Assume.assumeTrue("SFTP_LEGACY_PORT not set - skipping legacy algorithm-negotiation "
+                + "negative leg (only runs under the external break-then-fix driver, "
+                + "regression-scripts/test-irt1541-jsch-sftp-upgrade.sh)", legacyLegActive());
+        assertTrue("MIRTH_LOG_PATH must be set when SFTP_LEGACY_PORT is active",
+                mirthLogPath != null && !mirthLogPath.isEmpty());
+
+        // Give the reader's poll cycle (3000ms interval, pollOnStart=true) time to attempt
+        // and log the connection failure at least once (Pitfall 7: poll with timeout, no
+        // fixed sleep).
+        pollUntil("mirth.log contains a JSchAlgoNegoFailException signature for the "
+                + "legacy-negative leg", 30, SftpParamsTest::mirthLogContainsAlgoNegoFailure);
+
+        assertTrue("mirth.log should record the algorithm-negotiation failure SPECIFICALLY "
+                + "(JSchAlgoNegoFailException / \"Algorithm negotiation fail:\"), not a "
+                + "generic connect failure",
+                mirthLogContainsAlgoNegoFailure());
+
+        long sentCount = rest.getSentCount(LEGACY_NEGATIVE_ID);
+        assertEquals("Legacy-negative channel should never successfully dispatch a message "
+                + "(the connection never succeeds)", 0, sentCount);
+    }
+
+    /**
+     * D-07 positive leg (SC-3, IRT-1541, D-05): against the SAME legacy-only server, the
+     * documented per-channel {@code configurationSettings} override (populated with the FULL
+     * comma-separated lists — legacy algorithm PLUS jsch's modern defaults, Assumption A2 /
+     * T-25.1-03a) RESTORES connectivity — proving the escape hatch actually works, not just
+     * that the hardened defaults reject legacy servers.
+     */
+    @Test
+    public void legacyWorkaroundRestores() throws Exception {
+        Assume.assumeTrue("SFTP_LEGACY_PORT not set - skipping legacy workaround positive leg "
+                + "(only runs under the external break-then-fix driver, "
+                + "regression-scripts/test-irt1541-jsch-sftp-upgrade.sh)", legacyLegActive());
+        assertTrue("SFTP_LEGACY_UPLOAD_DIR must reference an existing, writable directory "
+                + "when SFTP_LEGACY_PORT is active",
+                sftpLegacyUploadDir != null && !sftpLegacyUploadDir.isEmpty()
+                        && Files.isDirectory(Paths.get(sftpLegacyUploadDir)));
+
+        assertThreeLevels(LEGACY_WORKAROUND_ID, 1, () -> {
+            Path out = pollForFile(Paths.get(sftpLegacyUploadDir, "output-legacy-workaround.hl7"), 60);
+            String content = readFile(out);
+            assertTrue("SFTP legacy-workaround destination content should contain the "
+                    + "transformed patient token", content.contains(Hl7Messages.EXPECTED_PATIENT));
+        });
+    }
+
+    /**
+     * Reads the live mirth.log (fresh each call — the log grows over the run) and checks for
+     * jsch's class-specific algorithm-negotiation-failure signature. Never throws on a missing
+     * file (pollUntil retries); returns {@code false} instead so the poll loop keeps trying.
+     */
+    private static boolean mirthLogContainsAlgoNegoFailure() {
+        try {
+            if (mirthLogPath == null || mirthLogPath.isEmpty()) {
+                return false;
+            }
+            Path logPath = Paths.get(mirthLogPath);
+            if (!Files.exists(logPath)) {
+                return false;
+            }
+            String logContent = new String(Files.readAllBytes(logPath), StandardCharsets.UTF_8);
+            return logContent.contains("JSchAlgoNegoFailException")
+                    || logContent.contains("Algorithm negotiation fail:");
+        } catch (IOException e) {
+            return false;
+        }
     }
 }

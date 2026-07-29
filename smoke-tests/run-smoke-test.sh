@@ -106,6 +106,14 @@ SERVER_SETUP="${REPO_ROOT}/server/setup"
 MIRTH_PROPS="${SERVER_SETUP}/conf/mirth.properties"
 MIRTH_PROPS_BAK="${MIRTH_PROPS}.smoke-bak"
 HARNESS_LOG_DIR="${SCRIPT_DIR}/out"
+# 25.1-03 (SC-3, IRT-1541): the live mirth.log path, forwarded to the JUnit driver so
+# SftpParamsTest's legacy-negative leg can assert the class-specific JSchAlgoNegoFailException
+# signature directly — a poll-level connection failure (FileReceiver.poll()) never creates a
+# per-message ERROR-status statistics entry (verified from source: poll() catches Throwable
+# and only logger.error()s before any message reaches the channel), so the REST-level
+# getErrorCount() signal used elsewhere in this harness is NOT sufficient here; the log
+# content is the only class-specific evidence available for this leg.
+MIRTH_LOG_PATH="${SERVER_SETUP}/logs/mirth.log"
 START_EPOCH=$(date +%s)
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -411,6 +419,30 @@ Re-run smoke-tests/run-smoke-test.sh once Docker is available."
 }
 
 # ---------------------------------------------------------------------------
+# Stage: check_sftp_legacy_fixture — 25.1-03 (SC-3, IRT-1541): conditional legacy-algorithm
+# leg, gated on SFTP_LEGACY_PORT being pre-exported by an EXTERNAL driver
+# (regression-scripts/test-irt1541-jsch-sftp-upgrade.sh) BEFORE this script is invoked. This
+# harness does NOT boot the legacy server itself — that lives in the driver's own
+# docker-compose.test-irt1541.yml, since the legacy server is deliberately weak (algorithm
+# negotiation should FAIL against it by default) and standing it up unconditionally inside
+# every ordinary harness run would be a needless Docker/CI cost for a leg only the
+# break-then-fix driver ever exercises. Unset (the normal case) => the two legacy channel
+# fixtures are never added to CHANNEL_FILES/CHANNEL_IDS below, and SftpParamsTest's two
+# legacy @Test methods self-skip via Assume.assumeTrue — a plain run-smoke-test.sh is
+# completely unaffected.
+# ---------------------------------------------------------------------------
+SFTP_LEGACY_LEG_ACTIVE=0
+check_sftp_legacy_fixture() {
+    hr
+    if [[ -n "${SFTP_LEGACY_PORT:-}" ]]; then
+        SFTP_LEGACY_LEG_ACTIVE=1
+        info "SFTP_LEGACY_PORT=${SFTP_LEGACY_PORT} detected (external driver) — legacy-algorithm fixtures ACTIVE"
+    else
+        info "SFTP_LEGACY_PORT not set — legacy-algorithm fixtures SKIPPED (only exercised via regression-scripts/test-irt1541-jsch-sftp-upgrade.sh)"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Stage: patch_properties — sed -i.smoke-bak in place; restored in cleanup (Pitfall 3)
 # T-18-01: shipped default http.host/https.host = 0.0.0.0 — a CI runner must not
 # expose the admin API on all interfaces, so bind 127.0.0.1 only.
@@ -528,6 +560,14 @@ dump_log_tail() {
 API=""
 COOKIE_JAR=""
 CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test)
+# 25.1-03 (SC-3, IRT-1541): the two legacy-algorithm fixtures are appended ONLY when
+# SFTP_LEGACY_PORT is pre-exported by the external break-then-fix driver — an ordinary
+# run-smoke-test.sh invocation has no legacy server to dial, so these must stay out of the
+# unconditional array (unlike every fixture above) or import_deploy()'s STARTED-state poll
+# and wait_for_started() would have no target to reach for them.
+if [[ -n "${SFTP_LEGACY_PORT:-}" ]]; then
+    CHANNEL_FILES+=(file-sftp-legacy-negative-test file-sftp-legacy-workaround-test)
+fi
 CHANNEL_IDS=(
     "00000001-0000-0000-0000-000000000001"
     "00000002-0000-0000-0000-000000000002"
@@ -559,6 +599,12 @@ CHANNEL_IDS=(
     "00000028-0000-0000-0000-000000000028"
     "00000029-0000-0000-0000-000000000029"
 )
+if [[ -n "${SFTP_LEGACY_PORT:-}" ]]; then
+    CHANNEL_IDS+=(
+        "00000030-0000-0000-0000-000000000030"
+        "00000031-0000-0000-0000-000000000031"
+    )
+fi
 # Explicit envsubst allowlist — exactly the ${VARNAME} placeholders the committed
 # fixtures use. ${DICOMMESSAGE} is a Mirth-internal template variable resolved by
 # the server itself and MUST NOT appear here (envsubst would blank it out).
@@ -587,7 +633,11 @@ CHANNEL_IDS=(
 # SFTP_KNOWN_HOSTS_PATH currently appear inside those fixtures' XML text — SFTP_UPLOAD_DIR
 # is allowlisted for parity/future fixtures but envsubst is a no-op for names absent from
 # the source file, so listing it here is harmless.
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR}'
+# 25.1-03 adds SFTP_LEGACY_PORT (SC-3, IRT-1541): the external break-then-fix driver's legacy
+# atmoz/sftp server port, referenced by file-sftp-legacy-negative-test.xml/
+# file-sftp-legacy-workaround-test.xml (channels 00000030/00000031). Harmless (envsubst no-op)
+# in an ordinary run where these two fixtures are never added to CHANNEL_FILES.
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -1126,6 +1176,9 @@ run_driver() {
         -DSFTP_KEY_PATH="${SFTP_KEY_PATH}" \
         -DSFTP_KNOWN_HOSTS_PATH="${SFTP_KNOWN_HOSTS_PATH}" \
         -DSFTP_UPLOAD_DIR="${SFTP_UPLOAD_DIR}" \
+        -DSFTP_LEGACY_PORT="${SFTP_LEGACY_PORT:-}" \
+        -DSFTP_LEGACY_UPLOAD_DIR="${SFTP_LEGACY_UPLOAD_DIR:-}" \
+        -DMIRTH_LOG_PATH="${MIRTH_LOG_PATH}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else
@@ -1290,6 +1343,7 @@ allocate_ports
 allocate_work_dirs
 generate_dicom_tls_keystore
 generate_sftp_fixtures
+check_sftp_legacy_fixture
 patch_properties
 launch_server
 

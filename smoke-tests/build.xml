@@ -149,6 +149,17 @@ already-built distribution elsewhere.
     <property name="SFTP_KEY_PATH" value="" />
     <property name="SFTP_KNOWN_HOSTS_PATH" value="" />
     <property name="SFTP_UPLOAD_DIR" value="" />
+    <!-- 25.1-03 (SC-3, IRT-1541): legacy-algorithm break-then-fix leg. SFTP_LEGACY_PORT is
+         only ever non-empty when run-smoke-test.sh is invoked by the external driver
+         (regression-scripts/test-irt1541-jsch-sftp-upgrade.sh) with the legacy atmoz/sftp
+         port pre-exported; SftpParamsTest's two legacy @Test methods self-skip via
+         Assume.assumeTrue when it is empty. MIRTH_LOG_PATH is always forwarded (not
+         conditional) — the legacy-negative leg needs to read the live mirth.log directly,
+         since a poll-level connection failure never creates a per-message ERROR-status
+         statistics entry (see run-smoke-test.sh's MIRTH_LOG_PATH comment). -->
+    <property name="SFTP_LEGACY_PORT" value="" />
+    <property name="SFTP_LEGACY_UPLOAD_DIR" value="" />
+    <property name="MIRTH_LOG_PATH" value="" />
 
     <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
         <mkdir dir="${junit.reports}" />
@@ -191,6 +202,9 @@ already-built distribution elsewhere.
             <sysproperty key="SFTP_KEY_PATH" value="${SFTP_KEY_PATH}" />
             <sysproperty key="SFTP_KNOWN_HOSTS_PATH" value="${SFTP_KNOWN_HOSTS_PATH}" />
             <sysproperty key="SFTP_UPLOAD_DIR" value="${SFTP_UPLOAD_DIR}" />
+            <sysproperty key="SFTP_LEGACY_PORT" value="${SFTP_LEGACY_PORT}" />
+            <sysproperty key="SFTP_LEGACY_UPLOAD_DIR" value="${SFTP_LEGACY_UPLOAD_DIR}" />
+            <sysproperty key="MIRTH_LOG_PATH" value="${MIRTH_LOG_PATH}" />
             <classpath>
                 <path refid="test.classpath" />
                 <pathelement location="${build.classes}" />
