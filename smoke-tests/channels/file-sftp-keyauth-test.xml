@@ -56,8 +56,8 @@
         <keyAuth>true</keyAuth>
         <keyFile>${SFTP_KEY_PATH}</keyFile>
         <passPhrase></passPhrase>
-        <hostKeyChecking>ask</hostKeyChecking>
-        <knownHostsFile></knownHostsFile>
+        <hostKeyChecking>yes</hostKeyChecking>
+        <knownHostsFile>${SFTP_KNOWN_HOSTS_PATH}</knownHostsFile>
         <configurationSettings class="linked-hash-map"/>
       </schemeProperties>
       <host>127.0.0.1:${SFTP_MODERN_PORT}/upload</host>
@@ -218,8 +218,8 @@
           <keyAuth>true</keyAuth>
           <keyFile>${SFTP_KEY_PATH}</keyFile>
           <passPhrase></passPhrase>
-          <hostKeyChecking>ask</hostKeyChecking>
-          <knownHostsFile></knownHostsFile>
+          <hostKeyChecking>yes</hostKeyChecking>
+          <knownHostsFile>${SFTP_KNOWN_HOSTS_PATH}</knownHostsFile>
           <configurationSettings class="linked-hash-map"/>
         </schemeProperties>
         <host>127.0.0.1:${SFTP_MODERN_PORT}/upload</host>

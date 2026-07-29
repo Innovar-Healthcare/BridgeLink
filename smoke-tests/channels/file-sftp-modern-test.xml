@@ -1,7 +1,7 @@
 <channel version="26.6.0">
   <id>00000027-0000-0000-0000-000000000027</id>
   <nextMetaDataId>2</nextMetaDataId>
-  <name>File SFTP Modern (Password Auth) Test Channel</name>
+  <name>File SFTP Modern Password Test</name>
   <description>Connector functional test: SFTP-scheme File Reader source + SFTP-scheme File Writer destination against a live modern OpenSSH (atmoz/sftp) container, password auth (SC-2/D-06, IRT-1541). Test-only; never deploy to production.</description>
   <revision>1</revision>
   <sourceConnector version="26.6.0">
