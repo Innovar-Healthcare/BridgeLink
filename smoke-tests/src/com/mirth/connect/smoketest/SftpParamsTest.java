@@ -184,12 +184,14 @@ public class SftpParamsTest extends SmokeTestBase {
      * {@code run-smoke-test.sh} invocation.
      *
      * <p><b>Why this asserts the mirth.log signature instead of {@code getErrorCount()}:</b>
-     * {@code FileReceiver.poll()} (server/src/.../file/FileReceiver.java) catches the
-     * connection failure at the file-LISTING stage — before any message is ever dispatched to
-     * the channel — and only {@code logger.error()}s it; no per-message ERROR-status
-     * statistics entry is created. "Sent count stayed at 0" alone would not distinguish an
-     * algorithm-negotiation failure from any other connect failure (D-07 falsifiability
-     * requirement — the same class-specific-signature discipline
+     * {@code FileReceiver.onStart()} (server/src/.../file/FileReceiver.java) eagerly opens a
+     * connection at DEPLOY time (via {@code fileConnector.getConnection()}), so the algorithm
+     * negotiation failure throws SYNCHRONOUSLY as a channel-start failure — before the
+     * channel ever reaches STARTED and before any message could possibly be dispatched. There
+     * is no per-message ERROR-status statistics entry for this leg (that REST-level signal
+     * assumes a channel that successfully started); "sent count stayed at 0" alone would also
+     * not distinguish an algorithm-negotiation failure from any other connect failure (D-07
+     * falsifiability requirement — the same class-specific-signature discipline
      * {@code smoke-tests/break-dependency.sh} established), so this asserts the log contains
      * the SPECIFIC {@code JSchAlgoNegoFailException} / "Algorithm negotiation fail:" signature.
      */
@@ -201,9 +203,9 @@ public class SftpParamsTest extends SmokeTestBase {
         assertTrue("MIRTH_LOG_PATH must be set when SFTP_LEGACY_PORT is active",
                 mirthLogPath != null && !mirthLogPath.isEmpty());
 
-        // Give the reader's poll cycle (3000ms interval, pollOnStart=true) time to attempt
-        // and log the connection failure at least once (Pitfall 7: poll with timeout, no
-        // fixed sleep).
+        // The channel-start failure is synchronous (onStart(), at deploy time) so the
+        // signature is typically already in mirth.log by the time this test runs; poll with
+        // a timeout anyway (Pitfall 7: no fixed sleep) in case of scheduling variance.
         pollUntil("mirth.log contains a JSchAlgoNegoFailException signature for the "
                 + "legacy-negative leg", 30, SftpParamsTest::mirthLogContainsAlgoNegoFailure);
 

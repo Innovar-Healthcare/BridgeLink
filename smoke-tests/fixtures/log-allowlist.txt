@@ -22,11 +22,15 @@
 
 # 25.1-03 (SC-3, IRT-1541): the legacy-negative fixture (channel 00000030,
 # file-sftp-legacy-negative-test.xml) is DELIBERATELY EXPECTED to fail algorithm
-# negotiation against the legacy-only SFTP server on every poll attempt (D-07's
-# falsifiable negative proof) — FileReceiver.poll() logs this as
-# "Error polling in channel: <id>" (ERROR level). Scoped to this ONE channel ID only
-# (never a bare "Error polling in channel" pattern) so an unrelated File/SFTP
-# connector's genuine poll failure on any OTHER channel still fails the L3 scan.
-# Only ever matches when SFTP_LEGACY_PORT is active (external break-then-fix driver);
-# harmless no-op on an ordinary run-smoke-test.sh invocation.
-Error polling in channel: 00000030-0000-0000-0000-000000000030
+# negotiation against the legacy-only SFTP server (D-07's falsifiable negative proof).
+# Rule 1 correction (discovered via live run, not FileReceiver.poll() as originally
+# assumed): FileReceiver.onStart() (server/src/.../file/FileReceiver.java) eagerly opens
+# a connection at DEPLOY time, so the JSchAlgoNegoFailException surfaces synchronously
+# as a channel-start failure, logged by ErrorTaskHandler as
+# "Failed to start channel File SFTP Legacy Negative Test (<id>)." (ERROR level), not a
+# per-poll-cycle message. Scoped to this ONE channel ID only (never a bare
+# "Failed to start channel" pattern) so an unrelated connector's genuine start failure on
+# any OTHER channel still fails the L3 scan. Only ever matches when SFTP_LEGACY_PORT is
+# active (external break-then-fix driver); harmless no-op on an ordinary
+# run-smoke-test.sh invocation.
+Failed to start channel File SFTP Legacy Negative Test \(00000030-0000-0000-0000-000000000030\)\.

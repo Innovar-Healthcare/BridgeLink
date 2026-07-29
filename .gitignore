@@ -650,4 +650,6 @@ donkey/donkey-test
 # smoke-tests driver build output — Phase 18 plan 06 (smoke-tests/build.xml compile/test-run)
 /smoke-tests/build/
 /smoke-tests/junit-reports/
+# regression-scripts/test-irt1541-jsch-sftp-upgrade.sh per-run evidence log — 25.1-03 (SC-3)
+/regression-scripts/irt1541-evidence.log
 

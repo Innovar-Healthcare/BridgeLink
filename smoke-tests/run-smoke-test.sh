@@ -108,11 +108,14 @@ MIRTH_PROPS_BAK="${MIRTH_PROPS}.smoke-bak"
 HARNESS_LOG_DIR="${SCRIPT_DIR}/out"
 # 25.1-03 (SC-3, IRT-1541): the live mirth.log path, forwarded to the JUnit driver so
 # SftpParamsTest's legacy-negative leg can assert the class-specific JSchAlgoNegoFailException
-# signature directly — a poll-level connection failure (FileReceiver.poll()) never creates a
-# per-message ERROR-status statistics entry (verified from source: poll() catches Throwable
-# and only logger.error()s before any message reaches the channel), so the REST-level
-# getErrorCount() signal used elsewhere in this harness is NOT sufficient here; the log
-# content is the only class-specific evidence available for this leg.
+# signature directly. Verified from a live run (Rule 1 correction — NOT a poll-time failure
+# as originally assumed): FileReceiver.onStart() eagerly opens a connection at DEPLOY time,
+# so the algorithm-negotiation failure throws synchronously as a channel-START failure
+# (StartException) BEFORE the channel ever reaches STARTED and before any message could be
+# dispatched — there is no per-message ERROR-status statistics entry to read via
+# getErrorCount() for this leg (that REST-level signal used elsewhere in this harness
+# assumes a channel that successfully started). The log content is the only class-specific
+# evidence available for this leg.
 MIRTH_LOG_PATH="${SERVER_SETUP}/logs/mirth.log"
 START_EPOCH=$(date +%s)
 PASS_COUNT=0
@@ -733,12 +736,33 @@ import_channels() {
 # Deploys all channels in one call (D-06: parallel, protects the 10-minute budget).
 # Accepts 200 OR 204 — the _deploy endpoint returns 204 No Content on success
 # (test-irt832 line 133); asserting 200-only fails healthy deploys.
+#
+# 25.1-03 (SC-3, IRT-1541): channel 00000030 (file-sftp-legacy-negative-test.xml) is
+# DESIGNED to fail its onStart() connection attempt (D-07's falsifiable negative proof —
+# FileReceiver.onStart() eagerly opens a connection at deploy time, throwing
+# JSchAlgoNegoFailException synchronously, not merely logging a poll-time warning).
+# EngineServlet.deployChannels(returnErrors=true) aggregates ALL channels' task results via
+# ErrorTaskHandler.isErrored() and throws for the ENTIRE batch request if even ONE channel
+# errors — even though every OTHER channel's deploy task still completes normally in the
+# same batch (deploy tasks run independently; only the aggregated HTTP response is
+# affected). Deploying 00000030 in its OWN separate returnErrors=false call keeps its
+# expected failure from being misreported as a harness-wide FATAL.
 deploy_channels() {
     hr
     info "Deploying all ${#CHANNEL_IDS[@]} channels..."
     local set_body id http_code body
-    set_body="<set>"
+    local legacy_negative_id=""
+    local deploy_ids=()
     for id in "${CHANNEL_IDS[@]}"; do
+        if [[ "${id}" == "00000030-0000-0000-0000-000000000030" ]]; then
+            legacy_negative_id="${id}"
+        else
+            deploy_ids+=("${id}")
+        fi
+    done
+
+    set_body="<set>"
+    for id in "${deploy_ids[@]}"; do
         set_body+="<string>${id}</string>"
     done
     set_body+="</set>"
@@ -756,7 +780,24 @@ deploy_channels() {
         fatal "Deploy request failed (HTTP ${http_code})"
     fi
     rm -f "${body}"
-    pass "Deploy request accepted (HTTP ${http_code})"
+    pass "Deploy request accepted (HTTP ${http_code}) for ${#deploy_ids[@]} channels"
+
+    if [[ -n "${legacy_negative_id}" ]]; then
+        info "Deploying legacy-negative fixture (${legacy_negative_id}) separately with returnErrors=false — its connection failure is EXPECTED (D-07)."
+        body=$(mktemp)
+        http_code=$(curl -s -k -b "${COOKIE_JAR}" \
+            -X POST "${API}/channels/_deploy?returnErrors=false" \
+            -H "X-Requested-With: OpenAPI" \
+            -H "Content-Type: application/xml" \
+            -d "<set><string>${legacy_negative_id}</string></set>" \
+            -o "${body}" -w "%{http_code}")
+        rm -f "${body}"
+        if [[ "${http_code}" != "200" && "${http_code}" != "204" ]]; then
+            echo "SMOKE-FAILURE-CLASS: import"
+            fatal "Legacy-negative fixture deploy REQUEST itself failed unexpectedly (HTTP ${http_code}; expected 200/204 even though the underlying SFTP connection attempt fails)"
+        fi
+        pass "Legacy-negative fixture deploy request accepted (HTTP ${http_code}) — connection failure expected on start"
+    fi
 }
 
 # FATAL InvalidChannel detection (divergence from the test-irt832 analog, which only
@@ -836,6 +877,17 @@ wait_for_started() {
     for id in "${CHANNEL_IDS[@]}"; do
         name="${CHANNEL_FILES[$i]}"
         i=$((i + 1))
+
+        # 25.1-03 (SC-3, IRT-1541): channel 00000030 is DESIGNED to never reach STARTED —
+        # its onStart() connection attempt fails by design (D-07 negative proof). Waiting
+        # 60s for a state it will never reach would just waste harness budget every run;
+        # SftpParamsTest's legacyDefaultFailsAlgoNego @Test is the actual assertion for
+        # this channel's behavior, not this generic STARTED-state poll.
+        if [[ "${id}" == "00000030-0000-0000-0000-000000000030" ]]; then
+            info "  Skipping STARTED-wait for ${name} (${id}) — expected to never start (D-07 negative leg)"
+            continue
+        fi
+
         attempts=0
         started_once=0
 
