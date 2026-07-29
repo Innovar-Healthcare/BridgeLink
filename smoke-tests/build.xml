@@ -142,6 +142,13 @@ already-built distribution elsewhere.
     <property name="DICOM_TLS_AES_SCP_PORT" value="" />
     <property name="DICOM_TLS_3DES_LISTENER_PORT" value="" />
     <property name="DICOM_TLS_3DES_SCP_PORT" value="" />
+    <!-- 25.1-02 (SC-2, IRT-1541): modern SFTP fixture port/paths from
+         generate_sftp_fixtures() — pinned atmoz/sftp container port, throwaway client
+         key path, runtime-captured known_hosts path, host-side upload dir. -->
+    <property name="SFTP_MODERN_PORT" value="" />
+    <property name="SFTP_KEY_PATH" value="" />
+    <property name="SFTP_KNOWN_HOSTS_PATH" value="" />
+    <property name="SFTP_UPLOAD_DIR" value="" />
 
     <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
         <mkdir dir="${junit.reports}" />
@@ -180,6 +187,10 @@ already-built distribution elsewhere.
             <sysproperty key="DICOM_TLS_AES_SCP_PORT" value="${DICOM_TLS_AES_SCP_PORT}" />
             <sysproperty key="DICOM_TLS_3DES_LISTENER_PORT" value="${DICOM_TLS_3DES_LISTENER_PORT}" />
             <sysproperty key="DICOM_TLS_3DES_SCP_PORT" value="${DICOM_TLS_3DES_SCP_PORT}" />
+            <sysproperty key="SFTP_MODERN_PORT" value="${SFTP_MODERN_PORT}" />
+            <sysproperty key="SFTP_KEY_PATH" value="${SFTP_KEY_PATH}" />
+            <sysproperty key="SFTP_KNOWN_HOSTS_PATH" value="${SFTP_KNOWN_HOSTS_PATH}" />
+            <sysproperty key="SFTP_UPLOAD_DIR" value="${SFTP_UPLOAD_DIR}" />
             <classpath>
                 <path refid="test.classpath" />
                 <pathelement location="${build.classes}" />

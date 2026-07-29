@@ -329,6 +329,88 @@ generate_dicom_tls_keystore() {
 }
 
 # ---------------------------------------------------------------------------
+# Stage: generate_sftp_fixtures — 25.1-02 (SC-2, IRT-1541): mints a pinned modern
+# OpenSSH (atmoz/sftp) container plus a throwaway ed25519 client keypair and a
+# runtime-captured known_hosts fixture, so the File connector's jsch 2.28.5 SFTP
+# transport can be exercised end-to-end for password auth, key auth, and
+# known-hosts host-key verification (D-06). Modeled on generate_dicom_tls_keystore()
+# above: all generated file material lives under CHANNEL_WORK_DIR so the existing
+# cleanup() rm -rf tears it down; the container itself needs its own explicit
+# `docker rm -f` in cleanup() (a container is not a filesystem path).
+# ---------------------------------------------------------------------------
+SFTP_CONTAINER_NAME=""
+SFTP_IMAGE_TAG="atmoz/sftp:alpine"
+
+generate_sftp_fixtures() {
+    hr
+    info "Generating modern SFTP fixtures (container + keypair + known_hosts)..."
+
+    # Docker-availability preflight (RESEARCH Environment Availability / T-25.1-02c):
+    # fail fast with an actionable message instead of a cryptic mid-run failure.
+    if ! docker info > /dev/null 2>&1; then
+        fatal "Docker is not available (docker info failed). The modern-SFTP smoke leg (SC-2) requires a running Docker daemon:
+  - macOS: open -a Docker (Docker Desktop) and wait for it to finish starting
+  - Linux: sudo systemctl start docker
+Re-run smoke-tests/run-smoke-test.sh once Docker is available."
+    fi
+
+    SFTP_MODERN_PORT=$(free_port)
+
+    local sftp_work_dir="${CHANNEL_WORK_DIR}/sftp"
+    SFTP_UPLOAD_DIR="${sftp_work_dir}/upload"
+    mkdir -p "${SFTP_UPLOAD_DIR}"
+    # atmoz/sftp's create-sftp-user only chown's a dir it creates itself; a bind-mounted
+    # dir already exists, so it is skipped and never chowned to the container's "smoke"
+    # user. This is a throwaway per-run work dir (CHANNEL_WORK_DIR, never a committed
+    # fixture), so world-writable is an acceptable trade to keep both host and container
+    # UIDs able to read/write it without pre-computing a matching numeric UID.
+    chmod 777 "${SFTP_UPLOAD_DIR}"
+
+    # Throwaway client keypair — never committed (T-25.1-02b), lives under
+    # CHANNEL_WORK_DIR and is torn down by cleanup()'s existing rm -rf.
+    SFTP_KEY_PATH="${sftp_work_dir}/id_ed25519"
+    ssh-keygen -t ed25519 -N '' -f "${SFTP_KEY_PATH}" -C "smoke-harness" > /dev/null
+
+    # Pinned tag (never :latest, T-25.1-SC) — resolve and record the concrete digest at
+    # execution time (rather than hardcoding one), so the pin is visible in run output
+    # without needing to bump the script every time the upstream image is rebuilt.
+    docker pull "${SFTP_IMAGE_TAG}" > /dev/null
+    local sftp_image_digest
+    sftp_image_digest=$(docker inspect --format '{{index .RepoDigests 0}}' "${SFTP_IMAGE_TAG}" 2>/dev/null || echo "unknown")
+    info "Modern SFTP image: ${SFTP_IMAGE_TAG} (${sftp_image_digest})"
+
+    SFTP_CONTAINER_NAME="smoke-sftp-modern-$$"
+    docker run -d \
+        --name "${SFTP_CONTAINER_NAME}" \
+        -p "127.0.0.1:${SFTP_MODERN_PORT}:22" \
+        -v "${SFTP_UPLOAD_DIR}:/home/smoke/upload" \
+        -v "${SFTP_KEY_PATH}.pub:/home/smoke/.ssh/keys/id_ed25519.pub:ro" \
+        "${SFTP_IMAGE_TAG}" \
+        smoke:smokepass:::upload \
+        > /dev/null
+
+    # Capture the container's host key into a runtime known_hosts fixture once sshd is
+    # accepting connections — ssh-keyscan itself doubles as the readiness probe here
+    # (retried on a poll loop, Pitfall 7: no fixed sleep before the first attempt).
+    SFTP_KNOWN_HOSTS_PATH="${sftp_work_dir}/known_hosts"
+    local attempts=0
+    while [[ ${attempts} -lt 30 ]]; do
+        if ssh-keyscan -p "${SFTP_MODERN_PORT}" -T 3 127.0.0.1 > "${SFTP_KNOWN_HOSTS_PATH}" 2>/dev/null \
+                && [[ -s "${SFTP_KNOWN_HOSTS_PATH}" ]]; then
+            break
+        fi
+        sleep 2
+        attempts=$((attempts + 1))
+    done
+    if [[ ! -s "${SFTP_KNOWN_HOSTS_PATH}" ]]; then
+        fatal "Modern SFTP container did not accept connections within 60s (ssh-keyscan never produced a host key)"
+    fi
+
+    export SFTP_MODERN_PORT SFTP_KEY_PATH SFTP_KNOWN_HOSTS_PATH SFTP_UPLOAD_DIR
+    pass "Modern SFTP fixtures ready: container=${SFTP_CONTAINER_NAME} port=${SFTP_MODERN_PORT} keyPath=${SFTP_KEY_PATH} knownHosts=${SFTP_KNOWN_HOSTS_PATH} uploadDir=${SFTP_UPLOAD_DIR}"
+}
+
+# ---------------------------------------------------------------------------
 # Stage: patch_properties — sed -i.smoke-bak in place; restored in cleanup (Pitfall 3)
 # T-18-01: shipped default http.host/https.host = 0.0.0.0 — a CI runner must not
 # expose the admin API on all interfaces, so bind 127.0.0.1 only.
@@ -445,7 +527,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test)
 CHANNEL_IDS=(
     "00000001-0000-0000-0000-000000000001"
     "00000002-0000-0000-0000-000000000002"
@@ -473,6 +555,9 @@ CHANNEL_IDS=(
     "00000024-0000-0000-0000-000000000024"
     "00000025-0000-0000-0000-000000000025"
     "00000026-0000-0000-0000-000000000026"
+    "00000027-0000-0000-0000-000000000027"
+    "00000028-0000-0000-0000-000000000028"
+    "00000029-0000-0000-0000-000000000029"
 )
 # Explicit envsubst allowlist — exactly the ${VARNAME} placeholders the committed
 # fixtures use. ${DICOMMESSAGE} is a Mirth-internal template variable resolved by
@@ -494,7 +579,15 @@ CHANNEL_IDS=(
 # DICOM_TLS_3DES_LISTENER_PORT/DICOM_TLS_3DES_SCP_PORT (dicom-tls-aes-roundtrip-test.xml/
 # dicom-tls-3des-roundtrip-test.xml, NET-09 mutual-TLS round-trip fixtures — channels
 # 00000025/00000026).
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT}'
+# 25.1-02 adds SFTP_MODERN_PORT/SFTP_KEY_PATH/SFTP_KNOWN_HOSTS_PATH/SFTP_UPLOAD_DIR (the
+# modern SFTP fixtures from generate_sftp_fixtures(): pinned atmoz/sftp container port,
+# throwaway client key path, runtime-captured known_hosts path, host-side upload dir) for
+# file-sftp-modern-test.xml/file-sftp-keyauth-test.xml/file-sftp-knownhosts-test.xml
+# (SC-2, channels 00000027/00000028/00000029). Only SFTP_MODERN_PORT/SFTP_KEY_PATH/
+# SFTP_KNOWN_HOSTS_PATH currently appear inside those fixtures' XML text — SFTP_UPLOAD_DIR
+# is allowlisted for parity/future fixtures but envsubst is a no-op for names absent from
+# the source file, so listing it here is harmless.
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -1029,6 +1122,10 @@ run_driver() {
         -DDICOM_TLS_AES_SCP_PORT="${DICOM_TLS_AES_SCP_PORT}" \
         -DDICOM_TLS_3DES_LISTENER_PORT="${DICOM_TLS_3DES_LISTENER_PORT}" \
         -DDICOM_TLS_3DES_SCP_PORT="${DICOM_TLS_3DES_SCP_PORT}" \
+        -DSFTP_MODERN_PORT="${SFTP_MODERN_PORT}" \
+        -DSFTP_KEY_PATH="${SFTP_KEY_PATH}" \
+        -DSFTP_KNOWN_HOSTS_PATH="${SFTP_KNOWN_HOSTS_PATH}" \
+        -DSFTP_UPLOAD_DIR="${SFTP_UPLOAD_DIR}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else
@@ -1154,6 +1251,14 @@ cleanup() {
         info "Deleted channel import/deploy work directory"
     fi
 
+    # 25.1-02: unconditional, trap-safe removal of the modern SFTP container (T-25.1-02b/SC-2)
+    # — a container is not a filesystem path, so it needs its own explicit teardown call
+    # separate from the CHANNEL_WORK_DIR rm -rf above.
+    if [[ -n "${SFTP_CONTAINER_NAME}" ]]; then
+        docker rm -f "${SFTP_CONTAINER_NAME}" > /dev/null 2>&1 || true
+        info "Removed modern SFTP container ${SFTP_CONTAINER_NAME}"
+    fi
+
     if [[ -n "${COOKIE_JAR}" && -f "${COOKIE_JAR}" ]]; then
         rm -f "${COOKIE_JAR}"
         info "Deleted REST session cookie jar"
@@ -1184,6 +1289,7 @@ preflight
 allocate_ports
 allocate_work_dirs
 generate_dicom_tls_keystore
+generate_sftp_fixtures
 patch_properties
 launch_server
 
