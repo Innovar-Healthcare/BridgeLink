@@ -568,8 +568,21 @@ CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-
 # run-smoke-test.sh invocation has no legacy server to dial, so these must stay out of the
 # unconditional array (unlike every fixture above) or import_deploy()'s STARTED-state poll
 # and wait_for_started() would have no target to reach for them.
+#
+# 25.1-05 (CR-01/SC-3 falsifiability gap-closure): when the external driver ALSO exports
+# SFTP_LEGACY_SIMULATE_HOLE=1 (test-irt1541-jsch-sftp-upgrade.sh --simulate-regression), swap
+# in file-sftp-legacy-negative-hole-test — the SAME channel id (00000030) backed by a
+# restoring-config fixture that DOES negotiate against the legacy-only server, simulating a
+# hole in jsch's hardened defaults. CHANNEL_IDS and every existing 00000030 special-case below
+# are unchanged either way — only which XML file backs that channel id changes. Unset/normal
+# runs are completely unaffected.
 if [[ -n "${SFTP_LEGACY_PORT:-}" ]]; then
-    CHANNEL_FILES+=(file-sftp-legacy-negative-test file-sftp-legacy-workaround-test)
+    if [[ "${SFTP_LEGACY_SIMULATE_HOLE:-}" == "1" ]]; then
+        info "SFTP_LEGACY_SIMULATE_HOLE=1 detected — swapping in file-sftp-legacy-negative-hole-test (fault-injection fixture) for channel 00000030"
+        CHANNEL_FILES+=(file-sftp-legacy-negative-hole-test file-sftp-legacy-workaround-test)
+    else
+        CHANNEL_FILES+=(file-sftp-legacy-negative-test file-sftp-legacy-workaround-test)
+    fi
 fi
 CHANNEL_IDS=(
     "00000001-0000-0000-0000-000000000001"
@@ -640,6 +653,9 @@ fi
 # atmoz/sftp server port, referenced by file-sftp-legacy-negative-test.xml/
 # file-sftp-legacy-workaround-test.xml (channels 00000030/00000031). Harmless (envsubst no-op)
 # in an ordinary run where these two fixtures are never added to CHANNEL_FILES.
+# 25.1-05 adds no new placeholder: file-sftp-legacy-negative-hole-test.xml (the
+# SFTP_LEGACY_SIMULATE_HOLE fault-injection swap-in) reuses the SAME ${SFTP_LEGACY_PORT}
+# placeholder already allowlisted above.
 ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT}'
 
 bl_login() {
