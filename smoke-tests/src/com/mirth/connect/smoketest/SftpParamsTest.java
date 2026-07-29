@@ -1,6 +1,6 @@
 package com.mirth.connect.smoketest;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.Assume;
 import org.junit.BeforeClass;
@@ -173,27 +174,31 @@ public class SftpParamsTest extends SmokeTestBase {
     }
 
     /**
-     * D-07 negative leg (SC-3, IRT-1541): against the legacy-only server (regression-scripts/
+     * D-07 negative leg (SC-3, IRT-1541; realigned 25.1-05, CR-01/SC-3 falsifiability
+     * gap-closure): against the legacy-only server (regression-scripts/
      * docker-compose.test-irt1541.yml, offering ONLY the algorithm families jsch 2.28.5's
      * hardened defaults exclude), the File Reader's DEFAULT (empty) {@code
-     * configurationSettings} must FAIL algorithm negotiation on every poll attempt.
+     * configurationSettings} must FAIL algorithm negotiation, and — since {@code
+     * FileReceiver.onStart()} (server/src/.../file/FileReceiver.java) eagerly opens the
+     * connection at DEPLOY time — that failure means the channel must NEVER reach STARTED.
      *
      * <p>Self-skips via {@link Assume#assumeTrue} when {@code SFTP_LEGACY_PORT} is unset — this
      * leg only ever runs under the external break-then-fix driver
      * ({@code regression-scripts/test-irt1541-jsch-sftp-upgrade.sh}), never a plain
      * {@code run-smoke-test.sh} invocation.
      *
-     * <p><b>Why this asserts the mirth.log signature instead of {@code getErrorCount()}:</b>
-     * {@code FileReceiver.onStart()} (server/src/.../file/FileReceiver.java) eagerly opens a
-     * connection at DEPLOY time (via {@code fileConnector.getConnection()}), so the algorithm
-     * negotiation failure throws SYNCHRONOUSLY as a channel-start failure — before the
-     * channel ever reaches STARTED and before any message could possibly be dispatched. There
-     * is no per-message ERROR-status statistics entry for this leg (that REST-level signal
-     * assumes a channel that successfully started); "sent count stayed at 0" alone would also
-     * not distinguish an algorithm-negotiation failure from any other connect failure (D-07
-     * falsifiability requirement — the same class-specific-signature discipline
-     * {@code smoke-tests/break-dependency.sh} established), so this asserts the log contains
-     * the SPECIFIC {@code JSchAlgoNegoFailException} / "Algorithm negotiation fail:" signature.
+     * <p><b>PRIMARY assertion (CR-01 fix):</b> a direct channel-never-STARTED check, with the
+     * stable, driver-recognized failure substring {@code unexpectedly reached STARTED}. This
+     * replaces the previous ordering, where the mirth.log signature assertion ran FIRST and a
+     * genuine future hole in jsch's hardened defaults would fail on THAT message — never on the
+     * driver-matched string — misclassifying a real security regression as INCONCLUSIVE instead
+     * of SELF-TEST FAILED (regression-scripts/test-irt1541-jsch-sftp-upgrade.sh's exit-1
+     * branch). The mirth.log {@code JSchAlgoNegoFailException} check below is now SECONDARY
+     * corroboration only, run after the primary assertion has already established the channel
+     * never started. The previous {@code assertEquals(0, sentCount)} check is removed — the
+     * legacy-negative leg's input file is never seeded (see {@link #seedAll()}), so that
+     * assertion was tautological (sent count can never be anything but 0) and could never
+     * falsify anything.
      */
     @Test
     public void legacyDefaultFailsAlgoNego() throws Exception {
@@ -203,9 +208,20 @@ public class SftpParamsTest extends SmokeTestBase {
         assertTrue("MIRTH_LOG_PATH must be set when SFTP_LEGACY_PORT is active",
                 mirthLogPath != null && !mirthLogPath.isEmpty());
 
-        // The channel-start failure is synchronous (onStart(), at deploy time) so the
-        // signature is typically already in mirth.log by the time this test runs; poll with
-        // a timeout anyway (Pitfall 7: no fixed sleep) in case of scheduling variance.
+        // PRIMARY (CR-01): the legacy-negative channel (00000030) must NEVER reach STARTED.
+        // onStart() opens the connection synchronously at deploy time, so a bounded poll
+        // window (no fixed sleep, Pitfall 7) is sufficient to observe whether the connection
+        // ever unexpectedly succeeded.
+        boolean everStarted = channelEverReachedStarted(LEGACY_NEGATIVE_ID, 10);
+        assertFalse("legacy-negative channel 00000030 unexpectedly reached STARTED (onStart() "
+                + "opened the connection, meaning the hardened defaults accepted the "
+                + "legacy-only server -- a hole in the D-07 defaults)", everStarted);
+
+        // SECONDARY corroboration: the log should ALSO record the specific
+        // JSchAlgoNegoFailException / "Algorithm negotiation fail:" signature, not merely a
+        // generic connect failure. The channel-start failure is synchronous so the signature
+        // is typically already in mirth.log by the time this test runs; poll anyway in case of
+        // scheduling variance.
         pollUntil("mirth.log contains a JSchAlgoNegoFailException signature for the "
                 + "legacy-negative leg", 30, SftpParamsTest::mirthLogContainsAlgoNegoFailure);
 
@@ -213,10 +229,28 @@ public class SftpParamsTest extends SmokeTestBase {
                 + "(JSchAlgoNegoFailException / \"Algorithm negotiation fail:\"), not a "
                 + "generic connect failure",
                 mirthLogContainsAlgoNegoFailure());
+    }
 
-        long sentCount = rest.getSentCount(LEGACY_NEGATIVE_ID);
-        assertEquals("Legacy-negative channel should never successfully dispatch a message "
-                + "(the connection never succeeds)", 0, sentCount);
+    /**
+     * Polls (bounded, no fixed sleep — Pitfall 7) for up to {@code timeoutSeconds}, returning
+     * {@code true} as soon as {@code channelId} is observed in STARTED state, or {@code false}
+     * if the channel never reaches STARTED within the window. Unlike {@link #pollUntil}, this
+     * does NOT throw when the condition never becomes true — for this negative leg, "never
+     * started" is the EXPECTED, passing outcome.
+     */
+    private static boolean channelEverReachedStarted(String channelId, int timeoutSeconds) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        do {
+            try {
+                if (rest.isStarted(channelId)) {
+                    return true;
+                }
+            } catch (IOException e) {
+                // Treat a transient REST error as "not started yet" and keep polling.
+            }
+            Thread.sleep(500);
+        } while (System.nanoTime() < deadline);
+        return false;
     }
 
     /**

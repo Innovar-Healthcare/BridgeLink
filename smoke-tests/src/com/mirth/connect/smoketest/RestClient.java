@@ -328,6 +328,16 @@ public class RestClient {
         return state != null && !state.isEmpty();
     }
 
+    /**
+     * Public channel-state accessor (25.1-05, CR-01/SC-3): lets a caller assert directly on
+     * whether a channel has reached {@code STARTED} without reflection — needed by
+     * {@code SftpParamsTest.legacyDefaultFailsAlgoNego}'s PRIMARY falsifiable signal
+     * (the legacy-negative leg must never reach STARTED).
+     */
+    public boolean isStarted(String channelId) throws IOException, InterruptedException {
+        return "STARTED".equals(getChannelState(channelId));
+    }
+
     private String getChannelState(String channelId) throws IOException, InterruptedException {
         String url = baseUrl + "/channels/statuses?channelId=" + channelId + "&includeUndeployed=true";
         HttpResponse<String> response = httpClient.send(newJsonGetBuilder(url).build(), HttpResponse.BodyHandlers.ofString());
