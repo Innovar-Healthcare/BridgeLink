@@ -652,4 +652,6 @@ donkey/donkey-test
 /smoke-tests/junit-reports/
 # regression-scripts/test-irt1541-jsch-sftp-upgrade.sh per-run evidence log — 25.1-03 (SC-3)
 /regression-scripts/irt1541-evidence.log
+# offline dependency-check-offline target output (Phase 23, D-19) — build output, not evidence
+/dependency-check-out/
 

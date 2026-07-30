@@ -31,4 +31,57 @@
 	        </multirootfileset>
 	    </dependency-check>
 	</target>
+
+	<!--
+	  Phase 23 / D-19 / D-33: fully-offline, diffable per-library CVE-closure scan. Sibling of
+	  the 'dependency-check' target above, which is left byte-identical; this target does not
+	  touch it.
+
+	  Why JSON, not HTML: D-19 needs a machine-checkable "the CVE ID disappeared at this commit
+	  boundary" assertion (before/after diff per library). HTML is not diffable; JSON + jq is.
+
+	  Why autoUpdate is disabled: the NVD API is rate-limited to 30-60+ minutes without an API key
+	  (none is configured here), and the in-tree dependency-check-ant/data/11.0/odc.mv.db
+	  already matches Dependency-Check 12.1.1's declared data.directory=[JAR]/data/11.0; no
+	  schema migration, no network re-download needed. hostedSuppressionsEnabled,
+	  knownExploitedEnabled, centralAnalyzerEnabled, nodeAuditAnalyzerEnabled, and
+	  ossindexAnalyzerEnabled are all disabled for the same offline reason (Pitfall 10).
+
+	  Why failBuildOnCVSS="11": this is an evidence-gathering scan; the gate is the before/after
+	  diff, not Dependency-Check's own severity threshold. CVE-2025-66453 (Rhino, CVE-13) is CVSS
+	  5.5 Moderate, so any threshold-based gate would have to be set below default anyway; a diff
+	  avoids the question entirely. 11 is above the maximum possible CVSS score, so the build
+	  never fails here regardless of what is found.
+	-->
+	<target name="dependency-check-offline" description="Offline CVE-closure scan (JSON, diffable, no NVD API key required)">
+		<property name="dependency-check.home" location="${basedir}/dependency-check-ant"/>
+		<property name="dc.out" location="${basedir}/dependency-check-out"/>
+		<mkdir dir="${dc.out}"/>
+		<path id="dependency-check-offline.path">
+		   <pathelement location="${dependency-check.home}/dependency-check-ant.jar"/>
+		    <fileset dir="${dependency-check.home}/lib">
+		        <include name="*.jar"/>
+		    </fileset>
+		</path>
+		<taskdef resource="dependency-check-taskdefs.properties">
+		   <classpath refid="dependency-check-offline.path" />
+		</taskdef>
+	    <dependency-check projectname="BridgeLink Core"
+	                      reportoutputdirectory="${dc.out}"
+	                      reportformat="JSON"
+	                      prettyPrint="true"
+	                      autoUpdate="false"
+	                      hostedSuppressionsEnabled="false"
+	                      knownExploitedEnabled="false"
+	                      centralAnalyzerEnabled="false"
+	                      nodeAuditAnalyzerEnabled="false"
+	                      ossindexAnalyzerEnabled="false"
+	                      assemblyAnalyzerEnabled="false"
+	                      failBuildOnCVSS="11">
+	        <suppressionfile path="${dependency-check.home}/suppression.xml" />
+	        <multirootfileset basedirs="${basedir}/server/lib,${basedir}/donkey/lib,${basedir}/client/lib,${basedir}/command/lib,${basedir}/manager/lib">
+	            <include name="**/*.jar"/>
+	        </multirootfileset>
+	    </dependency-check>
+	</target>
 </project>
