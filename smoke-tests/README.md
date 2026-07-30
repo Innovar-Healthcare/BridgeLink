@@ -528,12 +528,15 @@ duplicate-package classpath conflict (see Pitfall 5 in `18-RESEARCH.md`).
 
 ```
 smoke-tests/
-├── run-smoke-test.sh      # boot/teardown orchestrator (this plan, 18-01)
-├── README.md              # this file
-├── send_mllp.py           # MLLP frame sender (verbatim content copy from feature/26.6.x)
-├── channels/              # committed channel-XML fixtures (18-05)
-├── src/                   # JUnit assertion driver + stub bootstrap classes (18-06/18-07)
-├── testlib/               # committed test-infra jars (GreenMail pair)
-├── fixtures/              # break-dependency fixture jar + log-allowlist.txt
-└── out/                   # gitignored — mirth.log copies from harness runs
+├── run-smoke-test.sh          # boot/teardown orchestrator (this plan, 18-01)
+├── break-dependency.sh        # NET-05/SC-4 break-proof canary (18-13/D-25/D-26)
+├── check-jar-java17.sh        # MR-aware Java-17 loadability scan (Phase 23, D-17/D-18)
+├── check-manifest-classpath.sh # manifest Class-Path reconciliation, RFC-822-aware (Phase 23, D-29.2)
+├── README.md                  # this file
+├── send_mllp.py               # MLLP frame sender (verbatim content copy from feature/26.6.x)
+├── channels/                  # committed channel-XML fixtures (18-05)
+├── src/                       # JUnit assertion driver + stub bootstrap classes (18-06/18-07)
+├── testlib/                   # committed test-infra jars (GreenMail pair)
+├── fixtures/                  # break-dependency fixture jar + log-allowlist.txt
+└── out/                       # gitignored — mirth.log copies from harness runs
 ```
