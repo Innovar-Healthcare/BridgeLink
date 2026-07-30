@@ -4,9 +4,10 @@
 #
 # Asserts every BASE-PATH class file in a jar is loadable by a Java 17 JVM (major <= 61),
 # while REPORTING (never failing on) META-INF/versions/N multi-release tiers. A naive "no
-# class above major 61" scan would FAIL bcprov-jdk18on-1.78.1.jar -- the jar BridgeLink ships
-# and runs on Java 17 TODAY -- because it carries 11 base-irrelevant entries at major 65 under
-# META-INF/versions/21 (23-RESEARCH.md Pitfall 3). A JVM only ever reads a versions/N tier
+# class above major 61" scan would FAIL any Multi-Release BouncyCastle bcprov jar BridgeLink
+# has shipped and run on Java 17 (both the pre-Phase-23 and the current release) --
+# because such jars carry base-irrelevant entries at higher class majors under
+# META-INF/versions/N (23-RESEARCH.md Pitfall 3). A JVM only ever reads a versions/N tier
 # where N <= its own feature version, so those entries are correctly invisible to Java 17 and
 # must not be scored against the floor.
 #
