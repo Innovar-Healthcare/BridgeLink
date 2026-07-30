@@ -348,10 +348,13 @@ Ordered, following the exact sequence this phase used across six plans:
 
 
 
+## Break-dependency proof (NET-05)
+
 `smoke-tests/break-dependency.sh` is the D-13/D-14 self-verifying broken-dependency proof:
-it swaps EVERY `xstream-*.jar` found recursively under `server/setup/server-lib` aside, drops
-in a deliberately incompatible fixture jar, runs the harness expecting failure, restores the
-original jar(s) unconditionally (trap on EXIT), and verifies the restore.
+it swaps EVERY jar matching `BREAK_LIB_GLOB` (default `xstream-*.jar`) found recursively under
+`server/setup/server-lib` aside, drops in a deliberately incompatible fixture jar, runs the
+harness expecting failure, restores the original jar(s) unconditionally (trap on EXIT), and
+verifies the restore.
 
 **When to run:** before any CVE-track jar bump (Phase 23 xstream/BC re-land, Phase 24 Derby,
 Phase 25 mssql-jdbc, Phase 26 Jersey) — rehearses the exact validation ritual a risky
@@ -362,16 +365,26 @@ xstream 1.4.21 re-land that was rolled back in v26.6.0 (commit `6a483ab9d`).
 
 | Exit | Meaning |
 |------|---------|
-| `0`  | OK — harness caught the broken dependency (behavioral catch at the XStream import seam, `SMOKE-FAILURE-CLASS: import`) |
+| `0`  | OK — harness caught the broken dependency (behavioral catch at the configured `BREAK_EXPECT_FAILURE_CLASS` seam, default `import`, `SMOKE-FAILURE-CLASS: <class>`) |
 | `1`  | SELF-TEST FAILED — harness passed with the broken jar in place; the net has a hole |
-| `2`  | INCONCLUSIVE — harness failed, but not at the import/dependency seam (e.g. boot/infrastructure failure) |
+| `2`  | INCONCLUSIVE — harness failed, but not at the configured seam (e.g. boot/infrastructure failure) |
 
-**Fixture jar selection:** `FIXTURE_JAR` defaults to `fixtures/xstream-1.4.10.jar` but is
-overridable via the `BREAK_FIXTURE_JAR` environment variable, e.g.:
+**Fixture jar selection:** `FIXTURE_JAR` defaults to `fixtures/xstream-1.4.21-mangled.jar`
+(the D-25 armed default, see below) but is overridable via the `BREAK_FIXTURE_JAR`
+environment variable, e.g.:
 
 ```bash
-BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.21.jar smoke-tests/break-dependency.sh
+BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.10.jar smoke-tests/break-dependency.sh
 ```
+
+**Generalization knobs (Phase 23, D-26):** two additional environment variables generalize
+the canary beyond xstream, both defaulting to today's xstream-only behavior so no caller is
+broken by their introduction:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `BREAK_LIB_GLOB` | `xstream-*.jar` | The `find`-style glob used to enumerate jars under `server/setup/server-lib` to swap aside. Phases 24 (Derby)/25 (mssql-jdbc)/26 (Jersey) can point this at their own dependency's jar family without a script rewrite. |
+| `BREAK_EXPECT_FAILURE_CLASS` | `import` | Which `SMOKE-FAILURE-CLASS:` marker the verdict classifier greps for. Must be one of the four legal values documented in "Failure-class markers" above: `import`, `assert`, `log`, `duration` — a new knob must not invite a fifth. |
 
 **Verified result (plan 18-10, JDK 26.0.1 — locally available JDK clearing the Phase 16
 Derby preflight, 2026-07-23): exit `0` (harness caught the broken dependency) on the FIRST
@@ -425,26 +438,83 @@ call `removeChild("steps")`/`removeChild("rules")` and would NPE on the post-3.5
 `<elements/>` bodies if their own version attributes were downgraded too. The channel-root
 migration alone is sufficient to reproduce the exact `22940c0f8`/`6a483ab9d` seam.
 
-**`xstream-1.4.10.jar` (the D-14-specified, 18-01-committed default fixture)** was not
-needed for this run — the `1.4.21` fixture (Step 1 of the plan's authorized sequence)
-caught the regression on the first attempt. Per plan 18-08/18-09's prior findings,
-`1.4.10` (a downgrade) is not expected to reproduce a forward-upgrade regression class;
-this remains documented but was not re-tested since `1.4.21` already produced the
-required evidence.
+**`xstream-1.4.10.jar` (the D-14-specified, 18-01-committed default fixture) — settled by
+Phase 23 plan 02's rung-0 run (2026-07-30, JDK 21.0.12, clearing the Phase 16 Derby
+preflight):** `BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.10.jar` against the full
+29-channel reference set (including `legacy-migration-3-4-test.xml`) recorded exit `1`
+(SELF-TEST FAILED — harness passed cleanly, all 29 channels STARTED, 116 assertions
+passed). This settles the question left open since plan 18-08/18-09: a `1.4.10` downgrade
+genuinely does **not** reproduce the forward-upgrade regression class, confirmed
+mechanically in `23-RESEARCH.md` §R3.1 (xstream `DomReader` is field- and API-identical
+between 1.4.10 and 1.4.20; only 1.4.21 carries the GHI:#342 child-cache split). Verdict
+tail:
 
-**Status: NET-05 / SC-4 IS closed by plan 18-10.** `break-dependency.sh` with
-`BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.21.jar` now records a genuine,
-self-verifying behavioral catch (`SMOKE-FAILURE-CLASS: import`) at the exact seam the
-v26.6.0 xstream rollback (commit `22940c0f8`, reverted in `6a483ab9d`) broke, with
-`legacy-migration-3-4-test.xml` as the trip-wire. This is the recorded SC-4 evidence
-gating Phase 23's xstream 1.4.21 re-land.
+```
+HARNESS DURATION: 42s (limit 600s)
+HARNESS PASSED (116 pass(es))
+---------------------------------------
+INFO: Harness exit code: 0
+SELF-TEST FAILED: harness PASSED with broken xstream-*.jar — net has a hole
+INFO: Restoring original xstream jar(s)...
+OK: Restoration verified: all 1 original xstream jar(s) back in place, fixture jar removed.
+```
 
-The script itself is complete, correct, and self-verifying per every D-13/D-14 structural
-requirement (recursive jar discovery, generalized `BREAK_FIXTURE_JAR` override, trap-based
-restore keyed on `$(basename "${FIXTURE_JAR}")` so no fixture is ever left in the tree,
-restoration verification, three-way verdict classification) — the exit code accurately
-reflects what actually happened, which is the property `break-dependency.sh` is designed to
-prove.
+**Rung 1 (an old BouncyCastle or Rhino jar) is SKIPPED per D-25** — not attempted. `BcSeamTest`
+is designed green on both BC 1.78.1 and 1.84; and once Phase 23 plan 04's D-10 throw lands, a
+Rhino 1.7.13 downgrade fails at *boot* (`JavaIterableIterator` absent from that jar), the wrong
+stage for the import-seam verdict grep. Straight to rung 2.
+
+**Status: NET-05 / SC-4 IS closed by plan 18-10, and RE-ARMED by Phase 23 plan 02 (D-25).**
+Phase 23 lands xstream 1.4.21 as the shipped version, so the plan-18-10 fixture
+(`fixtures/xstream-1.4.21.jar`) **can no longer break anything — it IS what ships.** Per D-25
+the armed default is now a **deliberately-mangled copy**, `fixtures/xstream-1.4.21-mangled.jar`
+(derived by removing `com/thoughtworks/xstream/io/xml/DomReader.class` — the exact superclass
+`MirthDomReader` extends — from a copy of the shipped 1.4.21 jar via `zip -d`; see the
+Provenance table below for the derivation recipe and locally-computed SHA-1), made the
+**in-script default** at `break-dependency.sh`'s `FIXTURE_JAR` assignment (not a
+`BREAK_FIXTURE_JAR` override) so the armed configuration cannot be run wrong by omission.
+
+**Rung 2 live exit 0 (Phase 23 plan 02, 2026-07-30, JDK 21.0.12):**
+`smoke-tests/break-dependency.sh` run with **no environment variable set** recorded a genuine,
+self-verifying behavioral catch at the import seam — `NoClassDefFoundError:
+com/thoughtworks/xstream/io/xml/DomReader` inside `MirthDomReader`'s own class-loading path.
+Verdict tail:
+
+```
+HARNESS DURATION: 15s (limit 600s)
+HARNESS FAILED (1 failure(s), 14 pass(es))
+---------------------------------------
+INFO: Harness exit code: 1
+OK: harness caught the broken dependency (behavioral catch at the import seam)
+--- import-stage failure excerpt ---
+INFO: Importing 29 reference channels...
+PASS: Imported http-test.xml
+SMOKE-FAILURE-CLASS: import
+<com.mirth.connect.client.core.ControllerException>
+  <detailMessage>com.mirth.connect.donkey.util.xstream.SerializerException: java.lang.NoClassDefFoundError: com/thoughtworks/xstream/io/xml/DomReader</detailMessage>
+  <cause class="com.mirth.connect.donkey.util.xstream.SerializerException">
+    <detailMessage>java.lang.NoClassDefFoundError: com/thoughtworks/xstream/io/xml/DomReader</detailMessage>
+    <cause class="java.lang.NoClassDefFoundError">
+-------------------------------------
+INFO: Restoring original xstream jar(s)...
+OK: Restoration verified: all 1 original xstream jar(s) back in place, fixture jar removed.
+```
+
+After the run, `find server/setup/server-lib -name 'xstream-*.jar'` named only
+`xstream-1.4.21.jar` — the trap-based restore left the runtime classpath clean; no mangled
+jar survives on any runtime path.
+
+This is the recorded D-06 hard-gate evidence for Phase 23's xstream 1.4.21 re-land: NET-05's
+break-proof canary is proven live-armed at the exact moment its previous armed configuration
+(the plan-18-10 fixture) stopped being able to fire.
+
+The script itself is complete, correct, and self-verifying per every D-13/D-14/D-25/D-26
+structural requirement (recursive jar discovery generalized via `BREAK_LIB_GLOB`, `BREAK_FIXTURE_JAR`
+override with an armed in-script default, verdict classification generalized via
+`BREAK_EXPECT_FAILURE_CLASS`, trap-based restore keyed on `$(basename "${FIXTURE_JAR}")` so no
+fixture is ever left in the tree, restoration verification, three-way verdict classification) —
+the exit code accurately reflects what actually happened, which is the property
+`break-dependency.sh` is designed to prove.
 
 ## Jetty regression coverage (18.2)
 
@@ -510,14 +580,19 @@ not a quick addition to an existing fixture.
 Binary artifacts committed to this directory are downloaded from Maven Central
 (repo1.maven.org) and SHA-1 verified against the published `.sha1` sidecar before being
 committed. No other new external dependencies are introduced by Phase 18 (see
-`18-RESEARCH.md` Package Legitimacy Audit — all entries Approved).
+`18-RESEARCH.md` Package Legitimacy Audit — all entries Approved). **Exception (Phase 23,
+D-25):** `fixtures/xstream-1.4.21-mangled.jar` is a **derived** artifact, not downloaded from
+Maven Central, so it has no upstream `.sha1` sidecar to verify against. Its row below gives
+the exact derivation recipe (source jar + what was removed) and a **locally-computed** SHA-1
+in place of an upstream one — it is never placed on any runtime classpath.
 
 | Artifact | Version | SHA-1 (verified against repo1.maven.org) | Purpose |
 |----------|---------|-------------------------------------------|---------|
 | `testlib/greenmail-1.6.15.jar` | 1.6.15 | `cacc939fff36cabc9512644130504ef4f7ef53e8` | SMTP endpoint stub (NET-01 names 1.6.15 explicitly; D-07) |
 | `testlib/greenmail-junit4-1.6.15.jar` | 1.6.15 | `19498174e9b8f832ff629fd568da45c34618a369` | JUnit 4 GreenMail rule/integration for the assertion driver |
-| `fixtures/xstream-1.4.10.jar` | 1.4.10 | `dfecae23647abc9d9fd0416629a4213a3882b101` | Break-dependency fixture (D-13/D-14, plan 18-08) — a deliberately old, incompatible XStream jar. **Never placed on any runtime classpath**; lives under `fixtures/` only. |
-| `fixtures/xstream-1.4.21.jar` | 1.4.21 | `65cb3e7f809b18b9aab43f2338ee5b320f72d7bd` | Break-dependency contingency fixture (D-13/D-14, plan 18-09) — the literal xstream version rolled back in v26.6.0 (commit `6a483ab9d`). Select via `BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.21.jar`. **Never placed on any runtime classpath**; lives under `fixtures/` only. |
+| `fixtures/xstream-1.4.10.jar` | 1.4.10 | `dfecae23647abc9d9fd0416629a4213a3882b101` | Break-dependency fixture (D-13/D-14, plan 18-08) — a deliberately old, incompatible XStream jar. **Never placed on any runtime classpath**; lives under `fixtures/` only. Rung 0 negative confirmed (Phase 23 plan 02, D-25): paired with `legacy-migration-3-4-test.xml`, records exit 1 (SELF-TEST FAILED — does not reproduce the forward-upgrade regression class). |
+| `fixtures/xstream-1.4.21.jar` | 1.4.21 | `65cb3e7f809b18b9aab43f2338ee5b320f72d7bd` | Break-dependency contingency fixture (D-13/D-14, plan 18-09) — the literal xstream version rolled back in v26.6.0 (commit `6a483ab9d`); plan 18-10 recorded a live exit-0 catch with it. **disarmed post-Phase-23** (D-08): xstream 1.4.21 is now the shipped version, so this fixture can no longer break anything — it IS what ships. Retained for the `22940c0f8`/`6a483ab9d` evidence trail; do not select it via `BREAK_FIXTURE_JAR` expecting a catch. |
+| `fixtures/xstream-1.4.21-mangled.jar` | 1.4.21 (mangled) | `9de5fc65538a580289e5b4c97d956ca9d9f0f63a` (locally computed — **no upstream `.sha1` sidecar**; this is a derived artifact) | Break-dependency **armed default** (D-25, Phase 23 plan 02) — a byte-for-byte copy of `fixtures/xstream-1.4.21.jar` with `com/thoughtworks/xstream/io/xml/DomReader.class` removed via `zip -d smoke-tests/fixtures/xstream-1.4.21-mangled.jar 'com/thoughtworks/xstream/io/xml/DomReader.class'`, so `MirthDomReader`'s own superclass fails to link and the harness raises `NoClassDefFoundError` at the import seam (`SMOKE-FAILURE-CLASS: import`) unconditionally. This is the in-script `FIXTURE_JAR` default — no `BREAK_FIXTURE_JAR` override needed. **Never placed on any runtime classpath**; lives under `fixtures/` only. |
 
 GreenMail's transitive `com.sun.mail:jakarta.mail` dependency is intentionally NOT
 downloaded — the shipped `server/setup/server-lib/javax/javax.mail-1.6.2.jar` already
