@@ -34,6 +34,45 @@ public class NativeJavaObject
 
     public NativeJavaObject() { }
 
+    // Package-private (not private) so a test can assert the exact verbatim text (CVE-13, D-10),
+    // mirroring Mirth.DERBY_JAVA_ERROR_MSG's precedent. Names the *consequence*, not just the
+    // mechanism: an unadapted Rhino means every JavaScript transformer would run on unverified
+    // importPackage/scope semantics, which on a clinical-data path is an abort-level condition.
+    static final String JAVA_ITERABLE_ITERATOR_INIT_ERROR_MSG =
+        "NativeJavaObject.init shim could not reach JavaIterableIterator.init via reflection -- "
+        + "this Rhino build is unadapted and every JavaScript transformer would otherwise run on "
+        + "unverified importPackage/scope semantics";
+
+    /**
+     * Compatibility shim: Rhino 1.7.15+ requires NativeJavaObject.init to be called during
+     * Context.initStandardObjects(). This method delegates to JavaIterableIterator.init
+     * via reflection so the vendored source remains compatible without importing the inner class.
+     *
+     * D-10: the original recovered shim silently swallowed the reflection failure with a
+     * comment dismissing it as harmless, which let initStandardObjects() succeed while
+     * JavaIterableIterator was never registered -- a textbook silent-pass channel on a
+     * clinical-data transform path. It now throws instead, chaining the caught cause so the
+     * reflection failure is not lost, refusing to let an unadapted Rhino proceed. This throw is
+     * raised from the shim itself (not surfaced through a preflight-style check, per
+     * 23-CONTEXT.md Claude's Discretion) because init() runs on every Context.initStandardObjects()
+     * call -- including inside RhinoSeamTest.@BeforeClass -- so an abrupt JVM-halting exit (the
+     * Derby preflight's mechanism, which runs once before the shutdown hook is registered) would
+     * kill the JUnit fork; a plain thrown exception propagates correctly in both the runtime and
+     * test paths.
+     */
+    static void init(ScriptableObject scope, boolean sealed) {
+        try {
+            Class<?> iterClass = Class.forName(
+                "org.mozilla.javascript.NativeJavaObject$JavaIterableIterator");
+            java.lang.reflect.Method initMethod = iterClass.getDeclaredMethod(
+                "init", ScriptableObject.class, boolean.class);
+            initMethod.setAccessible(true);
+            initMethod.invoke(null, scope, sealed);
+        } catch (Exception e) {
+            throw new IllegalStateException(JAVA_ITERABLE_ITERATOR_INIT_ERROR_MSG, e);
+        }
+    }
+
     public NativeJavaObject(Scriptable scope, Object javaObject,
                             Class<?> staticType)
     {

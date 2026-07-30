@@ -10,6 +10,8 @@
 package com.mirth.connect.seams;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -22,6 +24,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.ScriptableObject;
 
 import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
@@ -31,11 +34,12 @@ import com.mirth.connect.model.PluginMetaData;
 import com.mirth.connect.server.controllers.ConfigurationController;
 import com.mirth.connect.server.controllers.ControllerFactory;
 import com.mirth.connect.server.controllers.ExtensionController;
+import com.mirth.connect.server.util.javascript.JavaScriptScopeUtil;
 import com.mirth.connect.server.util.javascript.MirthContextFactory;
 
 /**
  * Dependency-seam characterization suite (NET-03, D-09/D-10) for the Rhino engine AS SHIPPED:
- * rhino 1.7.13 (server/lib/rhino-1.7.13.jar), run with the ES6 language version that is the
+ * rhino 1.7.15.1 (server/lib/rhino-1.7.15.1.jar), run with the ES6 language version that is the
  * shipped {@code mirth.properties} default ({@code rhino.languageversion = es6}).
  * <p>
  * Scripts are executed through a real {@code com.mirth.connect.server.util.javascript.
@@ -145,5 +149,67 @@ public class RhinoSeamTest {
                 "'Transformed: ' + patientName;";
 
         assertEquals("Transformed: McDoogal^Angus", evaluate(script));
+    }
+
+    // ========== Test 4: adapter (a) -- NativeJavaObject.init shim registers JavaIterableIterator ==========
+
+    @Test
+    public void nativeJavaObjectInitShimRegistersJavaIterableIterator() {
+        Context cx = contextFactory.enterContext();
+        try {
+            // PRECONDITION: the 3 tests above already prove this shim LINKS -- removing it
+            // entirely makes ScriptRuntime throw NoSuchMethodError inside the class-level setup's
+            // MirthContextFactory construction (bytecode-verified: ScriptRuntime.
+            // initSafeStandardObjects is the sole caller of NativeJavaObject.init across all 542
+            // classes in rhino-1.7.15.1.jar). What those 3 tests do NOT prove is that the shim's
+            // reflection actually REACHED JavaIterableIterator.init -- before D-10's throw, a
+            // failed Class.forName/getDeclaredMethod was silently swallowed, leaving
+            // initStandardObjects() succeeding while JavaIterableIterator was never registered.
+            // JavaIterableIterator.init's final act (via ES6Iterator.init) is
+            // scope.associateValue("JavaIterableIterator", prototype) (bytecode-verified), so
+            // asserting that value is non-null proves the shim's OBSERVABLE EFFECT, not merely
+            // that it linked. This is NOT written as a JS `for...of` over a Java Iterable (D-32):
+            // the vendored NativeJavaObject.get(Symbol, Scriptable) has no SymbolKey.ITERATOR
+            // handling, so JS-level iteration genuinely does not work here even with a correctly
+            // installed shim, and such a test would false-red.
+            ScriptableObject scope = (ScriptableObject) cx.initStandardObjects();
+            assertNotNull("NativeJavaObject.init shim must register the JavaIterableIterator prototype",
+                    ScriptableObject.getTopScopeValue(scope, "JavaIterableIterator"));
+        } finally {
+            Context.exit();
+        }
+    }
+
+    // ========== Test 5: adapter (b) -- importPackage'd core symbol resolves via JavaScriptScopeUtil ==========
+
+    @Test
+    public void importPackagedCoreSymbolResolvesInJavaScriptScopeUtilScope() {
+        // PRECONDITION: JavaScriptBuilder.generateGlobalSealedScript() unconditionally emits
+        // importPackage(Packages.com.mirth.connect.userutil) and
+        // importPackage(Packages.com.mirth.connect.server.userutil), independent of the empty
+        // getConnectorMetaData()/getPluginMetaData() maps this class's class-level setup mocks
+        // (confirmed by reading JavaScriptBuilder.java) -- so this scope has a core symbol to
+        // resolve without needing to seed one. com.mirth.connect.userutil.Response is picked as a
+        // concrete, stable class from that package.
+        Scriptable scope = JavaScriptScopeUtil.getDeployScope(contextFactory, null);
+        try {
+            // PRECONDITION: adapter (b) propagates the sealed scope's
+            // associatedValue("importedPackages") onto this parentScope-null child. Without that
+            // propagation, "Response" resolves to Scriptable.NOT_FOUND here even though the sealed
+            // shared scope itself correctly ran importPackage -- the exact silent behavior change
+            // D-11/T-23-21 exist to close, since parentScope is deliberately left null (see
+            // JavaScriptScopeUtil.getScope()'s own comment for why) and nothing else makes the
+            // sealed scope's imports visible from a fresh child scope. ScriptableObject.getProperty
+            // (not a bare scope.get(...)) is used deliberately: it walks the prototype chain the
+            // way Rhino's own name-resolution does, invoking the prototype's (the sealed
+            // ImporterTopLevel's) overridden get() -- a bare scope.get(name, scope) call does not
+            // walk the chain and would false-red regardless of adapter (b).
+            Object response = ScriptableObject.getProperty(scope, "Response");
+            assertNotEquals("importPackage'd com.mirth.connect.userutil.Response must resolve in a "
+                    + "scope obtained through JavaScriptScopeUtil's public getters",
+                    Scriptable.NOT_FOUND, response);
+        } finally {
+            Context.exit();
+        }
     }
 }
