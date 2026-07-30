@@ -221,14 +221,14 @@ public class SftpParamsTest extends SmokeTestBase {
         // JSchAlgoNegoFailException / "Algorithm negotiation fail:" signature, not merely a
         // generic connect failure. The channel-start failure is synchronous so the signature
         // is typically already in mirth.log by the time this test runs; poll anyway in case of
-        // scheduling variance.
+        // scheduling variance. pollUntil() itself throws on timeout (WR-01, 25.1-07: the
+        // redundant post-poll assertTrue that used to follow this call could only ever be
+        // reached when the condition already held — it added no falsifiability and its message
+        // did not contain the driver-matched "unexpectedly reached STARTED" substring, so a
+        // hypothetical failure there would have misrouted to INCONCLUSIVE instead of
+        // SELF-TEST FAILED. pollUntil is the sole secondary corroboration now.
         pollUntil("mirth.log contains a JSchAlgoNegoFailException signature for the "
                 + "legacy-negative leg", 30, SftpParamsTest::mirthLogContainsAlgoNegoFailure);
-
-        assertTrue("mirth.log should record the algorithm-negotiation failure SPECIFICALLY "
-                + "(JSchAlgoNegoFailException / \"Algorithm negotiation fail:\"), not a "
-                + "generic connect failure",
-                mirthLogContainsAlgoNegoFailure());
     }
 
     /**

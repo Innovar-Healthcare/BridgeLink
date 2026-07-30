@@ -899,7 +899,7 @@ wait_for_started() {
         # 60s for a state it will never reach would just waste harness budget every run;
         # SftpParamsTest's legacyDefaultFailsAlgoNego @Test is the actual assertion for
         # this channel's behavior, not this generic STARTED-state poll.
-        if [[ "${id}" == "00000030-0000-0000-0000-000000000030" ]]; then
+        if [[ "${id}" == "00000030-0000-0000-0000-000000000030" && "${SFTP_LEGACY_SIMULATE_HOLE:-}" != "1" ]]; then
             info "  Skipping STARTED-wait for ${name} (${id}) — expected to never start (D-07 negative leg)"
             continue
         fi
@@ -1212,6 +1212,19 @@ run_driver() {
     local driver_log
     driver_log="$(mktemp)"
 
+    # 25.1-07 (SC-3): SFTP_LEGACY_SIMULATE_SKIP=1 (test-irt1541-jsch-sftp-upgrade.sh
+    # --simulate-skip) deliberately drops the forked JUnit process's -DSFTP_LEGACY_PORT value
+    # to empty, reproducing a property-forwarding regression. The shell-level
+    # ${SFTP_LEGACY_PORT} is left REAL — the container/deploy stages are unaffected — only the
+    # forked JVM's view of the property is dropped, so SftpParamsTest.legacyLegActive() returns
+    # false inside the fork and both legacy @Test legs self-skip via Assume.assumeTrue. Gated;
+    # unset in every normal run.
+    local driver_sftp_legacy_port="${SFTP_LEGACY_PORT:-}"
+    if [[ "${SFTP_LEGACY_SIMULATE_SKIP:-}" == "1" ]]; then
+        info "SFTP_LEGACY_SIMULATE_SKIP=1 detected — forwarding an EMPTY -DSFTP_LEGACY_PORT to the forked JUnit process (forced self-skip self-proof)"
+        driver_sftp_legacy_port=""
+    fi
+
     if ant -f "${SCRIPT_DIR}/build.xml" test-run \
         -Dsmoke.setup.dir="${SERVER_SETUP}" \
         -DHTTPS_PORT="${HTTPS_PORT}" \
@@ -1244,7 +1257,7 @@ run_driver() {
         -DSFTP_KEY_PATH="${SFTP_KEY_PATH}" \
         -DSFTP_KNOWN_HOSTS_PATH="${SFTP_KNOWN_HOSTS_PATH}" \
         -DSFTP_UPLOAD_DIR="${SFTP_UPLOAD_DIR}" \
-        -DSFTP_LEGACY_PORT="${SFTP_LEGACY_PORT:-}" \
+        -DSFTP_LEGACY_PORT="${driver_sftp_legacy_port}" \
         -DSFTP_LEGACY_UPLOAD_DIR="${SFTP_LEGACY_UPLOAD_DIR:-}" \
         -DMIRTH_LOG_PATH="${MIRTH_LOG_PATH}" \
         > "${driver_log}" 2>&1; then
