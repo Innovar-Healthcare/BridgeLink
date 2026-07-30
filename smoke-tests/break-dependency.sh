@@ -19,16 +19,32 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SERVER_LIB="${REPO_ROOT}/server/setup/server-lib"
-# BREAK_FIXTURE_JAR is overridable (plan 18-09): the default xstream-1.4.10.jar downgrade
-# does NOT reproduce a functional break for this codebase (verified empirically in plan
-# 18-08 and reconfirmed in 18-09 -- XStream's reflection-based serializer is highly
-# backward-compatible for plain POJO graphs, and downgrading does not reproduce the
-# forward-upgrade regression class). The recorded catch (plan 18-10) pairs
-# BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.21.jar -- the literal v26.6.0 rollback
-# version -- with smoke-tests/channels/legacy-migration-3-4-test.xml, whose channel root at
-# schema 3.4.0 forces Channel.migrate3_5_0(), the DOM-mutation-then-reload seam the
-# regression's DomReader child-caching change broke (NET-05/SC-4 break-proof).
-FIXTURE_JAR="${BREAK_FIXTURE_JAR:-${SCRIPT_DIR}/fixtures/xstream-1.4.10.jar}"
+# BREAK_FIXTURE_JAR is overridable. History (D-25): the xstream-1.4.10.jar downgrade does NOT
+# reproduce a functional break for this codebase -- verified empirically in plan 18-08,
+# reconfirmed in 18-09 (XStream's reflection-based serializer is highly backward-compatible
+# for plain POJO graphs, and downgrading does not reproduce the forward-upgrade regression
+# class), and settled a third time in Phase 23 plan 02's rung-0 run (BREAK_FIXTURE_JAR
+# explicitly pointed at this same 1.4.10 jar against legacy-migration-3-4-test.xml --
+# recorded exit 1, SELF-TEST FAILED, per smoke-tests/README.md). The plan 18-10 catch
+# (BREAK_FIXTURE_JAR=smoke-tests/fixtures/xstream-1.4.21.jar -- the literal v26.6.0 rollback
+# version) is now HISTORICAL ONLY: Phase 23 lands xstream 1.4.21 as the shipped version, so
+# that fixture can no longer break anything (it IS what ships) -- see fixtures/xstream-1.4.21.jar's
+# README annotation, disarmed post-Phase-23. Per D-25 the ARMED DEFAULT is now a deliberately
+# mangled copy of the shipped 1.4.21 jar (com/thoughtworks/xstream/io/xml/DomReader.class
+# removed, so MirthDomReader's own superclass fails to link -- guaranteed
+# SMOKE-FAILURE-CLASS: import at the exact same seam), because an armed configuration that
+# lives only in a README sentence is a canary that will be run wrong.
+FIXTURE_JAR="${BREAK_FIXTURE_JAR:-${SCRIPT_DIR}/fixtures/xstream-1.4.21-mangled.jar}"
+# BREAK_LIB_GLOB is overridable (D-26): generalizes the swap-aside glob beyond xstream so
+# Phases 24/25/26 can reuse this script for their own dependency's break-proof canary without
+# a script rewrite -- both knobs default to today's xstream-only values so behavior is
+# unchanged unless a caller opts in.
+BREAK_LIB_GLOB="${BREAK_LIB_GLOB:-xstream-*.jar}"
+# BREAK_EXPECT_FAILURE_CLASS is overridable (D-26): generalizes the verdict-classification
+# marker beyond the XStream import seam. Must be one of the four legal
+# SMOKE-FAILURE-CLASS values (import/assert/log/duration) documented in this file's
+# "Failure-class markers" section -- a new knob must not invite a fifth.
+BREAK_EXPECT_FAILURE_CLASS="${BREAK_EXPECT_FAILURE_CLASS:-import}"
 ASIDE_DIR="$(mktemp -d)/xstream-aside"
 OUT_DIR="${SCRIPT_DIR}/out"
 EVIDENCE_LOG="${OUT_DIR}/break-proof-harness-run.log"
@@ -54,21 +70,22 @@ if [[ ! -f "${FIXTURE_JAR}" ]]; then
     exit 2
 fi
 
-# Enumerate EVERY xstream jar RECURSIVELY under server-lib. MirthLauncher walks server-lib
-# recursively (MirthLauncher.java directory walk) and a nested copy (e.g. donkey ships its own
-# xstream-*.jar under server-lib/donkey/) would mask the break if left in place — never a
-# top-level-only glob (Pitfall 10a), and never hardcode a version number (Phase 23 changes it).
+# Enumerate EVERY jar matching BREAK_LIB_GLOB RECURSIVELY under server-lib. MirthLauncher
+# walks server-lib recursively (MirthLauncher.java directory walk) and a nested copy (e.g.
+# donkey ships its own xstream-*.jar under server-lib/donkey/) would mask the break if left
+# in place — never a top-level-only glob (Pitfall 10a), and never hardcode a version number
+# (Phase 23 changes it) or a library family (D-26 -- BREAK_LIB_GLOB generalizes this).
 ORIGINAL_JARS=()
 while IFS= read -r line; do
     [[ -n "${line}" ]] && ORIGINAL_JARS+=("${line}")
-done < <(find "${SERVER_LIB}" -name 'xstream-*.jar' | sort)
+done < <(find "${SERVER_LIB}" -name "${BREAK_LIB_GLOB}" | sort)
 
 if [[ ${#ORIGINAL_JARS[@]} -eq 0 ]]; then
-    err "No xstream-*.jar found recursively under ${SERVER_LIB} — nothing to break."
+    err "No ${BREAK_LIB_GLOB} found recursively under ${SERVER_LIB} — nothing to break."
     exit 2
 fi
 
-info "Found ${#ORIGINAL_JARS[@]} xstream jar(s) to swap aside:"
+info "Found ${#ORIGINAL_JARS[@]} jar(s) matching ${BREAK_LIB_GLOB} to swap aside:"
 for jar in "${ORIGINAL_JARS[@]}"; do
     echo "    ${jar}"
 done
@@ -135,12 +152,12 @@ info "Harness exit code: ${HARNESS_EXIT}"
 VERDICT_EXIT=2
 
 if [[ ${HARNESS_EXIT} -eq 0 ]]; then
-    echo "SELF-TEST FAILED: harness PASSED with broken xstream — net has a hole"
+    echo "SELF-TEST FAILED: harness PASSED with broken ${BREAK_LIB_GLOB} — net has a hole"
     VERDICT_EXIT=1
-elif grep -q 'SMOKE-FAILURE-CLASS: import' "${EVIDENCE_LOG}"; then
-    ok "harness caught the broken dependency (behavioral catch at the XStream import seam)"
-    echo "--- import-stage failure excerpt ---"
-    grep -A 5 -B 2 'SMOKE-FAILURE-CLASS: import' "${EVIDENCE_LOG}" | head -60
+elif grep -q "SMOKE-FAILURE-CLASS: ${BREAK_EXPECT_FAILURE_CLASS}" "${EVIDENCE_LOG}"; then
+    ok "harness caught the broken dependency (behavioral catch at the ${BREAK_EXPECT_FAILURE_CLASS} seam)"
+    echo "--- ${BREAK_EXPECT_FAILURE_CLASS}-stage failure excerpt ---"
+    grep -A 5 -B 2 "SMOKE-FAILURE-CLASS: ${BREAK_EXPECT_FAILURE_CLASS}" "${EVIDENCE_LOG}" | head -60
     echo "-------------------------------------"
     VERDICT_EXIT=0
 else
