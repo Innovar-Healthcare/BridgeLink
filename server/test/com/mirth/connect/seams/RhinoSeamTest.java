@@ -35,7 +35,7 @@ import com.mirth.connect.server.util.javascript.MirthContextFactory;
 
 /**
  * Dependency-seam characterization suite (NET-03, D-09/D-10) for the Rhino engine AS SHIPPED:
- * rhino 1.7.13 (server/lib/rhino-1.7.13.jar), run with the ES6 language version that is the
+ * rhino 1.7.15.1 (server/lib/rhino-1.7.15.1.jar), run with the ES6 language version that is the
  * shipped {@code mirth.properties} default ({@code rhino.languageversion = es6}).
  * <p>
  * Scripts are executed through a real {@code com.mirth.connect.server.util.javascript.
