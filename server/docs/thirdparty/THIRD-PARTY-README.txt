@@ -86,7 +86,7 @@ Mirth Connect includes the following, which is distributed under the terms of
 the MPL version 2.0 (see MPL-2.0.txt). The source code is also available under
 the same license terms.
 
-	Mozilla Rhino 1.7.13 (source code can be downloaded at:
+	Mozilla Rhino 1.7.15.1 (source code can be downloaded at:
 	https://developer.mozilla.org/en-US/docs/Rhino)
 	This library was modified to fix some issues in XML processing, and to make
 	the debugger easier to implement.
@@ -1074,7 +1074,7 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 The license below pertains to a portion of the software included with Mozilla
-Rhino 1.7.13 (most of the classes in the
+Rhino 1.7.15.1 (most of the classes in the
 org.mozilla.javascript.v8dtoa package), which is included with Mirth Connect.
 
 =================== Beginning of License ===================
@@ -1113,7 +1113,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 The license below pertains to a portion of the software included with Mozilla
-Rhino 1.7.13 (the org.mozilla.javascript.DToA class), which is
+Rhino 1.7.15.1 (the org.mozilla.javascript.DToA class), which is
 included with Mirth Connect.
 
 =================== Beginning of License ===================
@@ -1144,7 +1144,7 @@ included with Mirth Connect.
 
 
 The license below pertains to a portion of the software included with Mozilla
-Rhino 1.7.13 (the classes in the
+Rhino 1.7.15.1 (the classes in the
 org.mozilla.javascript.tools.debugger.treetable package), which is included with
 Mirth Connect.
 
