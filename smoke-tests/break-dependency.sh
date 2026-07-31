@@ -70,6 +70,16 @@ if [[ ! -f "${FIXTURE_JAR}" ]]; then
     exit 2
 fi
 
+# Existence of mirth-server.jar says NOTHING about whether server/setup was rebuilt after the
+# source-tree jars changed. server/setup is gitignored local state: a canary run against a
+# distribution still carrying the PREVIOUS release's xstream/Rhino/BouncyCastle jars would swap
+# the mangled fixture in for a stale jar, still observe NoClassDefFoundError, still exit 0 — and
+# prove nothing about the jar this phase actually ships. Reconcile BEFORE the swap, fail closed.
+if ! bash "${SCRIPT_DIR}/check-dist-freshness.sh"; then
+    err "Refusing to produce a verdict against a stale assembled distribution (see above)."
+    exit 2
+fi
+
 # Enumerate EVERY jar matching BREAK_LIB_GLOB RECURSIVELY under server-lib. MirthLauncher
 # walks server-lib recursively (MirthLauncher.java directory walk) and a nested copy (e.g.
 # donkey ships its own xstream-*.jar under server-lib/donkey/) would mask the break if left
@@ -155,7 +165,11 @@ info "Swapped in ${FIXTURE_JAR} at ${FIXTURE_INSTALLED_PATH}"
 # ---------------------------------------------------------------------------
 info "Running smoke-tests/run-smoke-test.sh with the broken xstream jar (expecting failure)..."
 HARNESS_EXIT=0
-bash "${SCRIPT_DIR}/run-smoke-test.sh" > "${EVIDENCE_LOG}" 2>&1 || HARNESS_EXIT=$?
+# The swap we just performed deliberately makes the distribution disagree with the source tree,
+# so the harness's own freshness gate MUST be suppressed for this nested run — otherwise it would
+# fatal in preflight with no SMOKE-FAILURE-CLASS marker and every canary run would classify as
+# INCONCLUSIVE. Freshness was already asserted above, before the swap.
+SMOKE_SKIP_DIST_FRESHNESS=1 bash "${SCRIPT_DIR}/run-smoke-test.sh" > "${EVIDENCE_LOG}" 2>&1 || HARNESS_EXIT=$?
 
 echo "--- harness output (tail 60 lines) ---"
 tail -n 60 "${EVIDENCE_LOG}" || true

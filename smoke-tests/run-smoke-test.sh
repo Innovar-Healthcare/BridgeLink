@@ -192,6 +192,24 @@ preflight() {
     fi
     pass "mirth-server-launcher.jar present"
 
+    # Existence is not freshness. server/setup is gitignored local state, so every verdict this
+    # harness produces is otherwise silently conditional on someone having rebuilt the
+    # distribution after the source jars changed — a property no script asserted before this
+    # gate. Reconcile the assembled tree against server/lib, client/lib and manager/lib and
+    # refuse to run against a stale one.
+    #
+    # SMOKE_SKIP_DIST_FRESHNESS=1 opts out. The ONLY legitimate caller is
+    # break-dependency.sh, whose whole purpose is to run this harness against a distribution it
+    # has deliberately broken; it asserts freshness itself BEFORE performing the swap.
+    if [[ "${SMOKE_SKIP_DIST_FRESHNESS:-0}" == "1" ]]; then
+        info "Distribution-freshness reconciliation SKIPPED (SMOKE_SKIP_DIST_FRESHNESS=1)"
+    elif bash "${SCRIPT_DIR}/check-dist-freshness.sh"; then
+        pass "assembled distribution reconciles with the source-tree jars"
+    else
+        fatal "Assembled distribution is STALE (see reconciliation output above). Rebuild first:
+  cd server && ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true"
+    fi
+
     mkdir -p "${HARNESS_LOG_DIR}"
 
     # Rule 1 fix (plan 18-07): server/setup/logs/mirth.log lives at a FIXED path (log4j2's

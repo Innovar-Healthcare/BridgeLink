@@ -26,6 +26,25 @@ ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true
 This produces `server/setup/` (`server-lib/mirth-server.jar`, `mirth-server-launcher.jar`,
 `conf/mirth.properties`, etc.) — the harness never rebuilds it, only boots it.
 
+**Rebuild it again after ANY change to a source-tree jar.** `server/setup/` is gitignored, so it
+is pure local state: an assembled distribution left over from before a dependency bump still
+carries the OLD jars, and every verdict produced against it — including the break-proof canary's
+— is then about the old jars, not the ones under test. Since Phase 23 this is enforced rather
+than trusted: `smoke-tests/check-dist-freshness.sh` reconciles `server/lib` (presence + byte
+identity under `server/setup/server-lib`) and `client/lib`/`manager/lib` (presence of the exact
+versioned filename anywhere under `server/setup`; those jars are re-signed during assembly so
+their bytes legitimately differ) and exits `2` with the rebuild command on any mismatch. It runs
+automatically in `run-smoke-test.sh`'s `preflight()` and in `break-dependency.sh`'s preflight
+(there, before the swap), and can be run standalone:
+
+```bash
+bash smoke-tests/check-dist-freshness.sh
+```
+
+`SMOKE_SKIP_DIST_FRESHNESS=1` suppresses the harness-side gate. Its only legitimate caller is
+`break-dependency.sh`, which deliberately breaks the distribution before invoking the harness and
+therefore asserts freshness itself beforehand.
+
 ## Usage
 
 ```bash
@@ -51,7 +70,10 @@ D-04).
 ### What the script does
 
 1. Preflight: confirms `server/setup/server-lib/mirth-server.jar` and
-   `server/setup/conf/mirth.properties` exist (fails fatally with a rebuild hint if not).
+   `server/setup/conf/mirth.properties` exist, and runs
+   `check-dist-freshness.sh` to confirm the assembled distribution actually matches the
+   source-tree jars (fails fatally with a rebuild hint if not; suppressible only via
+   `SMOKE_SKIP_DIST_FRESHNESS=1`, see Prerequisites).
 2. Allocates ephemeral ports (HTTP, HTTPS, MLLP, HTTP listener, SMTP, SCP, SOAP — plus a
    derived `SOAP_URL`) and a per-run channel work directory (`IN_DIR`/`OUT_DIR`/
    `SQLITE_PATH`) under a fresh `mktemp -d`.
@@ -351,10 +373,19 @@ Ordered, following the exact sequence this phase used across six plans:
 ## Break-dependency proof (NET-05)
 
 `smoke-tests/break-dependency.sh` is the D-13/D-14 self-verifying broken-dependency proof:
-it swaps EVERY jar matching `BREAK_LIB_GLOB` (default `xstream-*.jar`) found recursively under
-`server/setup/server-lib` aside, drops in a deliberately incompatible fixture jar, runs the
-harness expecting failure, restores the original jar(s) unconditionally (trap on EXIT), and
-verifies the restore.
+it reconciles the assembled distribution against the source tree
+(`check-dist-freshness.sh`, fail-closed — see Prerequisites), swaps EVERY jar matching
+`BREAK_LIB_GLOB` (default `xstream-*.jar`) found recursively under `server/setup/server-lib`
+aside, drops in a deliberately incompatible fixture jar, runs the harness expecting failure
+(with `SMOKE_SKIP_DIST_FRESHNESS=1`, since the swap it just performed is exactly the mismatch
+that gate detects), restores the original jar(s) unconditionally (trap on EXIT), and verifies the
+restore against the exact path the fixture was installed at.
+
+The fixture's basename must NOT collide with any jar being swapped aside; a collision is rejected
+in preflight with exit `2`. This matters because `fixtures/xstream-1.4.21.jar` now shares its
+basename with the shipped jar: under a collision the restore-time `rm -f` would target the real
+jar's path and the post-restore leftover check would match the correctly restored original,
+reporting a false "tree may be left in a broken state" and discarding the genuine verdict.
 
 **When to run:** before any CVE-track jar bump (Phase 23 xstream/BC re-land, Phase 24 Derby,
 Phase 25 mssql-jdbc, Phase 26 Jersey) — rehearses the exact validation ritual a risky
@@ -459,6 +490,18 @@ INFO: Restoring original xstream jar(s)...
 OK: Restoration verified: all 1 original xstream jar(s) back in place, fixture jar removed.
 ```
 
+> **Freshness caveat (Phase 23 code review, CR-04).** This transcript and the rung-2 transcript
+> below were recorded BEFORE `check-dist-freshness.sh` existed, i.e. against an assembled
+> distribution whose agreement with the source tree was never asserted. They must be treated as
+> **not yet reproduced under the gate**: re-run each against a freshly rebuilt distribution and
+> replace the tails above/below with the reproduced output before either is cited as D-06
+> hard-gate evidence again. (The specific reason this is not a theoretical caveat: the tree was
+> observed carrying `server/setup/server-lib/xstream-1.4.20.jar`, `rhino-1.7.13.jar` and
+> `bcprov-jdk18on-1.78.1.jar` while `server/lib` already held the Phase 23 jars — so a canary run
+> in that state would have exercised the PRE-Phase-23 jars.) The rung-0 conclusion itself
+> (a `1.4.10` downgrade does not reproduce the forward-upgrade regression class) is independently
+> confirmed mechanically in `23-RESEARCH.md` §R3.1 and does not rest on this transcript.
+
 **Rung 1 (an old BouncyCastle or Rhino jar) is SKIPPED per D-25** — not attempted. `BcSeamTest`
 is designed green on both BC 1.78.1 and 1.84; and once Phase 23 plan 04's D-10 throw lands, a
 Rhino 1.7.13 downgrade fails at *boot* (`JavaIterableIterator` absent from that jar), the wrong
@@ -502,19 +545,22 @@ OK: Restoration verified: all 1 original xstream jar(s) back in place, fixture j
 
 After the run, `find server/setup/server-lib -name 'xstream-*.jar'` named only
 `xstream-1.4.21.jar` — the trap-based restore left the runtime classpath clean; no mangled
-jar survives on any runtime path.
+jar survives on any runtime path. **Note (CR-04):** that observation is only meaningful about the
+re-land if the distribution had actually been rebuilt with the Phase 23 jars — see the freshness
+caveat above; the same command run against a stale tree names `xstream-1.4.20.jar` instead, and
+the transcript above was recorded before any gate asserted the difference.
 
-This is the recorded D-06 hard-gate evidence for Phase 23's xstream 1.4.21 re-land: NET-05's
-break-proof canary is proven live-armed at the exact moment its previous armed configuration
-(the plan-18-10 fixture) stopped being able to fire.
+This is the D-06 hard-gate evidence recorded for Phase 23's xstream 1.4.21 re-land — NET-05's
+break-proof canary demonstrated live-armed at the exact moment its previous armed configuration
+(the plan-18-10 fixture) stopped being able to fire — **pending re-run under
+`check-dist-freshness.sh`** per the caveat above.
 
-The script itself is complete, correct, and self-verifying per every D-13/D-14/D-25/D-26
-structural requirement (recursive jar discovery generalized via `BREAK_LIB_GLOB`, `BREAK_FIXTURE_JAR`
-override with an armed in-script default, verdict classification generalized via
-`BREAK_EXPECT_FAILURE_CLASS`, trap-based restore keyed on `$(basename "${FIXTURE_JAR}")` so no
-fixture is ever left in the tree, restoration verification, three-way verdict classification) —
-the exit code accurately reflects what actually happened, which is the property
-`break-dependency.sh` is designed to prove.
+Structurally the script satisfies every D-13/D-14/D-25/D-26 requirement: recursive jar discovery
+generalized via `BREAK_LIB_GLOB`, `BREAK_FIXTURE_JAR` override with an armed in-script default,
+verdict classification generalized via `BREAK_EXPECT_FAILURE_CLASS`, trap-based restore keyed on
+the exact recorded fixture install path (with a colliding fixture basename rejected in preflight)
+so no fixture is ever left in the tree, restoration verification, three-way verdict
+classification, and fail-closed distribution-freshness reconciliation before any swap.
 
 ## Jetty regression coverage (18.2)
 
@@ -605,6 +651,7 @@ duplicate-package classpath conflict (see Pitfall 5 in `18-RESEARCH.md`).
 smoke-tests/
 ├── run-smoke-test.sh          # boot/teardown orchestrator (this plan, 18-01)
 ├── break-dependency.sh        # NET-05/SC-4 break-proof canary (18-13/D-25/D-26)
+├── check-dist-freshness.sh    # assembled-distribution vs source-tree jar reconciliation (Phase 23, CR-04)
 ├── check-jar-java17.sh        # MR-aware Java-17 loadability scan (Phase 23, D-17/D-18)
 ├── check-manifest-classpath.sh # manifest Class-Path reconciliation, RFC-822-aware (Phase 23, D-29.2)
 ├── README.md                  # this file
