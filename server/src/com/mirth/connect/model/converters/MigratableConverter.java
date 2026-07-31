@@ -89,13 +89,10 @@ public class MigratableConverter extends ReflectionConverter {
                 migrateElement(new DonkeyElement((Element) ((DocumentReader) reader.underlyingReader()).getCurrent()), version, context.getRequiredType());
             }
 
-            /*
-             * MIRTH-3446: If any migration was performed, we need to tell the DomReader to reload
-             * its internal list of child elements (since children may have been added or removed).
-             */
-            if (reader.underlyingReader() instanceof MirthDomReader) {
-                ((MirthDomReader) reader.underlyingReader()).reloadCurrentElement();
-            }
+            // MIRTH-3446 / IRT-1396: no explicit reload is needed — MirthDomReader overrides
+            // getChildCount()/getChild(int) to re-read the live DOM on every access. See
+            // MirthDomReader. (The former reloadCurrentElement() call here was a no-op under
+            // xstream 1.4.21, whose reassignCurrentElement() no longer rebuilds the child cache.)
         }
 
         return super.unmarshal(reader, context);

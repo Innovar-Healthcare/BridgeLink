@@ -12,39 +12,22 @@ package com.mirth.connect.model.converters;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import com.thoughtworks.xstream.io.naming.NameCoder;
 import com.thoughtworks.xstream.io.xml.DomReader;
-import com.thoughtworks.xstream.io.xml.XmlFriendlyReplacer;
 
 public class MirthDomReader extends DomReader {
 
+    /*
+     * The only constructor BridgeLink uses (ObjectXMLSerializer:348,405,421). The five other
+     * DomReader constructor overloads this class used to mirror had no callers anywhere in the
+     * tree, and two of them took the deprecated XmlFriendlyReplacer; they were removed rather than
+     * left as untested surface that a future xstream bump would have to keep compiling.
+     */
     public MirthDomReader(Element rootElement) {
         super(rootElement);
-    }
-
-    public MirthDomReader(Document document) {
-        super(document);
-    }
-
-    public MirthDomReader(Element rootElement, NameCoder nameCoder) {
-        super(rootElement, nameCoder);
-    }
-
-    public MirthDomReader(Document document, NameCoder nameCoder) {
-        super(document, nameCoder);
-    }
-
-    public MirthDomReader(Element rootElement, XmlFriendlyReplacer replacer) {
-        super(rootElement, replacer);
-    }
-
-    public MirthDomReader(Document document, XmlFriendlyReplacer replacer) {
-        super(document, replacer);
     }
 
     /*
@@ -66,6 +49,12 @@ public class MirthDomReader extends DomReader {
      * MirthDomReader never depends on that private, version-fragile cache at all — every access
      * re-reads the live DOM directly off the current element. This restores the pre-1.4.21
      * always-fresh behavior for our reader without reaching into xstream's private internals.
+     *
+     * Consequently there is no reload step and no reloadCurrentElement() helper any more: the old
+     * helper (and MigratableConverter's call to it) was a provable no-op under 1.4.21 sitting under
+     * a comment that claimed load-bearing behavior — exactly what leads a later maintainer to
+     * conclude the reload path is still active and revert the overrides below. If a future xstream
+     * ever restores rebuild-on-reassign semantics, the overrides below remain correct regardless.
      */
     @Override
     protected int getChildCount() {
@@ -87,9 +76,5 @@ public class MirthDomReader extends DomReader {
             }
         }
         return children;
-    }
-
-    protected void reloadCurrentElement() {
-        reassignCurrentElement(getCurrent());
     }
 }
