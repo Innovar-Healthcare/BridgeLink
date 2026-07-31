@@ -58,8 +58,10 @@ smoke-tests/run-smoke-test.sh [--db derby|mysql|postgres|mssql] [--boot-only] [-
   10.17 lands and the JDK-17 leg flips to an external DB.
 - `--boot-only`: stop after the health check succeeds and tear down immediately — proves
   the boot/teardown machinery in isolation (18-01), skipping the import/deploy stage.
-- `--deploy-only`: boot, then import and deploy all 23 reference channel fixtures, poll
-  them to STARTED, then tear down (no message pump/assert driver — that's 18-06/18-07).
+- `--deploy-only`: boot, then import and deploy every registered reference channel fixture
+  (the `CHANNEL_FILES` array in `run-smoke-test.sh` — 29 unconditionally, plus the two SFTP
+  legacy fixtures when the external driver exports `SFTP_LEGACY_PORT`), poll them to STARTED,
+  then tear down (no message pump/assert driver — that's 18-06/18-07).
   Mutually exclusive with `--boot-only`.
 - `--help`: print usage and exit 0.
 
@@ -151,7 +153,32 @@ never included in the measured duration.
 
 ## Add a channel
 
-The registry has grown to 23 committed fixtures in `smoke-tests/channels/` (channel IDs
+**Do not trust a hard-coded count in this section — derive it.** The registry grows every phase and
+restated numbers go stale silently (they had drifted by nine fixtures before Phase 23's code review
+caught it). Current state, and the commands that produce it:
+
+```bash
+ls smoke-tests/channels/*.xml | wc -l                       # committed fixtures
+grep -h -o '<id>[0-9a-f-]*</id>' smoke-tests/channels/*.xml | sort -u | tail -1   # highest ID in tree
+```
+
+At the time of writing that is **32 committed fixtures, IDs running through `00000031`**, of which
+**29 are registered unconditionally** in `run-smoke-test.sh`'s `CHANNEL_FILES` (matching the
+harness's own `Importing 29 reference channels...` line) and two more (`00000030`, `00000031`) are
+appended only when the external SFTP driver exports `SFTP_LEGACY_PORT` (25.1-03).
+
+**`00000030` is intentionally backed by two alternative fixture files**,
+`channels/file-sftp-legacy-negative-test.xml` and `channels/file-sftp-legacy-negative-hole-test.xml`
+(25.1-05 fault injection). They are mutually exclusive — `SFTP_LEGACY_SIMULATE_HOLE=1` selects the
+second — so exactly one is ever imported in a run. This is NOT an ID collision; do not "fix" it by
+renumbering. Any *other* pair of fixtures sharing an ID is a real defect, which the harness now
+catches: `import_deploy()` fails fast if the channel-ID set it is about to import contains a
+duplicate.
+
+The paragraphs below describe the original Phase 18/18.1/18.2 fixtures and remain accurate for
+those; they are not a full inventory.
+
+The registry began with 23 committed fixtures in `smoke-tests/channels/` (channel IDs
 `00000001` through `00000023`). The original 12 (Phase 18, NET-01) cover every stock
 connector type: `http-test.xml`, `tcp-mllp-test.xml`, `file-test.xml`, `jdbc-test.xml`,
 `vm-test.xml`, `js-test.xml`, `smtp-test.xml`, `soap-test.xml`, `dicom-test.xml`,
@@ -186,14 +213,19 @@ threshold) and `/static/file` (FILE, backed by `${STATIC_FILE_PATH}`, a pre-crea
 102400-byte file) — both additive; the pre-existing `/static/smoke` resource was left
 byte-identical.
 
-To add a 24th fixture:
+To add the next fixture:
 
 1. **Author the channel XML** under `smoke-tests/channels/<name>-test.xml`. Follow the
    existing fixtures' conventions:
-   - Fixed, human-assigned sequential channel ID (`00000024-0000-0000-0000-000000000024`
-     — continue the sequence; IDs `00000001`-`00000023` are taken by the 12 Phase 18
-     fixtures, the 8 Phase 18.1 HTTP parameter-coverage fixtures, and the 3 Phase 18.2
-     Jetty regression fixtures).
+   - Fixed, human-assigned sequential channel ID, using **the next ID after the highest one
+     currently present in the tree** — check it, never copy a number out of this README:
+
+     ```bash
+     grep -h -o '<id>[0-9a-f-]*</id>' smoke-tests/channels/*.xml | sort -u | tail -1
+     ```
+
+     (Following a stale "IDs 1-23 are taken" instruction is what produced the only ID reuse in
+     the tree's history.)
    - `<description>` ends with "Test-only; never deploy to production."
    - Every ephemeral port/path is a `${VARNAME}` placeholder, never a hardcoded value.
    - A real transformer step (JavaScript Step, `com.mirth.connect.plugins.javascriptstep.JavaScriptStep`)
@@ -340,9 +372,15 @@ Ordered, following the exact sequence this phase used across six plans:
    — forgetting this step is a hard failure (envsubst leaves the literal `${...}` text in
    the imported XML, breaking port parsing).
 3. **`CHANNEL_FILES` / `CHANNEL_IDS`** — append the new fixture's base filename and its
-   channel ID (same index position in both arrays) using the next free sequential ID
-   (18.1 continued `00000013`-`00000020`, 18.2 continued `00000021`-`00000023`; the next
-   connector phase continues from `00000024`).
+   channel ID (same index position in both arrays) using the next free sequential ID, read
+   from the tree rather than from this document:
+
+   ```bash
+   grep -h -o '<id>[0-9a-f-]*</id>' smoke-tests/channels/*.xml | sort -u | tail -1
+   ```
+
+   (Historically: 18.1 continued `00000013`-`00000020`, 18.2 `00000021`-`00000023`, later phases
+   continued from `00000024`. Those ranges are history, not the current high-water mark.)
 4. **`OUT_DIR` subdirs** — add a work-directory subdirectory in `allocate_work_dirs()` for
    any new File-Writer-style destination artifact the new fixture writes to.
 5. **Listener probes** — add the new port to `wait_for_listener_ports()` ONLY if the probe

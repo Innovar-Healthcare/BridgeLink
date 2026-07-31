@@ -1172,10 +1172,32 @@ except Exception:
     done
 }
 
+# Two fixtures may legitimately SHARE a channel id when they are mutually exclusive alternatives
+# for the same slot (25.1-05: file-sftp-legacy-negative-test vs -hole-test both back 00000030, and
+# only one is ever placed in CHANNEL_FILES). What is never legitimate is the SELECTED set carrying
+# the same id twice: the second import overwrites or is rejected, and the channel that "passed" is
+# not the channel the fixture describes. Checking the selected set (not the fixture directory)
+# catches the real defect without false-failing on the documented alternatives.
+check_duplicate_channel_ids() {
+    local dupes
+    dupes="$(printf '%s\n' "${CHANNEL_IDS[@]}" | sort | uniq -d)"
+    if [[ -n "${dupes}" ]]; then
+        fatal "Duplicate channel ID(s) in the registered set — the second import would overwrite the
+  first, so neither channel's assertions would mean what they claim:
+${dupes}
+  Assign the next unused ID: grep -h -o '<id>[0-9a-f-]*</id>' smoke-tests/channels/*.xml | sort -u | tail -1"
+    fi
+    if [[ ${#CHANNEL_IDS[@]} -ne ${#CHANNEL_FILES[@]} ]]; then
+        fatal "CHANNEL_IDS (${#CHANNEL_IDS[@]}) and CHANNEL_FILES (${#CHANNEL_FILES[@]}) differ in
+  length — they are index-aligned arrays, so every entry after the mismatch names the wrong channel."
+    fi
+}
+
 import_deploy() {
     API="https://127.0.0.1:${HTTPS_PORT}/api"
     COOKIE_JAR="$(mktemp)"
 
+    check_duplicate_channel_ids
     bl_login
     get_server_version
     substitute_fixtures
