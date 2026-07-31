@@ -15,6 +15,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -62,13 +64,25 @@ public class ObjectXMLSerializerTest {
     // ObjectXMLSerializer path specifically because that suite's coverage is JSON-only.
     @Test
     public void testDeserializeOldFormatChannelXmlBelow3_5_0() throws Exception {
-        String xml = IOUtils.toString(ObjectXMLSerializerTest.class.getResourceAsStream("legacy-migration-3-4-channel.xml"));
+        String xml;
+        // try-with-resources + an explicit charset: IOUtils.toString(InputStream) is deprecated and
+        // decodes with the platform default charset, and the stream was never closed. The null check
+        // matters because getResourceAsStream returns null if the fixture is not on the test
+        // classpath, which would otherwise surface as a bare NPE inside IOUtils naming nothing.
+        try (InputStream in = ObjectXMLSerializerTest.class.getResourceAsStream("legacy-migration-3-4-channel.xml")) {
+            assertNotNull("fixture legacy-migration-3-4-channel.xml missing from the test classpath "
+                    + "(server/build.xml's test-compile must copy **/*.xml into ${test_classes})", in);
+            xml = IOUtils.toString(in, StandardCharsets.UTF_8);
+        }
+
         Channel channel = ObjectXMLSerializer.getInstance().deserialize(xml, Channel.class);
 
-        assertTrue(channel instanceof Channel);
         // Removal side: a stale child-element cache raises UnknownFieldException on the
         // removed codeTemplateLibraries field and downgrades deserialization to InvalidChannel.
-        assertFalse(channel instanceof InvalidChannel);
+        // (There is deliberately no `assertTrue(channel instanceof Channel)` here: `channel` is
+        // declared Channel, so that assertion can never fail and asserts nothing. InvalidChannel
+        // extends Channel, so this assertFalse is the real type check.)
+        assertFalse("channel must not degrade to InvalidChannel", channel instanceof InvalidChannel);
         assertEquals("00000012-0000-0000-0000-000000000012", channel.getId());
         // Addition side: a stale child-element cache makes the newly-added exportData element
         // invisible to xstream, and this dereference NPEs.
