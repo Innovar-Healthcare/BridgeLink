@@ -95,6 +95,22 @@ done
 TOP_LEVEL_JAR="${ORIGINAL_JARS[0]}"
 TOP_LEVEL_DIR="$(dirname "${TOP_LEVEL_JAR}")"
 
+# The fixture must NOT share a basename with any jar it is swapped in for. README documents
+# fixtures/xstream-1.4.21.jar as a selectable BREAK_FIXTURE_JAR value, and that basename is now
+# identical to the jar Phase 23 ships. Under such a collision the restore-time `rm -f` targets the
+# real shipped jar's path, and the post-restore leftover check matches the correctly restored
+# ORIGINAL jar — turning a good run into a false "tree may be left in a broken state" that also
+# discards the genuine verdict. Reject the collision up front, and from here on refer to the
+# fixture's installed location by the exact recorded path, never by re-deriving it from a name.
+FIXTURE_BASENAME="$(basename "${FIXTURE_JAR}")"
+for jar in "${ORIGINAL_JARS[@]}"; do
+    if [[ "$(basename "${jar}")" == "${FIXTURE_BASENAME}" ]]; then
+        err "Fixture basename ${FIXTURE_BASENAME} collides with a shipped jar (${jar}); copy the fixture to a distinct name (e.g. ${FIXTURE_BASENAME%.jar}-broken.jar) before use."
+        exit 2
+    fi
+done
+FIXTURE_INSTALLED_PATH="${TOP_LEVEL_DIR}/${FIXTURE_BASENAME}"
+
 # ---------------------------------------------------------------------------
 # Swap: move every original jar aside (preserving its original path for restore), then copy
 # the fixture into the top-level match's directory. ANY exit path restores everything (trap).
@@ -108,7 +124,7 @@ restore_jars() {
     fi
     RESTORED=1
     info "Restoring original xstream jar(s)..."
-    rm -f "${TOP_LEVEL_DIR}/$(basename "${FIXTURE_JAR}")"
+    rm -f "${FIXTURE_INSTALLED_PATH}"
     local jar rel dest
     for jar in "${ORIGINAL_JARS[@]}"; do
         rel="${jar#"${SERVER_LIB}"/}"
@@ -130,8 +146,8 @@ for jar in "${ORIGINAL_JARS[@]}"; do
     mkdir -p "$(dirname "${dest}")"
     mv "${jar}" "${dest}"
 done
-cp "${FIXTURE_JAR}" "${TOP_LEVEL_DIR}/$(basename "${FIXTURE_JAR}")"
-info "Swapped in ${FIXTURE_JAR} at ${TOP_LEVEL_DIR}/$(basename "${FIXTURE_JAR}")"
+cp "${FIXTURE_JAR}" "${FIXTURE_INSTALLED_PATH}"
+info "Swapped in ${FIXTURE_JAR} at ${FIXTURE_INSTALLED_PATH}"
 
 # ---------------------------------------------------------------------------
 # Run: expect the harness to FAIL. Capture full output to a log file for the
@@ -184,9 +200,10 @@ for jar in "${ORIGINAL_JARS[@]}"; do
     fi
 done
 
-FIXTURE_LEFTOVER="$(find "${SERVER_LIB}" -name "$(basename "${FIXTURE_JAR}")" 2>/dev/null || true)"
-if [[ -n "${FIXTURE_LEFTOVER}" ]]; then
-    err "Fixture jar still present after restore: ${FIXTURE_LEFTOVER}"
+# Check the exact path the fixture was installed at — a basename search would also match the
+# correctly restored original jar whenever the two share a name (rejected in preflight above).
+if [[ -e "${FIXTURE_INSTALLED_PATH}" ]]; then
+    err "Fixture jar still present after restore: ${FIXTURE_INSTALLED_PATH}"
     STILL_MISSING=1
 fi
 
