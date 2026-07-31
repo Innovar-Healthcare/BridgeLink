@@ -14,6 +14,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.util.DefaultIndenter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,6 +24,21 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 public class MirthJsonUtil {
 
     private static Logger logger = LogManager.getLogger(MirthJsonUtil.class);
+    /*
+     * Shared mapper for plain POJO <-> JSON conversion (e.g. REST endpoint DTOs). Returning the
+     * resulting String directly from a JAX-RS resource method causes Jersey to select its built-in
+     * String writer (exact type match) over the API-wide XStream-backed JsonMessageBodyWriter
+     * (generic Object match), so the JSON is written as-is with no XStream envelope.
+     */
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    /**
+     * Serializes a plain object (e.g. a REST endpoint DTO) directly to a JSON string via Jackson,
+     * bypassing the XStream-based serialization used elsewhere in the API.
+     */
+    public static String toJson(Object object) throws JsonProcessingException {
+        return OBJECT_MAPPER.writeValueAsString(object);
+    }
 
     public static String prettyPrint(String input) {
         ObjectMapper mapper = new ObjectMapper(new JsonFactory());

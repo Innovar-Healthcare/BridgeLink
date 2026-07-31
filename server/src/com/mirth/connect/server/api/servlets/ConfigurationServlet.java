@@ -27,9 +27,11 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.api.MirthApiException;
+import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.client.core.api.servlets.ConfigurationServletInterface;
 import com.mirth.connect.donkey.model.channel.DeployedState;
 import com.mirth.connect.donkey.model.channel.PollConnectorPropertiesInterface;
@@ -61,7 +63,9 @@ import com.mirth.connect.server.controllers.ExtensionController;
 import com.mirth.connect.server.controllers.ScriptController;
 import com.mirth.connect.util.ConfigurationProperty;
 import com.mirth.connect.util.ConnectionTestResponse;
+import com.mirth.connect.util.JavaScriptSharedUtil;
 import com.mirth.connect.util.KeystoreRegenerationResponse;
+import com.mirth.connect.util.MirthJsonUtil;
 import com.mirth.connect.util.MirthSSLUtil;
 
 public class ConfigurationServlet extends MirthServlet implements ConfigurationServletInterface {
@@ -420,6 +424,15 @@ public class ConfigurationServlet extends MirthServlet implements ConfigurationS
             }
         }
         return languageVersion;
+    }
+
+    @Override
+    public RawContent validateScript(String script) {
+        try {
+            return new RawContent(MirthJsonUtil.toJson(JavaScriptSharedUtil.validateScriptStructured(script)));
+        } catch (JsonProcessingException e) {
+            throw new MirthApiException(e);
+        }
     }
 
     @Override
