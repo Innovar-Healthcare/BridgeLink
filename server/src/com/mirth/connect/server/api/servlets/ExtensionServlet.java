@@ -12,9 +12,7 @@ package com.mirth.connect.server.api.servlets;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -28,17 +26,9 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.SecurityContext;
-import javax.xml.XMLConstants;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -49,24 +39,17 @@ import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.api.MirthApiException;
 import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.client.core.api.servlets.ExtensionServletInterface;
-import com.mirth.connect.donkey.model.channel.ConnectorPluginProperties;
 import com.mirth.connect.donkey.model.channel.ConnectorProperties;
-import com.mirth.connect.donkey.model.channel.DestinationConnectorProperties;
-import com.mirth.connect.donkey.model.channel.DestinationConnectorPropertiesInterface;
-import com.mirth.connect.donkey.model.channel.SourceConnectorProperties;
-import com.mirth.connect.donkey.model.channel.SourceConnectorPropertiesInterface;
-import com.mirth.connect.donkey.server.Constants;
-import com.mirth.connect.donkey.util.DonkeyElement;
 import com.mirth.connect.model.ConnectorMetaData;
 import com.mirth.connect.model.MetaData;
 import com.mirth.connect.model.PluginMetaData;
 import com.mirth.connect.model.ServerEvent.Outcome;
-import com.mirth.connect.model.converters.ObjectXMLSerializer;
 import com.mirth.connect.server.api.DontCheckAuthorized;
 import com.mirth.connect.server.api.MirthServlet;
 import com.mirth.connect.server.controllers.ControllerFactory;
 import com.mirth.connect.server.controllers.ExtensionController;
 import com.mirth.connect.server.controllers.ExtensionController.InstallationResult;
+import com.mirth.connect.server.util.ConnectorPropertiesUtil;
 
 public class ExtensionServlet extends MirthServlet implements ExtensionServletInterface {
 
@@ -233,7 +216,7 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
              * The explicit media type pins the response to application/xml even when the client
              * sent Accept: application/json (which the method's Produces admits to avoid a 406).
              */
-            RawContent body = new RawContent(toConnectorPropertiesXml(instance));
+            RawContent body = new RawContent(ConnectorPropertiesUtil.toConnectorPropertiesXml(instance));
             return Response.ok(body, MediaType.APPLICATION_XML_TYPE).build();
         } catch (MirthApiException e) {
             throw e;
@@ -286,18 +269,6 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
         return ExtensionController.getExtensionsPath();
     }
 
-    private int getDefaultQueueBufferSize() {
-        try {
-            Integer queueBufferSize = ControllerFactory.getFactory().createConfigurationController().getServerSettings().getQueueBufferSize();
-            if (queueBufferSize != null && queueBufferSize > 0) {
-                return queueBufferSize;
-            }
-        } catch (Exception e) {
-            // Fall through to the donkey default
-        }
-        return Constants.DEFAULT_QUEUE_BUFFER_SIZE;
-    }
-
     /**
      * Resolves an extension's webadmin manifest file, guarding against paths that traverse outside
      * the extensions directory. Returns null when the resolved file escapes the directory.
@@ -315,74 +286,6 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
             return manifestFile;
         } catch (IOException e) {
             return null;
-        }
-    }
-
-    /**
-     * Serializes freshly instantiated connector properties into the same form they take when
-     * embedded in a channel: a root <properties> element carrying class and version attributes.
-     */
-    private String toConnectorPropertiesXml(ConnectorProperties properties) throws Exception {
-        /*
-         * Client-created channels always carry a pluginProperties element (the Swing client sets
-         * an empty set); serialize the same form so defaults match saved channel XML.
-         */
-        if (properties.getPluginProperties() == null) {
-            properties.setPluginProperties(new HashSet<ConnectorPluginProperties>());
-        }
-
-        /*
-         * The Swing client replaces a zero queue buffer size with the server's configured default
-         * before displaying defaults (ConnectorPanel); do the same so served defaults match.
-         */
-        if (properties instanceof SourceConnectorPropertiesInterface) {
-            SourceConnectorProperties sourceProperties = ((SourceConnectorPropertiesInterface) properties).getSourceConnectorProperties();
-            if (sourceProperties != null && sourceProperties.getQueueBufferSize() <= 0) {
-                sourceProperties.setQueueBufferSize(getDefaultQueueBufferSize());
-            }
-        }
-        if (properties instanceof DestinationConnectorPropertiesInterface) {
-            DestinationConnectorProperties destinationProperties = ((DestinationConnectorPropertiesInterface) properties).getDestinationConnectorProperties();
-            if (destinationProperties != null && destinationProperties.getQueueBufferSize() <= 0) {
-                destinationProperties.setQueueBufferSize(getDefaultQueueBufferSize());
-            }
-        }
-
-        String xml = ObjectXMLSerializer.getInstance().serialize(properties);
-        DonkeyElement element = new DonkeyElement(xml);
-        // The standalone root node name is exactly what XStream emits as the class attribute
-        element.setAttribute("class", element.getNodeName());
-        element.setNodeName("properties");
-        stripStructuralWhitespace(element.getElement());
-
-        TransformerFactory transformerFactory = TransformerFactory.newInstance();
-        transformerFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-        transformerFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
-        Transformer transformer = transformerFactory.newTransformer();
-        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-        transformer.setOutputProperty(OutputKeys.INDENT, "no");
-        StringWriter writer = new StringWriter();
-        transformer.transform(new DOMSource(element.getElement()), new StreamResult(writer));
-        return writer.toString();
-    }
-
-    private void stripStructuralWhitespace(Node node) {
-        boolean hasElementChild = false;
-        NodeList children = node.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            if (children.item(i).getNodeType() == Node.ELEMENT_NODE) {
-                hasElementChild = true;
-                break;
-            }
-        }
-
-        for (int i = children.getLength() - 1; i >= 0; i--) {
-            Node child = children.item(i);
-            if (child.getNodeType() == Node.TEXT_NODE && hasElementChild && StringUtils.isBlank(child.getNodeValue())) {
-                node.removeChild(child);
-            } else if (child.getNodeType() == Node.ELEMENT_NODE) {
-                stripStructuralWhitespace(child);
-            }
         }
     }
 }
