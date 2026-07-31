@@ -370,6 +370,28 @@ Ordered, following the exact sequence this phase used across six plans:
 
 
 
+## Classpath reconciliation gates
+
+Three independent descriptors can silently disagree with the jars actually present, and none of
+them fails a build when it does:
+
+| Gate | Reconciles | Exit 0 / 1 / 2 |
+|------|-----------|----------------|
+| `check-dist-freshness.sh` | `server/lib`, `client/lib`, `manager/lib` against the assembled `server/setup/` tree (see Prerequisites) | fresh / — / stale-or-unbuilt |
+| `check-manifest-classpath.sh <jar> <base-dir>` | an assembled jar's manifest `Class-Path` (RFC-822-unfolded) against `<base-dir>`; directory entries such as `conf/` are legal and resolve | all resolve / dangling / unreadable-or-no-attribute |
+| `check-eclipse-classpath.sh [<project>...]` | `kind="lib"` entries in Eclipse `.classpath` descriptors, resolving `/ProjectName/...` workspace paths via each project's `.project` name | all resolve / dangling / bad argument |
+
+`check-eclipse-classpath.sh` defaults to **`client` only**, deliberately. That is the descriptor
+Phase 23 reconciled in full (sixteen entries had drifted to non-existent jar versions — log4j
+2.17.2, guava 28.2-jre, jetty-util 9.4.x, slf4j 1.7.30, and others — while the file was being
+edited for the CVE jars, because no gate covered Eclipse descriptors). The other projects
+(`server`, `donkey`, `command`, `manager`, `generator`, `webadmin`) carry much larger pre-existing
+drift from earlier release lines; check them explicitly (`bash smoke-tests/check-eclipse-classpath.sh
+manager`) when taking that work on, rather than shipping a gate that is red on arrival.
+
+Entries pointing into `server/setup/` (build output, gitignored) are reported as `SKIPPED`, not
+failed, since they legitimately do not exist before a distribution build.
+
 ## Break-dependency proof (NET-05)
 
 `smoke-tests/break-dependency.sh` is the D-13/D-14 self-verifying broken-dependency proof:
@@ -657,6 +679,7 @@ smoke-tests/
 ├── run-smoke-test.sh          # boot/teardown orchestrator (this plan, 18-01)
 ├── break-dependency.sh        # NET-05/SC-4 break-proof canary (18-13/D-25/D-26)
 ├── check-dist-freshness.sh    # assembled-distribution vs source-tree jar reconciliation (Phase 23, CR-04)
+├── check-eclipse-classpath.sh # Eclipse .classpath library reconciliation (Phase 23, WR-06)
 ├── check-jar-java17.sh        # MR-aware Java-17 loadability scan (Phase 23, D-17/D-18)
 ├── check-manifest-classpath.sh # manifest Class-Path reconciliation, RFC-822-aware (Phase 23, D-29.2)
 ├── README.md                  # this file
