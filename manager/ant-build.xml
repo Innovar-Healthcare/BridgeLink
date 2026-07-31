@@ -40,14 +40,26 @@
 		<mkdir dir="${dist}" />
 
 		<!--
-		  NOTE (IRT-1055): The manager Class-Path below references rhino-1.7.15.1.jar (stock Rhino).
+		  NOTE (IRT-1055): the Class-Path attribute in the jar manifest built below references
+		  manager-lib/rhino-1.7.15.1.jar (stock Rhino).
 		  The server module ships a BridgeLink-patched Rhino compiled from vendored source under
 		  server/src/org/mozilla/javascript/ (NativeBoolean, NativeDate, XMLObjectImpl, NativeJavaObject).
 		  The manager intentionally runs against stock Rhino 1.7.15.1 because the manager UI does not
 		  execute server-side JavaScript — it only renders channel XML/JSON configuration.  The patched
 		  Rhino is only needed where the server evaluates JavaScript rules.  If the manager ever gains
-		  JavaScript evaluation features, replace the rhino-1.7.15.1.jar entry above with the patched
-		  build (e.g., rhino-1.7.15.1-bridgelink.jar produced by the server build target).
+		  JavaScript evaluation features, replace the manager-lib/rhino-1.7.15.1.jar entry in that
+		  attribute with the patched build (e.g., rhino-1.7.15.1-bridgelink.jar produced by the server
+		  build target). Name the entry, never a position ("above"/"below"): there is exactly one
+		  Class-Path attribute and both directions previously pointed at it.
+
+		  NOTE (Phase 23 traceability): the same one-line Class-Path edit that retargeted
+		  xstream/Rhino for the CVE re-land also moved manager-lib/guava-28.2-jre.jar to
+		  manager-lib/guava-32.0.1-jre.jar. Guava is NOT part of the xstream/BouncyCastle/Rhino CVE
+		  set; it rides along here because the whole attribute is a single line. The target resolves
+		  (manager/lib/guava-32.0.1-jre.jar and server/setup/manager-lib/guava-32.0.1-jre.jar both
+		  exist), so this is a traceability note rather than a defect — recorded so a rollback of the
+		  CVE re-land does not silently revert an unrelated dependency, and so the next reader does
+		  not have to reconstruct why a guava bump appears in a CVE phase's diff.
 		-->
 		<jar destfile="${dist}/${manager.jar}" basedir="${classes}">
 			<manifest>
