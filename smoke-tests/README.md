@@ -555,17 +555,22 @@ INFO: Restoring original xstream jar(s)...
 OK: Restoration verified: all 1 original xstream jar(s) back in place, fixture jar removed.
 ```
 
-> **Freshness caveat (Phase 23 code review, CR-04).** This transcript and the rung-2 transcript
-> below were recorded BEFORE `check-dist-freshness.sh` existed, i.e. against an assembled
-> distribution whose agreement with the source tree was never asserted. They must be treated as
-> **not yet reproduced under the gate**: re-run each against a freshly rebuilt distribution and
-> replace the tails above/below with the reproduced output before either is cited as D-06
-> hard-gate evidence again. (The specific reason this is not a theoretical caveat: the tree was
-> observed carrying `server/setup/server-lib/xstream-1.4.20.jar`, `rhino-1.7.13.jar` and
-> `bcprov-jdk18on-1.78.1.jar` while `server/lib` already held the Phase 23 jars — so a canary run
-> in that state would have exercised the PRE-Phase-23 jars.) The rung-0 conclusion itself
-> (a `1.4.10` downgrade does not reproduce the forward-upgrade regression class) is independently
-> confirmed mechanically in `23-RESEARCH.md` §R3.1 and does not rest on this transcript.
+> **Freshness caveat (Phase 23 code review, CR-04) — RESOLVED 2026-07-31.** This transcript and the
+> rung-2 transcript below were originally recorded BEFORE `check-dist-freshness.sh` existed, i.e.
+> against an assembled distribution whose agreement with the source tree was never asserted. Both
+> have now been **reproduced under the gate**: the distribution was rebuilt from the Phase 23 source
+> tree (`ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true`, BUILD SUCCESSFUL),
+> `check-dist-freshness.sh` then confirmed OK (193 jar(s) reconciled, exit 0), and each rung was
+> re-run on JDK 21.0.12 against that fresh dist. The reproduced tails match the originals (rung-0
+> HARNESS PASSED / self-test exit 1 in 43s; rung-2 HARNESS FAILED with the import-seam catch /
+> self-test exit 0 in 14s) — see the tails shown here and below, which are the reproduced output.
+> (The specific reason this was not a theoretical caveat: the tree had been observed carrying
+> `server/setup/server-lib/xstream-1.4.20.jar`, `rhino-1.7.13.jar` and `bcprov-jdk18on-1.78.1.jar`
+> while `server/lib` already held the Phase 23 jars — so a canary run in that state would have
+> exercised the PRE-Phase-23 jars; the rebuild above cleared exactly that drift.) The rung-0
+> conclusion itself (a `1.4.10` downgrade does not reproduce the forward-upgrade regression class)
+> is independently confirmed mechanically in `23-RESEARCH.md` §R3.1 and does not rest on this
+> transcript.
 
 **Rung 1 (an old BouncyCastle or Rhino jar) is SKIPPED per D-25** — not attempted. `BcSeamTest`
 is designed green on both BC 1.78.1 and 1.84; and once Phase 23 plan 04's D-10 throw lands, a
@@ -610,15 +615,18 @@ OK: Restoration verified: all 1 original xstream jar(s) back in place, fixture j
 
 After the run, `find server/setup/server-lib -name 'xstream-*.jar'` named only
 `xstream-1.4.21.jar` — the trap-based restore left the runtime classpath clean; no mangled
-jar survives on any runtime path. **Note (CR-04):** that observation is only meaningful about the
-re-land if the distribution had actually been rebuilt with the Phase 23 jars — see the freshness
-caveat above; the same command run against a stale tree names `xstream-1.4.20.jar` instead, and
-the transcript above was recorded before any gate asserted the difference.
+jar survives on any runtime path. **Note (CR-04) — now satisfied:** that observation is only
+meaningful about the re-land if the distribution had actually been rebuilt with the Phase 23 jars.
+For this 2026-07-31 reproduction it had been: `check-dist-freshness.sh` passed (193 jars reconciled)
+immediately before the run, and `server/setup/server-lib` carried `xstream-1.4.21.jar` /
+`rhino-1.7.15.1.jar` / `bcprov-jdk18on-1.84.jar`. (The same command against a stale tree names
+`xstream-1.4.20.jar` instead — the drift the gate now blocks.)
 
-This is the D-06 hard-gate evidence recorded for Phase 23's xstream 1.4.21 re-land — NET-05's
+This is the D-06 hard-gate evidence for Phase 23's xstream 1.4.21 re-land — NET-05's
 break-proof canary demonstrated live-armed at the exact moment its previous armed configuration
-(the plan-18-10 fixture) stopped being able to fire — **pending re-run under
-`check-dist-freshness.sh`** per the caveat above.
+(the plan-18-10 fixture) stopped being able to fire — **reproduced 2026-07-31 under
+`check-dist-freshness.sh` against a freshly rebuilt distribution** (JDK 21.0.12, self-test exit 0),
+resolving the freshness caveat above.
 
 Structurally the script satisfies every D-13/D-14/D-25/D-26 requirement: recursive jar discovery
 generalized via `BREAK_LIB_GLOB`, `BREAK_FIXTURE_JAR` override with an armed in-script default,
