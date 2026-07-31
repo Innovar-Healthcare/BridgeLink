@@ -57,6 +57,34 @@ err()   { echo -e "${RED}ERROR${NC}: $1" >&2; }
 mkdir -p "${OUT_DIR}"
 
 # ---------------------------------------------------------------------------
+# Knob validation -- the documented constraints above are ENFORCED here, not merely stated.
+#
+#   * A TYPO in BREAK_EXPECT_FAILURE_CLASS (`imports`, `Import`) is the reachable defect: it
+#     permanently routes a correct catch to INCONCLUSIVE, so the canary can never report the
+#     verdict it exists to report, and nothing tells the caller why.
+#   * An EMPTY value would reduce the classifier to `grep "SMOKE-FAILURE-CLASS: "`, matching ANY
+#     failure class and reporting an unrelated infra failure as "harness caught the broken
+#     dependency" (exit 0) -- a false PASS in the break-proof canary itself. The `:-` defaults
+#     above already substitute the armed value for an empty override, so that case is currently
+#     unreachable from the environment; these checks make it unreachable from an in-script edit
+#     too (e.g. someone switching `:-` to `-`), which is the point of a canary's own guard rails.
+#   * An empty BREAK_LIB_GLOB would make `find -name ""` match nothing and abort with a
+#     misleading "nothing to break" instead of naming the real cause.
+# ---------------------------------------------------------------------------
+case "${BREAK_EXPECT_FAILURE_CLASS}" in
+    import|assert|log|duration) ;;
+    *)
+        err "BREAK_EXPECT_FAILURE_CLASS must be one of: import assert log duration (got: '${BREAK_EXPECT_FAILURE_CLASS}')"
+        exit 2
+        ;;
+esac
+
+if [[ -z "${BREAK_LIB_GLOB}" ]]; then
+    err "BREAK_LIB_GLOB must be a non-empty find -name glob (e.g. xstream-*.jar)"
+    exit 2
+fi
+
+# ---------------------------------------------------------------------------
 # Preflight
 # ---------------------------------------------------------------------------
 if [[ ! -f "${REPO_ROOT}/server/setup/server-lib/mirth-server.jar" ]]; then
@@ -184,10 +212,12 @@ VERDICT_EXIT=2
 if [[ ${HARNESS_EXIT} -eq 0 ]]; then
     echo "SELF-TEST FAILED: harness PASSED with broken ${BREAK_LIB_GLOB} — net has a hole"
     VERDICT_EXIT=1
-elif grep -q "SMOKE-FAILURE-CLASS: ${BREAK_EXPECT_FAILURE_CLASS}" "${EVIDENCE_LOG}"; then
+# -F (fixed string): the marker is interpolated from an environment variable, so a value carrying
+# regex metacharacters must never be honoured as a pattern.
+elif grep -qF "SMOKE-FAILURE-CLASS: ${BREAK_EXPECT_FAILURE_CLASS}" "${EVIDENCE_LOG}"; then
     ok "harness caught the broken dependency (behavioral catch at the ${BREAK_EXPECT_FAILURE_CLASS} seam)"
     echo "--- ${BREAK_EXPECT_FAILURE_CLASS}-stage failure excerpt ---"
-    grep -A 5 -B 2 "SMOKE-FAILURE-CLASS: ${BREAK_EXPECT_FAILURE_CLASS}" "${EVIDENCE_LOG}" | head -60
+    grep -F -A 5 -B 2 "SMOKE-FAILURE-CLASS: ${BREAK_EXPECT_FAILURE_CLASS}" "${EVIDENCE_LOG}" | head -60
     echo "-------------------------------------"
     VERDICT_EXIT=0
 else

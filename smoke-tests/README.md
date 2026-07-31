@@ -414,8 +414,8 @@ broken by their introduction:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `BREAK_LIB_GLOB` | `xstream-*.jar` | The `find`-style glob used to enumerate jars under `server/setup/server-lib` to swap aside. Phases 24 (Derby)/25 (mssql-jdbc)/26 (Jersey) can point this at their own dependency's jar family without a script rewrite. |
-| `BREAK_EXPECT_FAILURE_CLASS` | `import` | Which `SMOKE-FAILURE-CLASS:` marker the verdict classifier greps for. Must be one of the four legal values documented in "Failure-class markers" above: `import`, `assert`, `log`, `duration` — a new knob must not invite a fifth. |
+| `BREAK_LIB_GLOB` | `xstream-*.jar` | The `find`-style glob used to enumerate jars under `server/setup/server-lib` to swap aside. Phases 24 (Derby)/25 (mssql-jdbc)/26 (Jersey) can point this at their own dependency's jar family without a script rewrite. **Enforced:** must be non-empty (an empty value would match nothing and abort with a misleading "nothing to break"). |
+| `BREAK_EXPECT_FAILURE_CLASS` | `import` | Which `SMOKE-FAILURE-CLASS:` marker the verdict classifier matches. **Enforced** (not merely documented) to be one of the four legal values in "Failure-class markers" above: `import`, `assert`, `log`, `duration` — a new knob must not invite a fifth. Anything else exits `2` — a typo would otherwise route every correct catch to INCONCLUSIVE silently. (An *empty* override cannot reach the classifier: `${VAR:-import}` substitutes the armed default; the guard also covers an in-script edit that removed that behaviour, which would make the classifier match *any* failure class and report an unrelated infra failure as a successful catch.) Matching is fixed-string (`grep -F`), so regex metacharacters in the value are never honoured as a pattern. |
 
 **Verified result (plan 18-10, JDK 26.0.1 — locally available JDK clearing the Phase 16
 Derby preflight, 2026-07-23): exit `0` (harness caught the broken dependency) on the FIRST
