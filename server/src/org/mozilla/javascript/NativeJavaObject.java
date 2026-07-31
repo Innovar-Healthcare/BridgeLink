@@ -27,6 +27,43 @@ import java.util.Map;
  * @see NativeJavaClass
  */
 
+/*
+ * ============================================================================================
+ * VENDORED RHINO SOURCE -- KNOWN DIVERGENCE FROM THE SHIPPED JAR (Phase 23 code review, WR-01)
+ * ============================================================================================
+ * This file is a BridgeLink-vendored copy of Rhino's own NativeJavaObject source. Because it
+ * lives in server/src under the org.mozilla.javascript package, the class compiled from it
+ * SHADOWS org.mozilla.javascript.NativeJavaObject from server/lib/rhino-1.7.15.1.jar at runtime.
+ * The vendored body is PRE-1.7.15 (it was last re-based for the 1.7.12 -> 1.7.13 bump, commit
+ * 4d8b3a18a) and has NOT been re-based onto 1.7.15.1. Comparing this source against `javap` of
+ * the shipped jar, three upstream members are missing here. None of them produces a
+ * NoSuchMethodError (they are private, or inherited from Object), so every one of them fails
+ * SILENTLY:
+ *
+ *   1. JSTYPE_BIGINT. The 1.7.15.1 getJSTypeCode() tests java.math.BigInteger BEFORE Number and
+ *      returns a dedicated JSTYPE_BIGINT code, with matching cases in getConversionWeight() and
+ *      coerceTypeImpl(). This file has no such code at all, so a JS BigInt (a BigInteger) falls
+ *      through `value instanceof Number` into coerceToNumber()/toDouble() -- SILENT PRECISION
+ *      LOSS on BigInt -> Java, plus wrong overload-resolution weights.
+ *   2. SymbolKey.ITERATOR. 1.7.15.1's get(Symbol, Scriptable)/has(Symbol, Scriptable) return the
+ *      ES6 iterator member when the wrapped javaObject is an Iterable. This file returns
+ *      NOT_FOUND / false unconditionally, so JS `for...of` and spread over a Java Iterable do not
+ *      work here -- see RhinoSeamTest, which asserts exactly that, and note that this is what
+ *      makes init()'s JavaIterableIterator registration below unreachable in practice.
+ *   3. equals(Object) / hashCode(). Present in 1.7.15.1, absent here, so wrapper equality falls
+ *      back to Object identity.
+ *
+ * These deltas are RECORDED, NOT ENDORSED: no decision has been taken that the divergence is
+ * desirable. Re-basing this file onto the 1.7.15.1 source and re-applying only the BridgeLink
+ * delta requires the upstream 1.7.15.1 source (not available in this tree) and a deliberate
+ * human call about which deltas to keep; it is deliberately NOT attempted piecemeal, because
+ * hand-authoring coercion logic for a clinical-data script path from bytecode alone is precisely
+ * the silent-defect class this phase exists to close.
+ *
+ * WHEN THE NEXT RHINO BUMP LANDS: re-base this file against the new upstream source, re-apply the
+ * BridgeLink delta, and update this block. Do not widen the divergence silently.
+ * ============================================================================================
+ */
 public class NativeJavaObject
     implements Scriptable, SymbolScriptable, Wrapper, Serializable
 {
