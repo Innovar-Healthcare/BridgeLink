@@ -25,9 +25,17 @@
 		<fileset dir="${build.web}/WEB-INF/lib">
 			<include name="*.jar" />
 		</fileset>
+		<!--
+		  Match the jar FAMILY, never a pinned version: an Ant fileset include that matches
+		  nothing is not an error, so "xstream-1.4.21.jar" would silently contribute zero files on
+		  the next xstream bump and quietly drop XStream from this compile classpath, producing
+		  either an obscure "cannot find symbol" or, for JSP-generated code that never names an
+		  XStream type directly, a SUCCESSFUL build that fails at runtime. The compile target
+		  asserts the fileset is non-empty so that silence cannot happen.
+		-->
 		<fileset dir="${server.setup}/client-lib">
 			<include name="mirth-client-core.jar" />
-			<include name="xstream-1.4.21.jar" />
+			<include name="xstream-*.jar" />
 		</fileset>
 		<fileset dir="${donkey.setup}">
 			<include name="donkey-model.jar" />
@@ -60,6 +68,15 @@
 	</target>
 
 	<target name="compile" depends="jspc">
+		<!-- Fail loudly if the version-independent xstream include matched nothing. -->
+		<resourcecount property="xstream.count">
+			<fileset dir="${server.setup}/client-lib" includes="xstream-*.jar" erroronmissingdir="false" />
+		</resourcecount>
+		<fail message="No xstream-*.jar in ${server.setup}/client-lib -- rebuild the server distribution before building webadmin (cd server &amp;&amp; ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true)">
+			<condition>
+				<equals arg1="${xstream.count}" arg2="0" />
+			</condition>
+		</fail>
 		<javac destdir="${build.classes}" debug="true" srcdir="${build.src}" includeAntRuntime="false" release="17">
 			<classpath refid="compile.classpath" />
 		</javac>
