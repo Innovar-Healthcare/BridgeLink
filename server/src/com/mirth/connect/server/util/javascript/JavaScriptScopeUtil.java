@@ -24,6 +24,7 @@ import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.NativeArray;
 import org.mozilla.javascript.NativeJSON;
 import org.mozilla.javascript.NativeObject;
+import org.mozilla.javascript.ObjArray;
 import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -111,9 +112,30 @@ public class JavaScriptScopeUtil {
         // scope's importedPackages to the child so importPackage'd symbols (e.g. Lists, Response)
         // remain accessible without making the child's parentScope point to the sealed scope
         // (which would cause bare-assignment global writes to fail on the sealed object).
+        //
+        // The propagation MUST be a per-scope COPY, never the sealed scope's own ObjArray:
+        // ImporterTopLevel.importPackage() mutates that array in place (ObjArray.add) and
+        // ImporterTopLevel.realScope() resolves to getTopLevelScope(scope), which for these
+        // parentScope=null child scopes is the child itself. Sharing one instance would (a) leak
+        // one channel's importPackage into every other channel's scope and back into the sealed
+        // scope, (b) re-open a mutation channel through the sealObject() seal (associatedValues
+        // are not covered by the seal), and (c) race, because importPackage/getNativeJavaPackages
+        // synchronize on the scope object they are handed, not on the array.
         Object importedPackages = sealedSharedScope.getAssociatedValue("importedPackages");
-        if (importedPackages != null) {
-            scope.associateValue("importedPackages", importedPackages);
+        if (importedPackages instanceof ObjArray) {
+            Object[] snapshot;
+            // Read under the owning scope's monitor -- the same monitor
+            // importPackage()/getNativeJavaPackages() take when handed the sealed scope.
+            synchronized (sealedSharedScope) {
+                snapshot = ((ObjArray) importedPackages).toArray();
+            }
+
+            ObjArray copy = new ObjArray();
+            for (Object importedPackage : snapshot) {
+                copy.add(importedPackage);
+            }
+
+            scope.associateValue("importedPackages", copy);
         }
         return scope;
     }
