@@ -45,7 +45,12 @@ BREAK_LIB_GLOB="${BREAK_LIB_GLOB:-xstream-*.jar}"
 # SMOKE-FAILURE-CLASS values (import/assert/log/duration) documented in this file's
 # "Failure-class markers" section -- a new knob must not invite a fifth.
 BREAK_EXPECT_FAILURE_CLASS="${BREAK_EXPECT_FAILURE_CLASS:-import}"
-ASIDE_DIR="$(mktemp -d)/xstream-aside"
+# ASIDE_ROOT/ASIDE_DIR are created AFTER preflight, immediately before the trap is registered --
+# see the Swap section. Creating the temp directory here (as the original did) leaked one
+# `mktemp -d` directory per preflight abort, because every preflight `exit 2` path runs before any
+# trap exists to clean it up.
+ASIDE_ROOT=""
+ASIDE_DIR=""
 OUT_DIR="${SCRIPT_DIR}/out"
 EVIDENCE_LOG="${OUT_DIR}/break-proof-harness-run.log"
 
@@ -152,7 +157,13 @@ FIXTURE_INSTALLED_PATH="${TOP_LEVEL_DIR}/${FIXTURE_BASENAME}"
 # ---------------------------------------------------------------------------
 # Swap: move every original jar aside (preserving its original path for restore), then copy
 # the fixture into the top-level match's directory. ANY exit path restores everything (trap).
+#
+# The staging directory is created HERE -- after every preflight abort path -- and the trap is
+# registered on the very next statement, so there is no window in which a temp directory exists
+# without a cleanup handler for it.
 # ---------------------------------------------------------------------------
+ASIDE_ROOT="$(mktemp -d)"
+ASIDE_DIR="${ASIDE_ROOT}/xstream-aside"
 mkdir -p "${ASIDE_DIR}"
 
 RESTORED=0
@@ -174,7 +185,9 @@ restore_jars() {
             err "Expected staged copy missing for restore: ${dest} (original: ${jar})"
         fi
     done
-    rm -rf "$(dirname "${ASIDE_DIR}")"
+    # Remove the mktemp root itself (ASIDE_DIR's parent), not just the staging subdirectory.
+    [[ -n "${ASIDE_ROOT}" ]] && rm -rf "${ASIDE_ROOT}"
+    return 0
 }
 trap restore_jars EXIT
 
@@ -254,7 +267,13 @@ fi
 if [[ ${STILL_MISSING} -eq 0 ]]; then
     ok "Restoration verified: all $((${#ORIGINAL_JARS[@]})) original xstream jar(s) back in place, fixture jar removed."
 else
-    err "Restoration verification FAILED — tree may be left in a broken state."
+    # Report BOTH conditions and never let a restore problem overwrite the verdict. Unconditionally
+    # exiting 2 here means SELF-TEST FAILED (exit 1 — "the net has a hole", the single most serious
+    # thing this script can discover) would be downgraded to INCONCLUSIVE by any restore hiccup.
+    err "Restoration verification FAILED — tree may be left in a broken state (verdict was ${VERDICT_EXIT})."
+    if [[ ${VERDICT_EXIT} -eq 1 ]]; then
+        exit 1
+    fi
     exit 2
 fi
 

@@ -398,7 +398,12 @@ xstream 1.4.21 re-land that was rolled back in v26.6.0 (commit `6a483ab9d`).
 |------|---------|
 | `0`  | OK — harness caught the broken dependency (behavioral catch at the configured `BREAK_EXPECT_FAILURE_CLASS` seam, default `import`, `SMOKE-FAILURE-CLASS: <class>`) |
 | `1`  | SELF-TEST FAILED — harness passed with the broken jar in place; the net has a hole |
-| `2`  | INCONCLUSIVE — harness failed, but not at the configured seam (e.g. boot/infrastructure failure) |
+| `2`  | INCONCLUSIVE — harness failed, but not at the configured seam (e.g. boot/infrastructure failure), or a preflight precondition (stale distribution, illegal knob value, colliding fixture basename) blocked the run |
+
+A failed post-run restoration verification is reported loudly and, on its own, exits `2` — but it
+can no longer overwrite a `SELF-TEST FAILED` verdict: exit `1` survives a restore hiccup, because
+"the net has a hole" is the most serious thing this script can discover and must never be
+downgraded to "could not tell".
 
 **Fixture jar selection:** `FIXTURE_JAR` defaults to `fixtures/xstream-1.4.21-mangled.jar`
 (the D-25 armed default, see below) but is overridable via the `BREAK_FIXTURE_JAR`
