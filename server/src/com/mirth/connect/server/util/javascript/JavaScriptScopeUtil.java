@@ -16,6 +16,7 @@ import java.util.Map.Entry;
 import java.util.Properties;
 
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.mozilla.javascript.Context;
@@ -55,22 +56,41 @@ import com.mirth.connect.util.PropertyLoader;
 
 public class JavaScriptScopeUtil {
     private static Logger logger = LogManager.getLogger(JavaScriptScopeUtil.class);
+    /** -1 = interpretive mode, Rhino's own default and BridgeLink's shipped setting (MIRTH-1627). */
+    private static final Integer DEFAULT_RHINO_OPTIMIZATION_LEVEL = -1;
     private static Integer rhinoOptimizationLevel = null;
 
     static {
         /*
          * Checks mirth.properties for the rhino.optimizationlevel property. Setting it to -1 runs
          * it in interpretive mode. See MIRTH-1627 for more information.
+         *
+         * Two constraints on this block, both learned the hard way:
+         *
+         *  - It must NEVER throw. An exception escaping a static initializer becomes
+         *    ExceptionInInitializerError, which permanently poisons this class for the JVM's
+         *    lifetime and takes down every JavaScript path (transformers, filters, connectors)
+         *    with an error that does not even name the offending property. A one-character typo in
+         *    mirth.properties must degrade to the default, loudly logged, not to a dead server.
+         *  - The diagnostic must be logged AFTER the value is resolved. The previous version logged
+         *    rhinoOptimizationLevel on the line before it was assigned, so the single diagnostic
+         *    for this setting always read "null".
          */
         Properties properties = PropertyLoader.loadProperties("mirth");
+        String configuredOptimizationLevel = MapUtils.isNotEmpty(properties) ? properties.getProperty("rhino.optimizationlevel") : null;
 
-        if (MapUtils.isNotEmpty(properties) && properties.containsKey("rhino.optimizationlevel")) {
-            logger.debug("set Rhino context optimization level: " + rhinoOptimizationLevel);
-            rhinoOptimizationLevel = Integer.valueOf(properties.getProperty("rhino.optimizationlevel")).intValue();
+        if (StringUtils.isNotBlank(configuredOptimizationLevel)) {
+            try {
+                rhinoOptimizationLevel = Integer.valueOf(configuredOptimizationLevel.trim());
+            } catch (NumberFormatException e) {
+                rhinoOptimizationLevel = DEFAULT_RHINO_OPTIMIZATION_LEVEL;
+                logger.error("Invalid rhino.optimizationlevel value \"" + configuredOptimizationLevel + "\" in mirth.properties; using default (" + DEFAULT_RHINO_OPTIMIZATION_LEVEL + ")", e);
+            }
         } else {
-            logger.debug("using default Rhino context optimization level (-1)");
-            rhinoOptimizationLevel = -1;
+            rhinoOptimizationLevel = DEFAULT_RHINO_OPTIMIZATION_LEVEL;
         }
+
+        logger.debug("Rhino context optimization level: " + rhinoOptimizationLevel);
     }
 
     /*
