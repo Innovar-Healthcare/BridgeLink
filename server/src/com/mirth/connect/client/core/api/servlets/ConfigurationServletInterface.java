@@ -48,6 +48,7 @@ import com.mirth.connect.client.core.Permissions;
 import com.mirth.connect.client.core.api.BaseServletInterface;
 import com.mirth.connect.client.core.api.MirthOperation;
 import com.mirth.connect.client.core.api.Param;
+import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.donkey.model.channel.DeployedState;
 import com.mirth.connect.model.ChannelDependency;
 import com.mirth.connect.model.ChannelMetadata;
@@ -460,6 +461,17 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
                     @ExampleObject(name = "rhinoLanguageVersion", ref = "../apiexamples/integer_json") }) })
     @MirthOperation(name = "getRhinoLanguageVersion", display = "Get rhino language version", type = ExecuteType.ASYNC, auditable = false)
     public int getRhinoLanguageVersion() throws ClientException;
+
+    @POST
+    @Path("/_validateScript")
+    @Consumes(MediaType.TEXT_PLAIN)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Validates a JavaScript script using the server's Rhino engine, returning the first syntax error (if any). Plain JSON response, not the standard serialized envelope.")
+    @ApiResponse(responseCode = "200", description = "The validation result.", content = @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
+            @ExampleObject(name = "valid", summary = "Valid script", value = "{\"valid\":true,\"error\":null}"),
+            @ExampleObject(name = "invalid", summary = "Invalid script", value = "{\"valid\":false,\"error\":{\"line\":1,\"column\":9,\"message\":\"syntax error\"}}") }))
+    @MirthOperation(name = "validateScript", display = "Validate script", type = ExecuteType.ASYNC, auditable = false)
+    public RawContent validateScript(@Param("script") @RequestBody(description = "The script body to validate.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String script) throws ClientException;
 
     @POST
     @Path("/keystore/regenerate")

@@ -56,6 +56,15 @@ public class JavaScriptSharedUtil {
     private final static Pattern INVALID_PROLOG_PATTERN = Pattern.compile("<<\\s*\\?\\s*xml\\s+version\\s*=\\s*\"(?<version>[^\"]*)\"(\\s+encoding\\s*=\\s*\"(?<encoding>[^\"]*)\")?\\s*\\?\\s*>");
     private final static int FULL_NAME_MATCHER_INDEX = 2;
     private final static int SHORT_NAME_MATCHER_INDEX = 5;
+    /*
+     * Scripts are wrapped in a dummy function before validation so that top-level "return"
+     * statements are legal. The prefix sits on line 1 with no trailing newline, so reported line
+     * numbers are unaffected, but a column reported on line 1 is shifted right by the prefix length
+     * and must be adjusted back before being handed to a caller.
+     */
+    private final static String SCRIPT_WRAPPER_PREFIX = "function rhinoWrapper() {";
+    private final static String SCRIPT_WRAPPER_SUFFIX = "\n}";
+    private final static int SCRIPT_WRAPPER_PREFIX_LENGTH = SCRIPT_WRAPPER_PREFIX.length();
     private static volatile ScriptableObject cachedFormatterScope;
     private static int rhinoLanguageVersion = Context.VERSION_DEFAULT;
     private static Logger logger = LogManager.getLogger(JavaScriptSharedUtil.class);
@@ -84,7 +93,7 @@ public class JavaScriptSharedUtil {
     public static String validateScript(String script) {
         Context context = JavaScriptSharedUtil.getGlobalContextForValidation();
         try {
-            context.compileString("function rhinoWrapper() {" + script + "\n}", UUID.randomUUID().toString(), 1, null);
+            context.compileString(SCRIPT_WRAPPER_PREFIX + script + SCRIPT_WRAPPER_SUFFIX, UUID.randomUUID().toString(), 1, null);
         } catch (EvaluatorException e) {
             return "Error on line " + e.lineNumber() + ": " + e.getMessage() + ".";
         } catch (Exception e) {
@@ -93,6 +102,47 @@ public class JavaScriptSharedUtil {
             Context.exit();
         }
         return null;
+    }
+
+    /**
+     * Compiles the given script with the real Rhino engine and returns a structured result instead
+     * of the single, human-readable string produced by {@link #validateScript(String)}. Rhino's
+     * compiler stops at the first syntax error, so at most one error is ever reported. Line and
+     * column are 1-based and normalized to the caller's script (the internal wrapper offset is
+     * removed); a column of 0 means Rhino could not determine one.
+     *
+     * @param script the script body to validate (may be null or empty, which is treated as valid)
+     * @return a {@link ScriptValidationResult} describing whether the script compiled and, if not,
+     *         where it failed
+     */
+    public static ScriptValidationResult validateScriptStructured(String script) {
+        if (StringUtils.isBlank(script)) {
+            return ScriptValidationResult.valid();
+        }
+
+        Context context = JavaScriptSharedUtil.getGlobalContextForValidation();
+        try {
+            context.compileString(SCRIPT_WRAPPER_PREFIX + script + SCRIPT_WRAPPER_SUFFIX, UUID.randomUUID().toString(), 1, null);
+            return ScriptValidationResult.valid();
+        } catch (EvaluatorException e) {
+            int line = e.lineNumber();
+            int column = e.columnNumber();
+            /*
+             * Rhino columns are 1-based. Only line 1 carries the wrapper prefix, so only errors on
+             * that line need the prefix width subtracted; a non-positive column means "unknown".
+             */
+            if (line == 1 && column > SCRIPT_WRAPPER_PREFIX_LENGTH) {
+                column -= SCRIPT_WRAPPER_PREFIX_LENGTH;
+            } else if (column < 0) {
+                column = 0;
+            }
+            String message = StringUtils.defaultIfBlank(e.details(), e.getMessage());
+            return ScriptValidationResult.invalid(new ScriptValidationResult.ScriptValidationError(line, column, message));
+        } catch (Exception e) {
+            return ScriptValidationResult.invalid(new ScriptValidationResult.ScriptValidationError(0, 0, "Unknown error occurred during validation."));
+        } finally {
+            Context.exit();
+        }
     }
 
     /*
