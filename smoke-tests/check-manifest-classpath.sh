@@ -9,6 +9,10 @@
 # value and silently passes. This script RFC-822-unfolds continuation lines first (details
 # and the concrete manager-launcher invocation are in smoke-tests/README.md and 23-PLAN.md).
 #
+# Contract detail: an entry "resolves" if it exists under <base-dir> as EITHER a file OR a
+# directory -- the JAR spec permits directory Class-Path entries (conventionally trailing-slash,
+# e.g. `conf/`), and rejecting them would be a false FAIL on a valid manifest.
+#
 # Usage: smoke-tests/check-manifest-classpath.sh <jar> <base-dir>
 # Exit codes:
 #   0 - PASS: every Class-Path entry resolves under <base-dir>
@@ -91,13 +95,23 @@ fi
 
 EXAMINED=0
 MISSING=0
+# ${CP} is intentionally UNQUOTED so the shell splits it on whitespace, which is how the JAR spec
+# separates Class-Path entries. `set -f` disables pathname expansion for the duration: without it
+# an entry containing *, ? or [ is glob-expanded against the CWD, silently changing which entries
+# get checked (or checking a CWD file that has nothing to do with the manifest).
+set -f
 for entry in ${CP}; do
     EXAMINED=$((EXAMINED + 1))
-    if [[ ! -f "${BASE}/${entry}" ]]; then
+    # -e, not -f: the JAR specification permits DIRECTORY Class-Path entries (conventionally
+    # trailing-slash, e.g. `conf/`). A `-f` test is false for a directory, so a perfectly valid
+    # manifest would be reported DANGLING and this gate would exit 1 on the next assembled jar
+    # that uses one.
+    if [[ ! -e "${BASE}/${entry}" ]]; then
         echo "DANGLING: ${entry}" | tee -a "${REPORT_LOG}" >&2
         MISSING=1
     fi
 done
+set +f
 
 {
     echo "   entries examined: ${EXAMINED}"
