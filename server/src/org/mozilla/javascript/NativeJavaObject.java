@@ -71,14 +71,23 @@ public class NativeJavaObject
 
     public NativeJavaObject() { }
 
-    // Package-private (not private) so a test can assert the exact verbatim text (CVE-13, D-10),
-    // mirroring Mirth.DERBY_JAVA_ERROR_MSG's precedent. Names the *consequence*, not just the
-    // mechanism: an unadapted Rhino means every JavaScript transformer would run on unverified
-    // importPackage/scope semantics, which on a clinical-data path is an abort-level condition.
-    static final String JAVA_ITERABLE_ITERATOR_INIT_ERROR_MSG =
-        "NativeJavaObject.init shim could not reach JavaIterableIterator.init via reflection -- "
-        + "this Rhino build is unadapted and every JavaScript transformer would otherwise run on "
-        + "unverified importPackage/scope semantics";
+    // Both constants are package-private (not private) so a test can assert the exact verbatim
+    // text (CVE-13, D-10), mirroring Mirth.DERBY_JAVA_ERROR_MSG's precedent. Each names only what
+    // is actually true of its own failure mode: JavaIterableIterator registers an ES6 iterator
+    // prototype and has NO relationship to importPackage or scope construction (those are
+    // ImporterTopLevel and JavaScriptScopeUtil.getScope()), so neither message claims otherwise.
+
+    /** The class or its init method is not present/accessible: this is not the expected Rhino build. */
+    static final String JAVA_ITERABLE_ITERATOR_UNREACHABLE_MSG =
+        "NativeJavaObject.init shim could not reach "
+        + "org.mozilla.javascript.NativeJavaObject$JavaIterableIterator.init via reflection -- this "
+        + "Rhino build does not expose that class, so it is not the adapted Rhino build BridgeLink "
+        + "was built against";
+
+    /** The class WAS reached, but its own init threw: a real execution failure, not a lookup failure. */
+    static final String JAVA_ITERABLE_ITERATOR_INIT_FAILED_MSG =
+        "org.mozilla.javascript.NativeJavaObject$JavaIterableIterator.init was reached but threw -- "
+        + "the ES6 Java-Iterable iterator prototype was not registered on this scope";
 
     /**
      * Compatibility shim: Rhino 1.7.15+ requires NativeJavaObject.init to be called during
@@ -96,17 +105,36 @@ public class NativeJavaObject
      * Derby preflight's mechanism, which runs once before the shutdown hook is registered) would
      * kill the JUnit fork; a plain thrown exception propagates correctly in both the runtime and
      * test paths.
+     *
+     * WR-02: the two failure modes are kept separate. A single catch(Exception) around the whole
+     * body also catches the InvocationTargetException wrapping anything thrown INSIDE
+     * JavaIterableIterator.init, and would then misreport an execution failure as
+     * "could not reach ... via reflection" -- sending the next debugger after a classloading
+     * problem that does not exist. The lookup phase and the invoke phase therefore have their own
+     * handlers and their own messages, and the invoke phase unwraps getCause() so the real
+     * stack trace survives.
      */
     static void init(ScriptableObject scope, boolean sealed) {
+        Method initMethod;
         try {
             Class<?> iterClass = Class.forName(
                 "org.mozilla.javascript.NativeJavaObject$JavaIterableIterator");
-            java.lang.reflect.Method initMethod = iterClass.getDeclaredMethod(
+            initMethod = iterClass.getDeclaredMethod(
                 "init", ScriptableObject.class, boolean.class);
             initMethod.setAccessible(true);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            // ClassNotFoundException / NoSuchMethodException, or setAccessible being refused
+            // (InaccessibleObjectException / SecurityException) -- genuinely "cannot reach it".
+            throw new IllegalStateException(JAVA_ITERABLE_ITERATOR_UNREACHABLE_MSG, e);
+        }
+
+        try {
             initMethod.invoke(null, scope, sealed);
-        } catch (Exception e) {
-            throw new IllegalStateException(JAVA_ITERABLE_ITERATOR_INIT_ERROR_MSG, e);
+        } catch (InvocationTargetException e) {
+            // Reached and invoked, but it threw: report THAT, and keep the original cause.
+            throw new IllegalStateException(JAVA_ITERABLE_ITERATOR_INIT_FAILED_MSG, e.getCause());
+        } catch (IllegalAccessException | RuntimeException e) {
+            throw new IllegalStateException(JAVA_ITERABLE_ITERATOR_UNREACHABLE_MSG, e);
         }
     }
 
