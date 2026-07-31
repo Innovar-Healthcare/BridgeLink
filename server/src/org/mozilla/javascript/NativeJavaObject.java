@@ -53,15 +53,17 @@ import java.util.Map;
  *   3. equals(Object) / hashCode(). Present in 1.7.15.1, absent here, so wrapper equality falls
  *      back to Object identity.
  *
- * These deltas are RECORDED, NOT ENDORSED: no decision has been taken that the divergence is
- * desirable. Re-basing this file onto the 1.7.15.1 source and re-applying only the BridgeLink
- * delta requires the upstream 1.7.15.1 source (not available in this tree) and a deliberate
- * human call about which deltas to keep; it is deliberately NOT attempted piecemeal, because
- * hand-authoring coercion logic for a clinical-data script path from bytecode alone is precisely
- * the silent-defect class this phase exists to close.
+ * These deltas were RECORDED, NOT ENDORSED during the Phase 23 review. They are now RATIFIED for
+ * 26.9 (decision 2026-07-31, Zi-Min Weng): the divergence predates Phase 23 -- these gaps shipped
+ * through 26.x already -- and re-basing from the shipped bytecode alone would put guessed
+ * numeric-coercion logic on a clinical-data script path, precisely the silent-defect class this
+ * phase exists to close. Re-basing is therefore deferred, not abandoned, and is tracked as its own
+ * hardening task: IRT-1629 (obtain the real upstream 1.7.15.1 source, re-apply only the BridgeLink
+ * delta, add BigInt + for...of-over-Iterable regression coverage through a real MirthContextFactory).
  *
- * WHEN THE NEXT RHINO BUMP LANDS: re-base this file against the new upstream source, re-apply the
- * BridgeLink delta, and update this block. Do not widen the divergence silently.
+ * WHEN THE NEXT RHINO BUMP LANDS (or when IRT-1629 is picked up): re-base this file against the new
+ * upstream source, re-apply the BridgeLink delta, and update this block. Do not widen the divergence
+ * silently.
  * ============================================================================================
  */
 public class NativeJavaObject
