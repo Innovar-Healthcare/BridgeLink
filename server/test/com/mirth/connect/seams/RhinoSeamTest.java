@@ -95,15 +95,23 @@ public class RhinoSeamTest {
         // one-time class init without touching build.xml (no server/build.xml changes, D-09/D-10).
         ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
         File confDir = new File("conf");
-        if (confDir.isDirectory()) {
-            URL confUrl = confDir.toURI().toURL();
-            Thread.currentThread().setContextClassLoader(new URLClassLoader(new URL[] { confUrl }, originalClassLoader));
-        }
+        // The loader is CLOSED in the finally block: restoring the previous context classloader is
+        // not enough on its own -- an unclosed URLClassLoader holds a file handle on server/conf for
+        // the JVM's lifetime. The one-time class init it exists for has already happened by then.
+        URLClassLoader confLoader = null;
         try {
+            if (confDir.isDirectory()) {
+                URL confUrl = confDir.toURI().toURL();
+                confLoader = new URLClassLoader(new URL[] { confUrl }, originalClassLoader);
+                Thread.currentThread().setContextClassLoader(confLoader);
+            }
             // Real MirthContextFactory -- BridgeLink's own Rhino seam, not raw Context.enter().
             contextFactory = new MirthContextFactory(null, null, false);
         } finally {
             Thread.currentThread().setContextClassLoader(originalClassLoader);
+            if (confLoader != null) {
+                confLoader.close();
+            }
         }
     }
 
@@ -191,8 +199,14 @@ public class RhinoSeamTest {
         // (confirmed by reading JavaScriptBuilder.java) -- so this scope has a core symbol to
         // resolve without needing to seed one. com.mirth.connect.userutil.Response is picked as a
         // concrete, stable class from that package.
-        Scriptable scope = JavaScriptScopeUtil.getDeployScope(contextFactory, null);
+        // getDeployScope() is INSIDE the try: it calls getContext(contextFactory) ->
+        // contextFactory.enterContext() before chaining the scope builders (addConfigurationMap ->
+        // ConfigurationController.getInstance(), addGlobalMap, addDatabaseConnectionFactory). If any
+        // of those throws, an entered Context would stay associated with this JUnit thread and
+        // corrupt every later test in the same fork with a confusing secondary failure.
+        Scriptable scope = null;
         try {
+            scope = JavaScriptScopeUtil.getDeployScope(contextFactory, null);
             // PRECONDITION: adapter (b) propagates the sealed scope's
             // associatedValue("importedPackages") onto this parentScope-null child. Without that
             // propagation, "Response" resolves to Scriptable.NOT_FOUND here even though the sealed
@@ -209,7 +223,12 @@ public class RhinoSeamTest {
                     + "scope obtained through JavaScriptScopeUtil's public getters",
                     Scriptable.NOT_FOUND, response);
         } finally {
-            Context.exit();
+            // Guarded: if getDeployScope() threw BEFORE enterContext() returned, there is no
+            // Context on this thread and an unconditional Context.exit() would itself throw,
+            // masking the real failure.
+            if (Context.getCurrentContext() != null) {
+                Context.exit();
+            }
         }
     }
 }
