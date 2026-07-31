@@ -13,9 +13,15 @@
 #
 # Usage: smoke-tests/check-jar-java17.sh <jar> [<jar>...]
 # Exit codes:
-#   0 - PASS: every base-path class in every jar is <= MAX_CLASS_MAJOR
-#   1 - FAIL: at least one base-path class exceeds MAX_CLASS_MAJOR (offending entries printed)
-#   2 - INCONCLUSIVE: a jar argument is missing/unreadable, python3 is unavailable, or no jars given
+#   0 - PASS: every base-path class in every jar is <= MAX_CLASS_MAJOR, and every jar actually
+#       contributed at least one base-path class entry (an empty scan can never PASS)
+#   1 - FAIL: at least one base-path class exceeds MAX_CLASS_MAJOR (offending entries printed).
+#       A real FAIL takes precedence over an INCONCLUSIVE jar in the same run: the violation is
+#       hard evidence and must not be downgraded to "could not tell" (the per-jar INCONCLUSIVE
+#       lines are still printed, and a NOTE names how many jars went unscanned).
+#   2 - INCONCLUSIVE: no jars given, python3 unavailable, MAX_CLASS_MAJOR not a positive integer,
+#       or a jar is missing/unreadable/not a zip/carries no base-path class entries at all --
+#       i.e. the gate could not actually evaluate the jar. Never reported as FAIL.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -57,52 +63,86 @@ done
 # Scan: verified logic from 23-RESEARCH.md sec R2.3 (the exact code that produced
 # sec R1.1's results this session) -- do not re-derive.
 # ---------------------------------------------------------------------------
+# Validate the override BEFORE the arithmetic below: a non-numeric value would otherwise blow up
+# in $((...)) here and in int() inside the scan, and an uncaught Python exception exits 1 --
+# which the verdict block would mistranslate into a fabricated class-version violation.
+if ! [[ "${MAX_CLASS_MAJOR}" =~ ^[0-9]+$ ]]; then
+    err "MAX_CLASS_MAJOR must be a positive integer (got: ${MAX_CLASS_MAJOR})"
+    exit 2
+fi
+
 info "Scanning $# jar(s), MAX_CLASS_MAJOR=${MAX_CLASS_MAJOR} (Java $((MAX_CLASS_MAJOR - 44)))..."
 
 set +e
 SCAN_OUTPUT="$(MAX_CLASS_MAJOR="${MAX_CLASS_MAJOR}" python3 - "$@" <<'PYEOF'
 import sys, zipfile, struct, collections, re, os
-MAXOK = int(os.environ.get('MAX_CLASS_MAJOR', '61'))
+try:
+    MAXOK = int(os.environ.get('MAX_CLASS_MAJOR', '61'))
+except ValueError:
+    print("INCONCLUSIVE: MAX_CLASS_MAJOR is not an integer")
+    sys.exit(2)
 VER = re.compile(r'^META-INF/versions/(\d+)/')
-rc = 0
+any_fail = False
+any_inconclusive = 0
 for p in sys.argv[1:]:
-    z = zipfile.ZipFile(p)
-    mr = False
+    # A truncated / non-zip / unreadable jar must be INCONCLUSIVE, never a class-version FAIL:
+    # an uncaught exception here exits 1, which the caller would print as "base-path class
+    # exceeds major N" for a jar that was never scanned at all.
     try:
-        mf = z.read('META-INF/MANIFEST.MF').decode('utf8', 'replace')
-        mr = bool(re.search(r'(?im)^Multi-Release:\s*true', mf))
-    except KeyError:
-        pass
-    base = collections.Counter()
-    tiers = collections.defaultdict(collections.Counter)
-    bad = []
-    for n in z.namelist():
-        if not n.endswith('.class'):
-            continue
-        m = VER.match(n)
-        with z.open(n) as f:
-            h = f.read(8)
-        if len(h) < 8 or h[:4] != b'\xca\xfe\xba\xbe':
-            continue
-        major = struct.unpack('>HH', h[4:8])[1]
-        if m:
-            tiers[int(m.group(1))][major] += 1      # REPORT only, never fail (D-17a)
-        else:
-            base[major] += 1
-            if major > MAXOK:
-                bad.append((n, major))
+        with zipfile.ZipFile(p) as z:
+            mr = False
+            try:
+                mf = z.read('META-INF/MANIFEST.MF').decode('utf8', 'replace')
+                mr = bool(re.search(r'(?im)^Multi-Release:\s*true', mf))
+            except KeyError:
+                pass
+            base = collections.Counter()
+            tiers = collections.defaultdict(collections.Counter)
+            bad = []
+            for n in z.namelist():
+                if not n.endswith('.class'):
+                    continue
+                m = VER.match(n)
+                with z.open(n) as f:
+                    h = f.read(8)
+                if len(h) < 8 or h[:4] != b'\xca\xfe\xba\xbe':
+                    continue
+                major = struct.unpack('>HH', h[4:8])[1]
+                if m:
+                    tiers[int(m.group(1))][major] += 1      # REPORT only, never fail (D-17a)
+                else:
+                    base[major] += 1
+                    if major > MAXOK:
+                        bad.append((n, major))
+    except (zipfile.BadZipFile, OSError) as e:
+        print(f"== {p}  INCONCLUSIVE: unreadable / not a zip: {e}")
+        any_inconclusive += 1
+        continue
     print(f"== {p}  Multi-Release: {mr}")
     print(f"   base-path majors: {dict(sorted(base.items()))} (total {sum(base.values())})")
     for t in sorted(tiers):
         reads = "read" if t <= (MAXOK - 44) else "ignored"
         print(f"   META-INF/versions/{t}: majors {dict(sorted(tiers[t].items()))} "
               f"({sum(tiers[t].values())} entries)  [{reads} by a Java {MAXOK-44} JVM]")
+    # Fail closed on an empty base path: a sources/javadoc jar, a pom-only artifact, an
+    # all-META-INF/versions jar, a stub, or a wrong path would otherwise print PASS because
+    # "no base-path class exceeds the floor" is vacuously true of the empty set (D-17/D-18).
+    if sum(base.values()) == 0:
+        print(f"   VERDICT: INCONCLUSIVE  no base-path class entries scanned in {p}")
+        any_inconclusive += 1
+        continue
     print(f"   VERDICT: {'FAIL' if bad else 'PASS'}  base-path over major {MAXOK}: {len(bad)}")
     for n, mj in bad[:10]:
         print(f"     {n} -> {mj}")
     if bad:
-        rc = 1
-sys.exit(rc)
+        any_fail = True
+if any_inconclusive:
+    print(f"NOTE: {any_inconclusive} jar(s) could not be evaluated (see INCONCLUSIVE lines above)")
+# A genuine class-version violation outranks an unscannable jar in the same run: exit 1 keeps
+# the hard evidence, and the NOTE above preserves the "not everything was scanned" signal.
+if any_fail:
+    sys.exit(1)
+sys.exit(2 if any_inconclusive else 0)
 PYEOF
 )"
 SCAN_EXIT=$?
@@ -115,13 +155,13 @@ echo "${SCAN_OUTPUT}" | tee "${REPORT_LOG}"
 # ---------------------------------------------------------------------------
 VERDICT_EXIT=2
 if [[ ${SCAN_EXIT} -eq 0 ]]; then
-    ok "all base-path classes in all $# jar(s) are <= major ${MAX_CLASS_MAJOR}"
+    ok "all base-path classes in all $# jar(s) are <= major ${MAX_CLASS_MAJOR} (every jar contributed at least one base-path class)"
     VERDICT_EXIT=0
 elif [[ ${SCAN_EXIT} -eq 1 ]]; then
     err "at least one base-path class exceeds major ${MAX_CLASS_MAJOR} -- see offending entries above"
     VERDICT_EXIT=1
 else
-    err "scan could not complete (python3 exit ${SCAN_EXIT}) -- INCONCLUSIVE"
+    err "at least one jar could not be evaluated (unreadable / not a zip / no base-path class entries) -- INCONCLUSIVE, see the scan output above"
     VERDICT_EXIT=2
 fi
 
