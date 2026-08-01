@@ -470,6 +470,12 @@ public class ConfigurationServlet extends MirthServlet implements ConfigurationS
         }
     }
 
+    @Override
+    public Response prettyPrintScript(String script) {
+        String result = JavaScriptSharedUtil.prettyPrint(StringUtils.defaultString(script));
+        return Response.ok(result, MediaType.TEXT_PLAIN_TYPE).build();
+    }
+
     private static MirthApiException badRequest(String message) {
         return new MirthApiException(Response.status(Status.BAD_REQUEST).type(MediaType.TEXT_PLAIN).entity(message).build());
     }
