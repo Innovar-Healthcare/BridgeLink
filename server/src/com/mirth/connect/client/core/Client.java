@@ -965,6 +965,56 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
         return getServlet(ConfigurationServletInterface.class).getRhinoLanguageVersion();
     }
 
+    /**
+     * Returns the catalog of script reference/autocomplete entries.
+     *
+     * @see ConfigurationServletInterface#getScriptReferences
+     */
+    @Override
+    public RawContent getScriptReferences() throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).getScriptReferences();
+    }
+
+    /**
+     * Validates a JavaScript script using the server's Rhino engine.
+     *
+     * @see ConfigurationServletInterface#validateScript
+     */
+    @Override
+    public RawContent validateScript(String script) throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).validateScript(script);
+    }
+
+    /**
+     * Validates a Quartz cron expression using the server's real Quartz CronExpression parser.
+     *
+     * @see ConfigurationServletInterface#validateCron
+     */
+    @Override
+    public RawContent validateCron(String expression) throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).validateCron(expression);
+    }
+
+    /**
+     * Resolves ${...} template values using the server's real template engine.
+     *
+     * @see ConfigurationServletInterface#replaceTemplate
+     */
+    @Override
+    public RawContent replaceTemplate(String channelId, String template) throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).replaceTemplate(channelId, template);
+    }
+
+    /**
+     * Pretty-prints a JavaScript/E4X script using the server's js-beautify formatter.
+     *
+     * @see ConfigurationServletInterface#prettyPrintScript
+     */
+    @Override
+    public javax.ws.rs.core.Response prettyPrintScript(String script) throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).prettyPrintScript(script);
+    }
+
     /*******************
      * Channel Servlet *
      *******************/
@@ -2497,6 +2547,16 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     @Override
     public synchronized CodeTemplateLibrarySaveResult updateLibrariesAndTemplates(List<CodeTemplateLibrary> libraries, Set<String> removedLibraryIds, List<CodeTemplate> updatedCodeTemplates, Set<String> removedCodeTemplateIds, boolean override) throws ClientException {
         return getServlet(CodeTemplateServletInterface.class).updateLibrariesAndTemplates(libraries, removedLibraryIds, updatedCodeTemplates, removedCodeTemplateIds, override);
+    }
+
+    /**
+     * Regenerates the JSDoc comment block for a code template's JavaScript.
+     *
+     * @see CodeTemplateServletInterface#generateDoc
+     */
+    @Override
+    public javax.ws.rs.core.Response generateDoc(String code) throws ClientException {
+        return getServlet(CodeTemplateServletInterface.class).generateDoc(code);
     }
 
     /*************************

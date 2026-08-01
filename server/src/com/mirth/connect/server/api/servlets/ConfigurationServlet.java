@@ -75,6 +75,7 @@ import com.mirth.connect.util.KeystoreRegenerationResponse;
 import com.mirth.connect.util.MirthJsonUtil;
 import com.mirth.connect.util.MirthSSLUtil;
 import com.mirth.connect.util.PollScheduleUtil;
+import com.mirth.connect.util.ScriptReferenceUtil;
 
 public class ConfigurationServlet extends MirthServlet implements ConfigurationServletInterface {
 
@@ -432,6 +433,15 @@ public class ConfigurationServlet extends MirthServlet implements ConfigurationS
             }
         }
         return languageVersion;
+    }
+
+    @Override
+    public RawContent getScriptReferences() {
+        try {
+            return new RawContent(MirthJsonUtil.toJson(ScriptReferenceUtil.getReferences()));
+        } catch (JsonProcessingException e) {
+            throw new MirthApiException(e);
+        }
     }
 
     @Override

@@ -463,6 +463,13 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
     @MirthOperation(name = "getRhinoLanguageVersion", display = "Get rhino language version", type = ExecuteType.ASYNC, auditable = false)
     public int getRhinoLanguageVersion() throws ClientException;
 
+    @GET
+    @Path("/scriptReferences")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Returns the catalog of script reference/autocomplete entries (code snippets, variables, functions, and E4X XML members) available when writing JavaScript filter/transformer code. Plain JSON response, not the standard serialized envelope.")
+    @MirthOperation(name = "getScriptReferences", display = "Get script references", type = ExecuteType.ASYNC, auditable = false)
+    public RawContent getScriptReferences() throws ClientException;
+
     @POST
     @Path("/_validateScript")
     @Consumes(MediaType.TEXT_PLAIN)
