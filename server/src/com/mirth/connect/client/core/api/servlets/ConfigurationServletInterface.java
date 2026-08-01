@@ -485,6 +485,18 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
     public RawContent validateCron(@Param("expression") @RequestBody(description = "The Quartz cron expression to validate.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String expression) throws ClientException;
 
     @POST
+    @Path("/_replaceTemplate")
+    @Consumes(MediaType.TEXT_PLAIN)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Resolves ${...} template values using the server's real template engine (Velocity), the same one channels use. Plain JSON response, not the standard serialized envelope.")
+    @ApiResponse(responseCode = "200", description = "The resolved template.", content = @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
+            @ExampleObject(name = "resolved", value = "{\"result\":\"Hello World\"}") }))
+    @MirthOperation(name = "replaceTemplate", display = "Replace template values", type = ExecuteType.ASYNC, auditable = false)
+    public RawContent replaceTemplate(
+            @Param("channelId") @Parameter(description = "Optional channel ID whose global channel variable map is included in the preview. A random ID is used if omitted, matching no real channel (empty variable map).") @QueryParam("channelId") String channelId,
+            @Param("template") @RequestBody(description = "The template string containing ${...} references to resolve.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String template) throws ClientException;
+
+    @POST
     @Path("/keystore/regenerate")
     @Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
     @Operation(summary = "Regenerates the keystore passwords if they are still set to default values.")
