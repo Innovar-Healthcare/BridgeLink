@@ -41,6 +41,7 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 
 import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.core.Operation.ExecuteType;
@@ -495,6 +496,19 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
     public RawContent replaceTemplate(
             @Param("channelId") @Parameter(description = "Optional channel ID whose global channel variable map is included in the preview. A random ID is used if omitted, matching no real channel (empty variable map).") @QueryParam("channelId") String channelId,
             @Param("template") @RequestBody(description = "The template string containing ${...} references to resolve.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String template) throws ClientException;
+
+    /*
+     * Produces declares JSON as well so JSON-accepting clients (the WebAdmin fetch wrapper sends
+     * Accept: application/json) are not rejected with 406; the implementation pins the actual
+     * response Content-Type to text/plain.
+     */
+    @POST
+    @Path("/_prettyPrintScript")
+    @Consumes(MediaType.TEXT_PLAIN)
+    @Produces({ MediaType.TEXT_PLAIN, MediaType.APPLICATION_JSON })
+    @Operation(summary = "Pretty-prints a JavaScript/E4X script using the server's js-beautify formatter. Raw text response (Content-Type text/plain), not the standard serialized envelope.")
+    @MirthOperation(name = "prettyPrintScript", display = "Pretty print script", type = ExecuteType.ASYNC, auditable = false)
+    public Response prettyPrintScript(@Param("script") @RequestBody(description = "The script to pretty-print.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String script) throws ClientException;
 
     @POST
     @Path("/keystore/regenerate")
