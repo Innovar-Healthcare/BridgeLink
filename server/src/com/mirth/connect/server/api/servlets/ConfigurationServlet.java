@@ -67,6 +67,7 @@ import com.mirth.connect.util.JavaScriptSharedUtil;
 import com.mirth.connect.util.KeystoreRegenerationResponse;
 import com.mirth.connect.util.MirthJsonUtil;
 import com.mirth.connect.util.MirthSSLUtil;
+import com.mirth.connect.util.PollScheduleUtil;
 
 public class ConfigurationServlet extends MirthServlet implements ConfigurationServletInterface {
 
@@ -430,6 +431,15 @@ public class ConfigurationServlet extends MirthServlet implements ConfigurationS
     public RawContent validateScript(String script) {
         try {
             return new RawContent(MirthJsonUtil.toJson(JavaScriptSharedUtil.validateScriptStructured(script)));
+        } catch (JsonProcessingException e) {
+            throw new MirthApiException(e);
+        }
+    }
+
+    @Override
+    public RawContent validateCron(String expression) {
+        try {
+            return new RawContent(MirthJsonUtil.toJson(PollScheduleUtil.validateCronStructured(expression)));
         } catch (JsonProcessingException e) {
             throw new MirthApiException(e);
         }

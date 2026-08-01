@@ -474,6 +474,17 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
     public RawContent validateScript(@Param("script") @RequestBody(description = "The script body to validate.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String script) throws ClientException;
 
     @POST
+    @Path("/_validateCron")
+    @Consumes(MediaType.TEXT_PLAIN)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Validates a Quartz cron expression using the server's real Quartz CronExpression parser. Plain JSON response, not the standard serialized envelope.")
+    @ApiResponse(responseCode = "200", description = "The validation result.", content = @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
+            @ExampleObject(name = "valid", summary = "Valid expression", value = "{\"valid\":true,\"message\":null}"),
+            @ExampleObject(name = "invalid", summary = "Invalid expression", value = "{\"valid\":false,\"message\":\"Unexpected end of expression.\"}") }))
+    @MirthOperation(name = "validateCron", display = "Validate cron expression", type = ExecuteType.ASYNC, auditable = false)
+    public RawContent validateCron(@Param("expression") @RequestBody(description = "The Quartz cron expression to validate.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String expression) throws ClientException;
+
+    @POST
     @Path("/keystore/regenerate")
     @Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
     @Operation(summary = "Regenerates the keystore passwords if they are still set to default values.")

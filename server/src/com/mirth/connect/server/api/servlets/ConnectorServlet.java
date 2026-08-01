@@ -16,6 +16,8 @@
 
 package com.mirth.connect.server.api.servlets;
 
+import java.util.Collections;
+
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
@@ -29,11 +31,14 @@ import com.mirth.connect.client.core.api.MirthApiException;
 import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.client.core.api.servlets.ConnectorServletInterface;
 import com.mirth.connect.donkey.model.channel.ConnectorProperties;
+import com.mirth.connect.donkey.model.channel.PollConnectorProperties;
 import com.mirth.connect.model.ConnectorMetaData;
 import com.mirth.connect.server.api.MirthServlet;
 import com.mirth.connect.server.controllers.ControllerFactory;
 import com.mirth.connect.server.controllers.ExtensionController;
 import com.mirth.connect.server.util.ConnectorPropertiesUtil;
+import com.mirth.connect.util.MirthJsonUtil;
+import com.mirth.connect.util.PollScheduleUtil;
 
 public class ConnectorServlet extends MirthServlet implements ConnectorServletInterface {
 
@@ -70,6 +75,30 @@ public class ConnectorServlet extends MirthServlet implements ConnectorServletIn
             return Response.ok(body, MediaType.APPLICATION_XML_TYPE).build();
         } catch (MirthApiException e) {
             throw e;
+        } catch (Exception e) {
+            throw new MirthApiException(e);
+        }
+    }
+
+    @Override
+    public Response nextFireTime(String pollConnectorPropertiesXml) {
+        if (StringUtils.isBlank(pollConnectorPropertiesXml)) {
+            throw badRequest("A pollConnectorProperties XML body is required.");
+        }
+
+        PollConnectorProperties properties;
+        try {
+            properties = PollScheduleUtil.parsePollConnectorPropertiesXml(pollConnectorPropertiesXml);
+        } catch (Exception e) {
+            throw badRequest("Invalid pollConnectorProperties XML: " + e.getMessage());
+        }
+
+        try {
+            String nextFireTime = PollScheduleUtil.getNextFireTime(properties);
+            RawContent body = new RawContent(MirthJsonUtil.toJson(Collections.singletonMap("nextFireTime", nextFireTime)));
+            return Response.ok(body, MediaType.APPLICATION_JSON_TYPE).build();
+        } catch (IllegalArgumentException e) {
+            throw badRequest(e.getMessage());
         } catch (Exception e) {
             throw new MirthApiException(e);
         }
