@@ -11,19 +11,25 @@ package com.mirth.connect.server.api.servlets;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
+import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.SecurityContext;
 
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -61,6 +67,7 @@ import com.mirth.connect.server.controllers.ContextFactoryController;
 import com.mirth.connect.server.controllers.ControllerFactory;
 import com.mirth.connect.server.controllers.ExtensionController;
 import com.mirth.connect.server.controllers.ScriptController;
+import com.mirth.connect.server.util.TemplateValueReplacer;
 import com.mirth.connect.util.ConfigurationProperty;
 import com.mirth.connect.util.ConnectionTestResponse;
 import com.mirth.connect.util.JavaScriptSharedUtil;
@@ -443,6 +450,28 @@ public class ConfigurationServlet extends MirthServlet implements ConfigurationS
         } catch (JsonProcessingException e) {
             throw new MirthApiException(e);
         }
+    }
+
+    @Override
+    public RawContent replaceTemplate(String channelId, String template) {
+        if (StringUtils.isBlank(template)) {
+            throw badRequest("A template is required.");
+        }
+
+        // A synthetic ID (no real channel) is fine: GlobalChannelVariableStoreFactory lazily
+        // creates an empty store for any unrecognized channel ID rather than throwing.
+        String resolvedChannelId = StringUtils.defaultIfBlank(channelId, UUID.randomUUID().toString());
+        String result = new TemplateValueReplacer().replaceValues(template, resolvedChannelId, Collections.<String, Object>emptyMap());
+
+        try {
+            return new RawContent(MirthJsonUtil.toJson(Collections.singletonMap("result", result)));
+        } catch (JsonProcessingException e) {
+            throw new MirthApiException(e);
+        }
+    }
+
+    private static MirthApiException badRequest(String message) {
+        return new MirthApiException(Response.status(Status.BAD_REQUEST).type(MediaType.TEXT_PLAIN).entity(message).build());
     }
 
     @Override
