@@ -43,7 +43,7 @@ import com.mirth.connect.server.channel.ChannelTaskHandler;
 import com.mirth.connect.server.util.DatabaseUtil;
 import com.mirth.connect.server.util.SqlConfig;
 
-import edu.emory.mathcs.backport.java.util.Collections;
+import java.util.Collections;
 
 public class DefaultDatabaseTaskController implements DatabaseTaskController {
 
