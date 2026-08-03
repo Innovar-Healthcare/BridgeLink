@@ -5,7 +5,8 @@
 	<classpathentry kind="src" path="conf"/>
 	<classpathentry kind="src" path="dbconf"/>
 	<classpathentry kind="src" path="build"/>
-	<classpathentry kind="lib" path="lib/extensions/dimse/jai_imageio.jar"/>
+	<classpathentry kind="lib" path="lib/extensions/dimse/jai-imageio-core-1.4.0.jar"/>
+	<classpathentry kind="lib" path="lib/extensions/dimse/jai-imageio-jpeg2000-1.4.0.jar"/>
 	<classpathentry kind="lib" path="lib/extensions/doc/flying-saucer-core-9.0.1.jar"/>
 	<classpathentry kind="lib" path="lib/extensions/doc/flying-saucer-pdf-9.0.1.jar"/>
 	<classpathentry kind="lib" path="lib/extensions/file/jcifs-1.3.17.jar"/>

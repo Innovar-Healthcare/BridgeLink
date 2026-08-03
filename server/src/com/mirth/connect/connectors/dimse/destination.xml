@@ -12,7 +12,8 @@
 	<library type="SHARED" path="dicom-shared.jar" />
 	<library type="SHARED" path="lib/dcm4che-core-2.0.29.jar" />
 	<library type="SERVER" path="dicom-server.jar" />
-	<library type="SERVER" path="lib/jai_imageio.jar" />
+	<library type="SERVER" path="lib/jai-imageio-core-1.4.0.jar" />
+	<library type="SERVER" path="lib/jai-imageio-jpeg2000-1.4.0.jar" />
 	<library type="SERVER" path="lib/dcm4che-net-2.0.29.jar" />
 	<library type="SERVER" path="lib/dcm4che-tool-dcmrcv-2.0.29.jar" />
 	<library type="SERVER" path="lib/dcm4che-tool-dcmsnd-2.0.29.jar" />
