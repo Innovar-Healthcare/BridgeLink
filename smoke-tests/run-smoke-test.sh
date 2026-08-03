@@ -283,6 +283,11 @@ allocate_ports() {
     HTTP_CTXPATH_PORT=$(free_port)
     HTTP_LARGE_PORT=$(free_port)
     HTTP_ERROR500_PORT=$(free_port)
+    # 22-05 (CVE-06/D-07): embedded WebDavServerStub ports — plaintext (webdav://) and TLS
+    # (webdavs://), kept separate (Pitfall 7) since both listeners run concurrently in the
+    # same JUnit-embedded stub instance.
+    WEBDAV_PORT=$(free_port)
+    WEBDAV_TLS_PORT=$(free_port)
     # SOAP_URL is derived, not a raw port — the Web Service Sender fixture (soap-test.xml)
     # substitutes ${SOAP_URL} directly (D-07: Endpoint.publish stub target).
     SOAP_URL="http://127.0.0.1:${SOAP_PORT}/smoketest"
@@ -290,8 +295,9 @@ allocate_ports() {
         HTTP_RESPONSE_PORT HTTP_XMLBODY_PORT HTTP_BINARY_PORT HTTP_AUTH_BASIC_PORT HTTP_AUTH_DIGEST_PORT \
         HTTP_STUB_PORT HTTP_CTXPATH_PORT HTTP_LARGE_PORT HTTP_ERROR500_PORT \
         DICOM_LISTENER_PORT DICOM_ROUNDTRIP_SCP_PORT DICOM_COMPRESSED_LISTENER_PORT DICOM_COMPRESSED_SCP_PORT \
-        DICOM_TLS_AES_LISTENER_PORT DICOM_TLS_AES_SCP_PORT DICOM_TLS_3DES_LISTENER_PORT DICOM_TLS_3DES_SCP_PORT
-    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT} DICOM_COMPRESSED_LISTENER=${DICOM_COMPRESSED_LISTENER_PORT} DICOM_COMPRESSED_SCP=${DICOM_COMPRESSED_SCP_PORT} DICOM_TLS_AES_LISTENER=${DICOM_TLS_AES_LISTENER_PORT} DICOM_TLS_AES_SCP=${DICOM_TLS_AES_SCP_PORT} DICOM_TLS_3DES_LISTENER=${DICOM_TLS_3DES_LISTENER_PORT} DICOM_TLS_3DES_SCP=${DICOM_TLS_3DES_SCP_PORT}"
+        DICOM_TLS_AES_LISTENER_PORT DICOM_TLS_AES_SCP_PORT DICOM_TLS_3DES_LISTENER_PORT DICOM_TLS_3DES_SCP_PORT \
+        WEBDAV_PORT WEBDAV_TLS_PORT
+    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT} DICOM_COMPRESSED_LISTENER=${DICOM_COMPRESSED_LISTENER_PORT} DICOM_COMPRESSED_SCP=${DICOM_COMPRESSED_SCP_PORT} DICOM_TLS_AES_LISTENER=${DICOM_TLS_AES_LISTENER_PORT} DICOM_TLS_AES_SCP=${DICOM_TLS_AES_SCP_PORT} DICOM_TLS_3DES_LISTENER=${DICOM_TLS_3DES_LISTENER_PORT} DICOM_TLS_3DES_SCP=${DICOM_TLS_3DES_SCP_PORT} WEBDAV=${WEBDAV_PORT} WEBDAV_TLS=${WEBDAV_TLS_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -359,6 +365,101 @@ generate_dicom_tls_keystore() {
 
     export DICOM_TLS_KEYSTORE DICOM_TLS_KEYSTORE_PW
     pass "Generated shared PKCS12 keystore: ${DICOM_TLS_KEYSTORE}"
+}
+
+# ---------------------------------------------------------------------------
+# Stage: generate_webdav_tls_keystore — 22-05 (CVE-06/D-07): mints a dedicated
+# self-signed PKCS12 keystore for the embedded WebDavServerStub's HTTPS (webdavs://)
+# listener, mirroring generate_dicom_tls_keystore()'s keytool invocation exactly
+# (own file/password, decoupled from the DICOM TLS keystore — kept separate rather
+# than reused, so neither leg's lifecycle depends on the other's).
+# ---------------------------------------------------------------------------
+generate_webdav_tls_keystore() {
+    hr
+    info "Generating WebDAV TLS PKCS12 keystore..."
+    WEBDAV_TLS_KEYSTORE="${CHANNEL_WORK_DIR}/webdav-tls.p12"
+    WEBDAV_TLS_KEYSTORE_PW="smoketest-$(date +%s)"
+
+    keytool -genkeypair \
+        -alias webdav-tls-smoke \
+        -keyalg RSA -keysize 2048 \
+        -validity 7 \
+        -dname "CN=127.0.0.1,O=BridgeLink Smoke Harness" \
+        -keystore "${WEBDAV_TLS_KEYSTORE}" \
+        -storetype PKCS12 \
+        -storepass "${WEBDAV_TLS_KEYSTORE_PW}" \
+        > /dev/null 2>&1
+
+    export WEBDAV_TLS_KEYSTORE WEBDAV_TLS_KEYSTORE_PW
+    pass "Generated WebDAV TLS PKCS12 keystore: ${WEBDAV_TLS_KEYSTORE}"
+}
+
+# ---------------------------------------------------------------------------
+# Stage: launch_webdav_stub — 22-05 (CVE-06/D-07): starts WebDavServerStub as an
+# INDEPENDENT OS process (mirroring the SFTP leg's independent atmoz/sftp Docker
+# container), BEFORE the channel import/deploy stage.
+#
+# Rule 1 fix: unlike DicomScpStub/SoapStub (whose connectors only connect out lazily,
+# at send time), FileReceiver.onStart() eagerly opens and validates its connection at
+# CHANNEL DEPLOY time. Starting the WebDAV stub from inside the JUnit driver's
+# @BeforeClass (this harness's usual embedded-stub pattern) would leave
+# file-webdav-test.xml deploying against nothing listening yet, and deploy would FAIL
+# before the driver phase ever runs. WebDavServerStub therefore ships a standalone
+# main() launched here as a background `java` process; WebDavRoundTripTest (run later,
+# in run_driver()) only reads WEBDAV_ROOT_DIR to seed/poll files against the SAME
+# already-running server.
+#
+# Only smoke-tests/build/classes is needed on the classpath — WebDavServerStub itself
+# is pure JDK (com.sun.net.httpserver), zero new jars (matches the D-07 "no silent
+# no-op gate" principle without dragging in Milton's heavy transitive graph, see
+# WebDavServerStub's class javadoc). Compiles the smoke-tests driver early (idempotent
+# — run_driver()'s later `ant test-run` recompiles the same sources) so build/classes
+# exists at this point in the sequence.
+# ---------------------------------------------------------------------------
+WEBDAV_STUB_PID=""
+WEBDAV_ROOT_DIR=""
+
+launch_webdav_stub() {
+    hr
+    info "Compiling smoke-tests driver (needed early for the standalone WebDavServerStub launcher)..."
+    if ! ant -f "${SCRIPT_DIR}/build.xml" compile -Dsmoke.setup.dir="${SERVER_SETUP}" > /dev/null; then
+        fatal "smoke-tests driver compile failed (needed for WebDavServerStub launch) — see output above"
+    fi
+    pass "smoke-tests driver compiled"
+
+    info "Launching WebDavServerStub (embedded WebDAV server, D-07 hard gate)..."
+    WEBDAV_ROOT_DIR="${CHANNEL_WORK_DIR}/webdav-root"
+    mkdir -p "${WEBDAV_ROOT_DIR}/upload"
+
+    java -cp "${SCRIPT_DIR}/build/classes" com.mirth.connect.smoketest.stubs.WebDavServerStub \
+        "${WEBDAV_PORT}" "${WEBDAV_TLS_PORT}" "${WEBDAV_ROOT_DIR}" "webdavuser" "webdavpass" \
+        "${WEBDAV_TLS_KEYSTORE}" "${WEBDAV_TLS_KEYSTORE_PW}" \
+        > "${HARNESS_LOG_DIR}/webdav-stub-stdout.log" 2>&1 &
+    WEBDAV_STUB_PID=$!
+
+    # Poll for TCP-listening (no fixed sleep, Pitfall 7) — mirrors the DICOM listener-port
+    # liveness probe further below.
+    local deadline=$((SECONDS + 20))
+    while [[ ${SECONDS} -lt ${deadline} ]]; do
+        if python3 -c "
+import socket, sys
+s = socket.socket()
+s.settimeout(1)
+try:
+    s.connect(('127.0.0.1', ${WEBDAV_PORT}))
+    sys.exit(0)
+except OSError:
+    sys.exit(1)
+"; then
+            pass "WebDavServerStub listening on 127.0.0.1:${WEBDAV_PORT} (PID=${WEBDAV_STUB_PID}, root=${WEBDAV_ROOT_DIR})"
+            return 0
+        fi
+        sleep 0.5
+    done
+
+    fail "WebDavServerStub did not start listening on 127.0.0.1:${WEBDAV_PORT} within 20s"
+    cat "${HARNESS_LOG_DIR}/webdav-stub-stdout.log" 2>/dev/null || true
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -584,7 +685,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-compressed-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-compressed-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test file-webdav-test)
 # 25.1-03 (SC-3, IRT-1541): the two legacy-algorithm fixtures are appended ONLY when
 # SFTP_LEGACY_PORT is pre-exported by the external break-then-fix driver — an ordinary
 # run-smoke-test.sh invocation has no legacy server to dial, so these must stay out of the
@@ -637,6 +738,7 @@ CHANNEL_IDS=(
     "00000027-0000-0000-0000-000000000027"
     "00000028-0000-0000-0000-000000000028"
     "00000029-0000-0000-0000-000000000029"
+    "00000033-0000-0000-0000-000000000033"
 )
 if [[ -n "${SFTP_LEGACY_PORT:-}" ]]; then
     CHANNEL_IDS+=(
@@ -684,7 +786,7 @@ fi
 # 25.1-05 adds no new placeholder: file-sftp-legacy-negative-hole-test.xml (the
 # SFTP_LEGACY_SIMULATE_HOLE fault-injection swap-in) reuses the SAME ${SFTP_LEGACY_PORT}
 # placeholder already allowlisted above.
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_COMPRESSED_LISTENER_PORT} ${DICOM_COMPRESSED_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT}'
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_COMPRESSED_LISTENER_PORT} ${DICOM_COMPRESSED_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT} ${WEBDAV_PORT} ${WEBDAV_TLS_PORT}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -1339,6 +1441,11 @@ run_driver() {
         -DSFTP_LEGACY_PORT="${driver_sftp_legacy_port}" \
         -DSFTP_LEGACY_UPLOAD_DIR="${SFTP_LEGACY_UPLOAD_DIR:-}" \
         -DMIRTH_LOG_PATH="${MIRTH_LOG_PATH}" \
+        -DWEBDAV_PORT="${WEBDAV_PORT}" \
+        -DWEBDAV_TLS_PORT="${WEBDAV_TLS_PORT}" \
+        -DWEBDAV_TLS_KEYSTORE="${WEBDAV_TLS_KEYSTORE}" \
+        -DWEBDAV_TLS_KEYSTORE_PW="${WEBDAV_TLS_KEYSTORE_PW}" \
+        -DWEBDAV_ROOT_DIR="${WEBDAV_ROOT_DIR}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else
@@ -1454,6 +1561,15 @@ cleanup() {
         pass "Server process stopped"
     fi
 
+    # 22-05 (CVE-06/D-07): stop the standalone WebDavServerStub process (launch_webdav_stub)
+    # BEFORE the CHANNEL_WORK_DIR rm -rf below removes WEBDAV_ROOT_DIR out from under it.
+    if [[ -n "${WEBDAV_STUB_PID}" ]] && kill -0 "${WEBDAV_STUB_PID}" 2>/dev/null; then
+        info "Sending SIGTERM to WebDavServerStub PID ${WEBDAV_STUB_PID}..."
+        kill -TERM "${WEBDAV_STUB_PID}" 2>/dev/null || true
+        wait "${WEBDAV_STUB_PID}" 2>/dev/null || true
+        pass "WebDavServerStub process stopped"
+    fi
+
     if [[ -n "${APPDATA}" && -d "${APPDATA}" ]]; then
         rm -rf "$(dirname "${APPDATA}")"
         info "Deleted temp appdata directory"
@@ -1502,8 +1618,10 @@ preflight
 allocate_ports
 allocate_work_dirs
 generate_dicom_tls_keystore
+generate_webdav_tls_keystore
 generate_sftp_fixtures
 check_sftp_legacy_fixture
+launch_webdav_stub
 patch_properties
 launch_server
 

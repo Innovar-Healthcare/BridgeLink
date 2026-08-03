@@ -90,14 +90,39 @@ public class WebDavConnection implements FileSystemConnection {
     private String username = null;
     private String password = null;
 
-    public WebDavConnection(String host, boolean secure, FileSystemConnectionOptions fileSystemOptions) throws Exception {
+    /**
+     * Rule 1 fix (found live while wiring the D-07 embedded-WebDAV round-trip gate): the
+     * pre-existing constructor {@code WebDavConnection(String host, boolean secure,
+     * FileSystemConnectionOptions)} never received a port at all -- {@code
+     * FileSystemConnectionFactory#makeObject()} parses {@code port} from the channel's URI but
+     * dropped it when constructing WEBDAV connections (unlike every sibling scheme --
+     * FTP/SFTP -- which do pass it through), silently forcing every {@code webdav://}/
+     * {@code webdavs://} connection onto the default port (80/443) regardless of what the
+     * channel configured. That is a real feature loss (D-06 requires "no feature loss"), not
+     * merely a test-harness inconvenience: any customer channel pointed at a WebDAV server on a
+     * non-default port would silently connect to the wrong port before this fix, without any
+     * error. Adding {@code port} here (and threading it through from {@code
+     * FileSystemConnectionFactory}) does not change the {@code FileSystemConnection} interface
+     * surface -- constructors are not part of that contract.
+     */
+    public WebDavConnection(String host, int port, boolean secure, FileSystemConnectionOptions fileSystemOptions) throws Exception {
         this.secure = secure;
         username = fileSystemOptions.getUsername();
         password = fileSystemOptions.getPassword();
-        baseUrl = (secure ? "https://" : "http://") + host;
+        baseUrl = (secure ? "https://" : "http://") + host + (port > 0 ? ":" + port : "");
 
         if (!username.equals("null")) {
             sardine = SardineFactory.begin(username, password);
+            if (!password.equals("null")) {
+                // Preemptive Basic Auth (Rule 1): without this, the underlying HttpClient only
+                // sends credentials after a 401 challenge, which requires REPLAYING the request
+                // body on retry. Sardine's put(url, InputStream) wraps a non-repeatable stream
+                // (the File Writer's message content), so a challenge-then-retry on PUT would
+                // silently resend an EMPTY body instead of the real one. Enabling preemptive
+                // auth sends credentials on the FIRST request, avoiding that class of bug
+                // entirely -- directly relevant to D-07's basic-auth coverage.
+                sardine.enablePreemptiveAuthentication(host);
+            }
         } else {
             sardine = SardineFactory.begin();
         }

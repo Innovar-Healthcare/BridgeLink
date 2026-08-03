@@ -81,6 +81,21 @@ already-built distribution elsewhere.
              stack the dispatcher itself uses client-side for Digest handshakes.
              commons-logging-1.3.3.jar is already on the path above (PDFBox). -->
         <fileset dir="${smoke.setup.dir}/server-lib/commons" includes="httpclient-4.5.13.jar,httpcore-4.4.13.jar,commons-codec-*.jar" />
+
+        <!-- 22-05 (CVE-06/D-07): WebDavRoundTripTest's webdavsSecureSchemeMapping() directly
+             instantiates the production WebDavConnection (not through a deployed channel) to
+             exercise the webdavs:// (TLS) path against WebDavServerStub's HTTPS listener,
+             scoped to this forked driver JVM only (see run-smoke-test.sh's WEBDAV_TLS_KEYSTORE
+             wiring). file-server.jar carries WebDavConnection + FileSystemConnectionOptions;
+             sardine-5.9.jar is its only new transitive (reuses the already-borrowed
+             httpclient-4.5.13.jar above plus the shipped javax jaxb-runtime/commons-codec). -->
+        <fileset file="${smoke.setup.dir}/extensions/file/file-server.jar" />
+        <!-- SchemeProperties (the FileSystemConnectionOptions constructor param type) lives
+             in file-shared.jar, not file-server.jar. -->
+        <fileset file="${smoke.setup.dir}/extensions/file/file-shared.jar" />
+        <fileset file="${smoke.setup.dir}/extensions/file/lib/sardine-5.9.jar" />
+        <!-- jaxb-runtime/jaxb-api already borrowed above (SOAP stub's server-lib/javax/jaxb
+             fileset) — Sardine reuses that same shipped javax JAXB runtime (D-14). -->
     </path>
 
     <path id="test.classpath">
@@ -167,6 +182,14 @@ already-built distribution elsewhere.
     <property name="SFTP_LEGACY_PORT" value="" />
     <property name="SFTP_LEGACY_UPLOAD_DIR" value="" />
     <property name="MIRTH_LOG_PATH" value="" />
+    <!-- 22-05 (CVE-06/D-07): embedded WebDavServerStub ports/keystore — plaintext
+         (webdav://) and TLS (webdavs://) listeners started by WebDavRoundTripTest's own
+         @BeforeClass, mirroring the DICOM round-trip stub's -D wiring. -->
+    <property name="WEBDAV_PORT" value="" />
+    <property name="WEBDAV_TLS_PORT" value="" />
+    <property name="WEBDAV_TLS_KEYSTORE" value="" />
+    <property name="WEBDAV_TLS_KEYSTORE_PW" value="" />
+    <property name="WEBDAV_ROOT_DIR" value="" />
 
     <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
         <mkdir dir="${junit.reports}" />
@@ -214,6 +237,23 @@ already-built distribution elsewhere.
             <sysproperty key="SFTP_LEGACY_PORT" value="${SFTP_LEGACY_PORT}" />
             <sysproperty key="SFTP_LEGACY_UPLOAD_DIR" value="${SFTP_LEGACY_UPLOAD_DIR}" />
             <sysproperty key="MIRTH_LOG_PATH" value="${MIRTH_LOG_PATH}" />
+            <sysproperty key="WEBDAV_PORT" value="${WEBDAV_PORT}" />
+            <sysproperty key="WEBDAV_TLS_PORT" value="${WEBDAV_TLS_PORT}" />
+            <sysproperty key="WEBDAV_TLS_KEYSTORE" value="${WEBDAV_TLS_KEYSTORE}" />
+            <sysproperty key="WEBDAV_TLS_KEYSTORE_PW" value="${WEBDAV_TLS_KEYSTORE_PW}" />
+            <sysproperty key="WEBDAV_ROOT_DIR" value="${WEBDAV_ROOT_DIR}" />
+            <!-- 22-05 (CVE-06/D-07): webdavsSecureSchemeMapping() directly instantiates
+                 WebDavConnection against WebDavServerStub's self-signed HTTPS listener, in
+                 THIS forked driver JVM only (forkmode="once" — never the deployed Mirth
+                 server, which is a separate process launched by run-smoke-test.sh). The same
+                 PKCS12 keystore doubles as its own truststore (single self-signed keypair,
+                 same convention as generate_dicom_tls_keystore's keyStore/trustStore reuse).
+                 Harmless when WEBDAV_TLS_KEYSTORE is unset (bare `ant test-run` local
+                 iteration): no code path in this suite triggers the JVM default SSLContext
+                 before WebDavRoundTripTest's own requireWebdavProperty() throws first. -->
+            <sysproperty key="javax.net.ssl.trustStore" value="${WEBDAV_TLS_KEYSTORE}" />
+            <sysproperty key="javax.net.ssl.trustStorePassword" value="${WEBDAV_TLS_KEYSTORE_PW}" />
+            <sysproperty key="javax.net.ssl.trustStoreType" value="PKCS12" />
             <classpath>
                 <path refid="test.classpath" />
                 <pathelement location="${build.classes}" />
