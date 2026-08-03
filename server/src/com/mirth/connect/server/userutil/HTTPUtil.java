@@ -9,10 +9,11 @@
 
 package com.mirth.connect.server.userutil;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.mail.MessagingException;
@@ -21,10 +22,12 @@ import javax.mail.util.ByteArrayDataSource;
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.apache.commons.fileupload.FileUploadBase;
-import org.apache.commons.httpclient.Header;
-import org.apache.commons.httpclient.HttpParser;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.http.Header;
 import org.apache.http.entity.ContentType;
+import org.apache.http.message.BasicLineParser;
+import org.apache.http.util.CharArrayBuffer;
 
 import com.mirth.connect.connectors.http.HttpMessageConverter;
 import com.mirth.connect.donkey.util.DonkeyElement.DonkeyElementException;
@@ -46,13 +49,43 @@ public class HTTPUtil {
      */
     public static Map<String, String> parseHeaders(String str) throws Exception {
         Map<String, String> headersMap = new HashMap<String, String>();
-        Header[] headers = HttpParser.parseHeaders(new ByteArrayInputStream(str.getBytes()), "UTF-8");
 
-        for (int i = 0; i < headers.length; i++) {
-            headersMap.put(headers[i].getName(), headers[i].getValue());
+        for (String line : unfoldHeaderLines(str)) {
+            if (StringUtils.isBlank(line)) {
+                continue;
+            }
+
+            CharArrayBuffer buffer = new CharArrayBuffer(line.length());
+            buffer.append(line);
+            Header header = BasicLineParser.INSTANCE.parseHeader(buffer);
+            headersMap.put(header.getName(), header.getValue());
         }
 
         return headersMap;
+    }
+
+    /**
+     * Splits a raw HTTP header block into individual header lines, unfolding RFC-822 continuation
+     * lines (lines beginning with a space or tab, which are a continuation of the previous
+     * header's value) into the header line they belong to. commons-httpclient's
+     * {@code HttpParser.parseHeaders} performed this same unfolding, and customer channel scripts
+     * consume the resulting Map, so the replacement parser must reproduce it exactly.
+     */
+    private static List<String> unfoldHeaderLines(String rawHeaderBlock) {
+        List<String> unfolded = new ArrayList<String>();
+        String[] rawLines = rawHeaderBlock.split("\r\n|\r|\n");
+
+        for (String rawLine : rawLines) {
+            if (!unfolded.isEmpty() && rawLine.length() > 0 && (rawLine.charAt(0) == ' ' || rawLine.charAt(0) == '\t')) {
+                // Folded/continuation line -- join to the previous header's value with a single space.
+                int lastIndex = unfolded.size() - 1;
+                unfolded.set(lastIndex, unfolded.get(lastIndex) + ' ' + rawLine.trim());
+            } else {
+                unfolded.add(rawLine);
+            }
+        }
+
+        return unfolded;
     }
 
     /**
