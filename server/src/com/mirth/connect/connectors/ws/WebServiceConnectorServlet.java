@@ -73,8 +73,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.w3c.dom.Node;
 
-import com.ibm.wsdl.extensions.schema.SchemaImpl;
-import com.ibm.wsdl.extensions.schema.SchemaImportImpl;
 import com.mirth.connect.client.core.api.MirthApiException;
 import com.mirth.connect.connectors.ws.DefinitionServiceMap.DefinitionPortMap;
 import com.mirth.connect.connectors.ws.DefinitionServiceMap.PortInformation;
