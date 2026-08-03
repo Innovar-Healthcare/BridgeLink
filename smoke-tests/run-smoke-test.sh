@@ -258,6 +258,10 @@ allocate_ports() {
     # and a dedicated DcmRcv SCP stub port (kept separate from SCP_PORT, Pitfall 7).
     DICOM_LISTENER_PORT=$(free_port)
     DICOM_ROUNDTRIP_SCP_PORT=$(free_port)
+    # 22-04 (CVE-09/D-13): compressed-DICOM round-trip channel — own Listener/SCP port
+    # pair (Pitfall 7), never shared with the plaintext round-trip ports above.
+    DICOM_COMPRESSED_LISTENER_PORT=$(free_port)
+    DICOM_COMPRESSED_SCP_PORT=$(free_port)
     # 18.4-03: DICOM TLS round-trip channels (NET-09) — dedicated Listener/SCP ports per
     # cipher (aes/3des), kept separate from the plaintext DICOM ports above (Pitfall 7).
     DICOM_TLS_AES_LISTENER_PORT=$(free_port)
@@ -285,9 +289,9 @@ allocate_ports() {
     export HTTP_PORT HTTPS_PORT MLLP_PORT HTTP_LISTENER_PORT SMTP_PORT SCP_PORT SOAP_PORT SOAP_URL \
         HTTP_RESPONSE_PORT HTTP_XMLBODY_PORT HTTP_BINARY_PORT HTTP_AUTH_BASIC_PORT HTTP_AUTH_DIGEST_PORT \
         HTTP_STUB_PORT HTTP_CTXPATH_PORT HTTP_LARGE_PORT HTTP_ERROR500_PORT \
-        DICOM_LISTENER_PORT DICOM_ROUNDTRIP_SCP_PORT \
+        DICOM_LISTENER_PORT DICOM_ROUNDTRIP_SCP_PORT DICOM_COMPRESSED_LISTENER_PORT DICOM_COMPRESSED_SCP_PORT \
         DICOM_TLS_AES_LISTENER_PORT DICOM_TLS_AES_SCP_PORT DICOM_TLS_3DES_LISTENER_PORT DICOM_TLS_3DES_SCP_PORT
-    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT} DICOM_TLS_AES_LISTENER=${DICOM_TLS_AES_LISTENER_PORT} DICOM_TLS_AES_SCP=${DICOM_TLS_AES_SCP_PORT} DICOM_TLS_3DES_LISTENER=${DICOM_TLS_3DES_LISTENER_PORT} DICOM_TLS_3DES_SCP=${DICOM_TLS_3DES_SCP_PORT}"
+    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT} DICOM_COMPRESSED_LISTENER=${DICOM_COMPRESSED_LISTENER_PORT} DICOM_COMPRESSED_SCP=${DICOM_COMPRESSED_SCP_PORT} DICOM_TLS_AES_LISTENER=${DICOM_TLS_AES_LISTENER_PORT} DICOM_TLS_AES_SCP=${DICOM_TLS_AES_SCP_PORT} DICOM_TLS_3DES_LISTENER=${DICOM_TLS_3DES_LISTENER_PORT} DICOM_TLS_3DES_SCP=${DICOM_TLS_3DES_SCP_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -580,7 +584,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-compressed-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test)
 # 25.1-03 (SC-3, IRT-1541): the two legacy-algorithm fixtures are appended ONLY when
 # SFTP_LEGACY_PORT is pre-exported by the external break-then-fix driver — an ordinary
 # run-smoke-test.sh invocation has no legacy server to dial, so these must stay out of the
@@ -627,6 +631,7 @@ CHANNEL_IDS=(
     "00000022-0000-0000-0000-000000000022"
     "00000023-0000-0000-0000-000000000023"
     "00000024-0000-0000-0000-000000000024"
+    "00000032-0000-0000-0000-000000000032"
     "00000025-0000-0000-0000-000000000025"
     "00000026-0000-0000-0000-000000000026"
     "00000027-0000-0000-0000-000000000027"
@@ -654,6 +659,11 @@ fi
 # appended to http-listener-response-test.xml, pre-created by allocate_work_dirs()).
 # 18.3-01 adds DICOM_LISTENER_PORT/DICOM_ROUNDTRIP_SCP_PORT (dicom-roundtrip-test.xml,
 # NET-08 round-trip fixture — channel 00000024).
+# 22-04 (CVE-09/D-13) adds DICOM_COMPRESSED_LISTENER_PORT/DICOM_COMPRESSED_SCP_PORT
+# (dicom-compressed-roundtrip-test.xml, compressed-DICOM hard-gate fixture — channel
+# 00000032). Own port pair (Pitfall 7), Listener leaves defts/nativeData/bigEndian all
+# false so JPEG2000/JPEG-lossless transfer syntaxes negotiate (unlike 00000024's
+# nativeData=true Implicit-VR-LE-only Listener).
 # 18.4-03 adds DICOM_TLS_KEYSTORE/DICOM_TLS_KEYSTORE_PW (the shared PKCS12 keystore from
 # generate_dicom_tls_keystore()) and DICOM_TLS_AES_LISTENER_PORT/DICOM_TLS_AES_SCP_PORT/
 # DICOM_TLS_3DES_LISTENER_PORT/DICOM_TLS_3DES_SCP_PORT (dicom-tls-aes-roundtrip-test.xml/
@@ -674,7 +684,7 @@ fi
 # 25.1-05 adds no new placeholder: file-sftp-legacy-negative-hole-test.xml (the
 # SFTP_LEGACY_SIMULATE_HOLE fault-injection swap-in) reuses the SAME ${SFTP_LEGACY_PORT}
 # placeholder already allowlisted above.
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT}'
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_COMPRESSED_LISTENER_PORT} ${DICOM_COMPRESSED_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -1139,6 +1149,33 @@ except Exception:
         fatal "DICOM Listener port ${DICOM_LISTENER_PORT} did not accept connections within 60s"
     fi
 
+    # 22-04 (CVE-09/D-13): compressed-DICOM Listener readiness probe
+    # (dicom-compressed-roundtrip-test.xml, channel 00000032). Same bare-TCP-connect probe
+    # as the plaintext round-trip Listener above.
+    attempts=0
+    info "  DICOM Compressed Listener (port ${DICOM_COMPRESSED_LISTENER_PORT})..."
+    while [[ ${attempts} -lt 20 ]]; do
+        if python3 -c "
+import socket, sys
+s = socket.socket()
+s.settimeout(2)
+try:
+    s.connect(('127.0.0.1', ${DICOM_COMPRESSED_LISTENER_PORT}))
+    s.close()
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+" 2>/dev/null; then
+            pass "  DICOM Compressed Listener port ${DICOM_COMPRESSED_LISTENER_PORT} accepting connections"
+            break
+        fi
+        sleep 3
+        attempts=$((attempts + 1))
+    done
+    if [[ ${attempts} -ge 20 ]]; then
+        fatal "DICOM Compressed Listener port ${DICOM_COMPRESSED_LISTENER_PORT} did not accept connections within 60s"
+    fi
+
     # 18.4-03: DICOM TLS Listener readiness probes (NET-09, dicom-tls-aes-roundtrip-test.xml/
     # dicom-tls-3des-roundtrip-test.xml, channels 00000025/00000026). Same bare-TCP-connect
     # pattern as the plaintext DICOM probe above — these ports are TLS-only, so a bare TCP
@@ -1287,6 +1324,8 @@ run_driver() {
         -DHTTP_ERROR500_PORT="${HTTP_ERROR500_PORT}" \
         -DDICOM_LISTENER_PORT="${DICOM_LISTENER_PORT}" \
         -DDICOM_ROUNDTRIP_SCP_PORT="${DICOM_ROUNDTRIP_SCP_PORT}" \
+        -DDICOM_COMPRESSED_LISTENER_PORT="${DICOM_COMPRESSED_LISTENER_PORT}" \
+        -DDICOM_COMPRESSED_SCP_PORT="${DICOM_COMPRESSED_SCP_PORT}" \
         -DDICOM_TLS_KEYSTORE="${DICOM_TLS_KEYSTORE}" \
         -DDICOM_TLS_KEYSTORE_PW="${DICOM_TLS_KEYSTORE_PW}" \
         -DDICOM_TLS_AES_LISTENER_PORT="${DICOM_TLS_AES_LISTENER_PORT}" \

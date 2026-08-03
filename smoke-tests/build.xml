@@ -135,6 +135,13 @@ already-built distribution elsewhere.
     <!-- 18.3-01: DICOM round-trip channel ports (NET-08). -->
     <property name="DICOM_LISTENER_PORT" value="" />
     <property name="DICOM_ROUNDTRIP_SCP_PORT" value="" />
+    <!-- 22-04 (CVE-09/D-13): compressed-DICOM round-trip channel ports. Own Listener/SCP
+         pair (Pitfall 7); dicom-compressed-roundtrip-test.xml's Listener leaves
+         defts/nativeData/bigEndian all false so both JPEG2000 and JPEG-lossless transfer
+         syntaxes negotiate against DcmRcv's default TransferCapability list, unlike
+         dicom-roundtrip-test.xml's nativeData=true (Implicit VR LE only). -->
+    <property name="DICOM_COMPRESSED_LISTENER_PORT" value="" />
+    <property name="DICOM_COMPRESSED_SCP_PORT" value="" />
     <!-- 18.4-03: DICOM TLS round-trip channel keystore/ports (NET-09). -->
     <property name="DICOM_TLS_KEYSTORE" value="" />
     <property name="DICOM_TLS_KEYSTORE_PW" value="" />
@@ -192,6 +199,8 @@ already-built distribution elsewhere.
             <sysproperty key="HTTP_ERROR500_PORT" value="${HTTP_ERROR500_PORT}" />
             <sysproperty key="DICOM_LISTENER_PORT" value="${DICOM_LISTENER_PORT}" />
             <sysproperty key="DICOM_ROUNDTRIP_SCP_PORT" value="${DICOM_ROUNDTRIP_SCP_PORT}" />
+            <sysproperty key="DICOM_COMPRESSED_LISTENER_PORT" value="${DICOM_COMPRESSED_LISTENER_PORT}" />
+            <sysproperty key="DICOM_COMPRESSED_SCP_PORT" value="${DICOM_COMPRESSED_SCP_PORT}" />
             <sysproperty key="DICOM_TLS_KEYSTORE" value="${DICOM_TLS_KEYSTORE}" />
             <sysproperty key="DICOM_TLS_KEYSTORE_PW" value="${DICOM_TLS_KEYSTORE_PW}" />
             <sysproperty key="DICOM_TLS_AES_LISTENER_PORT" value="${DICOM_TLS_AES_LISTENER_PORT}" />

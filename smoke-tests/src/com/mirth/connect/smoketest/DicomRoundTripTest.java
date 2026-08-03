@@ -73,6 +73,40 @@ public class DicomRoundTripTest extends SmokeTestBase {
 
     private static final File SOURCE_FIXTURE = new File("fixtures", "smoke-test.dcm");
 
+    /**
+     * Phase 22 / CVE-09 / D-13 hard gate: genuinely-compressed DICOM fixtures (produced via
+     * GDCM 3.2.6 {@code gdcmconv} from a real 64x64 8-bit MONOCHROME2 pixel array — see
+     * 22-04-SUMMARY.md D-12 spike). Each carries its own compressed Transfer Syntax UID
+     * (verified via dcm4che-core parse, not assumed from the DICOM standard's registry).
+     */
+    private static final File JPEG2000_FIXTURE = new File("fixtures", "dicom-jpeg2000.dcm");
+    private static final File JPEG_LOSSLESS_FIXTURE = new File("fixtures", "dicom-jpeg-lossless.dcm");
+
+    /**
+     * D-13, principled constant — NOT self-fulfilling / auto-pinned (mirrors
+     * {@link #EXPECTED_TS_UID}'s discipline). JPEG 2000 Image Compression (Lossless Only).
+     * A mismatch here is a FINDING: it means the compressed leg's Listener negotiated (or the
+     * relay re-encoded) a DIFFERENT transfer syntax than the fixture's own, which would mean
+     * the DIMSE connector silently transcoded/downgraded a compressed object rather than
+     * relaying it byte-for-byte.
+     */
+    private static final String EXPECTED_JPEG2000_TS_UID = "1.2.840.10008.1.2.4.90";
+
+    /**
+     * D-13, principled constant — NOT self-fulfilling / auto-pinned. JPEG Lossless,
+     * Non-Hierarchical, First-Order Prediction (Process 14 [Selection Value 1]). A mismatch
+     * here is a FINDING (see {@link #EXPECTED_JPEG2000_TS_UID} javadoc) — this is the exact
+     * transfer syntax whose codec-coverage regression risk (Pitfall 2) this gate exists to
+     * catch, even though the D-12 spike proved the actual pixel-decode SPI is unreachable via
+     * any production code path (DICOMMessageUtil/DICOMUtil/DICOMViewer's shared
+     * {@code ij.plugin.DICOM} decoder rejects ANY compressed transfer syntax outright, both
+     * before and after the CVE-09 jar swap — see 22-04-SUMMARY.md). What THIS gate proves
+     * instead: the DIMSE connector's negotiation + relay of a compressed object is unaffected
+     * by the CVE-09 jar swap, since dcm4che (not the swapped-out codec jar) owns
+     * transport-level negotiation and DICOMSerializer treats PixelData as opaque.
+     */
+    private static final String EXPECTED_JPEG_LOSSLESS_TS_UID = "1.2.840.10008.1.2.4.70";
+
     /** The source fixture's original (untransformed) PatientName — proves mutation, not mere presence. */
     private static final String SOURCE_PATIENT_NAME_UNTRANSFORMED = "McDoogal^Hattie";
 
@@ -90,10 +124,27 @@ public class DicomRoundTripTest extends SmokeTestBase {
     private static DicomScpStub roundtripScpStub;
     private static DicomObject sourceObj;
 
+    /**
+     * D-13 hard gate (CVE-09): own Listener/SCP port pair (Pitfall 7), never shared with the
+     * plaintext round-trip ports above. A single {@link DicomScpStub} instance serves BOTH
+     * {@link #jpeg2000RoundTrip()} and {@link #jpegLosslessRoundTrip()} — safe to share
+     * because dcm4che2's {@code DcmRcv} names each received file after its
+     * {@code SOPInstanceUID}, and the two fixtures carry distinct, hand-assigned
+     * SOPInstanceUIDs, so each test's poll for its own uniquely-named file cannot observe the
+     * other test's object regardless of JUnit method-execution order.
+     */
+    private static String dicomCompressedListenerPort;
+    private static String dicomCompressedScpPort;
+    private static DicomScpStub compressedScpStub;
+    private static DicomObject jpeg2000SourceObj;
+    private static DicomObject jpegLosslessSourceObj;
+
     @BeforeClass
     public static void dicomRoundTripSetUp() throws Exception {
         dicomListenerPort = requireDicomProperty("DICOM_LISTENER_PORT");
         dicomRoundtripScpPort = requireDicomProperty("DICOM_ROUNDTRIP_SCP_PORT");
+        dicomCompressedListenerPort = requireDicomProperty("DICOM_COMPRESSED_LISTENER_PORT");
+        dicomCompressedScpPort = requireDicomProperty("DICOM_COMPRESSED_SCP_PORT");
 
         // Dedicated second DicomScpStub instance — own port/dir (Pitfall 7). Storage-
         // commitment same-association reply MUST be enabled BEFORE start() (HIGH #2): the
@@ -107,7 +158,20 @@ public class DicomRoundTripTest extends SmokeTestBase {
         roundtripScpStub.start();
         registerStubStop(roundtripScpStub::stop);
 
+        // D-13 hard gate: third DicomScpStub, own port/dir. stgcmt is NOT needed here —
+        // dicom-compressed-roundtrip-test.xml's Sender leaves <stgcmt>false</stgcmt>
+        // (unlike the plaintext round-trip channel), so setStgCmtReuseFrom is unnecessary.
+        // DicomScpStub.start() always calls DcmRcv#initTransferCapability() with NO
+        // setTransferSyntax restriction, so this stub accepts compressed transfer syntaxes
+        // by default (live-verified in the D-12 spike — see 22-04-SUMMARY.md).
+        File compressedStorageDir = Files.createTempDirectory("smoke-dicom-compressed-received").toFile();
+        compressedScpStub = new DicomScpStub(Integer.parseInt(dicomCompressedScpPort), "SMOKEHARNESS3", compressedStorageDir);
+        compressedScpStub.start();
+        registerStubStop(compressedScpStub::stop);
+
         sourceObj = parseDicomObject(SOURCE_FIXTURE);
+        jpeg2000SourceObj = parseDicomObject(JPEG2000_FIXTURE);
+        jpegLosslessSourceObj = parseDicomObject(JPEG_LOSSLESS_FIXTURE);
     }
 
     /**
@@ -130,7 +194,7 @@ public class DicomRoundTripTest extends SmokeTestBase {
 
     @Test
     public void roundTrip() throws Exception {
-        driveInboundCStore();
+        driveInboundCStore(Integer.parseInt(dicomListenerPort), SOURCE_FIXTURE);
 
         assertThreeLevels(ROUNDTRIP_CHANNEL_ID, 1, () -> {
             // HIGH #2 watchdog: DICOMDispatcher downgrades SENT->QUEUED whenever storage
@@ -176,6 +240,94 @@ public class DicomRoundTripTest extends SmokeTestBase {
         });
     }
 
+    /**
+     * D-13 hard gate (CVE-09): pushes the genuinely-compressed JPEG2000 fixture through the
+     * compressed-leg channel's Listener (dicom-compressed-roundtrip-test.xml, channel
+     * 00000032) and asserts it is relayed to the Sender's dedicated stub with its transfer
+     * syntax, SOP-class UID, and non-mutated tags preserved end to end. This does NOT (and
+     * per the D-12 spike, cannot) exercise the swapped codec jar's ImageReaderSpi — see
+     * {@link #EXPECTED_JPEG_LOSSLESS_TS_UID} javadoc for why. It proves the DIMSE connector's
+     * negotiation/relay path is unaffected by the CVE-09 jar swap.
+     */
+    @Test
+    public void jpeg2000RoundTrip() throws Exception {
+        assertCompressedRoundTrip(JPEG2000_FIXTURE, jpeg2000SourceObj, EXPECTED_JPEG2000_TS_UID);
+    }
+
+    /**
+     * D-13 hard gate (CVE-09): same as {@link #jpeg2000RoundTrip()} but for the JPEG-lossless
+     * fixture — the exact transfer syntax the fork (jai-imageio-core + jai-imageio-jpeg2000)
+     * dropped native decode support for (RESEARCH's flagged gap). Per the D-12 spike, that gap
+     * is unreachable/moot for image DECODE (ij.plugin.DICOM already rejected it with the OLD
+     * jar), but this leg still proves the swap did not regress the DIMSE connector's transport-
+     * level negotiation and relay of a JPEG-lossless-encoded object.
+     */
+    @Test
+    public void jpegLosslessRoundTrip() throws Exception {
+        assertCompressedRoundTrip(JPEG_LOSSLESS_FIXTURE, jpegLosslessSourceObj, EXPECTED_JPEG_LOSSLESS_TS_UID);
+    }
+
+    /**
+     * Shared machinery for {@link #jpeg2000RoundTrip()}/{@link #jpegLosslessRoundTrip()} —
+     * drives the fixture through {@link #compressedScpStub} (shared across both legs; see the
+     * field javadoc for why sharing is race-free) and asserts transfer-syntax/SOP-class/tag
+     * preservation. Polls for a file named after the fixture's OWN SOPInstanceUID — dcm4che2's
+     * DcmRcv names received files by SOPInstanceUID, so each leg's poll cannot observe the
+     * other leg's object regardless of JUnit method-execution order (no shared received[0]
+     * indexing, unlike {@link #roundTrip()}'s single-fixture stub).
+     */
+    private void assertCompressedRoundTrip(File fixture, DicomObject sourceFixtureObj, String expectedTsUid) throws Exception {
+        driveInboundCStore(Integer.parseInt(dicomCompressedListenerPort), fixture);
+
+        String sopInstanceUid = sourceFixtureObj.getString(Tag.SOPInstanceUID);
+
+        // dcm4che2's DcmRcv names each received file after its SOPInstanceUID (live-verified
+        // in the D-12 spike) — find OUR fixture's file by name rather than assuming index 0,
+        // since compressedScpStub's storage dir is shared across both compressed legs.
+        pollUntil("compressed DicomScpStub received a fully-parseable file for SOPInstanceUID " + sopInstanceUid, 30, () -> {
+            for (File candidateFile : compressedScpStub.listReceivedFiles()) {
+                if (!sopInstanceUid.equals(candidateFile.getName())) {
+                    continue;
+                }
+                try {
+                    DicomObject candidate = parseDicomObject(candidateFile);
+                    if (candidate.getString(Tag.SOPInstanceUID) != null) {
+                        return true;
+                    }
+                } catch (Exception e) {
+                    // half-written file — keep polling
+                }
+            }
+            return false;
+        });
+
+        File expectedReceivedFile = null;
+        for (File candidateFile : compressedScpStub.listReceivedFiles()) {
+            if (sopInstanceUid.equals(candidateFile.getName())) {
+                expectedReceivedFile = candidateFile;
+                break;
+            }
+        }
+        assertNotNull("Received file for SOPInstanceUID " + sopInstanceUid + " must exist after the poll above succeeded",
+                expectedReceivedFile);
+
+        try (DicomInputStream dis = new DicomInputStream(expectedReceivedFile)) {
+            dis.setAllocateLimit(-1);
+            DicomObject obj = new BasicDicomObject();
+            dis.readDicomObject(obj, -1);
+
+            for (int tag : PRESERVED_TAGS) {
+                assertEquals("Non-mutated tag " + Integer.toHexString(tag) + " must be preserved end-to-end",
+                        sourceFixtureObj.getString(tag), obj.getString(tag));
+            }
+
+            assertEquals("Transfer syntax must be preserved byte-for-byte through the DIMSE relay — "
+                    + "a mismatch means the connector re-encoded/downgraded the compressed object "
+                    + "(the exact Pitfall 2 codec-coverage regression this gate exists to catch)",
+                    expectedTsUid, dis.getTransferSyntax().uid());
+        }
+    }
+
     private static DicomObject parseDicomObject(File file) throws IOException {
         try (DicomInputStream dis = new DicomInputStream(file)) {
             dis.setAllocateLimit(-1);
@@ -199,12 +351,12 @@ public class DicomRoundTripTest extends SmokeTestBase {
      * file (logs to stderr, never rethrows), so the file-count assertion is the guard that
      * actually fires if negotiation silently fails.
      */
-    private void driveInboundCStore() throws Exception {
+    private void driveInboundCStore(int listenerPort, File fixture) throws Exception {
         DcmSnd dcmSnd = new DcmSnd("SMOKEHARNESS-SCU");
         dcmSnd.setCalledAET(LISTENER_CALLED_AET);
         dcmSnd.setRemoteHost("127.0.0.1");
-        dcmSnd.setRemotePort(Integer.parseInt(dicomListenerPort));
-        dcmSnd.addFile(SOURCE_FIXTURE);
+        dcmSnd.setRemotePort(listenerPort);
+        dcmSnd.addFile(fixture);
         // med priority (0) — DICOMDispatcher.java:171-176's own med=0/low=1/high=2 mapping
         // (inverted vs the DICOM standard's MEDIUM=0/HIGH=1/LOW=2 — harmless here, priority
         // is not asserted by this test).
