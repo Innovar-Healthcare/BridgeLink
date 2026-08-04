@@ -66,6 +66,12 @@ public class JavaScriptSharedUtil {
     private final static String SCRIPT_WRAPPER_SUFFIX = "\n}";
     private final static int SCRIPT_WRAPPER_PREFIX_LENGTH = SCRIPT_WRAPPER_PREFIX.length();
     private static volatile ScriptableObject cachedFormatterScope;
+    /*
+     * cachedFormatterScope's global/opts objects are shared mutable state across calls; js_beautify
+     * execution against them must be serialized so concurrent callers (e.g. concurrent REST
+     * requests on the server) don't race on them.
+     */
+    private static final Object FORMATTER_LOCK = new Object();
     private static int rhinoLanguageVersion = Context.VERSION_DEFAULT;
     private static Logger logger = LogManager.getLogger(JavaScriptSharedUtil.class);
 
@@ -204,38 +210,40 @@ public class JavaScriptSharedUtil {
         if (scope != null) {
             Context currentThreadContext = getGlobalContextForValidation();
             try {
-                /*
-                 * The beautify library wraps everything in a closure and adds the beautify function
-                 * to a specified object. We inject the global object so that we can access the
-                 * function here.
-                 */
-                Scriptable global = (Scriptable) scope.get("global", scope);
-                Scriptable opts = (Scriptable) scope.get("opts", scope);
-                Function function = (Function) global.get("js_beautify", global);
-                Object result = function.call(currentThreadContext, scope, scope, new Object[] {
-                        script, opts });
-                String prettyPrinted = (String) (Context.jsToJava(result, String.class));
+                synchronized (FORMATTER_LOCK) {
+                    /*
+                     * The beautify library wraps everything in a closure and adds the beautify
+                     * function to a specified object. We inject the global object so that we can
+                     * access the function here.
+                     */
+                    Scriptable global = (Scriptable) scope.get("global", scope);
+                    Scriptable opts = (Scriptable) scope.get("opts", scope);
+                    Function function = (Function) global.get("js_beautify", global);
+                    Object result = function.call(currentThreadContext, scope, scope, new Object[] {
+                            script, opts });
+                    String prettyPrinted = (String) (Context.jsToJava(result, String.class));
 
-                Matcher matcher = INVALID_PROLOG_PATTERN.matcher(prettyPrinted);
-                if (matcher.find()) {
-                    StringBuffer buffer = new StringBuffer();
+                    Matcher matcher = INVALID_PROLOG_PATTERN.matcher(prettyPrinted);
+                    if (matcher.find()) {
+                        StringBuffer buffer = new StringBuffer();
 
-                    do {
-                        String version = matcher.group("version");
-                        String encoding = matcher.group("encoding");
-                        StringBuilder prolog = new StringBuilder("<?xml version=\"").append(version).append('"');
-                        if (encoding != null) {
-                            prolog.append(" encoding=\"").append(encoding).append('"');
-                        }
-                        prolog.append("?>");
-                        matcher.appendReplacement(buffer, prolog.toString());
-                    } while (matcher.find());
+                        do {
+                            String version = matcher.group("version");
+                            String encoding = matcher.group("encoding");
+                            StringBuilder prolog = new StringBuilder("<?xml version=\"").append(version).append('"');
+                            if (encoding != null) {
+                                prolog.append(" encoding=\"").append(encoding).append('"');
+                            }
+                            prolog.append("?>");
+                            matcher.appendReplacement(buffer, prolog.toString());
+                        } while (matcher.find());
 
-                    matcher.appendTail(buffer);
-                    prettyPrinted = buffer.toString();
+                        matcher.appendTail(buffer);
+                        prettyPrinted = buffer.toString();
+                    }
+
+                    return prettyPrinted;
                 }
-
-                return prettyPrinted;
             } finally {
                 Context.exit();
             }
