@@ -182,6 +182,17 @@ already-built distribution elsewhere.
     <property name="SFTP_LEGACY_PORT" value="" />
     <property name="SFTP_LEGACY_UPLOAD_DIR" value="" />
     <property name="MIRTH_LOG_PATH" value="" />
+    <!-- CVE-04 (SC-3, phase 25-cve-mssql-jdbc-upgrade, plan 25-01): encrypted mssql-jdbc
+         break-then-fix leg. MSSQL_PORT is only ever non-empty when run-smoke-test.sh is
+         invoked by the external driver (regression-scripts/test-cve04-mssql-jdbc-upgrade.sh)
+         with the live SQL Server container's port pre-exported; MssqlJdbcParamsTest's
+         encryptedReadWrite @Test self-skips via Assume.assumeTrue when it is empty -- mirrors
+         the SFTP_LEGACY_PORT convention above. -->
+    <property name="MSSQL_HOST" value="" />
+    <property name="MSSQL_PORT" value="" />
+    <property name="MSSQL_DB" value="" />
+    <property name="MSSQL_USER" value="" />
+    <property name="MSSQL_PASSWORD" value="" />
     <!-- 22-05 (CVE-06/D-07): embedded WebDavServerStub ports/keystore — plaintext
          (webdav://) and TLS (webdavs://) listeners started by WebDavRoundTripTest's own
          @BeforeClass, mirroring the DICOM round-trip stub's -D wiring. -->
@@ -251,6 +262,11 @@ already-built distribution elsewhere.
             <sysproperty key="SFTP_LEGACY_PORT" value="${SFTP_LEGACY_PORT}" />
             <sysproperty key="SFTP_LEGACY_UPLOAD_DIR" value="${SFTP_LEGACY_UPLOAD_DIR}" />
             <sysproperty key="MIRTH_LOG_PATH" value="${MIRTH_LOG_PATH}" />
+            <sysproperty key="MSSQL_HOST" value="${MSSQL_HOST}" />
+            <sysproperty key="MSSQL_PORT" value="${MSSQL_PORT}" />
+            <sysproperty key="MSSQL_DB" value="${MSSQL_DB}" />
+            <sysproperty key="MSSQL_USER" value="${MSSQL_USER}" />
+            <sysproperty key="MSSQL_PASSWORD" value="${MSSQL_PASSWORD}" />
             <sysproperty key="WEBDAV_PORT" value="${WEBDAV_PORT}" />
             <sysproperty key="WEBDAV_TLS_PORT" value="${WEBDAV_TLS_PORT}" />
             <sysproperty key="WEBDAV_TLS_KEYSTORE" value="${WEBDAV_TLS_KEYSTORE}" />

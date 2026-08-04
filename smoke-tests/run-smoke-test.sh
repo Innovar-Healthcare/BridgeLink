@@ -569,6 +569,27 @@ check_sftp_legacy_fixture() {
 }
 
 # ---------------------------------------------------------------------------
+# Stage: check_mssql_fixture — CVE-04 (SC-3, phase 25-cve-mssql-jdbc-upgrade, plan 25-01):
+# conditional encrypted-SQL-Server leg, gated on MSSQL_PORT being pre-exported by an EXTERNAL
+# driver (regression-scripts/test-cve04-mssql-jdbc-upgrade.sh) BEFORE this script is invoked —
+# mirrors check_sftp_legacy_fixture()'s convention exactly. This harness does NOT boot the SQL
+# Server container itself — that lives in the driver's own docker-compose.test-cve04.yml. Unset
+# (the normal case) => the encrypted JDBC fixture is never added to CHANNEL_FILES/CHANNEL_IDS
+# below, and MssqlJdbcParamsTest's encryptedReadWrite @Test self-skips via Assume.assumeTrue — a
+# plain run-smoke-test.sh invocation is completely unaffected.
+# ---------------------------------------------------------------------------
+MSSQL_LEG_ACTIVE=0
+check_mssql_fixture() {
+    hr
+    if [[ -n "${MSSQL_PORT:-}" ]]; then
+        MSSQL_LEG_ACTIVE=1
+        info "MSSQL_PORT=${MSSQL_PORT} detected (external driver) — encrypted mssql-jdbc fixture ACTIVE"
+    else
+        info "MSSQL_PORT not set — encrypted mssql-jdbc fixture SKIPPED (only exercised via regression-scripts/test-cve04-mssql-jdbc-upgrade.sh)"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Stage: patch_properties — sed -i.smoke-bak in place; restored in cleanup (Pitfall 3)
 # T-18-01: shipped default http.host/https.host = 0.0.0.0 — a CI runner must not
 # expose the admin API on all interfaces, so bind 127.0.0.1 only.
@@ -707,6 +728,13 @@ if [[ -n "${SFTP_LEGACY_PORT:-}" ]]; then
         CHANNEL_FILES+=(file-sftp-legacy-negative-test file-sftp-legacy-workaround-test)
     fi
 fi
+# CVE-04 (SC-3, phase 25-cve-mssql-jdbc-upgrade, plan 25-01): the encrypted mssql-jdbc fixture
+# is appended ONLY when MSSQL_PORT is pre-exported by the external break-then-fix driver
+# (regression-scripts/test-cve04-mssql-jdbc-upgrade.sh) — an ordinary run-smoke-test.sh
+# invocation has no SQL Server to dial, mirroring the SFTP_LEGACY_PORT convention above.
+if [[ -n "${MSSQL_PORT:-}" ]]; then
+    CHANNEL_FILES+=(jdbc-mssql-encrypted-test)
+fi
 CHANNEL_IDS=(
     "00000001-0000-0000-0000-000000000001"
     "00000002-0000-0000-0000-000000000002"
@@ -744,6 +772,11 @@ if [[ -n "${SFTP_LEGACY_PORT:-}" ]]; then
     CHANNEL_IDS+=(
         "00000030-0000-0000-0000-000000000030"
         "00000031-0000-0000-0000-000000000031"
+    )
+fi
+if [[ -n "${MSSQL_PORT:-}" ]]; then
+    CHANNEL_IDS+=(
+        "00000034-0000-0000-0000-000000000034"
     )
 fi
 # Explicit envsubst allowlist — exactly the ${VARNAME} placeholders the committed
@@ -786,7 +819,12 @@ fi
 # 25.1-05 adds no new placeholder: file-sftp-legacy-negative-hole-test.xml (the
 # SFTP_LEGACY_SIMULATE_HOLE fault-injection swap-in) reuses the SAME ${SFTP_LEGACY_PORT}
 # placeholder already allowlisted above.
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_COMPRESSED_LISTENER_PORT} ${DICOM_COMPRESSED_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT} ${WEBDAV_PORT} ${WEBDAV_TLS_PORT}'
+# 25-01 (CVE-04, SC-3) adds MSSQL_HOST/MSSQL_PORT/MSSQL_DB/MSSQL_USER/MSSQL_PASSWORD: the
+# external break-then-fix driver's (regression-scripts/test-cve04-mssql-jdbc-upgrade.sh) live
+# SQL Server connection details, referenced by jdbc-mssql-encrypted-test.xml (channel 00000034)
+# and its deployScript. Harmless (envsubst no-op) in an ordinary run where the fixture is never
+# added to CHANNEL_FILES.
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_COMPRESSED_LISTENER_PORT} ${DICOM_COMPRESSED_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT} ${WEBDAV_PORT} ${WEBDAV_TLS_PORT} ${MSSQL_HOST} ${MSSQL_PORT} ${MSSQL_DB} ${MSSQL_USER} ${MSSQL_PASSWORD}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -1441,6 +1479,11 @@ run_driver() {
         -DSFTP_LEGACY_PORT="${driver_sftp_legacy_port}" \
         -DSFTP_LEGACY_UPLOAD_DIR="${SFTP_LEGACY_UPLOAD_DIR:-}" \
         -DMIRTH_LOG_PATH="${MIRTH_LOG_PATH}" \
+        -DMSSQL_HOST="${MSSQL_HOST:-}" \
+        -DMSSQL_PORT="${MSSQL_PORT:-}" \
+        -DMSSQL_DB="${MSSQL_DB:-}" \
+        -DMSSQL_USER="${MSSQL_USER:-}" \
+        -DMSSQL_PASSWORD="${MSSQL_PASSWORD:-}" \
         -DWEBDAV_PORT="${WEBDAV_PORT}" \
         -DWEBDAV_TLS_PORT="${WEBDAV_TLS_PORT}" \
         -DWEBDAV_TLS_KEYSTORE="${WEBDAV_TLS_KEYSTORE}" \
@@ -1621,6 +1664,7 @@ generate_dicom_tls_keystore
 generate_webdav_tls_keystore
 generate_sftp_fixtures
 check_sftp_legacy_fixture
+check_mssql_fixture
 launch_webdav_stub
 patch_properties
 launch_server
