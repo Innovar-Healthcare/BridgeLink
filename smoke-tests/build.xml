@@ -197,6 +197,12 @@ already-built distribution elsewhere.
     <property name="MSSQL_DB" value="" />
     <property name="MSSQL_USER" value="" />
     <property name="MSSQL_PASSWORD" value="" />
+    <!-- 25-04 (D-09, SC-3): forwarded to MssqlJdbcParamsTest#selfSignedDefaultFailsCertValidation
+         so it can seed the fault-injection hole fixture's own table when
+         test-cve04-mssql-jdbc-upgrade.sh's simulate regression mode swaps in
+         jdbc-mssql-selfsigned-negative-hole-test.xml for channel 00000035. Empty in every
+         normal run. -->
+    <property name="MSSQL_SIMULATE_HOLE" value="" />
     <!-- 22-05 (CVE-06/D-07): embedded WebDavServerStub ports/keystore — plaintext
          (webdav://) and TLS (webdavs://) listeners started by WebDavRoundTripTest's own
          @BeforeClass, mirroring the DICOM round-trip stub's -D wiring. -->
@@ -299,6 +305,7 @@ already-built distribution elsewhere.
             <sysproperty key="MSSQL_DB" value="${MSSQL_DB}" />
             <sysproperty key="MSSQL_USER" value="${MSSQL_USER}" />
             <sysproperty key="MSSQL_PASSWORD" value="${MSSQL_PASSWORD}" />
+            <sysproperty key="MSSQL_SIMULATE_HOLE" value="${MSSQL_SIMULATE_HOLE}" />
             <sysproperty key="WEBDAV_PORT" value="${WEBDAV_PORT}" />
             <sysproperty key="WEBDAV_TLS_PORT" value="${WEBDAV_TLS_PORT}" />
             <sysproperty key="WEBDAV_TLS_KEYSTORE" value="${WEBDAV_TLS_KEYSTORE}" />

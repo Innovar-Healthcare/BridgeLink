@@ -732,8 +732,19 @@ fi
 # is appended ONLY when MSSQL_PORT is pre-exported by the external break-then-fix driver
 # (regression-scripts/test-cve04-mssql-jdbc-upgrade.sh) — an ordinary run-smoke-test.sh
 # invocation has no SQL Server to dial, mirroring the SFTP_LEGACY_PORT convention above.
+# 25-04 (D-09, SC-3) adds the self-signed negative/workaround break-then-fix pair, gated on the
+# SAME MSSQL_PORT. MSSQL_SIMULATE_HOLE=1 (test-cve04-mssql-jdbc-upgrade.sh --simulate-regression)
+# swaps in jdbc-mssql-selfsigned-negative-hole-test.xml (same channel id 00000035, restoring
+# trustServerCertificate=true URL) in place of the real negative fixture — mirrors
+# SFTP_LEGACY_SIMULATE_HOLE's file-sftp-legacy-negative-hole-test convention exactly.
 if [[ -n "${MSSQL_PORT:-}" ]]; then
     CHANNEL_FILES+=(jdbc-mssql-encrypted-test)
+    if [[ "${MSSQL_SIMULATE_HOLE:-}" == "1" ]]; then
+        info "MSSQL_SIMULATE_HOLE=1 detected — swapping in jdbc-mssql-selfsigned-negative-hole-test (fault-injection fixture) for channel 00000035"
+        CHANNEL_FILES+=(jdbc-mssql-selfsigned-negative-hole-test jdbc-mssql-selfsigned-workaround-test)
+    else
+        CHANNEL_FILES+=(jdbc-mssql-selfsigned-negative-test jdbc-mssql-selfsigned-workaround-test)
+    fi
 fi
 CHANNEL_IDS=(
     "00000001-0000-0000-0000-000000000001"
@@ -777,6 +788,8 @@ fi
 if [[ -n "${MSSQL_PORT:-}" ]]; then
     CHANNEL_IDS+=(
         "00000034-0000-0000-0000-000000000034"
+        "00000035-0000-0000-0000-000000000035"
+        "00000036-0000-0000-0000-000000000036"
     )
 fi
 # Explicit envsubst allowlist — exactly the ${VARNAME} placeholders the committed
@@ -1442,6 +1455,19 @@ run_driver() {
         driver_sftp_legacy_port=""
     fi
 
+    # 25-04 (D-09, SC-3): MSSQL_SIMULATE_SKIP=1 (test-cve04-mssql-jdbc-upgrade.sh
+    # --simulate-skip) deliberately drops the forked JUnit process's -DMSSQL_PORT value to
+    # empty, reproducing a property-forwarding regression — mirrors SFTP_LEGACY_SIMULATE_SKIP
+    # exactly (25.1-07). The shell-level ${MSSQL_PORT} is left REAL — the container/deploy
+    # stages are unaffected — only the forked JVM's view of the property is dropped, so
+    # MssqlJdbcParamsTest.mssqlLegActive() returns false inside the fork and all three mssql
+    # @Test legs self-skip via Assume.assumeTrue. Gated; unset in every normal run.
+    local driver_mssql_port="${MSSQL_PORT:-}"
+    if [[ "${MSSQL_SIMULATE_SKIP:-}" == "1" ]]; then
+        info "MSSQL_SIMULATE_SKIP=1 detected — forwarding an EMPTY -DMSSQL_PORT to the forked JUnit process (forced self-skip self-proof)"
+        driver_mssql_port=""
+    fi
+
     if ant -f "${SCRIPT_DIR}/build.xml" test-run \
         -Dsmoke.setup.dir="${SERVER_SETUP}" \
         -DHTTPS_PORT="${HTTPS_PORT}" \
@@ -1480,10 +1506,11 @@ run_driver() {
         -DSFTP_LEGACY_UPLOAD_DIR="${SFTP_LEGACY_UPLOAD_DIR:-}" \
         -DMIRTH_LOG_PATH="${MIRTH_LOG_PATH}" \
         -DMSSQL_HOST="${MSSQL_HOST:-}" \
-        -DMSSQL_PORT="${MSSQL_PORT:-}" \
+        -DMSSQL_PORT="${driver_mssql_port}" \
         -DMSSQL_DB="${MSSQL_DB:-}" \
         -DMSSQL_USER="${MSSQL_USER:-}" \
         -DMSSQL_PASSWORD="${MSSQL_PASSWORD:-}" \
+        -DMSSQL_SIMULATE_HOLE="${MSSQL_SIMULATE_HOLE:-}" \
         -DWEBDAV_PORT="${WEBDAV_PORT}" \
         -DWEBDAV_TLS_PORT="${WEBDAV_TLS_PORT}" \
         -DWEBDAV_TLS_KEYSTORE="${WEBDAV_TLS_KEYSTORE}" \

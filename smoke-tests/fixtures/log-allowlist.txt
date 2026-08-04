@@ -34,3 +34,19 @@
 # active (external break-then-fix driver); harmless no-op on an ordinary
 # run-smoke-test.sh invocation.
 Failed to start channel File SFTP Legacy Negative Test \(00000030-0000-0000-0000-000000000030\)\.
+
+# D-09 (CVE-04, SC-3, phase 25-cve-mssql-jdbc-upgrade, plan 25-04): the self-signed-negative
+# fixture (channel 00000035, jdbc-mssql-selfsigned-negative-test.xml) is DELIBERATELY EXPECTED
+# to fail certificate validation on every poll attempt against the self-signed SQL Server
+# container (D-09's falsifiable negative proof). Unlike the SFTP legacy-negative leg above
+# (whose FileReceiver.onStart() opens the connection synchronously as a channel-START
+# failure), this channel's keepConnectionOpen=false means onStart() never blocks -- the
+# channel reaches STARTED and DatabaseReceiver.poll()'s catch block logs TWO ERROR lines per
+# failed poll cycle (pollingFrequency 3000ms): a generic "Failed to poll" line and a
+# channel-specific "Error in channel" line carrying the SQLServerException cert-validation
+# signature. Both patterns are scoped to this ONE channel's exact name (never a bare "Failed
+# to poll"/"Error in channel" pattern) so an unrelated connector's genuine poll failure on any
+# OTHER channel still fails the L3 scan. Only ever matches when MSSQL_PORT is active (external
+# break-then-fix driver); harmless no-op on an ordinary run-smoke-test.sh invocation.
+Failed to poll for messages from the database in channel "JDBC MSSQL Self-Signed Negative Test"
+Error in channel "JDBC MSSQL Self-Signed Negative Test": com.microsoft.sqlserver.jdbc.SQLServerException
