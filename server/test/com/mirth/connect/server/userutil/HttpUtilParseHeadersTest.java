@@ -108,6 +108,22 @@ public class HttpUtilParseHeadersTest {
         assertEquals(expected, HTTPUtil.parseHeaders(raw));
     }
 
+    @Test
+    public void testHeaderBlockFollowedByBodyContent() throws Exception {
+        // REGRESSION (WR-01): commons-httpclient's HttpParser.parseHeaders read header lines only
+        // until the first blank line, treating it as the header/body boundary terminator --
+        // standard HTTP semantics. A naive replacement that iterates every line and merely skips
+        // blank ones (rather than stopping at the first one) would keep feeding the trailing
+        // non-header content to BasicLineParser, which throws ParseException on any line lacking
+        // a ':'. Assert the parser stops at the blank line and returns only the preceding headers.
+        String raw = "A: b\r\n\r\nnot-a-header\r\n";
+
+        Map<String, String> expected = new HashMap<String, String>();
+        expected.put("A", "b");
+
+        assertEquals(expected, HTTPUtil.parseHeaders(raw));
+    }
+
     /**
      * Falsifiability of the load-bearing folding case (D-05 acceptance criterion): proves that
      * SKIPPING the RFC-822 unfold step -- i.e. feeding each raw line independently to

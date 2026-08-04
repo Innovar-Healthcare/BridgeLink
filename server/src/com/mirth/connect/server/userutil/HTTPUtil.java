@@ -52,7 +52,10 @@ public class HTTPUtil {
 
         for (String line : unfoldHeaderLines(str)) {
             if (StringUtils.isBlank(line)) {
-                continue;
+                // A blank line marks the end of the header block (matches the terminator
+                // semantics of the original commons-httpclient HttpParser.parseHeaders), so stop
+                // processing rather than skipping past it into any trailing body content.
+                break;
             }
 
             CharArrayBuffer buffer = new CharArrayBuffer(line.length());
