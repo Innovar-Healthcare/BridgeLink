@@ -46,15 +46,15 @@ public class DatabaseSettings extends AbstractSettings implements Serializable, 
         databaseDriverMap.put("mysql", "com.mysql.cj.jdbc.Driver");
         databaseDriverMap.put("oracle", "oracle.jdbc.OracleDriver");
         databaseDriverMap.put("postgres", "org.postgresql.Driver");
-        databaseDriverMap.put("sqlserver", "net.sourceforge.jtds.jdbc.Driver");
+        databaseDriverMap.put("sqlserver", "com.microsoft.sqlserver.jdbc.SQLServerDriver");
 
         databaseJdbc4Map = new HashMap<String, Boolean>();
         databaseJdbc4Map.put("derby", true);
         databaseJdbc4Map.put("mysql", true);
         databaseJdbc4Map.put("oracle", true);
         databaseJdbc4Map.put("postgres", true);
-        // JTDS does not support JDBC 4.0 operations
-        databaseJdbc4Map.put("sqlserver", false);
+        // mssql-jdbc supports JDBC 4.x operations (jTDS, the prior driver, did not)
+        databaseJdbc4Map.put("sqlserver", true);
 
         databaseTestQueryMap = new HashMap<String, String>();
         databaseTestQueryMap.put("derby", "SELECT 1");
