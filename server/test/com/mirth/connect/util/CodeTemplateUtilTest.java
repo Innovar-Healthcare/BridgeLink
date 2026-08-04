@@ -10,6 +10,7 @@
 package com.mirth.connect.util;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -153,5 +154,37 @@ public class CodeTemplateUtilTest {
         assertEquals("arg1", info.getFunctionDefinition().getParameters().get(0).getName());
         assertTrue(info.getDescription().equals(expectedDescription1) || info.getDescription().equals(expectedDescription2));
     }
-    
+
+    // ===== updateCode (IRT-1521 doc-gen) =====
+
+    @Test
+    public void testUpdateCodeAddsPlaceholderDescriptionAndParams() throws Exception {
+        String code = "function myFunc(arg1) {\n\treturn arg1;\n}";
+        String result = CodeTemplateUtil.updateCode(code);
+
+        assertTrue(result.startsWith("/**"));
+        assertTrue(result.contains("Modify the description here"));
+        assertTrue(result.contains("@param {Any} arg1"));
+        assertTrue(result.contains("@return {Any}"));
+        assertTrue(result.contains("function myFunc(arg1)"));
+    }
+
+    @Test
+    public void testUpdateCodeIsIdempotentOnItsOwnOutputStyle() throws Exception {
+        // Per IRT-1521: doc-gen round-trips an existing doc's description/param/return text
+        // correctly when the input uses the tab-indented style updateCode() itself produces
+        // (a known, pre-existing limitation means a hand-typed conventional leading-asterisk JSDoc
+        // style does not round-trip the same way - not exercised here).
+        String undocumented = "function myFunc(arg1) {\n\treturn arg1;\n}";
+        String firstPass = CodeTemplateUtil.updateCode(undocumented);
+        String secondPass = CodeTemplateUtil.updateCode(firstPass);
+        assertEquals(firstPass, secondPass);
+    }
+
+    @Test
+    public void testUpdateCodeBlankInputReturnsUnchanged() throws Exception {
+        assertNull(CodeTemplateUtil.updateCode(null));
+        assertEquals("", CodeTemplateUtil.updateCode(""));
+        assertEquals("   ", CodeTemplateUtil.updateCode("   "));
+    }
 }

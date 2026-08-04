@@ -10,7 +10,11 @@
 package com.mirth.connect.server.util;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -43,6 +47,55 @@ public class TemplateValueReplacerTest {
         assertEquals("valueOfVelocityHyphen", templateReplacer.replaceValues("$velocity-hyphen", "channelId", "channelName"));
     }
     
+    // ===== replaceValues(template, channelId, Map<String, Object>) - IRT-1519 =====
+    // Uses a real TemplateValueReplacer (not the loadContextFromMap-overriding fixture above),
+    // since GlobalChannelVariableStoreFactory is a self-contained in-memory singleton that is safe
+    // to touch directly in a unit test; a synthetic/unrecognized channel ID does not throw (it
+    // lazily creates an empty store), matching what ConfigurationServlet.replaceTemplate relies on.
+
+    @Test
+    public void testReplaceValuesWithMapPlainStringPassthrough() {
+        TemplateValueReplacer replacer = new TemplateValueReplacer();
+        assertEquals("plain string, no templating", replacer.replaceValues("plain string, no templating", "test-channel-id", Collections.<String, Object>emptyMap()));
+    }
+
+    @Test
+    public void testReplaceValuesWithMapResolvesCallerSuppliedVariable() {
+        TemplateValueReplacer replacer = new TemplateValueReplacer();
+        Map<String, Object> map = new HashMap<String, Object>();
+        map.put("extra1", "extraValue1");
+        assertEquals("extraValue1", replacer.replaceValues("$extra1", "test-channel-id", map));
+    }
+
+    @Test
+    public void testReplaceValuesWithMapResolvesChannelId() {
+        TemplateValueReplacer replacer = new TemplateValueReplacer();
+        assertEquals("test-channel-id", replacer.replaceValues("$channelId", "test-channel-id", Collections.<String, Object>emptyMap()));
+    }
+
+    @Test
+    public void testReplaceValuesWithMapUnrecognizedChannelIdDoesNotThrow() {
+        TemplateValueReplacer replacer = new TemplateValueReplacer();
+        // A brand new, never-before-seen channel ID; GlobalChannelVariableStoreFactory must lazily
+        // create an empty store rather than throwing.
+        String result = replacer.replaceValues("$unknownVar", java.util.UUID.randomUUID().toString(), Collections.<String, Object>emptyMap());
+        assertEquals("$unknownVar", result);
+    }
+
+    @Test
+    public void testReplaceValuesWithMapBuiltInUuidAndSystime() {
+        TemplateValueReplacer replacer = new TemplateValueReplacer();
+
+        String uuidResult = replacer.replaceValues("$UUID", "test-channel-id", Collections.<String, Object>emptyMap());
+        assertNotNull(uuidResult);
+        assertFalse(uuidResult.isEmpty());
+        assertFalse("$UUID".equals(uuidResult));
+
+        String systimeResult = replacer.replaceValues("$SYSTIME", "test-channel-id", Collections.<String, Object>emptyMap());
+        assertNotNull(systimeResult);
+        assertTrue(systimeResult.matches("\\d+"));
+    }
+
     private class TestTemplateValueReplacer extends TemplateValueReplacer {
         @Override
         protected void loadContextFromMap(VelocityContext context, Map<String, ?> map) {

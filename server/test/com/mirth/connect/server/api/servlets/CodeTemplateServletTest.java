@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
 
 import org.junit.Before;
@@ -353,6 +354,25 @@ public class CodeTemplateServletTest extends ServletTestBase {
         CodeTemplateLibrarySaveResult result = servlet.updateLibrariesAndTemplates(
                 new ArrayList<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), true);
         assertNotNull(result);
+    }
+
+    // ========== generateDoc (IRT-1521) ==========
+
+    @Test
+    public void testGenerateDocAddsPlaceholderDescription() throws Exception {
+        Response response = servlet.generateDoc("function myFunc(arg1) {\n\treturn arg1;\n}");
+        assertEquals(200, response.getStatus());
+        String result = (String) response.getEntity();
+        assertNotNull(result);
+        assertTrue(result.startsWith("/**"));
+        assertTrue(result.contains("@param"));
+    }
+
+    @Test
+    public void testGenerateDocBlankCodeReturnsBlank() throws Exception {
+        Response response = servlet.generateDoc(null);
+        assertEquals(200, response.getStatus());
+        assertEquals("", response.getEntity());
     }
 
     /**
