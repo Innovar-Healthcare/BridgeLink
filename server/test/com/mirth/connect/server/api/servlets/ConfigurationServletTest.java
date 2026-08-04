@@ -34,6 +34,7 @@ import java.util.Properties;
 import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
 
 import org.junit.Before;
@@ -45,6 +46,7 @@ import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.api.MirthApiException;
+import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.model.ChannelDependency;
 import com.mirth.connect.model.ChannelMetadata;
 import com.mirth.connect.model.ChannelTag;
@@ -475,6 +477,77 @@ public class ConfigurationServletTest extends ServletTestBase {
     public void testGetProperty() throws Exception {
         when(mockConfigController.getProperty(anyString(), anyString())).thenReturn("propertyValue");
         assertEquals("propertyValue", servlet.getProperty("group1", "name1"));
+    }
+
+    // ========== validateScript (IRT-1514) ==========
+
+    @Test
+    public void testValidateScriptValid() {
+        RawContent content = servlet.validateScript("var x = 1;");
+        assertNotNull(content);
+        assertTrue(content.getContent().contains("\"valid\":true"));
+    }
+
+    @Test
+    public void testValidateScriptInvalid() {
+        RawContent content = servlet.validateScript("var x = ;");
+        assertNotNull(content);
+        assertTrue(content.getContent().contains("\"valid\":false"));
+    }
+
+    // ========== validateCron (IRT-1518) ==========
+
+    @Test
+    public void testValidateCronValid() {
+        RawContent content = servlet.validateCron("0 0 12 * * ?");
+        assertTrue(content.getContent().contains("\"valid\":true"));
+    }
+
+    @Test
+    public void testValidateCronInvalid() {
+        RawContent content = servlet.validateCron("not a cron expression");
+        assertTrue(content.getContent().contains("\"valid\":false"));
+    }
+
+    // ========== replaceTemplate (IRT-1519) ==========
+
+    @Test
+    public void testReplaceTemplatePlainStringPassthrough() {
+        RawContent content = servlet.replaceTemplate(null, "plain string, no templating");
+        assertTrue(content.getContent().contains("plain string, no templating"));
+    }
+
+    @Test(expected = MirthApiException.class)
+    public void testReplaceTemplateBlankTemplate() {
+        servlet.replaceTemplate(null, "");
+    }
+
+    // ========== prettyPrintScript (IRT-1521) ==========
+
+    @Test
+    public void testPrettyPrintScript() {
+        Response response = servlet.prettyPrintScript("var x=1;");
+        assertEquals(200, response.getStatus());
+        assertNotNull(response.getEntity());
+    }
+
+    @Test
+    public void testPrettyPrintScriptBlank() {
+        // JavaScriptSharedUtil.prettyPrint degrades gracefully on blank input instead of throwing.
+        Response response = servlet.prettyPrintScript(null);
+        assertEquals(200, response.getStatus());
+    }
+
+    // ========== getScriptReferences (IRT-1520) ==========
+
+    @Test
+    public void testGetScriptReferences() throws Exception {
+        RawContent content = servlet.getScriptReferences();
+        assertNotNull(content);
+        assertTrue(content.getContent().trim().startsWith("["));
+        // ~209 static entries per IRT-1520; a gross size check catches accidental truncation without
+        // duplicating ScriptReferenceUtilTest's exact-count assertion here.
+        assertTrue(content.getContent().length() > 1000);
     }
 
     /**

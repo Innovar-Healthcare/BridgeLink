@@ -11,10 +11,18 @@ package com.mirth.connect.util;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
 import org.mozilla.javascript.Context;
@@ -213,6 +221,96 @@ public class JavaScriptSharedUtilTest {
             assertEquals(Context.toNumber(r1), Context.toNumber(r2), 0.0);
         } finally {
             Context.exit();
+        }
+    }
+
+    // ===== validateScriptStructured (IRT-1514) =====
+
+    @Test
+    public void testValidateScriptStructuredValid() {
+        ScriptValidationResult result = JavaScriptSharedUtil.validateScriptStructured("var x = 1;\nlogger.info(x);");
+        assertTrue(result.isValid());
+        assertNull(result.getError());
+    }
+
+    @Test
+    public void testValidateScriptStructuredBlankIsValid() {
+        assertTrue(JavaScriptSharedUtil.validateScriptStructured(null).isValid());
+        assertTrue(JavaScriptSharedUtil.validateScriptStructured("").isValid());
+        assertTrue(JavaScriptSharedUtil.validateScriptStructured("   ").isValid());
+    }
+
+    @Test
+    public void testValidateScriptStructuredSyntaxErrorOnFirstLine() {
+        ScriptValidationResult result = JavaScriptSharedUtil.validateScriptStructured("var x = ;");
+        assertFalse(result.isValid());
+        assertNotNull(result.getError());
+        assertEquals(1, result.getError().getLine());
+        // Column is normalized to the caller's script; the internal wrapper-prefix offset must
+        // already be subtracted out, so it must never be negative.
+        assertTrue(result.getError().getColumn() >= 0);
+        assertNotNull(result.getError().getMessage());
+    }
+
+    @Test
+    public void testValidateScriptStructuredSyntaxErrorOnSecondLine() {
+        ScriptValidationResult result = JavaScriptSharedUtil.validateScriptStructured("var x = 1;\nvar y = ;");
+        assertFalse(result.isValid());
+        assertNotNull(result.getError());
+        // Only line 1 carries the wrapper-prefix offset; line 2's column should be reported as-is.
+        assertEquals(2, result.getError().getLine());
+        assertTrue(result.getError().getColumn() >= 0);
+    }
+
+    // ===== prettyPrint concurrency (regression test for 9f98a00fb) =====
+
+    @Test
+    public void testPrettyPrintConcurrentThreadSafety() throws Exception {
+        /*
+         * prettyPrint() runs js_beautify against a cached, static Rhino formatter scope
+         * (cachedFormatterScope). Before 9f98a00fb, concurrent callers (e.g. concurrent
+         * _prettyPrintScript REST requests on separate Jetty threads) could race on that shared
+         * mutable state. This drives many concurrent callers with two distinct scripts and asserts
+         * every result matches a known-good single-threaded reference - if the shared state were
+         * ever corrupted by another thread mid-format, a call would return the wrong script's
+         * (or a mangled) result.
+         */
+        String scriptA = "for(var i=0;i<10;i++){if(i>5){logger.info('a');}}";
+        String scriptB = "var x={a:1,b:2};function foo(y){return y+1;}";
+
+        String expectedA = JavaScriptSharedUtil.prettyPrint(scriptA);
+        String expectedB = JavaScriptSharedUtil.prettyPrint(scriptB);
+        assertNotNull(expectedA);
+        assertNotNull(expectedB);
+
+        int threadCount = 16;
+        int iterationsPerThread = 25;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        List<Future<Boolean>> futures = new ArrayList<Future<Boolean>>();
+
+        try {
+            for (int i = 0; i < threadCount; i++) {
+                final boolean useA = i % 2 == 0;
+                futures.add(executor.submit(new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() {
+                        String script = useA ? scriptA : scriptB;
+                        String expected = useA ? expectedA : expectedB;
+                        for (int j = 0; j < iterationsPerThread; j++) {
+                            if (!expected.equals(JavaScriptSharedUtil.prettyPrint(script))) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+                }));
+            }
+
+            for (Future<Boolean> future : futures) {
+                assertTrue("Concurrent prettyPrint call returned a corrupted/mismatched result", future.get(30, TimeUnit.SECONDS));
+            }
+        } finally {
+            executor.shutdownNow();
         }
     }
 
