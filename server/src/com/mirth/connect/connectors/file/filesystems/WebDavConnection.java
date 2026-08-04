@@ -121,7 +121,26 @@ public class WebDavConnection implements FileSystemConnection {
                 // silently resend an EMPTY body instead of the real one. Enabling preemptive
                 // auth sends credentials on the FIRST request, avoiding that class of bug
                 // entirely -- directly relevant to D-07's basic-auth coverage.
-                sardine.enablePreemptiveAuthentication(host);
+                //
+                // WR-02 fix: the host-only overload seeds the auth cache with HttpHost entries
+                // whose port is -1 (Sardine's single-String overload always passes -1,-1), which
+                // only matches outbound requests whose target HttpHost ALSO has port -1 -- i.e.
+                // requests built from a URL with no explicit port. baseUrl above only appends
+                // ":" + port when port > 0, so for a DEFAULT-port channel the request URL has no
+                // explicit port and its target HttpHost is also port -1: the host-only overload
+                // already matched correctly there. The bug is specific to NON-default ports: once
+                // baseUrl embeds an explicit port, the request's target HttpHost carries that real
+                // port, so the auth-cache entry must be seeded with the SAME port -- not a fixed
+                // default (80/443) -- or the two never match and preemptive auth silently never
+                // fires. Passing -1 through when no port is configured (mirroring the baseUrl
+                // construction above) preserves both cases: default-port channels keep matching on
+                // -1, and non-default-port channels now match on the actual configured port.
+                int preemptiveAuthPort = port > 0 ? port : -1;
+                if (secure) {
+                    sardine.enablePreemptiveAuthentication(host, -1, preemptiveAuthPort);
+                } else {
+                    sardine.enablePreemptiveAuthentication(host, preemptiveAuthPort, -1);
+                }
             }
         } else {
             sardine = SardineFactory.begin();
