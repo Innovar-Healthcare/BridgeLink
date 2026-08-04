@@ -193,6 +193,20 @@ already-built distribution elsewhere.
 
     <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
         <mkdir dir="${junit.reports}" />
+        <!-- WR-03 fix: only emit the javax.net.ssl.trustStore* overrides below when
+             WEBDAV_TLS_KEYSTORE was actually supplied (run-smoke-test.sh's WebDAV TLS leg).
+             Previously these sysproperties were unconditional: on a bare `ant test-run`
+             (WEBDAV_TLS_KEYSTORE unset/empty), javax.net.ssl.trustStore was set to the empty
+             string, which JSSE treats as "no truststore file" (an EMPTY trust set) rather
+             than "fall back to the JDK default cacerts" — silently breaking TLS handshakes
+             for any OTHER suite in this forkmode="once" fork that relies on the default trust
+             store. Gating on this condition means the property is left unset in that case,
+             preserving the JDK default. -->
+        <condition property="webdav.tls.keystore.set">
+            <not>
+                <equals arg1="${WEBDAV_TLS_KEYSTORE}" arg2="" />
+            </not>
+        </condition>
         <junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="once" dir="${basedir}">
             <jvmarg value="--add-opens=java.base/java.util=ALL-UNNAMED" />
             <jvmarg value="--add-opens=java.base/java.lang=ALL-UNNAMED" />
@@ -248,12 +262,14 @@ already-built distribution elsewhere.
                  server, which is a separate process launched by run-smoke-test.sh). The same
                  PKCS12 keystore doubles as its own truststore (single self-signed keypair,
                  same convention as generate_dicom_tls_keystore's keyStore/trustStore reuse).
-                 Harmless when WEBDAV_TLS_KEYSTORE is unset (bare `ant test-run` local
-                 iteration): no code path in this suite triggers the JVM default SSLContext
-                 before WebDavRoundTripTest's own requireWebdavProperty() throws first. -->
-            <sysproperty key="javax.net.ssl.trustStore" value="${WEBDAV_TLS_KEYSTORE}" />
-            <sysproperty key="javax.net.ssl.trustStorePassword" value="${WEBDAV_TLS_KEYSTORE_PW}" />
-            <sysproperty key="javax.net.ssl.trustStoreType" value="PKCS12" />
+                 WR-03: emitted only when WEBDAV_TLS_KEYSTORE is non-empty (see the
+                 webdav.tls.keystore.set condition above) — when unset (bare `ant test-run`
+                 local iteration), the property is left unset entirely rather than forced to
+                 the empty string, so the fork keeps the JDK default cacerts trust store for
+                 every other suite. -->
+            <sysproperty key="javax.net.ssl.trustStore" value="${WEBDAV_TLS_KEYSTORE}" if="webdav.tls.keystore.set" />
+            <sysproperty key="javax.net.ssl.trustStorePassword" value="${WEBDAV_TLS_KEYSTORE_PW}" if="webdav.tls.keystore.set" />
+            <sysproperty key="javax.net.ssl.trustStoreType" value="PKCS12" if="webdav.tls.keystore.set" />
             <classpath>
                 <path refid="test.classpath" />
                 <pathelement location="${build.classes}" />
