@@ -55,8 +55,12 @@ already-built distribution elsewhere.
         <fileset dir="${smoke.setup.dir}/server-lib/javax/jaxb" includes="*.jar" />
         <fileset dir="${smoke.setup.dir}/server-lib/javax/jaxb/ext" includes="*.jar" />
 
-        <!-- JDBC sink: sqlite-jdbc ships server-side (database/) -->
-        <fileset dir="${smoke.setup.dir}/server-lib/database" includes="sqlite-jdbc-*.jar" />
+        <!-- JDBC sink: sqlite-jdbc ships server-side (database/). CVE-04 (phase
+             25-cve-mssql-jdbc-upgrade, plan 25-01) adds mssql-jdbc-*.jre11.jar: the driver
+             JVM opens its OWN JDBC connection directly (not through a deployed channel) to
+             poll dest_records for the encrypted round-trip's L2 artifact check, mirroring
+             22-05's WebDavConnection-in-driver-JVM convention above. -->
+        <fileset dir="${smoke.setup.dir}/server-lib/database" includes="sqlite-jdbc-*.jar,mssql-jdbc-*.jre11.jar" />
 
         <!-- DICOM SCP stub: dcm4che tool jars ship in the dicom connector extension.
              NOTE: 18-RESEARCH.md Pattern 4 names this dir "extensions/dimse/" — the
@@ -186,7 +190,7 @@ already-built distribution elsewhere.
          break-then-fix leg. MSSQL_PORT is only ever non-empty when run-smoke-test.sh is
          invoked by the external driver (regression-scripts/test-cve04-mssql-jdbc-upgrade.sh)
          with the live SQL Server container's port pre-exported; MssqlJdbcParamsTest's
-         encryptedReadWrite @Test self-skips via Assume.assumeTrue when it is empty -- mirrors
+         encryptedReadWrite @Test self-skips via Assume.assumeTrue when it is empty, mirroring
          the SFTP_LEGACY_PORT convention above. -->
     <property name="MSSQL_HOST" value="" />
     <property name="MSSQL_PORT" value="" />
@@ -212,8 +216,36 @@ already-built distribution elsewhere.
              than "fall back to the JDK default cacerts" — silently breaking TLS handshakes
              for any OTHER suite in this forkmode="once" fork that relies on the default trust
              store. Gating on this condition means the property is left unset in that case,
-             preserving the JDK default. -->
+             preserving the JDK default.
+             CVE-04 (plan 25-01) Rule 3 fix: the local Ant install this session's live
+             verification ran against (Homebrew ant 1.10.17) rejects `if="..."` on
+             sysproperty ("sysproperty doesn't support the "if" attribute"); Environment.
+             Variable-typed nested elements are not part of Ant's generic if/unless dispatch,
+             unlike top-level tasks. This blocked the JUnit driver stage entirely (every suite,
+             not just mssql), so it is fixed here rather than deferred. Replaced with the
+             condition-property-value then syspropertyset/propertyref/mapper idiom below: a
+             condition task with a value attribute sets the target property ONLY when the
+             nested test is true, leaving it genuinely UNSET (not merely empty) when false;
+             IntrospectionHelper accepts that even where a bare if= attribute is rejected, and
+             a plain propertyref for an unset property is a documented no-op omission, never
+             an error. Net runtime behavior for both the true and false branches is unchanged
+             from the previous (uncompilable) if= intent. -->
         <condition property="webdav.tls.keystore.set">
+            <not>
+                <equals arg1="${WEBDAV_TLS_KEYSTORE}" arg2="" />
+            </not>
+        </condition>
+        <condition property="webdav.tls.truststore.actual" value="${WEBDAV_TLS_KEYSTORE}">
+            <not>
+                <equals arg1="${WEBDAV_TLS_KEYSTORE}" arg2="" />
+            </not>
+        </condition>
+        <condition property="webdav.tls.truststore.pw.actual" value="${WEBDAV_TLS_KEYSTORE_PW}">
+            <not>
+                <equals arg1="${WEBDAV_TLS_KEYSTORE}" arg2="" />
+            </not>
+        </condition>
+        <condition property="webdav.tls.truststore.type.actual" value="PKCS12">
             <not>
                 <equals arg1="${WEBDAV_TLS_KEYSTORE}" arg2="" />
             </not>
@@ -278,14 +310,26 @@ already-built distribution elsewhere.
                  server, which is a separate process launched by run-smoke-test.sh). The same
                  PKCS12 keystore doubles as its own truststore (single self-signed keypair,
                  same convention as generate_dicom_tls_keystore's keyStore/trustStore reuse).
-                 WR-03: emitted only when WEBDAV_TLS_KEYSTORE is non-empty (see the
-                 webdav.tls.keystore.set condition above) — when unset (bare `ant test-run`
-                 local iteration), the property is left unset entirely rather than forced to
-                 the empty string, so the fork keeps the JDK default cacerts trust store for
-                 every other suite. -->
-            <sysproperty key="javax.net.ssl.trustStore" value="${WEBDAV_TLS_KEYSTORE}" if="webdav.tls.keystore.set" />
-            <sysproperty key="javax.net.ssl.trustStorePassword" value="${WEBDAV_TLS_KEYSTORE_PW}" if="webdav.tls.keystore.set" />
-            <sysproperty key="javax.net.ssl.trustStoreType" value="PKCS12" if="webdav.tls.keystore.set" />
+                 WR-03: emitted only when WEBDAV_TLS_KEYSTORE is non-empty (the
+                 webdav.tls.truststore*.actual properties above are left genuinely UNSET
+                 otherwise) — when unset (bare `ant test-run` local iteration), each
+                 syspropertyset below has nothing to reference and omits its entry entirely
+                 rather than forcing the empty string, so the fork keeps the JDK default
+                 cacerts trust store for every other suite. Ant's <propertyset> type allows
+                 at most one nested <mapper>, hence three separate syspropertysets rather
+                 than one combined block. -->
+            <syspropertyset>
+                <propertyref name="webdav.tls.truststore.actual" />
+                <mapper type="regexp" from="^webdav\.tls\.truststore\.actual$" to="javax.net.ssl.trustStore" />
+            </syspropertyset>
+            <syspropertyset>
+                <propertyref name="webdav.tls.truststore.pw.actual" />
+                <mapper type="regexp" from="^webdav\.tls\.truststore\.pw\.actual$" to="javax.net.ssl.trustStorePassword" />
+            </syspropertyset>
+            <syspropertyset>
+                <propertyref name="webdav.tls.truststore.type.actual" />
+                <mapper type="regexp" from="^webdav\.tls\.truststore\.type\.actual$" to="javax.net.ssl.trustStoreType" />
+            </syspropertyset>
             <classpath>
                 <path refid="test.classpath" />
                 <pathelement location="${build.classes}" />

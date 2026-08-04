@@ -9,6 +9,33 @@
     <name>sourceConnector</name>
     <properties class="com.mirth.connect.connectors.jdbc.DatabaseReceiverProperties" version="26.6.0">
       <pluginProperties/>
+      <pollConnectorProperties version="26.6.0">
+        <pollingType>INTERVAL</pollingType>
+        <pollOnStart>true</pollOnStart>
+        <pollingFrequency>3000</pollingFrequency>
+        <pollingHour>0</pollingHour>
+        <pollingMinute>0</pollingMinute>
+        <cronJobs/>
+        <pollConnectorPropertiesAdvanced>
+          <weekly>true</weekly>
+          <inactiveDays>
+            <boolean>false</boolean>
+            <boolean>false</boolean>
+            <boolean>false</boolean>
+            <boolean>false</boolean>
+            <boolean>false</boolean>
+            <boolean>false</boolean>
+            <boolean>false</boolean>
+            <boolean>false</boolean>
+          </inactiveDays>
+          <dayOfMonth>1</dayOfMonth>
+          <allDay>true</allDay>
+          <startingHour>8</startingHour>
+          <startingMinute>0</startingMinute>
+          <endingHour>17</endingHour>
+          <endingMinute>0</endingMinute>
+        </pollConnectorPropertiesAdvanced>
+      </pollConnectorProperties>
       <sourceConnectorProperties version="26.6.0">
         <responseVariable>None</responseVariable>
         <respondAfterProcessing>true</respondAfterProcessing>
@@ -22,15 +49,6 @@
           </entry>
         </resourceIds>
         <queueBufferSize>1000</queueBufferSize>
-        <pollConnectorProperties version="26.6.0">
-          <pollingType>INTERVAL</pollingType>
-          <pollOnStart>true</pollOnStart>
-          <pollingFrequency>3000</pollingFrequency>
-          <pollingHour>0</pollingHour>
-          <pollingMinute>0</pollingMinute>
-          <invalidCronExpression></invalidCronExpression>
-          <cronJobs class="linked-hash-map"/>
-        </pollConnectorProperties>
       </sourceConnectorProperties>
       <driver>com.microsoft.sqlserver.jdbc.SQLServerDriver</driver>
       <url>jdbc:sqlserver://${MSSQL_HOST}:${MSSQL_PORT};databaseName=${MSSQL_DB};encrypt=true;trustServerCertificate=true</url>
@@ -196,18 +214,24 @@ channelMap.put(&apos;srcPayload&apos;, msg[&apos;payload&apos;].toString());</sc
   <preprocessingScript>return message;</preprocessingScript>
   <postprocessingScript>return;</postprocessingScript>
   <deployScript>// CVE-04 (plan 25-01): create the source and destination tables if they don't
-// already exist, and seed one unprocessed source row per deploy so the Database Reader
-// has something to pick up on its first polling cycle (pollOnStart=true). mssql-jdbc has
-// no implicit-DDL-on-insert behavior, so both tables are created explicitly here, mirroring
-// jdbc-test.xml's sqlite deployScript convention. patient_name is seeded as
-// Hl7Messages.EXPECTED_PATIENT ("McDoogal") so MssqlJdbcParamsTest can assert the same
-// canonical L2 token used by every other fixture in this harness.
+// already exist. mssql-jdbc has no implicit-DDL-on-insert behavior, so both tables are
+// created explicitly here, mirroring jdbc-test.xml's sqlite deployScript convention.
+//
+// Rule 1 fix (discovered during this plan's live verification): the seed row used to be
+// INSERTed here too, but the Database Reader's pollOnStart=true poller consumes it within
+// the first ~3s of deploy -- well BEFORE run-smoke-test.sh's later
+// "Clearing channel statistics" REST call resets the sent/received counters to 0 (that
+// call runs once for ALL 32 fixtures, right before the JUnit driver forks) -- so by the
+// time MssqlJdbcParamsTest.encryptedReadWrite() actually polls the REST statistics
+// endpoint, the real send already happened and was erased by the reset, and no new row
+// is ever seeded again. The fix: MssqlJdbcParamsTest seeds its OWN src_records row,
+// directly via JDBC, immediately before polling -- mirroring SftpParamsTest.seedAll()'s
+// seed-right-before-poll convention (never at deploy time). This deployScript is DDL-only.
 var conn = java.sql.DriverManager.getConnection('jdbc:sqlserver://${MSSQL_HOST}:${MSSQL_PORT};databaseName=${MSSQL_DB};encrypt=true;trustServerCertificate=true', '${MSSQL_USER}', '${MSSQL_PASSWORD}');
 try {
 	var stmt = conn.createStatement();
 	stmt.execute("IF OBJECT_ID('src_records', 'U') IS NULL CREATE TABLE src_records (id INT IDENTITY(1,1) PRIMARY KEY, patient_name NVARCHAR(255), payload NVARCHAR(MAX), processed BIT NOT NULL DEFAULT 0)");
 	stmt.execute("IF OBJECT_ID('dest_records', 'U') IS NULL CREATE TABLE dest_records (id INT IDENTITY(1,1) PRIMARY KEY, patient_name NVARCHAR(255), payload NVARCHAR(MAX))");
-	stmt.execute("INSERT INTO src_records (patient_name, payload, processed) VALUES ('McDoogal', 'cve-04-encrypted-roundtrip-seed', 0)");
 	stmt.close();
 } finally {
 	conn.close();
