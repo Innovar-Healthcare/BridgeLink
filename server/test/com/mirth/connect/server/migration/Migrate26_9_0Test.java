@@ -9,7 +9,9 @@ package com.mirth.connect.server.migration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,7 +36,8 @@ import com.mirth.connect.server.controllers.ControllerFactory;
  * Proves Migrate26_9_0 (CVE-04): the retired jTDS DriverInfo entry is stripped from the
  * persisted driver list, the Microsoft SQL Server entry is retained, the surviving entries keep
  * their original relative order, the migration is idempotent on a second run, and it is safe
- * (no exception, no-op) on an empty list or a list carrying no jTDS entry.
+ * (no exception, true no-op — {@code setDatabaseDrivers} is never invoked) on an empty list or a
+ * list carrying no jTDS entry.
  */
 public class Migrate26_9_0Test {
 
@@ -98,34 +101,32 @@ public class Migrate26_9_0Test {
 
         reset(configurationController);
 
-        // Second run: feed the already-stripped list back in. Nothing further should change.
+        // Second run: feed the already-stripped list back in. Nothing changed, so the
+        // migrator must be a true no-op — it must NOT re-persist the list.
         when(configurationController.getDatabaseDrivers()).thenReturn(new ArrayList<DriverInfo>(firstRunResult));
         new Migrate26_9_0().migrate();
-        List<DriverInfo> secondRunResult = captureSetDatabaseDrivers();
 
-        assertEquals("Re-running the migration must not change an already-stripped list", firstRunResult, secondRunResult);
-        assertFalse(containsClass(secondRunResult, JTDS_CLASS));
-        assertTrue(containsClass(secondRunResult, MSSQL_CLASS));
+        verify(configurationController, never()).setDatabaseDrivers(any());
+        assertFalse(containsClass(firstRunResult, JTDS_CLASS));
+        assertTrue(containsClass(firstRunResult, MSSQL_CLASS));
     }
 
     @Test
     public void emptyAndAbsentSafe() throws Exception {
-        // Empty list: no-op, no exception.
+        // Empty list: no-op, no exception, and no re-persist.
         when(configurationController.getDatabaseDrivers()).thenReturn(new ArrayList<DriverInfo>());
         new Migrate26_9_0().migrate();
-        List<DriverInfo> emptyResult = captureSetDatabaseDrivers();
-        assertTrue("Empty list must remain empty", emptyResult.isEmpty());
+        verify(configurationController, never()).setDatabaseDrivers(any());
 
         reset(configurationController);
 
-        // jTDS-absent list: no-op, no exception, list unchanged.
+        // jTDS-absent list: no-op, no exception, no re-persist.
         List<DriverInfo> absentSeed = new ArrayList<DriverInfo>();
         absentSeed.add(mssqlEntry());
         absentSeed.add(new DriverInfo("Oracle", "oracle.jdbc.driver.OracleDriver", "jdbc:oracle:thin:@host:port:dbname", "SELECT * FROM ? WHERE ROWNUM < 2"));
         when(configurationController.getDatabaseDrivers()).thenReturn(new ArrayList<DriverInfo>(absentSeed));
         new Migrate26_9_0().migrate();
-        List<DriverInfo> absentResult = captureSetDatabaseDrivers();
-        assertEquals("A jTDS-absent list must be unchanged", absentSeed, absentResult);
+        verify(configurationController, never()).setDatabaseDrivers(any());
     }
 
     @Test

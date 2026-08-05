@@ -40,6 +40,7 @@ public class Migrate26_9_0 extends Migrator {
         ConfigurationController configurationController = ControllerFactory.getFactory().createConfigurationController();
         try {
             List<DriverInfo> drivers = configurationController.getDatabaseDrivers();
+            boolean removed = false;
 
             for (Iterator<DriverInfo> it = drivers.iterator(); it.hasNext();) {
                 DriverInfo driver = it.next();
@@ -49,10 +50,17 @@ public class Migrate26_9_0 extends Migrator {
                 if (StringUtils.equals(driver.getClassName(), "net.sourceforge.jtds.jdbc.Driver")) {
                     logger.info("Removing retired jTDS driver entry (mssql-jdbc CVE upgrade, CVE-04)");
                     it.remove();
+                    removed = true;
                 }
             }
 
-            configurationController.setDatabaseDrivers(drivers);
+            // Only re-persist the list when something actually changed. Installs whose
+            // persisted list never carried the jTDS entry (e.g. a fresh 26.6.0 install) must
+            // remain a true no-op, otherwise this migrator would snapshot the shipped
+            // dbdrivers.xml defaults into the DB and permanently shadow future updates to it.
+            if (removed) {
+                configurationController.setDatabaseDrivers(drivers);
+            }
         } catch (ControllerException e) {
             throw new MigrationException(e);
         }
