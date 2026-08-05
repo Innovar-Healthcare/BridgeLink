@@ -986,6 +986,16 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     }
 
     /**
+     * Validates multiple JavaScript scripts in one request using the server's Rhino engine.
+     *
+     * @see ConfigurationServletInterface#validateScripts
+     */
+    @Override
+    public RawContent validateScripts(String request) throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).validateScripts(request);
+    }
+
+    /**
      * Validates a Quartz cron expression using the server's real Quartz CronExpression parser.
      *
      * @see ConfigurationServletInterface#validateCron

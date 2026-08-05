@@ -34,6 +34,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.api.MirthApiException;
@@ -448,6 +449,26 @@ public class ConfigurationServlet extends MirthServlet implements ConfigurationS
     public RawContent validateScript(String script) {
         try {
             return new RawContent(MirthJsonUtil.toJson(JavaScriptSharedUtil.validateScriptStructured(script)));
+        } catch (JsonProcessingException e) {
+            throw new MirthApiException(e);
+        }
+    }
+
+    @Override
+    public RawContent validateScripts(String request) {
+        Map<String, String> scripts;
+        try {
+            scripts = MirthJsonUtil.fromJson(StringUtils.defaultString(request), new TypeReference<Map<String, String>>() {});
+        } catch (JsonProcessingException e) {
+            throw badRequest("Invalid request body: " + e.getMessage());
+        }
+
+        if (scripts == null) {
+            scripts = Collections.emptyMap();
+        }
+
+        try {
+            return new RawContent(MirthJsonUtil.toJson(JavaScriptSharedUtil.validateScriptsStructured(scripts)));
         } catch (JsonProcessingException e) {
             throw new MirthApiException(e);
         }
