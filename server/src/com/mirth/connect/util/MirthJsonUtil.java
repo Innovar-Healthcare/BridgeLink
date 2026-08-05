@@ -15,6 +15,7 @@ import org.apache.logging.log4j.Logger;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.core.util.DefaultIndenter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,6 +39,16 @@ public class MirthJsonUtil {
      */
     public static String toJson(Object object) throws JsonProcessingException {
         return OBJECT_MAPPER.writeValueAsString(object);
+    }
+
+    /**
+     * Deserializes a plain JSON string directly into a value via Jackson, the read-side counterpart
+     * to {@link #toJson(Object)} for REST endpoints that accept a raw JSON request body instead of
+     * going through the API-wide XStream-based deserialization. Takes a {@link TypeReference} so
+     * generic targets such as {@code Map<String, String>} can be deserialized.
+     */
+    public static <T> T fromJson(String json, TypeReference<T> type) throws JsonProcessingException {
+        return OBJECT_MAPPER.readValue(json, type);
     }
 
     public static String prettyPrint(String input) {

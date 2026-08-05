@@ -17,7 +17,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -260,6 +262,37 @@ public class JavaScriptSharedUtilTest {
         // Only line 1 carries the wrapper-prefix offset; line 2's column should be reported as-is.
         assertEquals(2, result.getError().getLine());
         assertTrue(result.getError().getColumn() >= 0);
+    }
+
+    // ===== validateScriptsStructured (IRT-1514) =====
+
+    @Test
+    public void testValidateScriptsStructuredMixedResultsKeyedByIdInOrder() {
+        Map<String, String> scripts = new LinkedHashMap<>();
+        scripts.put("a", "var x = 1;");
+        scripts.put("b", "var x = ;");
+        scripts.put("c", "");
+
+        Map<String, ScriptValidationResult> results = JavaScriptSharedUtil.validateScriptsStructured(scripts);
+
+        assertEquals(3, results.size());
+        // Keys and iteration order are preserved from the request.
+        assertEquals(new ArrayList<>(scripts.keySet()), new ArrayList<>(results.keySet()));
+
+        assertTrue(results.get("a").isValid());
+        assertNull(results.get("a").getError());
+
+        assertFalse(results.get("b").isValid());
+        assertNotNull(results.get("b").getError());
+
+        assertTrue(results.get("c").isValid());
+    }
+
+    @Test
+    public void testValidateScriptsStructuredEmptyMapReturnsEmptyResults() {
+        Map<String, ScriptValidationResult> results = JavaScriptSharedUtil.validateScriptsStructured(new LinkedHashMap<String, String>());
+        assertNotNull(results);
+        assertTrue(results.isEmpty());
     }
 
     // ===== prettyPrint concurrency (regression test for 9f98a00fb) =====

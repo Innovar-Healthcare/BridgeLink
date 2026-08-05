@@ -495,6 +495,30 @@ public class ConfigurationServletTest extends ServletTestBase {
         assertTrue(content.getContent().contains("\"valid\":false"));
     }
 
+    // ========== validateScripts (IRT-1514) ==========
+
+    @Test
+    public void testValidateScriptsMixedResults() {
+        RawContent content = servlet.validateScripts("{\"a\":\"var x = 1;\",\"b\":\"var x = ;\"}");
+        assertNotNull(content);
+        String json = content.getContent();
+        // Results are keyed by the request ids; "a" compiles, "b" does not.
+        assertTrue(json.contains("\"a\":{\"valid\":true"));
+        assertTrue(json.contains("\"b\":{\"valid\":false"));
+    }
+
+    @Test
+    public void testValidateScriptsEmptyObject() {
+        RawContent content = servlet.validateScripts("{}");
+        assertNotNull(content);
+        assertEquals("{}", content.getContent());
+    }
+
+    @Test(expected = MirthApiException.class)
+    public void testValidateScriptsMalformedJson() {
+        servlet.validateScripts("not json");
+    }
+
     // ========== validateCron (IRT-1518) ==========
 
     @Test

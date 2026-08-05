@@ -15,7 +15,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -149,6 +151,24 @@ public class JavaScriptSharedUtil {
         } finally {
             Context.exit();
         }
+    }
+
+    /**
+     * Validates multiple scripts in one call, e.g. every filter/transformer/channel script in a
+     * channel gathered into a single request. Each script is validated independently via
+     * {@link #validateScriptStructured(String)}. Scripts are keyed by a caller-supplied id (its
+     * value is opaque to the server) and each result is returned under the same key, so callers map
+     * results back by id rather than by position. Iteration order is preserved in the returned map.
+     *
+     * @param scripts a map of id to script body (never null, but may be empty)
+     * @return a map of the same ids to their {@link ScriptValidationResult}
+     */
+    public static Map<String, ScriptValidationResult> validateScriptsStructured(Map<String, String> scripts) {
+        Map<String, ScriptValidationResult> results = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : scripts.entrySet()) {
+            results.put(entry.getKey(), validateScriptStructured(entry.getValue()));
+        }
+        return results;
     }
 
     /*

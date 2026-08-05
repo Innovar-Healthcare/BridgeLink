@@ -482,6 +482,17 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
     public RawContent validateScript(@Param("script") @RequestBody(description = "The script body to validate.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String script) throws ClientException;
 
     @POST
+    @Path("/_validateScripts")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Validates multiple JavaScript scripts in one request using the server's Rhino engine, returning the first syntax error (if any) per script. The request is a JSON object mapping a caller-supplied id (opaque to the server) to a script body; the response maps each id to its result. Plain JSON request/response, not the standard serialized envelope.")
+    @ApiResponse(responseCode = "200", description = "The validation results, keyed by the same ids supplied in the request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
+            @ExampleObject(name = "results", summary = "Mixed valid/invalid results", value = "{\"src-filter-0\":{\"valid\":true,\"error\":null},\"dest-2-transformer-1\":{\"valid\":false,\"error\":{\"line\":3,\"column\":9,\"message\":\"syntax error\"}}}") }))
+    @MirthOperation(name = "validateScripts", display = "Validate scripts", type = ExecuteType.ASYNC, auditable = false)
+    public RawContent validateScripts(@Param("request") @RequestBody(description = "A JSON object mapping each caller-supplied id to the script body to validate.", required = true, content = @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
+            @ExampleObject(name = "request", value = "{\"src-filter-0\":\"var x = 1;\",\"channel-deploy\":\"var y = ;\"}") })) String request) throws ClientException;
+
+    @POST
     @Path("/_validateCron")
     @Consumes(MediaType.TEXT_PLAIN)
     @Produces(MediaType.APPLICATION_JSON)
