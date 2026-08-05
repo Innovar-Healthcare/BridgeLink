@@ -21,9 +21,9 @@
     <classpathentry kind="lib" path="../../server/lib/log4j/log4j-api-2.25.3.jar"/>
     <classpathentry kind="lib" path="../../server/lib/log4j/log4j-core-2.25.3.jar"/>
     <classpathentry kind="lib" path="../../server/lib/javax/javax.servlet-api-4.0.1.jar"/>
-    <classpathentry kind="lib" path="../../server/lib/javax/javax.ws.rs-api-2.0.1.jar"/>
+    <classpathentry kind="lib" path="../../server/lib/javax/jakarta.ws.rs-api-2.1.6.jar"/>
     <classpathentry kind="lib" path="../../server/lib/swagger/swagger-annotations-2.0.10.jar"/>
-    <classpathentry kind="lib" path="../../server/lib/jersey/jersey-media-multipart-2.22.1.jar"/>
+    <classpathentry kind="lib" path="../../server/lib/jersey/jersey-media-multipart-2.48.jar"/>
     <classpathentry kind="lib" path="../../client/lib/miglayout-core-4.2.jar"/>
     <classpathentry kind="lib" path="../../client/lib/miglayout-swing-4.2.jar"/>
     <classpathentry kind="lib" path="../../client/lib/jackson-annotations-2.14.3.jar"/>
