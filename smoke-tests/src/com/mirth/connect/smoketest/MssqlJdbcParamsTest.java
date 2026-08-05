@@ -46,6 +46,10 @@ public class MssqlJdbcParamsTest extends SmokeTestBase {
     private static final String ENCRYPTED_ID = "00000034-0000-0000-0000-000000000034";
     private static final String SELFSIGNED_NEGATIVE_ID = "00000035-0000-0000-0000-000000000035";
     private static final String SELFSIGNED_WORKAROUND_ID = "00000036-0000-0000-0000-000000000036";
+    /** Must match {@code <name>} in jdbc-mssql-selfsigned-negative-test.xml (WR-02: channel-scopes
+     *  the mirth.log cert-validation-failure evidence so no OTHER channel's cert failure can
+     *  satisfy this channel's falsifiability proof). */
+    private static final String SELFSIGNED_NEGATIVE_CHANNEL_NAME = "JDBC MSSQL Self-Signed Negative Test";
 
     /** Empty when no external break-then-fix driver is running (ordinary harness run). */
     private static String mssqlHost;
@@ -371,6 +375,14 @@ public class MssqlJdbcParamsTest extends SmokeTestBase {
      * mssql-jdbc's class-specific certificate-validation-failure signature. Never throws on a
      * missing file (pollUntil retries); returns {@code false} instead so the poll loop keeps
      * trying. Mirrors {@code SftpParamsTest#mirthLogContainsAlgoNegoFailure()}.
+     *
+     * <p>WR-02: scoped to lines that also name {@link #SELFSIGNED_NEGATIVE_CHANNEL_NAME} (not a
+     * bare substring match anywhere in the shared log) so a different mssql fixture's own
+     * PKIX/cert-validation failure can never satisfy channel 35's falsifiability proof. This is
+     * safe on a single physical line because DatabaseReceiver logs
+     * {@code Error in channel "<name>": <e.getMessage()>} as one log record whose message
+     * (DatabaseReceiverException(Throwable) wraps the driver exception's own {@code toString()})
+     * carries both the channel name and the cert-validation text together.
      */
     private static boolean mirthLogContainsCertValidationFailure() {
         try {
@@ -382,9 +394,17 @@ public class MssqlJdbcParamsTest extends SmokeTestBase {
                 return false;
             }
             String logContent = new String(Files.readAllBytes(logPath), StandardCharsets.UTF_8);
-            return logContent.contains("could not establish a secure connection")
-                    || logContent.contains("PKIX")
-                    || logContent.contains("Failed to validate the server name");
+            for (String line : logContent.split("\\r?\\n", -1)) {
+                if (!line.contains(SELFSIGNED_NEGATIVE_CHANNEL_NAME)) {
+                    continue;
+                }
+                if (line.contains("could not establish a secure connection")
+                        || line.contains("PKIX")
+                        || line.contains("Failed to validate the server name")) {
+                    return true;
+                }
+            }
+            return false;
         } catch (IOException e) {
             return false;
         }
