@@ -229,6 +229,58 @@ preflight() {
 }
 
 # ---------------------------------------------------------------------------
+# Stage: detect_pr177_presence — phase 18.5 (NET-10) PR #177 (SMTP CC/BCC)
+# presence gate. Inspects the BUILT server-setup distribution assembled by
+# preflight() — NOT server/src (RESEARCH OQ-3) — for the two surfaces PR #177
+# introduces: a 7-argument bcc-carrying ServerSMTPConnection.send(to, cc, bcc,
+# from, subject, body, charset) overload, and a "BCC:" line in
+# SmtpDispatcherProperties.toFormattedString(). Uses `javap -p` to read method
+# arity (mirroring the shadow-precedence technique from Phase 26 plan 01) and
+# `javap -p -c` to read the compiled string-literal constant for the BCC
+# line. PR177_PRESENT is set to the literal "true" ONLY when BOTH signals are
+# found — never a hardcoded constant (T-18.5-05) — so tests standing on PR
+# #177 (D-group JS-API, E3 BCC line) can Assume-skip until it actually lands,
+# while F1/B1/B2/A3/F3 (pre-existing code) ignore the verdict and run now.
+# ---------------------------------------------------------------------------
+PR177_PRESENT="false"
+
+detect_pr177_presence() {
+    hr
+    info "Detecting PR #177 (SMTP CC/BCC) presence in the built server-setup..."
+
+    local smtp_ext_dir="${SERVER_SETUP}/extensions/smtp"
+    local cp="${SERVER_SETUP}/server-lib/mirth-server.jar:${smtp_ext_dir}/smtp-shared.jar:${smtp_ext_dir}/smtp-client.jar:${smtp_ext_dir}/smtp-server.jar"
+
+    local has_bcc_send="false"
+    local has_bcc_line="false"
+
+    # Signal 1: a 7-argument send(...) overload (the bcc-carrying send) on
+    # ServerSMTPConnection. Today's widest overload is 6-arg (no bcc).
+    if javap -p -classpath "${cp}" com.mirth.connect.server.util.ServerSMTPConnection 2>/dev/null \
+            | grep -E '^[[:space:]]*public void send\(' \
+            | awk -F'[()]' '{n=split($2, a, ","); if (n==7) found=1} END {exit !found}'; then
+        has_bcc_send="true"
+    fi
+
+    # Signal 2: the "BCC:" string literal compiled into
+    # SmtpDispatcherProperties.toFormattedString() — disassemble and grep the
+    # ldc instruction's constant-pool comment.
+    if javap -p -c -classpath "${cp}" com.mirth.connect.connectors.smtp.SmtpDispatcherProperties 2>/dev/null \
+            | grep -q 'String BCC:'; then
+        has_bcc_line="true"
+    fi
+
+    if [[ "${has_bcc_send}" == "true" && "${has_bcc_line}" == "true" ]]; then
+        PR177_PRESENT="true"
+    else
+        PR177_PRESENT="false"
+    fi
+    export PR177_PRESENT
+
+    pass "PR #177 presence verdict: PR177_PRESENT=${PR177_PRESENT} (7-arg bcc send=${has_bcc_send}, BCC: line=${has_bcc_line})"
+}
+
+# ---------------------------------------------------------------------------
 # Stage: allocate_ports — bind-port-0 helper, ALL ports up front (Pitfall 8:
 # randomize base per run, avoid TOCTOU by allocating everything before launch)
 # ---------------------------------------------------------------------------
@@ -288,6 +340,12 @@ allocate_ports() {
     # same JUnit-embedded stub instance.
     WEBDAV_PORT=$(free_port)
     WEBDAV_TLS_PORT=$(free_port)
+    # 18.5 (NET-10): SMTP CC/BCC coverage — a dedicated stub/port pair for the new
+    # SmtpCcBccRoundTripTest class (Pitfall 3: never share SMTP_PORT, avoids
+    # cross-channel message bleed) and a second dedicated port reserved for the
+    # PR-#177-gated JS-Writer SMTP fixtures (D1/D2/D3, plan 18.5-03+).
+    SMTP_CCBCC_PORT=$(free_port)
+    SMTP_JS_PORT=$(free_port)
     # SOAP_URL is derived, not a raw port — the Web Service Sender fixture (soap-test.xml)
     # substitutes ${SOAP_URL} directly (D-07: Endpoint.publish stub target).
     SOAP_URL="http://127.0.0.1:${SOAP_PORT}/smoketest"
@@ -296,8 +354,8 @@ allocate_ports() {
         HTTP_STUB_PORT HTTP_CTXPATH_PORT HTTP_LARGE_PORT HTTP_ERROR500_PORT \
         DICOM_LISTENER_PORT DICOM_ROUNDTRIP_SCP_PORT DICOM_COMPRESSED_LISTENER_PORT DICOM_COMPRESSED_SCP_PORT \
         DICOM_TLS_AES_LISTENER_PORT DICOM_TLS_AES_SCP_PORT DICOM_TLS_3DES_LISTENER_PORT DICOM_TLS_3DES_SCP_PORT \
-        WEBDAV_PORT WEBDAV_TLS_PORT
-    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT} DICOM_COMPRESSED_LISTENER=${DICOM_COMPRESSED_LISTENER_PORT} DICOM_COMPRESSED_SCP=${DICOM_COMPRESSED_SCP_PORT} DICOM_TLS_AES_LISTENER=${DICOM_TLS_AES_LISTENER_PORT} DICOM_TLS_AES_SCP=${DICOM_TLS_AES_SCP_PORT} DICOM_TLS_3DES_LISTENER=${DICOM_TLS_3DES_LISTENER_PORT} DICOM_TLS_3DES_SCP=${DICOM_TLS_3DES_SCP_PORT} WEBDAV=${WEBDAV_PORT} WEBDAV_TLS=${WEBDAV_TLS_PORT}"
+        WEBDAV_PORT WEBDAV_TLS_PORT SMTP_CCBCC_PORT SMTP_JS_PORT
+    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT} DICOM_COMPRESSED_LISTENER=${DICOM_COMPRESSED_LISTENER_PORT} DICOM_COMPRESSED_SCP=${DICOM_COMPRESSED_SCP_PORT} DICOM_TLS_AES_LISTENER=${DICOM_TLS_AES_LISTENER_PORT} DICOM_TLS_AES_SCP=${DICOM_TLS_AES_SCP_PORT} DICOM_TLS_3DES_LISTENER=${DICOM_TLS_3DES_LISTENER_PORT} DICOM_TLS_3DES_SCP=${DICOM_TLS_3DES_SCP_PORT} WEBDAV=${WEBDAV_PORT} WEBDAV_TLS=${WEBDAV_TLS_PORT} SMTP_CCBCC=${SMTP_CCBCC_PORT} SMTP_JS=${SMTP_JS_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -837,7 +895,11 @@ fi
 # SQL Server connection details, referenced by jdbc-mssql-encrypted-test.xml (channel 00000034)
 # and its deployScript. Harmless (envsubst no-op) in an ordinary run where the fixture is never
 # added to CHANNEL_FILES.
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_COMPRESSED_LISTENER_PORT} ${DICOM_COMPRESSED_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT} ${WEBDAV_PORT} ${WEBDAV_TLS_PORT} ${MSSQL_HOST} ${MSSQL_PORT} ${MSSQL_DB} ${MSSQL_USER} ${MSSQL_PASSWORD}'
+# 18.5-01 (NET-10) adds SMTP_CCBCC_PORT/SMTP_JS_PORT: the dedicated ports for the SMTP
+# CC/BCC coverage fixtures (smtp-ccbcc-test.xml/smtp-legacy-null-test.xml, plan 18.5-02+)
+# and the PR-#177-gated JS-Writer SMTP fixtures (plan 18.5-03+). Harmless (envsubst no-op)
+# until those fixtures are added to CHANNEL_FILES.
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_COMPRESSED_LISTENER_PORT} ${DICOM_COMPRESSED_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT} ${WEBDAV_PORT} ${WEBDAV_TLS_PORT} ${MSSQL_HOST} ${MSSQL_PORT} ${MSSQL_DB} ${MSSQL_USER} ${MSSQL_PASSWORD} ${SMTP_CCBCC_PORT} ${SMTP_JS_PORT}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -1474,6 +1536,9 @@ run_driver() {
         -DHTTP_LISTENER_PORT="${HTTP_LISTENER_PORT}" \
         -DMLLP_PORT="${MLLP_PORT}" \
         -DSMTP_PORT="${SMTP_PORT}" \
+        -DPR177_PRESENT="${PR177_PRESENT}" \
+        -DSMTP_CCBCC_PORT="${SMTP_CCBCC_PORT}" \
+        -DSMTP_JS_PORT="${SMTP_JS_PORT}" \
         -DSOAP_URL="${SOAP_URL}" \
         -DSCP_PORT="${SCP_PORT}" \
         -DSQLITE_PATH="${SQLITE_PATH}" \
@@ -1685,6 +1750,7 @@ trap cleanup EXIT
 # ---------------------------------------------------------------------------
 configure_db
 preflight
+detect_pr177_presence
 allocate_ports
 allocate_work_dirs
 generate_dicom_tls_keystore
