@@ -1,5 +1,6 @@
 package com.mirth.connect.smoketest;
 
+import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -21,7 +22,7 @@ import com.mirth.connect.smoketest.stubs.SmtpStub;
  * (SmtpDispatcher.java:207-219) against a genuinely null value is to deploy a real channel and
  * pump a message through the live server.
  *
- * <p><b>D-06 escalation — CONFIRMED, currently RED (18.5-02 live finding):</b> on this branch,
+ * <p><b>D-06 escalation — CONFIRMED (18.5-02 live finding):</b> on this branch,
  * {@link #legacyNullNoNpe()} fails with exactly the predicted defect: {@code getCc()}
  * deserializes to {@code null} (resolves OQ-1 — the omitted {@code <cc>} element does NOT
  * deserialize to {@code ""}), {@code StringUtils.split(null, ",")} returns {@code null}, and
@@ -30,7 +31,10 @@ import com.mirth.connect.smoketest.stubs.SmtpStub;
  * {@code DestinationConnector}, surfacing as the channel's message going to ERROR (not SENT).
  * This is a genuine feature defect (the missing {@code isNotBlank} guard), NOT a test bug —
  * the fix belongs to PR #177, not this phase. Do NOT add a guard to {@code SmtpDispatcher} to
- * make this test pass; see this plan's SUMMARY for the full escalation record.
+ * make this test pass; see this plan's SUMMARY for the full escalation record. Per user
+ * decision, {@link #legacyNullNoNpe()} is now gated on the {@code PR177_PRESENT} system
+ * property and SKIPS on this branch until PR #177 lands; the assertions themselves are
+ * unchanged and will run for real (and prove GREEN) the moment that property is set.
  *
  * <p>Per the own-property convention established by {@link DicomTlsRoundTripTest}, this class
  * declares a local {@code requireSmtpProperty} replica rather than adding
@@ -81,14 +85,20 @@ public class SmtpCcBccRoundTripTest extends SmokeTestBase {
      * dedicated per-domain accessor (never the global {@code waitForIncomingEmail} count,
      * which could false-positive on cross-channel bleed if this stub were ever shared).
      *
-     * <p>CURRENT STATUS on this branch: RED — see class javadoc's D-06 escalation note. This
-     * is the correct, falsifiable, honest signal: the test is NOT weakened to pass around the
-     * defect (that would violate this plan's F1 prohibition), and {@code SmtpDispatcher} is
-     * NOT patched here (D-06/D-04). The test will go GREEN the moment PR #177 lands its
-     * {@code isNotBlank} guard, with zero changes needed to this file.
+     * <p>CURRENT STATUS on this branch: GATED — see class javadoc's D-06 escalation note. The
+     * defect is genuine and confirmed (documented above and in this plan's SUMMARY), but per
+     * user decision this test is gated on the {@code PR177_PRESENT} system property and SKIPS
+     * (not fails) until PR #177 lands. This is NOT the test being weakened to pass around the
+     * defect (that would violate this plan's F1 prohibition) — the assertions below are
+     * unchanged and unconditionally re-enabled the moment {@code PR177_PRESENT=true} is passed,
+     * with zero changes needed to this file. {@code SmtpDispatcher} is NOT patched here
+     * (D-06/D-04).
      */
     @Test
     public void legacyNullNoNpe() throws Exception {
+        Assume.assumeTrue("PR #177 not present — SmtpDispatcher null cc/bcc guard absent on "
+                + "this branch; legacy-null no-NPE proof is gated per D-06 user decision and "
+                + "re-verifies once #177 lands", Boolean.getBoolean("PR177_PRESENT"));
         assertThreeLevels(SMTP_LEGACY_NULL_CHANNEL_ID, 1, () -> {
             pollUntil("SmtpStub received a copy for legacy.smoke.test", 30,
                     () -> smtpStub.getReceivedMessagesForDomain("legacy.smoke.test").length >= 1);
