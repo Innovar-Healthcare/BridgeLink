@@ -41,6 +41,18 @@ public class SmtpStub {
     }
 
     /**
+     * Per-domain received-message accessor (18.5-01, NET-10). GreenMail stores one
+     * {@code MimeMessage} copy per envelope recipient, and every copy carries identical
+     * visible headers — the bare {@link #getReceivedMessages()} cannot tell you *which*
+     * recipient a copy was delivered to, so it cannot separate "bcc recipient received a
+     * copy" from "bcc appears in a visible header" (Pitfall 4). Delegates to GreenMail's
+     * own {@code getReceivedMessagesForDomain(String)}.
+     */
+    public MimeMessage[] getReceivedMessagesForDomain(String domain) {
+        return greenMail.getReceivedMessagesForDomain(domain);
+    }
+
+    /**
      * Delegates to GreenMail's own poll-with-timeout wait (plan 18-07's designated L2 API) —
      * blocks up to {@code timeoutMs} for {@code count} messages to arrive, returning as soon
      * as they do (Pitfall 7: no fixed sleeps).
