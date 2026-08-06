@@ -1,7 +1,12 @@
 package com.mirth.connect.smoketest.stubs;
 
+import java.util.List;
+
 import javax.mail.internet.MimeMessage;
 
+import com.icegreen.greenmail.store.MailFolder;
+import com.icegreen.greenmail.store.StoredMessage;
+import com.icegreen.greenmail.user.GreenMailUser;
 import com.icegreen.greenmail.util.GreenMail;
 import com.icegreen.greenmail.util.GreenMailUtil;
 import com.icegreen.greenmail.util.ServerSetup;
@@ -41,15 +46,55 @@ public class SmtpStub {
     }
 
     /**
-     * Per-domain received-message accessor (18.5-01, NET-10). GreenMail stores one
-     * {@code MimeMessage} copy per envelope recipient, and every copy carries identical
-     * visible headers — the bare {@link #getReceivedMessages()} cannot tell you *which*
-     * recipient a copy was delivered to, so it cannot separate "bcc recipient received a
-     * copy" from "bcc appears in a visible header" (Pitfall 4). Delegates to GreenMail's
-     * own {@code getReceivedMessagesForDomain(String)}.
+     * Per-domain received-message accessor (18.5-01, NET-10).
+     *
+     * <p><b>18.5-03 correction — this accessor is header-based, NOT delivery-based, and
+     * therefore CANNOT prove BCC delivery (empirically confirmed, not merely inferred from
+     * reading GreenMail's source):</b> {@code GreenMail.getReceivedMessagesForDomain(domain)}
+     * matches by parsing {@code MimeMessage.getAllRecipients()} — i.e. the STORED MESSAGE'S OWN
+     * To/Cc/Bcc headers — not by which physical mailbox/recipient that particular copy was
+     * actually delivered to. Since a well-behaved SMTP client (this project's
+     * {@code javax.mail} {@code SMTPTransport}, via commons-email) strips the {@code Bcc}
+     * header from every copy before the wire DATA phase (the entire point of BCC), EVERY stored
+     * copy of a message with a BCC recipient has a {@code null} {@code Bcc} header — so
+     * {@code getReceivedMessagesForDomain(bccDomain)} always returns an EMPTY array, even though
+     * GreenMail genuinely delivered a copy to that recipient's own mailbox. Use
+     * {@link #getReceivedMessagesForRecipient(String)} to prove delivery to a specific address
+     * (including BCC addresses); reserve this domain-based accessor for header-content checks
+     * only (e.g. "is this address visible in the Cc header of the copies addressed to this
+     * domain").
      */
     public MimeMessage[] getReceivedMessagesForDomain(String domain) {
         return greenMail.getReceivedMessagesForDomain(domain);
+    }
+
+    /**
+     * Per-recipient (per-mailbox) received-message accessor (18.5-03, NET-10) — the DELIVERY
+     * proof {@link #getReceivedMessagesForDomain(String)} cannot provide for BCC recipients (see
+     * that method's javadoc). GreenMail auto-creates a {@link GreenMailUser} for every distinct
+     * SMTP envelope recipient (RCPT TO) and delivers that recipient's own copy into its own IMAP
+     * mailbox, independent of what headers the copy's content carries — this is genuinely
+     * delivery-target-based, not header-based, empirically confirmed via a standalone probe
+     * against this project's exact {@code commons-email-1.6.0.jar} +
+     * {@code javax.mail-1.6.2.jar} + {@code greenmail-1.6.15.jar} combination (see plan
+     * 18.5-03's SUMMARY) before this method was written.
+     *
+     * @return the messages delivered to {@code emailAddress}'s own mailbox, or an empty array
+     *         if GreenMail has not (yet) auto-created a user for that address (i.e. no message
+     *         has been delivered to it).
+     */
+    public MimeMessage[] getReceivedMessagesForRecipient(String emailAddress) throws Exception {
+        GreenMailUser user = greenMail.getUserManager().getUserByEmail(emailAddress);
+        if (user == null) {
+            return new MimeMessage[0];
+        }
+        MailFolder inbox = greenMail.getManagers().getImapHostManager().getInbox(user);
+        List<StoredMessage> stored = inbox.getMessages();
+        MimeMessage[] result = new MimeMessage[stored.size()];
+        for (int i = 0; i < stored.size(); i++) {
+            result[i] = stored.get(i).getMimeMessage();
+        }
+        return result;
     }
 
     /**
