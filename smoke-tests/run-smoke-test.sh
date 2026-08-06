@@ -764,7 +764,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-compressed-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test file-webdav-test smtp-legacy-null-test smtp-ccbcc-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-compressed-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test file-webdav-test smtp-legacy-null-test smtp-ccbcc-test smtp-js-ccbcc-test)
 # 25.1-03 (SC-3, IRT-1541): the two legacy-algorithm fixtures are appended ONLY when
 # SFTP_LEGACY_PORT is pre-exported by the external break-then-fix driver — an ordinary
 # run-smoke-test.sh invocation has no legacy server to dial, so these must stay out of the
@@ -838,6 +838,7 @@ CHANNEL_IDS=(
     "00000033-0000-0000-0000-000000000033"
     "00000038-0000-0000-0000-000000000038"
     "00000037-0000-0000-0000-000000000037"
+    "00000039-0000-0000-0000-000000000039"
 )
 if [[ -n "${SFTP_LEGACY_PORT:-}" ]]; then
     CHANNEL_IDS+=(
