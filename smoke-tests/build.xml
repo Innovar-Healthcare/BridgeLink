@@ -311,6 +311,21 @@ already-built distribution elsewhere.
             <sysproperty key="WEBDAV_TLS_KEYSTORE" value="${WEBDAV_TLS_KEYSTORE}" />
             <sysproperty key="WEBDAV_TLS_KEYSTORE_PW" value="${WEBDAV_TLS_KEYSTORE_PW}" />
             <sysproperty key="WEBDAV_ROOT_DIR" value="${WEBDAV_ROOT_DIR}" />
+            <!-- 18.5-01/18.5-02 (NET-10): PR177_PRESENT (the run-smoke-test.sh-computed PR
+                 #177 presence verdict, gates plan 18.5-03+'s JS-API tests) and
+                 SMTP_CCBCC_PORT/SMTP_JS_PORT (dedicated SMTP CC/BCC coverage ports —
+                 SmtpCcBccRoundTripTest's own requireSmtpProperty convention, mirroring
+                 DicomTlsRoundTripTest). run-smoke-test.sh's run_driver() already forwards
+                 these three as -D ant properties (Plan 01), but the forked JUnit JVM
+                 (forkmode="once") only sees a system property when an explicit
+                 <sysproperty> entry names it here — an ant -D on the command line does NOT
+                 automatically propagate into a fork. Rule 3 fix (18.5-02): these three
+                 entries were missing, which made SmtpCcBccRoundTripTest's @BeforeClass fail
+                 fast with "Required system property 'SMTP_CCBCC_PORT' not set" even though
+                 the port was correctly allocated/exported/forwarded one layer up. -->
+            <sysproperty key="PR177_PRESENT" value="${PR177_PRESENT}" />
+            <sysproperty key="SMTP_CCBCC_PORT" value="${SMTP_CCBCC_PORT}" />
+            <sysproperty key="SMTP_JS_PORT" value="${SMTP_JS_PORT}" />
             <!-- 22-05 (CVE-06/D-07): webdavsSecureSchemeMapping() directly instantiates
                  WebDavConnection against WebDavServerStub's self-signed HTTPS listener, in
                  THIS forked driver JVM only (forkmode="once" — never the deployed Mirth
