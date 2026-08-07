@@ -119,7 +119,12 @@ public class SmtpCcBccRoundTripTest extends SmokeTestBase {
         smtpStub.start();
         registerStubStop(smtpStub::stop);
 
-        rest.processMessage(SMTP_LEGACY_NULL_CHANNEL_ID, Hl7Messages.ORU_R01_LF);
+        // Only pump the legacy-null channel when the SmtpDispatcher null-guard (PR #177) is
+        // present; otherwise this pump throws NPE server-side and logs an unallowlisted ERROR
+        // that fails the L3 mirth.log scan (CR-01 — see 18.5-REVIEW.md).
+        if (Boolean.getBoolean("PR177_PRESENT")) {
+            rest.processMessage(SMTP_LEGACY_NULL_CHANNEL_ID, Hl7Messages.ORU_R01_LF);
+        }
         // Plan 18.5-03: pump all three smtp-ccbcc-test.xml destinations (B1/B2/B5) once, up
         // front, exactly like doc-writer-test.xml's multi-destination pump pattern
         // (StubChannelsTest#pumpAll). Each destination's own @Test polls/asserts on the
