@@ -211,6 +211,15 @@ already-built distribution elsewhere.
     <property name="WEBDAV_TLS_KEYSTORE" value="" />
     <property name="WEBDAV_TLS_KEYSTORE_PW" value="" />
     <property name="WEBDAV_ROOT_DIR" value="" />
+    <!-- WR-01 fix (18.5-REVIEW.md): empty-string defaults for the three new SMTP CC/BCC
+         -D names, matching the convention above. Without these, a bare `ant test-run`
+         (no -D from run-smoke-test.sh) leaves ${PR177_PRESENT}/${SMTP_CCBCC_PORT}/
+         ${SMTP_JS_PORT} as literal unresolved strings, so requireSmtpProperty()'s
+         null/empty check never fires and Integer.parseInt(...) throws a confusing
+         NumberFormatException instead of the intended clean skip message. -->
+    <property name="PR177_PRESENT" value="" />
+    <property name="SMTP_CCBCC_PORT" value="" />
+    <property name="SMTP_JS_PORT" value="" />
 
     <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
         <mkdir dir="${junit.reports}" />
