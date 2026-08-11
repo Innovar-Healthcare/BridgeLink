@@ -17,13 +17,16 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.servlet.http.HttpServletRequest;
@@ -60,6 +63,7 @@ import com.mirth.connect.connectors.vm.VmReceiverProperties;
 import com.mirth.connect.connectors.ws.WebServiceDispatcherProperties;
 import com.mirth.connect.connectors.ws.WebServiceReceiverProperties;
 import com.mirth.connect.donkey.model.channel.ConnectorProperties;
+import com.mirth.connect.donkey.model.channel.CronProperty;
 import com.mirth.connect.donkey.model.channel.PollConnectorProperties;
 import com.mirth.connect.donkey.model.channel.PollConnectorPropertiesAdvanced;
 import com.mirth.connect.donkey.model.channel.PollingType;
@@ -71,7 +75,7 @@ import com.mirth.connect.server.controllers.ExtensionController;
 
 /**
  * Covers {@code GET /connectors/{type}/defaults} (IRT-1516) and
- * {@code POST /connectors/poll/_nextFireTime} (IRT-1518).
+ * {@code POST /connectors/poll/_nextFireTime} (IRT-1518, IRT-1759).
  */
 public class ConnectorServletTest extends ServletTestBase {
 
@@ -307,7 +311,7 @@ public class ConnectorServletTest extends ServletTestBase {
         assertFalse("TCP Listener: KNOWN GAP (IRT-1516) appears to have closed - responseConnectorPluginProperties now present", listenerXml.contains("responseConnectorPluginProperties"));
     }
 
-    // ========== nextFireTime (IRT-1518) ==========
+    // ========== nextFireTime (IRT-1518, IRT-1759) ==========
 
     @Test(expected = MirthApiException.class)
     public void testNextFireTimeBlankBody() {
@@ -350,6 +354,43 @@ public class ConnectorServletTest extends ServletTestBase {
         String xml = ObjectXMLSerializer.getInstance().serialize(properties);
 
         servlet.nextFireTime(xml);
+    }
+
+    @Test
+    public void testNextFireTimeQuartzInvalidCronRejectedAs400() throws Exception {
+        // IRT-1759: a CRON expression that is structurally invalid to Quartz - here specifying BOTH
+        // a day-of-month (1) AND a day-of-week (1) - must degrade to a 400 Bad Request, mirroring
+        // _validateCron, rather than escaping the unguarded CronScheduleBuilder.cronSchedule(...)
+        // call in configureJob as a RuntimeException and surfacing to the client as a 500.
+        PollConnectorProperties properties = new PollConnectorProperties();
+        properties.setPollingType(PollingType.CRON);
+        List<CronProperty> cronJobs = new ArrayList<CronProperty>();
+        cronJobs.add(new CronProperty("both DOW and DOM", "0 0 12 1 * 1"));
+        properties.setCronJobs(cronJobs);
+        String xml = ObjectXMLSerializer.getInstance().serialize(properties);
+
+        try {
+            servlet.nextFireTime(xml);
+            fail("expected a 400 Bad Request for a Quartz-invalid cron expression");
+        } catch (MirthApiException e) {
+            assertEquals("Quartz-invalid cron must be a 400, not a 500", 400, e.getResponse().getStatus());
+        }
+    }
+
+    @Test
+    public void testNextFireTimeValidCronSchedule() throws Exception {
+        PollConnectorProperties properties = new PollConnectorProperties();
+        properties.setPollingType(PollingType.CRON);
+        List<CronProperty> cronJobs = new ArrayList<CronProperty>();
+        cronJobs.add(new CronProperty("noon daily", "0 0 12 * * ?"));
+        properties.setCronJobs(cronJobs);
+        String xml = ObjectXMLSerializer.getInstance().serialize(properties);
+
+        Response response = servlet.nextFireTime(xml);
+        assertEquals(200, response.getStatus());
+        RawContent body = (RawContent) response.getEntity();
+        assertNotNull(body);
+        assertTrue(body.getContent().contains("nextFireTime"));
     }
 
     /**
