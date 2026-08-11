@@ -1,71 +1,74 @@
-MIRTH CONNECT README
+BRIDGELINK README
 
 Contents
 ==================================================
 
 1. General Information
 2. Installation and Upgrade
-3. Starting Mirth Connect
-4. Running Mirth Connect in Java 9 or greater
+3. Starting BridgeLink
+4. Java Requirements
 5. More Information
 
 1. General Information
 ==================================================
 
-Mirth Connect is an open source health care integration engine. By supporting numerous standards (like HL7, EDI/X12, XML, NCPDP, DICOM, and Delimited Text) and protocols (like TCP/LLP, HTTP, JDBC, and File/FTP/SFTP), Mirth Connect allows for the filtering, transformation, and routing of messages between disparate systems to allow them to share data.
+BridgeLink is an open source health care integration platform. By supporting numerous standards (like HL7, FHIR, EDI/X12, XML, JSON, NCPDP, DICOM, and Delimited Text) and protocols (like TCP/LLP, HTTP, JDBC, and File/FTP/SFTP), BridgeLink allows for the filtering, transformation, and routing of messages between disparate systems to allow them to share data.
+
+BridgeLink is a fork of Mirth(R) Connect by NextGen Healthcare, modified and maintained independently by Innovar Healthcare. See NOTICE.txt in this folder.
 
 
 2. Installation and Upgrade
 ==================================================
 
-Mirth Connect installers are available for individual operating systems (EXE for Windows, RPM and SH for Linux, and DMG for Mac OS X). Pre-packaged distributions are also available for individual operating systems (ZIP for Windows, TAR.GZ for Linux, and TAR.GZ for Mac OS X). The installer allows you to automatically upgrade previous Mirth Connect installations (starting with version 1.5).
+BridgeLink installers are available for individual operating systems (EXE for Windows, RPM and SH for Linux, and DMG for macOS). Pre-packaged distributions are also available for individual operating systems (ZIP for Windows, TAR.GZ for Linux, and TAR.GZ for macOS). The installer allows you to automatically upgrade previous BridgeLink installations.
 
-Mirth Connect installers also come with the option to install and start a service which will run the background. You also have the option of installing and running the Mirth Connect Server Manager, which allows you to start and stop the service on some operating systems, change Mirth Connect properties and backend database settings, and view the server logs.
+BridgeLink installers also come with the option to install and start a service which will run in the background. You also have the option of installing and running the BridgeLink Server Manager, which allows you to start and stop the service on some operating systems, change BridgeLink properties and backend database settings, and view the server logs.
 
-An optional Mirth Connect Command Line Interface can be installed, allowing you to connect to a running Mirth Connect Server using a command line. This tool is useful for performing or scripting server tasks without opening the Mirth Connect Administrator.
+An optional BridgeLink Command Line Interface can be installed, allowing you to connect to a running BridgeLink Server using a command line. This tool is useful for performing or scripting server tasks without opening an administration client.
 
-After the installation, the Mirth Connect directory layout will look as follows:
+After the installation, the BridgeLink directory layout will look as follows:
 
-/appdata/mirthdb: The embedded database (Do NOT delete if you specify Derby as your database). This will be created when the Mirth Connect Server is started. The path for appdata is defined by the dir.appdata property in mirth.properties.
-/cli-lib: Libraries for the Mirth Connect Command Line Interface (if installed)
-/client-lib: Libraries for the Mirth Connect Administrator
+/appdata/mirthdb: The embedded database (Do NOT delete if you specify Derby as your database). This will be created when the BridgeLink Server is started. The path for appdata is defined by the dir.appdata property in mirth.properties.
+/cli-lib: Libraries for the BridgeLink Command Line Interface (if installed)
+/client-lib: Libraries for the desktop BridgeLink Administrator
 /conf: Configuration files
-/custom-lib: Place your custom user libraries here. These libraries will be loaded on the Mirth Connect Server classpath when it is started, making them accessible to channel scripts.
-/docs: This document and a copy of the Mirth Connect license
-/docs/javadocs: Generated javadocs for the installed version of Mirth Connect. These documents are also available when the server is running at http://[server address]:8080/javadocs/ (i.e. http://localhost:8080/javadocs/).
+/custom-lib: Place your custom user libraries here. These libraries will be loaded on the BridgeLink Server classpath when it is started, making them accessible to channel scripts.
+/docs: This document, a copy of the BridgeLink license, and third-party license information
+/docs/javadocs: Generated javadocs for the installed version of BridgeLink. These documents are also available when the server is running at http://[server address]:8080/javadocs/ (i.e. http://localhost:8080/javadocs/).
 /extensions: Libraries and meta data for Plug-ins and Connectors
-/logs: Default location for logs generated by Mirth Connect and its sub-components
-/manager-lib: Libraries for the Mirth Connect Server Manager (if installed)
+/logs: Default location for logs generated by BridgeLink and its sub-components
+/manager-lib: Libraries for the BridgeLink Server Manager (if installed)
 /public_html: Directory exposed by the embedded web server
-/server-lib: Mirth Connect server libraries
+/server-launcher-lib: Libraries in this directory will be loaded into the main BridgeLink Server thread context classloader upon startup. This is required if you are using any custom log4j appender libraries.
+/server-lib: BridgeLink server libraries
 /webapps: Directory exposed by the embedded web server to host webapps
 
 
-3. Starting Mirth Connect
+3. Starting BridgeLink
 ==================================================
 
-Once Mirth Connect has been installed, there are several ways to connect to launch the Mirth Connect Administrator. On a Windows installation, there is a Mirth Connect Administrator item in the Start Menu which launches the application directly.
+BridgeLink WebAdmin is the recommended way to administer BridgeLink. It is a browser-based administration console installed alongside the server, with no Java and no client install on the workstation. Open https://[server address]:8444 in a browser once it is installed. WebAdmin requires BridgeLink server 26.3.0 or later and is distributed separately; see https://www.bridgelink.net/download/.
 
-If the option is not available, you can connect to the Mirth Connect Administrator launch page which by default should be available at http://[server address]:8080 (i.e. http://localhost:8080). Clicking the Launch Mirth Connect Administrator button will connect you to the server which will be listening on https://[server address]:8443 (i.e. https://localhost:8443). If running a new installation, the default username and password for the login screen is admin and admin. This should be changed immediately for security purposes.
+The desktop BridgeLink Administrator is still included. Its launch page is available by default at http://[server address]:8080 (i.e. http://localhost:8080). Clicking the Launch BridgeLink Administrator button will connect you to the server, which will be listening on https://[server address]:8443 (i.e. https://localhost:8443).
 
-If you are launching the administrator for the first time, you will notice that the libraries for the Mirth Connect Administrator will be loaded. This feature allows you run the Administrator from any remote Mirth Connect server without having to download and install a separate client.
+If running a new installation, the default username and password for the login screen is admin and admin. This should be changed immediately for security purposes.
 
-You may also notice a security warning when starting the administrator (dialog box depends on browser being used). This is normal and you should click Run to continue launching the administrator.
+By default BridgeLink creates a self-signed certificate for its web server, so browsers will show a security warning until you replace the certificate with your own.
 
 
-4. Running Mirth Connect in Java 9 or greater
+4. Java Requirements
 ==================================================
 
-When running Mirth Connect in Java 9+, there are separate JVM options that need to be set.
+BridgeLink 26.x requires Java 17 or later. Because of Oracle's Java licensing changes, we recommend a free OpenJDK distribution such as Eclipse Temurin, Azul Zulu, or Amazon Corretto.
 
-As of version 4.4, these options will be automatically included in the Java command string as needed, when running mcserver, mcservice, or mccommand.
+Java 9 and later require separate JVM options to be set. These options are included in the Java command string automatically when running blserver, blservice, or blcommand.
 
-If you are running Mirth Connect manually with your own Java command string, and you are using Java 9+, then make sure to include the options from /docs/mcservice-java9+.vmoptions.
+If you are running BridgeLink manually with your own Java command string, then make sure to include the options from /docs/mcservice-java9+.vmoptions.
 
 
 5. More Information
 ==================================================
 
-You can find the latest Mirth Connect release information, documentation, and more at: https://www.nextgen.com/products-and-services/integration-engine
+You can find the latest BridgeLink release information, documentation, and more at: https://www.bridgelink.net
 
-Follow the Mirth Connect Open Source Community at: https://github.com/nextgenhealthcare/connect
+Follow the BridgeLink open source community at: https://github.com/Innovar-Healthcare/BridgeLink

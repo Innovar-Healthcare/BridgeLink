@@ -1,55 +1,73 @@
-# BridgeLink - an interop Open Source Community
+# BridgeLink
 
-1. [Useful Links](#useful-links)
-2. [General Information](#general-information)
-3. [Installation and Upgrade](#installation-and-upgrade)
-4. [Starting BridgeLink](#4-starting-bridgelink)
-5. [Running BridgeLink in Java 9 or greater](#java9)
-6. [Java Licensing](#java-licensing)
-7. [License](#license)
+[![GitHub release](https://img.shields.io/github/v/release/Innovar-Healthcare/BridgeLink)](https://github.com/Innovar-Healthcare/BridgeLink/releases)
+[![License: MPL 2.0](https://img.shields.io/badge/license-MPL%202.0-blue)](https://www.mozilla.org/en-US/MPL/2.0/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/innovarhealthcare/bridgelink)](https://hub.docker.com/r/innovarhealthcare/bridgelink)
 
-------------
+BridgeLink® is the open source integration platform for healthcare, connecting the systems that speak HL7, FHIR, X12, XML, JSON, and more. BridgeLink began as a fork of Mirth® Connect 4.5.2, and since our first release in March 2025 our team at [Innovar Healthcare](https://www.innovarhealthcare.com) has modernized and hardened the platform, adding many brand new features such as:
 
-<a name="useful-links"></a>
-## 1. Useful Links
-- [Downloads](https://bridgelink-downloads.s3.us-east-2.amazonaws.com/bridgelink-misc/bridgelink-downloads.html) 
-- [User Guide]()
-- [Slack Channel](https://bridgelink01.slack.com/)
+- WebAdmin, our new web-based administrator client that replaces the 20-year-old Java client, no client install required
+- Lookup Manager, built-in lookup table management for translating values as messages move between systems
+- Version History, integrated Git version control so you never lose track of a channel change
+- Message statistics and live channel monitoring dashboards
 
-------------
+BridgeLink 26.x requires Java 17 or later.
 
-<a name="general-information"></a>
-## 2. General Information
-##### About BridgeLink
-Like an interpreter who translates foreign languages into the one you understand, BridgeLink translates message standards into the one your system understands. Whenever a &quot;foreign&quot; system sends you a message, BridgeLink&apos;s integration capabilities expedite the following:
-- Filtering &mdash; BridgeLink reads message parameters and passes the message to or stops it on its way to the transformation stage.
-- Transformation &mdash; BridgeLink converts the incoming message standard to another standard (e.g., HL7 to XML).
-- Extraction &mdash; BridgeLink can &quot;pull&quot; data from and &quot;push&quot; data to a database.
-- Routing &mdash; BridgeLink makes sure messages arrive at their assigned destinations.
+Like an interpreter who translates foreign languages into the one you understand, BridgeLink translates message standards into the one your system understands. Whenever a "foreign" system sends you a message, BridgeLink's integration capabilities expedite the following:
 
-Users manage and develop channels (message pathways) using the interface known as the Administrator:
+- Filtering: BridgeLink reads message parameters and passes the message to or stops it on its way to the transformation stage.
+- Transformation: BridgeLink converts the incoming message standard to another standard (e.g., HL7 to XML).
+- Extraction: BridgeLink can "pull" data from and "push" data to a database.
+- Routing: BridgeLink makes sure messages arrive at their assigned destinations.
 
+Users manage and develop channels (message pathways) in the browser with BridgeLink WebAdmin.
 
-------------
+![BridgeLink WebAdmin dashboard, showing live channel status, message statistics, and the connection log](docs/images/webadmin-dashboard.png)
 
-<a name="installation-and-upgrade"></a>
-## 3. Installation and Upgrade
-BridgeLink installers are available for individual operating systems (.exe for Windows, .sh for Linux, and .dmg for Mac OS X). Pre-packaged distributions are also available for individual operating systems (ZIP for Windows, tar.gz for Linux, and tar.gz for Mac OS X). 
+## Useful Links
 
-BridgeLink installers also come with the option to install and start a service that will run in the background. You also have the option of installing and running the BridgeLink Server Manager, which allows you to start and stop the service on some operating systems, change BridgeLink properties and backend database settings, and view the server logs.
+- [Website](https://www.bridgelink.net)
+- [Downloads](https://www.bridgelink.net/download/)
+- [Releases and changelog](https://github.com/Innovar-Healthcare/BridgeLink/releases)
+- [WebAdmin repository](https://github.com/Innovar-Healthcare/BridgeLink-WebAdmin)
+- [Docker images and Helm chart](https://github.com/Innovar-Healthcare/bridgelink-container)
+- [WebAdmin Setup Guide (PDF)](https://innovar-userdocuments.s3.us-east-2.amazonaws.com/user_guide_doc/Plugins-WebAdmin/BridgeLink+WebAdmin+-+Setup+Guide.pdf)
+- [Community Slack](https://bridgelink01.slack.com/join/shared_invite/zt-3sctbm9pv-fFUV4xBVT8QCtmUxgsq06w)
+- [GitHub Discussions](https://github.com/Innovar-Healthcare/BridgeLink/discussions)
+- [Reddit r/bridgelink](https://www.reddit.com/r/bridgelink/)
 
-An optional Command Line Interface can be installed, allowing you to connect to a running BridgeLink Server using a command line. This tool is useful for performing or scripting server tasks without opening the BridgeLink Administrator.
+## BridgeLink WebAdmin
 
-The BridgeLink Administrator Launcher can also be installed, allowing you to manage connections to multiple BridgeLink servers and configure options such as Java runtime, max heap size, and security protocols.
+BridgeLink WebAdmin is the browser-based administration interface for BridgeLink. It runs as a small server process alongside your BridgeLink server and lets you manage channels, messages, users, and settings from any modern browser, with no Java and no client install on the workstation.
+
+- Requires BridgeLink server 26.3.0 or later
+- Listens on HTTPS port 8444 by default (the BridgeLink server API stays on 8443)
+- Available as Windows and Linux installers and as a Docker image ([innovarhealthcare/bridgelink-webadmin](https://hub.docker.com/r/innovarhealthcare/bridgelink-webadmin))
+
+WebAdmin is developed in the separate [BridgeLink-WebAdmin](https://github.com/Innovar-Healthcare/BridgeLink-WebAdmin) repository under the Business Source License 1.1, where you will also find more screenshots. See the [WebAdmin Setup Guide](https://innovar-userdocuments.s3.us-east-2.amazonaws.com/user_guide_doc/Plugins-WebAdmin/BridgeLink+WebAdmin+-+Setup+Guide.pdf) for installation and configuration.
+
+## Installation and Upgrade
+
+BridgeLink installers are available for individual operating systems (.exe for Windows, .sh for Linux, and .dmg for macOS). Pre-packaged distributions are also available (ZIP for Windows, tar.gz for Linux and macOS). Get them from the [download page](https://www.bridgelink.net/download/).
+
+BridgeLink is also available on Docker Hub for amd64 and arm64:
+
+```
+docker pull innovarhealthcare/bridgelink
+```
+
+The Dockerfiles, Docker Compose examples, and Helm chart live in the [bridgelink-container](https://github.com/Innovar-Healthcare/bridgelink-container) repository, which also publishes hardened (`-dhi`) and WebAdmin-only (`-slim`) image variants.
+
+The installers can optionally install and start a background service, along with two companion tools: the BridgeLink Server Manager (start and stop the service, change BridgeLink properties and backend database settings, and view server logs) and an optional Command Line Interface for performing or scripting server tasks.
 
 After the installation, the BridgeLink directory layout will look as follows:
 
 - /appdata/mirthdb: The embedded database (Do NOT delete if you specify Derby as your database). This will be created when the BridgeLink Server is started. The path for appdata is defined by the dir.appdata property in mirth.properties.
 - /cli-lib: Libraries for the Command Line Interface (if installed)
-- /client-lib: Libraries for the BridgeLink Administrator
+- /client-lib: Client libraries
 - /conf: Configuration files
 - /custom-lib: Place your custom user libraries here to be used by the default library resource.
-- /docs: This document and a copy of the BridgeLink license
+- /docs: Installed documentation, a copy of the BridgeLink license, and third-party license information
 - /docs/javadocs: Generated javadocs for the installed version of BridgeLink. These documents are also available when the server is running at `http://[server address]:8080/javadocs/` (i.e. `http://localhost:8080/javadocs/`).
 - /extensions: Libraries and meta data for Plug-ins and Connectors
 - /logs: Default location for logs generated by BridgeLink and its sub-components
@@ -59,44 +77,28 @@ After the installation, the BridgeLink directory layout will look as follows:
 - /server-lib: BridgeLink server libraries
 - /webapps: Directory exposed by the embedded web server to host webapps
 
-------------
+## Starting BridgeLink
 
-<a name="starting-bridgeLink"></a>
-## 4. Starting BridgeLink
-Once BridgeLink has been installed, there are several ways to connect to launch the BridgeLink Administrator. On a Windows installation, there is a BridgeLink Administrator item in the Start Menu which launches the application directly.
+Administer BridgeLink through BridgeLink WebAdmin: install it alongside your server and open `https://[server address]:8444` in a browser. The BridgeLink server API listens on `https://[server address]:8443`.
 
-If the option is not available, you can connect to the BridgeLink Administrator launch page which by default should be available at `http://[server address]:8080` (i.e. `http://localhost:8080`). It is recommended to use the Administrator Launcher to start the Administrator, which can be downloaded by clicking on the Download Administrator Launcher button. Clicking the Launch BridgeLink Administrator button will download the Java Web Start file for your server. Opening the file with the Administrator Launcher connects you to the server, which will be listening on `https://[server address]:8443` (i.e. `https://localhost:8443`). 
+On a new installation, the default username and password is admin / admin. Change it immediately.
 
-If running a new installation, the default username and password for the login screen is admin and admin. This should be changed immediately for security purposes.
+By default BridgeLink creates a self-signed certificate for its web server, so browsers will show a security warning until you replace the certificate with your own.
 
-If you are launching the administrator for the first time, you will notice that the libraries for the BridgeLink Administrator will be loaded. This feature allows you run the Administrator from any remote BridgeLink server without having to download and install a separate client.
+## Java Requirements
 
-You may also notice a security warning when starting the administrator (dialog box depends on browser being used). This is because by default BridgeLink creates a self-signed certificate for its web server. For now click Run to continue launching the administrator, but check out the User Guide for instructions on how to replace the certificate.
+BridgeLink 26.x requires Java 17 or later. Because of Oracle's Java licensing changes, we recommend a free OpenJDK distribution such as Eclipse Temurin, Azul Zulu, or Amazon Corretto.
 
-------------
+The Java module options needed on modern JVMs are applied automatically by the bundled launch scripts and service. If you run the server with your own Java command string, include the options from `docs/mcservice-java9+.vmoptions`.
 
-<a name="java9"></a>
-## 5. Running BridgeLink in Java 9 or greater
-In order to run BridgeLink in Java 9 or greater, copy the options from `docs/blservice-java9+.vmoptions` and append them to either blserver.vmoptions or blservice.vmoptions, depending on your deployment. Then restart BridgeLink.
+## Plugins, Support, and Training
 
-To run the Command Line Interface, create a new file named blcommand.vmoptions in the BridgeLink root directory. Copy all of the options from `docs/blservice-java9+.vmoptions` into blcommand.vmoptions and save before launching the Command Line Interface.
+Innovar Healthcare offers official plugins (SSO with OIDC or Amazon Cognito, advanced access control with MFA, SSL certificate management, SIEM event logging, and an AI Assistant), annual support plans with SLAs, the BridgeLink Essentials certification course, and professional services including migrations off legacy Mirth® Connect and custom development. See [pricing](https://www.bridgelink.net/pricing/) or contact [sales@innovarhealthcare.com](mailto:sales@innovarhealthcare.com).
 
-------------
+## License
 
-<a name="java-licensing"></a>
-## 6. Java Licensing
-In 2019, Oracle made significant changes to the licensing model for official Oracle Java releases. As a result, BridgeLink supports OpenJDK along with various third-party distributions that comply with the new licensing structure. These supported distributions include:
+BridgeLink is released under the [Mozilla Public License version 2.0](https://www.mozilla.org/en-US/MPL/2.0/ "Mozilla Public License version 2.0"). You can find a copy of the license in [LICENSE](LICENSE), and copyright and attribution information in [NOTICE](NOTICE). All licensing information regarding third-party libraries is located in the `server/docs/thirdparty` folder.
 
-- AdoptOpenJDK
-- Azul Zulu
-- Amazon Corretto
+BridgeLink WebAdmin is licensed separately under the Business Source License 1.1; see the [BridgeLink-WebAdmin](https://github.com/Innovar-Healthcare/BridgeLink-WebAdmin) repository.
 
-These distributions offer open-source, free-to-use alternatives to Oracle JDK, ensuring compatibility and compliance with the latest licensing requirements.
-
-------------
-
-<a name="license"></a>
-## 7. License
-BridgeLink is released under the [Mozilla Public License version 2.0](https://www.mozilla.org/en-US/MPL/2.0/ "Mozilla Public License version 2.0"). You can find a copy of the license in `server/docs/LICENSE.txt`.
-
-All licensing information regarding third-party libraries is located in the `server/docs/thirdparty` folder.
+Mirth® Connect is a registered trademark of NXGN Management, LLC. Innovar Healthcare is not affiliated with NXGN Management, LLC.

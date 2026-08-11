@@ -2,7 +2,7 @@
  
 ## Supported Versions
  
-We support the current minor version in regards to security updates. Versions are formatted \<major>.\<minor>.\<patch>. So, for example 4.5.3 is the current version; any security updates would be made in 4.5.4 or 4.6.0.
+We support the current minor version in regards to security updates. Versions are formatted \<major>.\<minor>.\<patch>. So, for example, if 26.6.0 is the current version, any security updates would be made in 26.6.1 or a later release.
  
 ## Reporting a Vulnerability
  

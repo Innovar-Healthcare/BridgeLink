@@ -1,0 +1,21 @@
+BridgeLink
+https://www.bridgelink.net
+
+Copyright (c) 2025 Innovar Healthcare. All rights reserved.
+
+BridgeLink is published under the terms of the Mozilla Public License,
+version 2.0. A copy of the license is in the LICENSE file at the root of
+this repository, and in docs/LICENSE.txt in an installed BridgeLink server.
+
+This project is a fork of Mirth Connect by NextGen Healthcare. It has been
+modified and is maintained independently by Innovar Healthcare.
+
+Copyright (c) NextGen Healthcare. All rights reserved.
+https://www.nextgen.com/products-and-services/integration-engine
+
+Mirth(R) Connect is a registered trademark of NXGN Management, LLC.
+Innovar Healthcare is not affiliated with NXGN Management, LLC.
+
+Licensing information for third-party libraries is in the
+server/docs/thirdparty folder of this repository, and in docs/thirdparty
+in an installed BridgeLink server.
