@@ -14,12 +14,18 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.io.StringReader;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+
+import javax.swing.text.Document;
+import javax.swing.text.rtf.RTFEditorKit;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -102,6 +108,10 @@ public class DocRenderSeamTest {
         invokePrivate(dispatcher, "createPDF", new Class<?>[] { Reader.class, OutputStream.class, DocumentDispatcherProperties.class }, new Object[] { reader, outputStream, props });
     }
 
+    private void invokeCreateRtf(DocumentDispatcher dispatcher, InputStream inputStream, OutputStream outputStream, DocumentDispatcherProperties props) throws Exception {
+        invokePrivate(dispatcher, "createRTF", new Class<?>[] { InputStream.class, OutputStream.class, DocumentDispatcherProperties.class }, new Object[] { inputStream, outputStream, props });
+    }
+
     // ------------------------------------------------------------------------------------------
     // Tracer: PDF render seam -- end-to-end content-faithful PDF assertion (SC-1, D-01, CVE-07)
     // ------------------------------------------------------------------------------------------
@@ -121,6 +131,58 @@ public class DocRenderSeamTest {
                 String pdfText = new PDFTextStripper().getText(pdf);
                 assertTrue("PDF text must contain the fixture token", pdfText.contains(EXPECTED_TOKEN));
             }
+        });
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // RTF render seam -- content-faithful RTF assertion, true OpenPDF RtfWriter2 leg
+    // (SC-2, D-01, CVE-07)
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    public void testRtfRenderContentFaithful() throws Exception {
+        withDispatcher(dispatcher -> {
+            DocumentDispatcherProperties props = new DocumentDispatcherProperties();
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            invokeCreateRtf(dispatcher, new ByteArrayInputStream(HTML.getBytes()), out, props);
+
+            byte[] rtfBytes = out.toByteArray();
+            assertTrue("RTF must start with the {\\rtf control header",
+                    new String(rtfBytes, StandardCharsets.US_ASCII).startsWith("{\\rtf"));
+
+            RTFEditorKit rtfKit = new RTFEditorKit();
+            Document rtfDoc = rtfKit.createDefaultDocument();
+            try (ByteArrayInputStream rtfIn = new ByteArrayInputStream(rtfBytes)) {
+                rtfKit.read(rtfIn, rtfDoc, 0);
+            }
+            String rtfText = rtfDoc.getText(0, rtfDoc.getLength());
+            assertTrue("RTF text must contain the fixture token", rtfText.contains(EXPECTED_TOKEN));
+        });
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Empty-input structural-validity edge: both render seams must not throw on an empty-body
+    // document, and each must produce a structurally valid document (no token/page-count pin)
+    // (edge CVE-07/empty)
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    public void testEmptyTemplateRendersWithoutThrowing() throws Exception {
+        withDispatcher(dispatcher -> {
+            DocumentDispatcherProperties props = new DocumentDispatcherProperties();
+
+            ByteArrayOutputStream pdfOut = new ByteArrayOutputStream();
+            invokeCreatePdf(dispatcher, new StringReader(EMPTY_HTML), pdfOut, props);
+            // Structural validity only -- no token, no page-count pin (empty body must not make
+            // this edge brittle). PDDocument.load throws on structurally invalid PDF bytes, so a
+            // clean load + close is the whole assertion.
+            PDDocument.load(pdfOut.toByteArray()).close();
+
+            ByteArrayOutputStream rtfOut = new ByteArrayOutputStream();
+            invokeCreateRtf(dispatcher, new ByteArrayInputStream(EMPTY_HTML.getBytes()), rtfOut, props);
+            assertTrue("empty-input RTF must start with the {\\rtf control header",
+                    new String(rtfOut.toByteArray(), StandardCharsets.US_ASCII).startsWith("{\\rtf"));
         });
     }
 }
