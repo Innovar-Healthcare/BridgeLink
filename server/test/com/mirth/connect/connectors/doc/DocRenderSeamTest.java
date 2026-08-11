@@ -10,6 +10,7 @@
 package com.mirth.connect.connectors.doc;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
@@ -28,6 +29,7 @@ import javax.swing.text.Document;
 import javax.swing.text.rtf.RTFEditorKit;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.Test;
 
@@ -112,6 +114,10 @@ public class DocRenderSeamTest {
         invokePrivate(dispatcher, "createRTF", new Class<?>[] { InputStream.class, OutputStream.class, DocumentDispatcherProperties.class }, new Object[] { inputStream, outputStream, props });
     }
 
+    private void invokeEncryptPdf(DocumentDispatcher dispatcher, InputStream inputStream, OutputStream outputStream, String password) throws Exception {
+        invokePrivate(dispatcher, "encryptPDF", new Class<?>[] { InputStream.class, OutputStream.class, String.class }, new Object[] { inputStream, outputStream, password });
+    }
+
     // ------------------------------------------------------------------------------------------
     // Tracer: PDF render seam -- end-to-end content-faithful PDF assertion (SC-1, D-01, CVE-07)
     // ------------------------------------------------------------------------------------------
@@ -183,6 +189,48 @@ public class DocRenderSeamTest {
             invokeCreateRtf(dispatcher, new ByteArrayInputStream(EMPTY_HTML.getBytes()), rtfOut, props);
             assertTrue("empty-input RTF must start with the {\\rtf control header",
                     new String(rtfOut.toByteArray(), StandardCharsets.US_ASCII).startsWith("{\\rtf"));
+        });
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // encryptPDF password round-trip: correct password opens + reports encrypted; wrong/absent
+    // password is rejected (SC-3, D-03, CVE-07)
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    public void testEncryptPdfPasswordRoundTrip() throws Exception {
+        withDispatcher(dispatcher -> {
+            DocumentDispatcherProperties props = new DocumentDispatcherProperties();
+            String fixturePassword = "s3cret";
+
+            ByteArrayOutputStream plainOut = new ByteArrayOutputStream();
+            invokeCreatePdf(dispatcher, new StringReader(HTML), plainOut, props);
+
+            ByteArrayOutputStream encOut = new ByteArrayOutputStream();
+            invokeEncryptPdf(dispatcher, new ByteArrayInputStream(plainOut.toByteArray()), encOut, fixturePassword);
+
+            byte[] enc = encOut.toByteArray();
+
+            // Correct password opens the output and reports it as encrypted.
+            try (PDDocument ok = PDDocument.load(enc, fixturePassword)) {
+                assertTrue("document encrypted with a password must report isEncrypted() == true", ok.isEncrypted());
+            }
+
+            // No password must be rejected.
+            try {
+                PDDocument.load(enc).close();
+                fail("loading an encrypted PDF without a password should throw");
+            } catch (InvalidPasswordException expected) {
+                // pass
+            }
+
+            // Wrong password must also be rejected.
+            try {
+                PDDocument.load(enc, "wrong-password").close();
+                fail("loading an encrypted PDF with the wrong password should throw");
+            } catch (InvalidPasswordException expected) {
+                // pass
+            }
         });
     }
 }
