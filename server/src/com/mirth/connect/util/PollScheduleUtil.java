@@ -24,6 +24,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.quartz.CronExpression;
 import org.quartz.SchedulerException;
 
+import com.mirth.connect.donkey.model.channel.CronProperty;
 import com.mirth.connect.donkey.model.channel.PollConnectorProperties;
 import com.mirth.connect.donkey.model.channel.PollConnectorPropertiesAdvanced;
 import com.mirth.connect.donkey.model.channel.PollingType;
@@ -62,15 +63,32 @@ public class PollScheduleUtil {
     }
 
     /**
-     * Rejects a weekly restriction that excludes every day of the week (for a non-CRON polling
-     * type, where the restriction actually applies). Both the Java client's and WebAdmin's Advanced
-     * Polling dialogs already refuse to save this ("At least one day must be selected."), but that
-     * guard lives only in those two UI widgets, not in the model or this endpoint's input, and
-     * Quartz's DailyCalendar.getNextIncludedTime() loops indefinitely for it (IRT-1518).
+     * Rejects input that {@link #getNextFireTime} cannot safely hand to the Quartz machinery:
+     * <ul>
+     * <li>For CRON polling, an expression that is structurally invalid to Quartz — e.g. one
+     * specifying BOTH a day-of-week AND a day-of-month. {@code configureJob} builds the trigger via
+     * {@code CronScheduleBuilder.cronSchedule(...)} with no guard of its own, so such an expression
+     * otherwise escapes as an unchecked {@link RuntimeException} and surfaces to the caller as a 500
+     * instead of a 400 (IRT-1759). Validating here with the same {@link CronExpression} check that
+     * {@code _validateCron} uses turns it into an {@link IllegalArgumentException} the servlet maps
+     * to a graceful bad request.
+     * <li>For a non-CRON weekly restriction, one that excludes every day of the week. Both the Java
+     * client's and WebAdmin's Advanced Polling dialogs already refuse to save this ("At least one
+     * day must be selected."), but that guard lives only in those two UI widgets, not in the model
+     * or this endpoint's input, and Quartz's DailyCalendar.getNextIncludedTime() loops indefinitely
+     * for it (IRT-1518).
+     * </ul>
      */
     public static void validateForNextFireTime(PollConnectorProperties properties) {
         if (properties.getPollingType() == PollingType.CRON) {
-            return; // CRON ignores restrictions entirely; nothing to validate here.
+            for (CronProperty cronJob : properties.getCronJobs()) {
+                try {
+                    CronExpression.validateExpression(StringUtils.defaultString(cronJob.getExpression()));
+                } catch (ParseException e) {
+                    throw new IllegalArgumentException(e.getMessage());
+                }
+            }
+            return; // CRON ignores the weekly/daily restrictions entirely; nothing else to validate.
         }
 
         PollConnectorPropertiesAdvanced advanced = properties.getPollConnectorPropertiesAdvanced();
