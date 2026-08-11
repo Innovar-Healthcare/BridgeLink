@@ -82,7 +82,9 @@ public class UserEditPanel extends javax.swing.JPanel {
     private UserDialogInterface dialog;
     private Frame parent;
     private final String DEFAULT_OPTION = "--Select an option--";
-    Map<String, String> countryMap = new HashMap<String, String>(); 
+    private static final String DEFAULT_COUNTRY_CODE = "US";
+    Map<String, String> countryMap = new HashMap<String, String>();
+    private Map<String, String> countryCodeByName = new HashMap<String, String>();
     private List<String> countryNames;
 
     public UserEditPanel() {
@@ -94,22 +96,63 @@ public class UserEditPanel extends javax.swing.JPanel {
 
     }
     
-    private void initializeCountryCodes() {
+    /**
+     * Builds the country code to country name map. The display names are pinned to
+     * Locale.ENGLISH rather than the JVM default locale so that the names shown in the dropdown,
+     * and therefore the value persisted on the user, are the same on every machine.
+     *
+     * @return A map of ISO country code to English country name
+     */
+    static Map<String, String> buildCountryMap() {
     	PhoneNumberUtil phoneUtil = PhoneNumberUtil.getInstance();
     	Set<String> countryCodeSet = phoneUtil.getSupportedRegions();
-    	
-    	// get country names for pull down and sort in alphabetical order
+    	Map<String, String> map = new HashMap<String, String>();
+
         for (String item : countryCodeSet) {
             Locale obj = new Locale("", item);
-            String countryName = obj.getDisplayCountry();
-            countryMap.put(item, countryName);
+            map.put(item, obj.getDisplayCountry(Locale.ENGLISH));
         }
+        return map;
+    }
+
+    private void initializeCountryCodes() {
+    	countryMap = buildCountryMap();
+
+    	// reverse lookup so the selected country name can be resolved back to its code
+    	countryCodeByName = new HashMap<String, String>();
+    	for (Map.Entry<String, String> entry : countryMap.entrySet()) {
+    		countryCodeByName.put(entry.getValue(), entry.getKey());
+    	}
+
+    	// get country names for pull down and sort in alphabetical order
     	countryNames = countryMap.values().stream().collect(Collectors.toCollection(ArrayList :: new));
     	java.util.Collections.sort(countryNames);
     }
-    
+
     protected List<String> getCountryNames() {
     	return countryNames;
+    }
+
+    /**
+     * @return The ISO country code for the currently selected country, or null if the selection is
+     *         not a recognized country
+     */
+    String getSelectedCountryCode() {
+    	Object selectedCountry = country.getSelectedItem();
+    	return selectedCountry == null ? null : countryCodeByName.get(selectedCountry.toString());
+    }
+
+    /**
+     * Resolves a stored country value to an entry in the country dropdown. Accepts an English
+     * country name or an ISO country code.
+     *
+     * @return The matching country name, or null if the value is not recognized
+     */
+    private String resolveCountryName(String storedCountry) {
+    	if (countryCodeByName.containsKey(storedCountry)) {
+    		return storedCountry;
+    	}
+    	return countryMap.get(storedCountry.toUpperCase(Locale.ENGLISH));
     }
 
     public void setUser(UserDialogInterface dialog, User user) {
@@ -129,7 +172,12 @@ public class UserEditPanel extends javax.swing.JPanel {
             industry.setSelectedItem(user.getIndustry());
         }
         if (!StringUtils.isBlank(user.getCountry())) {
-            country.setSelectedItem(user.getCountry());
+            // an unrecognized value (e.g. a country name saved by a client running in another
+            // locale) is ignored so that the dropdown keeps its valid default selection
+            String countryName = resolveCountryName(user.getCountry());
+            if (countryName != null) {
+                country.setSelectedItem(countryName);
+            }
         }
         if (!StringUtils.isBlank(user.getStateTerritory())) {
             stateTerritory.setSelectedItem(user.getStateTerritory());
@@ -251,10 +299,11 @@ public class UserEditPanel extends javax.swing.JPanel {
         }
 
         if (StringUtils.isNotBlank(phone.getText())) {
-        	if (country.getSelectedItem().equals(DEFAULT_OPTION)) {
+        	String countryCode = getSelectedCountryCode();
+        	if (country.getSelectedItem().equals(DEFAULT_OPTION) || countryCode == null) {
         		return "Country field is required to validate phone number.";
         	} else {
-        		if (!validatePhoneNumber(phone.getText(), getKeyFromValue(countryMap, country.getSelectedItem()).toString())) {
+        		if (!validatePhoneNumber(phone.getText(), countryCode)) {
             		return "The phone number is invalid for the given Country and/or State/Territory.";
         		}
         	}
@@ -392,7 +441,10 @@ public class UserEditPanel extends javax.swing.JPanel {
         for (String item : getCountryNames()) {
             country.addItem(item);
         }        
-        country.getModel().setSelectedItem("United States");
+        String defaultCountryName = countryMap.get(DEFAULT_COUNTRY_CODE);
+        if (defaultCountryName != null) {
+            country.getModel().setSelectedItem(defaultCountryName);
+        }
         country.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent evt) {
                 countryActionPerformed(evt);
@@ -541,19 +593,25 @@ public class UserEditPanel extends javax.swing.JPanel {
 
     private void phoneKeyReleased(KeyEvent evt) {
     	// this commented code will add the country code in front of the phone number - like +1 for the US
-    	phone.setText(formatPhoneNumber(phone.getText(), getKeyFromValue(countryMap, country.getSelectedItem()).toString()));
+    	String countryCode = getSelectedCountryCode();
+    	if (countryCode != null) {
+    		phone.setText(formatPhoneNumber(phone.getText(), countryCode));
+    	}
         checkAndTriggerFinishButton(evt);
     }
 
     private void countryActionPerformed(ActionEvent evt) {
         if (dialog != null) {
-        	if (country.getSelectedItem() == "United States") {
+        	String countryCode = getSelectedCountryCode();
+        	if (DEFAULT_COUNTRY_CODE.equals(countryCode)) {
         		stateTerritory.setEnabled(true);
         	} else {
                 stateTerritory.getModel().setSelectedItem(DEFAULT_OPTION);
         		stateTerritory.setEnabled(false);
         	}
-        	phone.setText(formatPhoneNumber(phone.getText(), getKeyFromValue(countryMap, country.getSelectedItem()).toString()));
+        	if (countryCode != null) {
+        		phone.setText(formatPhoneNumber(phone.getText(), countryCode));
+        	}
             checkIfAbleToFinish();
         }
     }
