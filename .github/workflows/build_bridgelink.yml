@@ -1,5 +1,11 @@
 # This workflow will build a Java project with Ant
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-ant
+#
+# The default `build` target runs the unit tests (server/mirth-build.xml calls
+# test-run), and as of IRT-1539 a failing test fails the build. This workflow is
+# therefore the enforcement point: a red test suite is a red pull request.
+#
+# Pass -Dskip.tests=true to build a distribution without running the tests.
 
 name: Build bridgelink
 
@@ -11,9 +17,22 @@ on:
     branches:
       - bridgelink_development
 
+# A full build plus the ~2,200 unit tests takes roughly half an hour, so cancel
+# superseded runs rather than queueing them behind each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The build itself is ~5 minutes and the test suite ~30. The ceiling is here to
+    # kill a hung run: without it the job inherits GitHub's 360-minute default, and
+    # this workflow has previously had a run hang rather than fail.
+    timeout-minutes: 90
+
+    env:
+      ANT_OPTS: -Xmx512m
 
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +44,15 @@ jobs:
           java-package: 'jdk+fx'
           distribution: 'zulu'
 
+      # Ant is currently present on the ubuntu-latest image, but nothing pins it
+      # there. Installing it explicitly keeps an image refresh from breaking the
+      # build for reasons that have nothing to do with this repository.
+      - name: Install Ant
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ant
+          ant -version
+
       - name: Build Bridgelink - signed
         if: github.ref == 'refs/heads/bridgelink_development'
         working-directory: server
@@ -34,6 +62,25 @@ jobs:
         if: github.ref != 'refs/heads/bridgelink_development'
         working-directory: server
         run: ant -f mirth-build.xml -DdisableSigning=true
+
+      # if: always() so the reports survive a failing build - that is the run where
+      # they matter. Each module writes its own junit-reports/ directory; they are
+      # collected here rather than from aggregate-reports/ because the aggregation
+      # target runs after all modules and so is skipped when the gate fires.
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-test-results
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            donkey/junit-reports/TEST-*.xml
+            server/junit-reports/TEST-*.xml
+            client/junit-reports/TEST-*.xml
+            command/junit-reports/TEST-*.xml
+            custom-extensions/dynamic-lookup-gateway/junit-reports/TEST-*.xml
+            custom-extensions/message-trends/junit-reports/TEST-*.xml
 
       - name: Package distribution
         run: tar czf bridgelink.tar.gz -C server/ setup --transform 's|^setup|bridgelink/|'
