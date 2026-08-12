@@ -188,6 +188,10 @@ donkey/donkey-test
 /donkey/donkeydb
 /donkey/donkeytest
 /donkey/derby.log
+
+# Derby test DB / log when ant is invoked from the repo root
+/donkeytest
+/derby.log
 /donkey/nb-build.xml
 /donkey/nbproject
 /donkey/nbbuild
