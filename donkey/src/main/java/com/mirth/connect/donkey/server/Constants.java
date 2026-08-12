@@ -58,6 +58,24 @@ public class Constants {
     public static final int DESTINATION_QUEUE_EMPTY_SLEEP_TIME = 200;
 
     /**
+     * The number of milliseconds an overwriting dispatch will wait for an in-flight copy of the
+     * message it is replacing to leave the source queue, before giving up and failing the dispatch.
+     *
+     * <p>
+     * This is a safety valve, not a tuning knob. The wait normally ends as soon as the in-flight
+     * attempt finishes, and a legitimate attempt is bounded by the destination send timeouts. Without
+     * a bound, a message wedged in the source queue error-retry loop would keep an overwriting
+     * dispatch spinning indefinitely while it holds a process lock permit.
+     */
+    public static final int OVERWRITE_QUIESCE_TIMEOUT_MILLIS = 300000;
+
+    /**
+     * The number of milliseconds between checks while an overwriting dispatch waits for an in-flight
+     * copy of the message it is replacing
+     */
+    public static final int OVERWRITE_QUIESCE_POLL_MILLIS = 100;
+
+    /**
      * Thread priority level for the event handler
      */
     public static final int EVENT_HANDLER_THREAD_PRIORITY = 2;

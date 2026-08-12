@@ -11,6 +11,8 @@ package com.mirth.connect.donkey.test.util;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.mirth.connect.donkey.model.message.ConnectorMessage;
 import com.mirth.connect.donkey.model.message.Message;
@@ -28,6 +30,11 @@ public class TestChannel extends Channel {
     private boolean isDeployed = false;
     private volatile boolean queueThreadRunning = false;
     private List<Message> unfinishedMessages = null;
+
+    private volatile Long blockedMessageId;
+    private volatile CountDownLatch processEntered;
+    private volatile CountDownLatch processRelease;
+    private final AtomicBoolean blockConsumed = new AtomicBoolean();
 
     public TestChannel() {
         super();
@@ -83,8 +90,34 @@ public class TestChannel extends Channel {
         super.queue(sourceMessage);
     }
 
+    /**
+     * Parks the next {@link #process(ConnectorMessage, boolean)} call for the given message id until
+     * {@code release} is counted down, so a test can hold a source queue thread in flight on a
+     * specific message. One-shot: later attempts on the same message id are not blocked.
+     *
+     * @param entered
+     *            counted down once the queue thread is inside process (and therefore checked out of
+     *            the source queue)
+     * @param release
+     *            awaited before the message is actually processed
+     */
+    public void blockProcessing(Long messageId, CountDownLatch entered, CountDownLatch release) {
+        blockConsumed.set(false);
+        this.processEntered = entered;
+        this.processRelease = release;
+        // Published last: process() reads the latches only after matching this, so they are never null
+        this.blockedMessageId = messageId;
+    }
+
     @Override
     public Message process(ConnectorMessage sourceMessage, boolean markAsProcessed) throws InterruptedException {
+        Long blocked = blockedMessageId;
+
+        if (blocked != null && blocked.equals(sourceMessage.getMessageId()) && blockConsumed.compareAndSet(false, true)) {
+            processEntered.countDown();
+            processRelease.await();
+        }
+
         Message message = super.process(sourceMessage, markAsProcessed);
         messageIds.add(message.getMessageId());
         return message;
