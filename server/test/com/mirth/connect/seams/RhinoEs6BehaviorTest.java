@@ -194,4 +194,33 @@ public class RhinoEs6BehaviorTest {
         }
     }
 
+    // ========== T3: E4X output-formatting round-trip (D-08/D-09) ==========
+
+    @Test
+    public void e4xElementDeleteReserializesFlat() {
+        // Sets the production seam config explicitly (D-09; JavaScriptTestUtil.
+        // generateGlobalSealedScript() L165-167 sets this on the harness's shared sealed scope,
+        // but this suite's evaluate() uses a fresh initStandardObjects() scope per call, not that
+        // shared sealed scope, so the config is set inline here).
+        //
+        // A small custom indented HL7 fragment (not the large shared JavaScriptTestUtil.MSG)
+        // maximizes ignoreWhitespace sensitivity: two sibling segment elements (PID, PV1) each on
+        // their own indented line. Deleting PV1 -- the canonical blank-line-removal trigger (D-09)
+        // -- must re-serialize to an exact flat string with no blank line and no stray indentation
+        // left where PV1 was.
+        String script = "XML.ignoreWhitespace=true;\n"
+                + "XML.prettyPrinting=false;\n"
+                + "var msg = new XML('<HL7Message>\\n  <PID><PID.1>1</PID.1></PID>\\n  <PV1><PV1.1>x</PV1.1></PV1>\\n</HL7Message>');\n"
+                + "delete msg.PV1[0];\n"
+                + "msg.toString();";
+
+        // Captured exact literal from the first green run (23.1-02-SUMMARY.md) -- an exact-string
+        // assertion driven by a logical mutation (D-08), NOT a byte-golden file compare. Falsifiable
+        // (D-11): a standalone break-the-seam spike setting XML.ignoreWhitespace=false against this
+        // same fragment/mutation produced a regressed result with a blank line and stray indentation
+        // left where PV1 was deleted (recorded in 23.1-02-SUMMARY.md), proving this assertion would
+        // go RED if the XmlProcessor.addTextNodesToRemoveAndTrim/toString(Node) seam regressed.
+        assertEquals("<HL7Message><PID><PID.1>1</PID.1></PID></HL7Message>", evaluate(script));
+    }
+
 }
