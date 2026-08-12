@@ -104,6 +104,13 @@
 	<taskdef uri="antlib:org.jacoco.ant"
 			 resource="org/jacoco/ant/antlib.xml"
 			 classpathref="jacoco.classpath"/>
+
+	<!-- Ant-Contrib provides <trycatch>, used to guarantee docker cleanup when tests fail. -->
+	<taskdef resource="net/sf/antcontrib/antlib.xml">
+		<classpath>
+			<fileset dir="${server}/lib/ant" includes="ant-contrib*.jar"/>
+		</classpath>
+	</taskdef>
 	
 	<target name="test-run" depends="test-compile" description="Run unit tests and generate code coverage">
 		<property name="junit-reports" value="junit-reports" />
@@ -119,7 +126,12 @@
 		</exec>
 
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
-			<junit haltonfailure="false" fork="true" forkmode="once" dir="${basedir}">
+			<!--
+				haltonfailure stays false on purpose: the run must finish so that the JUnit XML,
+				the HTML report and the JaCoCo coverage below are all written even when tests
+				fail. The build is failed by the <fail> at the end of this target instead.
+			-->
+			<junit haltonfailure="false" printsummary="yes" failureproperty="tests.failed" errorproperty="tests.errored" fork="true" forkmode="once" dir="${basedir}">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 				<jvmarg value="--add-opens=java.base/sun.misc=ALL-UNNAMED"/>
@@ -232,6 +244,16 @@
 
 		<!-- Automatically generate JaCoCo HTML report after tests -->
 		<antcall target="jacoco-report"/>
+
+		<!-- Gate the build on the test results. Must stay last so the reports above are written first. -->
+		<fail message="Unit tests failed in donkey. See ${junit-reports}/ for details.">
+			<condition>
+				<or>
+					<isset property="tests.failed" />
+					<isset property="tests.errored" />
+				</or>
+			</condition>
+		</fail>
 	</target>
 
 	<target name="jacoco-report" depends="init" description="Generate JaCoCo code coverage reports">
@@ -425,7 +447,12 @@
 		</exec>
 
 		<jacoco:coverage destfile="${db.code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader">
-			<junit haltonfailure="false" fork="true" forkmode="perBatch" dir="${basedir}">
+			<!--
+				haltonfailure stays false on purpose: the run must finish so that the JUnit XML,
+				the HTML report and the JaCoCo coverage below are all written even when tests
+				fail. The build is failed by the <fail> at the end of this target instead.
+			-->
+			<junit haltonfailure="false" printsummary="yes" failureproperty="tests.failed.db" errorproperty="tests.errored.db" fork="true" forkmode="perBatch" dir="${basedir}">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 				<jvmarg value="--add-opens=java.base/sun.misc=ALL-UNNAMED"/>
@@ -566,6 +593,21 @@
 		<echo message="JUnit Report: ${db.junit-html}/index.html"/>
 		<echo message="Coverage Report: ${db.jacoco-html}/index.html"/>
 		<echo message="========================================"/>
+
+		<!--
+			Gate the build on the test results. Must stay last so the reports above are written
+			first. Property names differ from test-run's so that running both targets in one
+			invocation (ant -k test-run test-run-postgres-db) cannot make this gate report a
+			failure that belongs to the other target.
+		-->
+		<fail message="Unit tests failed in donkey against ${db.type}. See ${db.junit-reports}/ for details.">
+			<condition>
+				<or>
+					<isset property="tests.failed.db" />
+					<isset property="tests.errored.db" />
+				</or>
+			</condition>
+		</fail>
 	</target>
 
 	<target name="test-run-db" depends="test-compile, docker-start-db" description="Run tests against a specific database (auto-starts database)">
@@ -574,6 +616,27 @@
 		<antcall target="test-run-db-only">
 			<param name="db.type" value="${db.type}"/>
 		</antcall>
+	</target>
+
+	<!--
+		Runs the tests for one database and cleans up its container afterwards, whether the
+		tests pass or fail. The <fail> at the end of test-run-db-only would otherwise skip
+		cleanup on exactly the runs that need it, leaving a stale container and volume for
+		the next run to reuse. trycatch has no <catch>, so the failure still propagates.
+	-->
+	<target name="test-run-db-with-cleanup" depends="init">
+		<trycatch>
+			<try>
+				<antcall target="test-run-db-only">
+					<param name="db.type" value="${db.type}"/>
+				</antcall>
+			</try>
+			<finally>
+				<antcall target="docker-cleanup-db">
+					<param name="db.type" value="${db.type}"/>
+				</antcall>
+			</finally>
+		</trycatch>
 	</target>
 
 	<target name="test-run-db-isolated" depends="test-compile" description="Run tests against a specific database with automatic cleanup">
@@ -591,13 +654,8 @@
 			<param name="db.type" value="${db.type}"/>
 		</antcall>
 
-		<!-- Run tests -->
-		<antcall target="test-run-db-only">
-			<param name="db.type" value="${db.type}"/>
-		</antcall>
-
-		<!-- Stop and cleanup the database -->
-		<antcall target="docker-cleanup-db">
+		<!-- Run tests, then stop and clean up the database even if they failed -->
+		<antcall target="test-run-db-with-cleanup">
 			<param name="db.type" value="${db.type}"/>
 		</antcall>
 
@@ -622,10 +680,7 @@
 		<antcall target="docker-start-db">
 			<param name="db.type" value="postgres"/>
 		</antcall>
-		<antcall target="test-run-db-only">
-			<param name="db.type" value="postgres"/>
-		</antcall>
-		<antcall target="docker-cleanup-db">
+		<antcall target="test-run-db-with-cleanup">
 			<param name="db.type" value="postgres"/>
 		</antcall>
 	</target>
@@ -636,10 +691,7 @@
 		<antcall target="docker-start-db">
 			<param name="db.type" value="mysql"/>
 		</antcall>
-		<antcall target="test-run-db-only">
-			<param name="db.type" value="mysql"/>
-		</antcall>
-		<antcall target="docker-cleanup-db">
+		<antcall target="test-run-db-with-cleanup">
 			<param name="db.type" value="mysql"/>
 		</antcall>
 	</target>
@@ -650,10 +702,7 @@
 		<antcall target="docker-start-db">
 			<param name="db.type" value="sqlserver"/>
 		</antcall>
-		<antcall target="test-run-db-only">
-			<param name="db.type" value="sqlserver"/>
-		</antcall>
-		<antcall target="docker-cleanup-db">
+		<antcall target="test-run-db-with-cleanup">
 			<param name="db.type" value="sqlserver"/>
 		</antcall>
 	</target>

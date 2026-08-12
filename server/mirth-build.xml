@@ -133,6 +133,22 @@
 			<fileset dir="${server.setup}/client-lib" />
 		</copy>
 		
+		<!--
+			Ant's unless= tests whether a property is SET, not whether it is true, so guarding
+			maybe-test-run on skip.tests directly would let -Dskip.tests=false silently skip the
+			whole suite. Resolve the value to a boolean first.
+		-->
+		<condition property="skip.tests.enabled">
+			<istrue value="${skip.tests}" />
+		</condition>
+		<antcall target="maybe-test-run" />
+	</target>
+
+	<!--
+		The unit tests now fail the build (see the <fail> at the end of each module's test-run
+		target). Pass -Dskip.tests=true to produce a distribution without running them.
+	-->
+	<target name="maybe-test-run" unless="skip.tests.enabled">
 		<antcall target="test-run" />
 	</target>
 
