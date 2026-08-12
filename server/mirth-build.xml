@@ -133,6 +133,14 @@
 			<fileset dir="${server.setup}/client-lib" />
 		</copy>
 		
+		<antcall target="maybe-test-run" />
+	</target>
+
+	<!--
+		The unit tests now fail the build (see the <fail> at the end of each module's test-run
+		target). Pass -Dskip.tests=true to produce a distribution without running them.
+	-->
+	<target name="maybe-test-run" unless="skip.tests">
 		<antcall target="test-run" />
 	</target>
 

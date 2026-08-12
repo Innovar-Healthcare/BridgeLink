@@ -97,7 +97,12 @@
 		<mkdir dir="${code-coverage-reports}" />
 		
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
-			<junit haltonfailure="false" fork="true" forkmode="once">
+			<!--
+				haltonfailure stays false on purpose: the run must finish so that the JUnit XML
+				and the JaCoCo coverage data are written even when tests fail. The build is
+				failed by the <fail> at the end of this target instead.
+			-->
+			<junit haltonfailure="false" printsummary="yes" failureproperty="tests.failed" errorproperty="tests.errored" fork="true" forkmode="once">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 				<jvmarg value="--add-opens=java.base/sun.misc=ALL-UNNAMED"/>
@@ -119,5 +124,15 @@
 				</batchtest>
 			</junit>
 		</jacoco:coverage>
+
+		<!-- Gate the build on the test results. Must stay last so the reports above are written first. -->
+		<fail message="Unit tests failed in command. See ${junit-reports}/ for details.">
+			<condition>
+				<or>
+					<isset property="tests.failed" />
+					<isset property="tests.errored" />
+				</or>
+			</condition>
+		</fail>
 	</target>
 </project>

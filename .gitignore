@@ -186,6 +186,8 @@ donkey/donkey-test
 /donkey/build
 /donkey/dist
 /donkey/donkeydb
+/donkey/donkeytest
+/donkey/derby.log
 /donkey/nb-build.xml
 /donkey/nbproject
 /donkey/nbbuild
@@ -348,6 +350,7 @@ donkey/donkey-test
 /server/setup
 /server/bin
 /server/derby.log
+/server/donkeytest
 /server/dist
 /server/.settings
 /server/build

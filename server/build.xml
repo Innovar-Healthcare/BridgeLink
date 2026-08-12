@@ -1301,7 +1301,12 @@
 		<mkdir dir="${junit-html}" />
 
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
-			<junit haltonfailure="false" fork="true" forkmode="perTest">
+			<!--
+				haltonfailure stays false on purpose: the run must finish so that the JUnit XML,
+				the HTML report and the JaCoCo coverage below are all written even when tests
+				fail. The build is failed by the <fail> at the end of this target instead.
+			-->
+			<junit haltonfailure="false" printsummary="yes" failureproperty="tests.failed" errorproperty="tests.errored" fork="true" forkmode="perTest">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 <!--				&lt;!&ndash;Uncomment the following and add additional dashes in front of the arguments to allow Java 9+-->
@@ -1333,6 +1338,13 @@
 				</classpath>
 				<formatter type="xml" />
 				<batchtest todir="${junit-reports}">
+					<!--
+						*Test only, deliberately. The 23 legacy *Tests classes under server/test are
+						quarantined: they require infrastructure this build does not provide (a live
+						PostgreSQL on localhost:5432, ActiveMQ on 61616, /tmp/prunertest, Windows
+						paths such as C:\NCPDP_*.txt). Adding **/*Tests.class here to match donkey's
+						fileset would pull in ~145 tests that cannot pass and would fail every build.
+					-->
 					<fileset dir="${test_classes}">
 						<include name="**/*Test.class" />
 					</fileset>
@@ -1350,6 +1362,16 @@
 
 		<!-- Automatically generate JaCoCo HTML report after tests -->
 		<antcall target="jacoco-report"/>
+
+		<!-- Gate the build on the test results. Must stay last so the reports above are written first. -->
+		<fail message="Unit tests failed in server. See ${junit-reports}/ for details.">
+			<condition>
+				<or>
+					<isset property="tests.failed" />
+					<isset property="tests.errored" />
+				</or>
+			</condition>
+		</fail>
 	</target>
 
 	<target name="jacoco-report" depends="init">
