@@ -62,7 +62,22 @@ public class TestSourceConnector extends SourceConnector {
     }
 
     public DispatchResult readTestMessage(String raw) throws ChannelException {
+        return dispatch(new RawMessage(raw));
+    }
+
+    /**
+     * Dispatches a raw message that overwrites an existing one, the way "Reprocess and overwrite"
+     * does. The overwritten message keeps its original message id.
+     */
+    public DispatchResult readTestMessageWithOverwrite(String raw, Long originalMessageId) throws ChannelException {
         RawMessage rawMessage = new RawMessage(raw);
+        rawMessage.setOverwrite(true);
+        rawMessage.setOriginalMessageId(originalMessageId);
+
+        return dispatch(rawMessage);
+    }
+
+    private DispatchResult dispatch(RawMessage rawMessage) throws ChannelException {
         DispatchResult dispatchResult = null;
 
         try {

@@ -23,6 +23,7 @@ import com.mirth.connect.donkey.server.event.MessageEvent;
 public class SourceQueue extends ConnectorMessageQueue {
 
     private Set<Long> checkedOut = Collections.newSetFromMap(new ConcurrentHashMap<Long, Boolean>());
+    private Set<Long> deleted = Collections.newSetFromMap(new ConcurrentHashMap<Long, Boolean>());
 
     @Override
     protected ConnectorMessage pollFirstValue() {
@@ -71,8 +72,13 @@ public class SourceQueue extends ConnectorMessageQueue {
              * We use a while loop here to ensure that no message gets polled at the same time from
              * multiple queue threads. After calling poll() and acquiring a connector message, the
              * caller is expected to call finish to remove the message ID from the checked out set.
+             *
+             * Messages marked as deleted are skipped for the same reason. An overwrite defers its
+             * delete to commit time, so until then the previous message's row is still RECEIVED and
+             * fillBuffer() above would hand it back out. Processing that stale copy is what collides
+             * with the replacement on the connector message primary key (IRT-1655).
              */
-            while (connectorMessage != null && checkedOut.contains(connectorMessage.getMessageId())) {
+            while (connectorMessage != null && (checkedOut.contains(connectorMessage.getMessageId()) || deleted.contains(connectorMessage.getMessageId()))) {
                 connectorMessage = pollFirstValue();
             }
         }
@@ -99,9 +105,57 @@ public class SourceQueue extends ConnectorMessageQueue {
         }
     }
 
+    /**
+     * Flags a message as deleted so that the queue stops handing out any copy of it, whether that copy
+     * is already buffered or gets re-read from the database by {@link #fillBuffer()}.
+     *
+     * <p>
+     * Unlike {@link DestinationQueue#markAsDeleted(Long)} the flag is <b>not</b> cleared by
+     * {@link #isCheckedOut(Long)}. It has to stay set until the overwriting dispatch has committed its
+     * delete and queued the replacement, because until that commit the previous message's row is still
+     * RECEIVED and therefore still pollable. The caller must guarantee a matching
+     * {@link #clearDeleted(Long)} - a flag left set would blackhole every future copy of that reused
+     * message id.
+     */
+    public synchronized void markAsDeleted(Long messageId) {
+        deleted.add(messageId);
+    }
+
+    /**
+     * Clears the deleted flag set by {@link #markAsDeleted(Long)}, releasing the message id for
+     * polling again. Must be called on every path out of an overwrite, including failures.
+     */
+    public synchronized void clearDeleted(Long messageId) {
+        deleted.remove(messageId);
+    }
+
+    /**
+     * Mirrors {@link DestinationQueue#isCheckedOut(Long)}. Returns whether a queue thread currently
+     * has the message checked out, and once it no longer does, discards the stale buffered copy.
+     */
+    public synchronized boolean isCheckedOut(Long messageId) {
+        boolean isCheckedOut = checkedOut.contains(messageId);
+
+        if (!isCheckedOut && deleted.contains(messageId)) {
+            /*
+             * Discard the buffered copy so it is not handed out again. Only re-sync the size if a copy
+             * was actually discarded, since that copy was counted in the size. Unlike DestinationQueue
+             * this is conditional: a bulk reprocess calls this once per overwritten message, and an
+             * unconditional re-sync would add a count query per message even when there was nothing to
+             * discard.
+             */
+            if (buffer.remove(messageId) != null) {
+                updateSize();
+            }
+        }
+
+        return isCheckedOut;
+    }
+
     @Override
     protected void reset() {
         checkedOut.clear();
+        deleted.clear();
     }
 
     public synchronized void decrementSize() {

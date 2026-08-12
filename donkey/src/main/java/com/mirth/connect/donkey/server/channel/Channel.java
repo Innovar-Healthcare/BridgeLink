@@ -138,6 +138,22 @@ public class Channel implements Runnable {
     private ChannelProcessLock processLock;
     private Lock removeContentLock = new ReentrantLock(true);
 
+    /*
+     * Serializes overwriting dispatches that target the same message id. The quiesce, the delete of the
+     * previous message's rows, the insert of the replacement and the queue addition have to happen as
+     * one unit: synchronizing on sourceQueue covers only the commit and the queue addition, so without
+     * this two dispatch threads could both quiesce the same message, both see it as not checked out, and
+     * then interleave their deletes and inserts. One pass's queued copy is discarded from the buffer
+     * while its row stays RECEIVED and the queue size no longer accounts for it, so nothing ever polls
+     * it again and the message silently never processes (IRT-1655).
+     *
+     * Striped rather than one lock per message id so the memory is bounded, and rather than a single
+     * channel-wide lock so that one message cannot hold up overwrites of unrelated messages. Different
+     * ids that hash to the same stripe are merely serialized, which is harmless.
+     */
+    private static final int OVERWRITE_LOCK_STRIPES = 64;
+    private final Lock[] overwriteLocks = newOverwriteLocks();
+
     private MessageController messageController = MessageController.getInstance();
 
     private Logger logger = LogManager.getLogger(getClass());
@@ -1255,6 +1271,7 @@ public class Channel implements Runnable {
         Thread currentThread = Thread.currentThread();
         String originalThreadName = currentThread.getName();
         boolean lockAcquired = false;
+        Lock overwriteLock = null;
         Long persistedMessageId = null;
 
         try {
@@ -1284,6 +1301,26 @@ public class Channel implements Runnable {
                 lockAcquired = true;
 
                 /*
+                 * Overwriting dispatches that target the same message id have to run one at a time,
+                 * from the quiesce below through to the queue addition, otherwise their deletes and
+                 * inserts interleave. Acquired before obtaining a dao so that a database connection is
+                 * not held open while waiting on another pass.
+                 */
+                if (isOverwrite(rawMessage)) {
+                    Lock lock = getOverwriteLock(rawMessage.getOriginalMessageId());
+                    lock.lockInterruptibly();
+                    // Only recorded once actually held, so the finally below never unlocks what it does not own
+                    overwriteLock = lock;
+                }
+
+                /*
+                 * If this message overwrites a previous one, quiesce the queues before any of the
+                 * previous message's rows are deleted. This is done before obtaining a dao so that a
+                 * database connection is not held open for the duration of the wait.
+                 */
+                markDeletedQueuedMessages(rawMessage);
+
+                /*
                  * TRANSACTION: Create Raw Message - create a source connector message from the raw
                  * message and set the status as RECEIVED - store attachments
                  */
@@ -1297,8 +1334,6 @@ public class Channel implements Runnable {
                     persistedMessageId = sourceMessage.getMessageId();
                     dao.close();
 
-                    markDeletedQueuedMessages(rawMessage, persistedMessageId);
-
                     processedMessage = process(sourceMessage, false);
                 } else {
                     // Block other threads from adding to the source queue until both the current commit and queue addition finishes
@@ -1308,9 +1343,18 @@ public class Channel implements Runnable {
                         persistedMessageId = sourceMessage.getMessageId();
                         dao.close();
                         queue(sourceMessage);
-                    }
 
-                    markDeletedQueuedMessages(rawMessage, persistedMessageId);
+                        if (isOverwrite(rawMessage)) {
+                            /*
+                             * The replacement is now queued and the delete is committed, so the message
+                             * id can be polled again. Cleared here, under the same monitor as the queue
+                             * addition, so no poll can observe the replacement while it is still
+                             * suppressed. The finally below repeats this for the paths that never got
+                             * this far.
+                             */
+                            sourceQueue.clearDeleted(persistedMessageId);
+                        }
+                    }
                 }
 
                 if (responseSelector.canRespond()) {
@@ -1324,6 +1368,20 @@ public class Channel implements Runnable {
                 // TODO determine behavior if this occurs.
                 throw new ChannelException(true, e);
             } finally {
+                /*
+                 * The deleted flag suppresses polling of the message being replaced, so it has to be
+                 * cleared on every path out of here - including the quiesce timeout and any failure
+                 * before the replacement was queued. A flag left set would blackhole every future copy
+                 * of that reused message id. Cleared before releasing the stripe so the next overwrite
+                 * of the same id never observes a stale flag.
+                 */
+                if (overwriteLock != null) {
+                    sourceQueue.clearDeleted(rawMessage.getOriginalMessageId());
+
+                    overwriteLock.unlock();
+                    overwriteLock = null;
+                }
+
                 if (lockAcquired && (!sourceConnector.isRespondAfterProcessing() || persistedMessageId == null || Thread.currentThread().isInterrupted())) {
                     // Release the process lock if an exception was thrown before a message was persisted
                     // or if the thread was interrupted because no additional processing will be done.
@@ -1389,26 +1447,84 @@ public class Channel implements Runnable {
         }
     }
 
-    private void markDeletedQueuedMessages(RawMessage rawMessage, Long persistedMessageId) throws InterruptedException {
-        /*
-         * If the current message has overwritten a previous one, we mark this message as deleted in
-         * all destination queues. This is done so that if a queue thread is currently processing a
-         * message, it will release the message after the current attempt, instead of keeping the
-         * message in memory and trying again. To ensure that all queues are no longer trying to
-         * process this message, we wait until the message is no longer checked out.
-         */
-        if (rawMessage.isOverwrite() && rawMessage.getOriginalMessageId() != null) {
-            // Mark the message as deleted in all queues first
+    private static Lock[] newOverwriteLocks() {
+        Lock[] locks = new Lock[OVERWRITE_LOCK_STRIPES];
+
+        for (int i = 0; i < locks.length; i++) {
+            locks[i] = new ReentrantLock(true);
+        }
+
+        return locks;
+    }
+
+    private boolean isOverwrite(RawMessage rawMessage) {
+        return rawMessage.isOverwrite() && rawMessage.getOriginalMessageId() != null;
+    }
+
+    private Lock getOverwriteLock(Long messageId) {
+        return overwriteLocks[Math.floorMod(messageId, OVERWRITE_LOCK_STRIPES)];
+    }
+
+    /**
+     * If the current message overwrites a previous one, mark that message as deleted in the source
+     * queue and in all destination queues, then wait until it is no longer checked out anywhere. A
+     * queue thread already processing the message releases it after the current attempt instead of
+     * keeping it in memory and trying again, and a copy sitting unprocessed in a queue buffer is
+     * discarded.
+     *
+     * <p>
+     * This must run <b>before</b> the previous message's rows are deleted. An overwrite reuses the
+     * original message id, so a source queue thread that is mid-{@link #process(ConnectorMessage,
+     * boolean)} on the old copy would otherwise commit its destination connector messages after this
+     * pass deleted them, and the next pass's insert would collide on the connector message primary
+     * key (IRT-1655). Waiting first makes overlapping overwrites serialize per message id, so the
+     * last overwrite wins.
+     *
+     * <p>
+     * The caller must not hold the {@code sourceQueue} monitor: the wait below depends on a queue
+     * thread being able to call {@link SourceQueue#finish(ConnectorMessage)}, which is synchronized
+     * on the queue.
+     */
+    private void markDeletedQueuedMessages(RawMessage rawMessage) throws ChannelException, InterruptedException {
+        if (isOverwrite(rawMessage)) {
+            Long messageId = rawMessage.getOriginalMessageId();
+
+            /*
+             * Quiesce the source queue first, and only mark the destination queues once it has
+             * succeeded. The source wait below can abort, and a destination deleted flag that is set
+             * but never consumed makes the destination queue release a message whose row is still
+             * QUEUED, dropping its in-memory count below the database count so it is never acquired
+             * again.
+             */
+            sourceQueue.markAsDeleted(messageId);
+
+            /*
+             * Wait until the message is not checked out in the source queue. Unlike the destination
+             * queues below this wait is bounded: proceeding while the old copy is still in flight is
+             * what causes the primary key collision, so on timeout we fail this dispatch rather than
+             * carry on. That keeps a message wedged in the source queue error-retry loop from holding
+             * an overwriting dispatch, and its process lock permit, indefinitely.
+             */
+            long deadline = System.currentTimeMillis() + Constants.OVERWRITE_QUIESCE_TIMEOUT_MILLIS;
+
+            while (sourceQueue.isCheckedOut(messageId)) {
+                if (System.currentTimeMillis() >= deadline) {
+                    throw new ChannelException(false, null, "Timed out after " + Constants.OVERWRITE_QUIESCE_TIMEOUT_MILLIS + "ms waiting for message " + messageId + " to finish processing in the source queue of channel " + name + " (" + channelId + "), so it was not overwritten. The message may be stuck in the source queue.");
+                }
+
+                Thread.sleep(Constants.OVERWRITE_QUIESCE_POLL_MILLIS);
+            }
+
+            // Mark the message as deleted in all destination queues, then wait out their current attempts
             for (Integer metaDataId : getMetaDataIds()) {
                 if (!metaDataId.equals(0)) {
-                    getDestinationConnector(metaDataId).getQueue().markAsDeleted(persistedMessageId);
+                    getDestinationConnector(metaDataId).getQueue().markAsDeleted(messageId);
                 }
             }
 
-            // Wait until the message is not checked out in all queues
             for (Integer metaDataId : getMetaDataIds()) {
                 if (!metaDataId.equals(0)) {
-                    while (getDestinationConnector(metaDataId).getQueue().isCheckedOut(persistedMessageId)) {
+                    while (getDestinationConnector(metaDataId).getQueue().isCheckedOut(messageId)) {
                         Thread.sleep(100);
                     }
                 }
@@ -1421,7 +1537,7 @@ public class Channel implements Runnable {
         Long messageId;
         Calendar receivedDate;
 
-        if (rawMessage.isOverwrite() && rawMessage.getOriginalMessageId() != null) {
+        if (isOverwrite(rawMessage)) {
             messageId = rawMessage.getOriginalMessageId();
             Set<Integer> metaDataIds = new HashSet<Integer>();
 
