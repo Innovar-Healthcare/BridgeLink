@@ -26,6 +26,7 @@ import org.apache.logging.log4j.Logger;
 import com.mirth.commons.encryption.Digester;
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.model.Credentials;
+import com.mirth.connect.model.ExtendedLoginStatus;
 import com.mirth.connect.model.LoginStatus;
 import com.mirth.connect.model.LoginStatus.Status;
 import com.mirth.connect.model.LoginStrike;
@@ -378,11 +379,25 @@ public class DefaultUserController extends UserController {
 
                 // If nothing failed (loginStatus != null), set SUCCESS now
                 if (loginStatus == null) {
-                    loginStatus = new LoginStatus(LoginStatus.Status.SUCCESS, "");
+                    /*
+                     * Password requirements are otherwise only applied when a password is set, so a
+                     * password predating a policy change is never re-examined. Login is the one
+                     * point where the server holds the plaintext and can evaluate it. See IRT-1791.
+                     */
+                    List<String> violations = null;
+                    if (passwordRequirements.isEnforceAtLogin()) {
+                        violations = getStoredPasswordViolations(plainPassword, passwordRequirements);
+                    }
 
-                    // Clear the user's grace period if one exists
-                    if (validUser.getGracePeriodStart() != null) {
-                        SqlConfig.getInstance().getSqlSessionManager().update("User.clearGracePeriod", validUser.getId());
+                    if (CollectionUtils.isNotEmpty(violations)) {
+                        loginStatus = new LoginStatus(LoginStatus.Status.SUCCESS_GRACE_PERIOD, buildRequirementsMessage(violations));
+                    } else {
+                        loginStatus = new LoginStatus(LoginStatus.Status.SUCCESS, "");
+
+                        // Clear the user's grace period if one exists
+                        if (validUser.getGracePeriodStart() != null) {
+                            SqlConfig.getInstance().getSqlSessionManager().update("User.clearGracePeriod", validUser.getId());
+                        }
                     }
                 }
             } else {
@@ -410,6 +425,35 @@ public class DefaultUserController extends UserController {
         } finally {
             StatementLock.getInstance(VACUUM_LOCK_PERSON_STATEMENT_ID).readUnlock();
         }
+    }
+
+    /**
+     * Evaluates an already-stored password against the current requirements. Returns the list of
+     * violations, or null if the password still meets them.
+     * <p>
+     * A null user id is passed deliberately. The checker runs its reuse-history checks when given a
+     * real id and either reuse policy is enabled, and at login the user's current password is by
+     * definition in their own credential history — so a real id would report the password as reused
+     * on every login, a violation the user cannot act on. Passing null is the checker's documented
+     * way to skip those checks, and it also keeps this call free of database access, which matters
+     * because authorizeUser runs on every Basic auth REST request.
+     */
+    protected List<String> getStoredPasswordViolations(String plainPassword, PasswordRequirements passwordRequirements) {
+        return PasswordRequirementsChecker.getInstance().doesPasswordMeetRequirements(null, plainPassword, passwordRequirements);
+    }
+
+    /**
+     * Formats requirement violations the way the clients already render them for the set-password
+     * path: a header followed by one bullet per violation.
+     */
+    public static String buildRequirementsMessage(List<String> violations) {
+        StringBuilder builder = new StringBuilder("Your password no longer meets the password requirements. Please change it now:");
+
+        for (String violation : violations) {
+            builder.append("\n - ").append(violation);
+        }
+
+        return builder.toString();
     }
 
     public boolean checkPassword(String plainPassword, String encryptedPassword) {
@@ -625,7 +669,18 @@ public class DefaultUserController extends UserController {
 
     private LoginStatus handleSecondaryAuthentication(String username, LoginStatus loginStatus, LoginRequirementsChecker loginRequirementsChecker, String serverURL) {
         if (loginStatus != null && extensionController.getMultiFactorAuthenticationPlugin() != null && (loginStatus.getStatus() == Status.SUCCESS || loginStatus.getStatus() == Status.SUCCESS_GRACE_PERIOD)) {
+            LoginStatus priorStatus = loginStatus;
             loginStatus = extensionController.getMultiFactorAuthenticationPlugin().authenticate(username, loginStatus, serverURL);
+
+            /*
+             * The plugin returns its own status rather than modifying the one it was given, so a
+             * grace period established above would be dropped for anyone using multi-factor auth.
+             * Restore it only when the plugin has finished and simply passed the login through: an
+             * ExtendedLoginStatus means it is mid-flow and is driving the client itself.
+             */
+            if (priorStatus.getStatus() == Status.SUCCESS_GRACE_PERIOD && loginStatus != null && loginStatus.getStatus() == Status.SUCCESS && !(loginStatus instanceof ExtendedLoginStatus)) {
+                loginStatus = new LoginStatus(Status.SUCCESS_GRACE_PERIOD, priorStatus.getMessage(), loginStatus.getUpdatedUsername());
+            }
         }
 
         // Only reset strikes if the final status is successful 

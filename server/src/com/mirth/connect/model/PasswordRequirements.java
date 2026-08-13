@@ -30,6 +30,8 @@ public class PasswordRequirements implements Serializable {
     private int reusePeriod;
     private int reuseLimit;
     private boolean allowUsernameEnumeration;
+    private boolean enforceAtLogin;
+    private boolean restrictGraceSessions;
 
     public PasswordRequirements() {
         this.minLength = 0;
@@ -44,6 +46,8 @@ public class PasswordRequirements implements Serializable {
         this.reusePeriod = 0;
         this.reuseLimit = 0;
         this.allowUsernameEnumeration = false;
+        this.enforceAtLogin = true;
+        this.restrictGraceSessions = false;
     }
     /**
      * @deprecated Use {@link #PasswordRequirements(int, int, int, int, int, int, int, int, int, int, int, boolean)} instead.
@@ -66,6 +70,8 @@ public class PasswordRequirements implements Serializable {
         this.reusePeriod = reusePeriod;
         this.reuseLimit = reuseLimit;
         this.allowUsernameEnumeration = allowUsernameEnumeration;
+        this.enforceAtLogin = true;
+        this.restrictGraceSessions = false;
     }
 
     public int getMinLength() {
@@ -163,5 +169,32 @@ public class PasswordRequirements implements Serializable {
 
     public void setAllowUsernameEnumeration(boolean allowUsernameEnumeration) {
         this.allowUsernameEnumeration = allowUsernameEnumeration;
+    }
+
+    /**
+     * Whether an already-stored password is evaluated against these requirements at login. Policy
+     * is otherwise only applied when a password is set, so passwords predating a policy change are
+     * never re-examined.
+     */
+    public boolean isEnforceAtLogin() {
+        return enforceAtLogin;
+    }
+
+    public void setEnforceAtLogin(boolean enforceAtLogin) {
+        this.enforceAtLogin = enforceAtLogin;
+    }
+
+    /**
+     * Whether a grace-period session is restricted to password-change operations. Off by default:
+     * turning it on will reject requests from any automation account whose password does not meet
+     * the current requirements, and there is no way to identify those accounts in advance because
+     * stored passwords are hashed.
+     */
+    public boolean isRestrictGraceSessions() {
+        return restrictGraceSessions;
+    }
+
+    public void setRestrictGraceSessions(boolean restrictGraceSessions) {
+        this.restrictGraceSessions = restrictGraceSessions;
     }
 }
