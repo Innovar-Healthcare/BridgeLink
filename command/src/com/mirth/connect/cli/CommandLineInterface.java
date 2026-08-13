@@ -187,9 +187,18 @@ public class CommandLineInterface {
 
             LoginStatus loginStatus = client.login(user, password);
 
-            if (loginStatus.getStatus() != LoginStatus.Status.SUCCESS) {
+            if (loginStatus.getStatus() != LoginStatus.Status.SUCCESS && loginStatus.getStatus() != LoginStatus.Status.SUCCESS_GRACE_PERIOD) {
                 error("Could not login to server.", null);
                 return;
+            }
+
+            /*
+             * The login succeeded but the password is serving out a grace period, either because it
+             * expired or because it no longer meets the password requirements. Say so rather than
+             * failing, which would misreport it as a bad credential.
+             */
+            if (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD) {
+                out.println("Warning: " + loginStatus.getMessage());
             }
 
             String serverVersion = client.getVersion();
