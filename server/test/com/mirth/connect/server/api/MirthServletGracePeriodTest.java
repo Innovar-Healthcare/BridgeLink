@@ -112,6 +112,23 @@ public class MirthServletGracePeriodTest extends ServletTestBase {
     }
 
     /**
+     * Logging out only destroys the session. Refusing it would strand a user who declines the
+     * change with a session they can neither use nor end — and UserServlet.logout calls
+     * isUserAuthorized purely to audit, so a refusal there would abort before invalidating.
+     */
+    @Test
+    public void restrictedSessionMayStillLogOut() throws Exception {
+        givenGraceRestrictedSession(true);
+
+        for (String operationName : new String[] { "logout", "inactivityLogout" }) {
+            MirthServlet servlet = newServlet();
+            servlet.setOperation(new Operation(operationName, operationName, ExecuteType.SYNC, true));
+
+            assertTrue("\"" + operationName + "\" must remain available", servlet.isUserAuthorized(false));
+        }
+    }
+
+    /**
      * Extension endpoints authorize through a separate method, so they need the same check.
      */
     @Test
