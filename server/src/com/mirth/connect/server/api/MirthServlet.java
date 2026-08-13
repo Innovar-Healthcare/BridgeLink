@@ -12,6 +12,7 @@ package com.mirth.connect.server.api;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -27,6 +28,7 @@ import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.SecurityContext;
 
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import com.mirth.connect.client.core.ControllerException;
@@ -36,6 +38,7 @@ import com.mirth.connect.client.core.api.MirthApiException;
 import com.mirth.connect.model.Channel;
 import com.mirth.connect.model.ChannelSummary;
 import com.mirth.connect.model.LoginStatus;
+import com.mirth.connect.model.PasswordRequirements;
 import com.mirth.connect.model.ServerEvent.Outcome;
 import com.mirth.connect.model.ServerEventContext;
 import com.mirth.connect.model.User;
@@ -51,6 +54,17 @@ public abstract class MirthServlet {
 
     protected static final String SESSION_USER = "user";
     protected static final String SESSION_AUTHORIZED = "authorized";
+    protected static final String SESSION_GRACE_RESTRICTED = "graceRestricted";
+
+    /**
+     * Operations a grace-restricted login may still perform. These are the ones needed to complete
+     * the password change that lifts the restriction: the client has to identify itself before it
+     * can change its own password, and it needs the requirements to explain a rejection. The list
+     * only narrows access — an operation named here still goes through the normal permission check.
+     */
+    private static final Set<String> GRACE_PERIOD_ALLOWED_OPERATIONS = new HashSet<String>(Arrays.asList("updateUserPassword", "checkUserPassword", "getPasswordRequirements", "getCurrentUser"));
+
+    private static final String GRACE_RESTRICTED_MESSAGE = "Your password does not meet the password requirements. Until it is changed, this login may only be used to change it.";
 
     protected HttpServletRequest request;
     protected ContainerRequestContext containerRequestContext;
@@ -71,6 +85,7 @@ public abstract class MirthServlet {
     private String extensionName;
     private boolean bypassUser;
     private int currentUserId;
+    private boolean graceRestricted;
 
     public MirthServlet(HttpServletRequest request, SecurityContext sc) {
         this(request, null, sc);
@@ -140,6 +155,7 @@ public abstract class MirthServlet {
 
         if (isUserLoggedIn()) {
             currentUserId = Integer.parseInt(request.getSession().getAttribute(SESSION_USER).toString());
+            graceRestricted = BooleanUtils.isTrue((Boolean) request.getSession().getAttribute(SESSION_GRACE_RESTRICTED));
             setContext();
             validLogin = true;
         } else {
@@ -179,6 +195,8 @@ public abstract class MirthServlet {
 
                                     if (user != null) {
                                         currentUserId = user.getId();
+                                        // No session here, so this applies to this request only
+                                        graceRestricted = (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD);
                                         setContext();
                                         validLogin = true;
                                     } else {
@@ -281,11 +299,38 @@ public abstract class MirthServlet {
                 }
                 return true;
             } else {
+                if (isDeniedByGraceRestriction()) {
+                    if (audit) {
+                        auditAuthorizationRequest(Outcome.FAILURE);
+                    }
+                    throw new MirthApiException(Response.status(Status.FORBIDDEN).entity(GRACE_RESTRICTED_MESSAGE).build());
+                }
+
                 return authorizationController.isUserAuthorized(getCurrentUserId(), operation, parameterMap, getRequestIpAddress(), audit);
             }
         } catch (ControllerException e) {
             throw new MirthApiException(e);
         }
+    }
+
+    /**
+     * Whether this request should be refused because the login it came from is serving out a
+     * password grace period. Off unless the server enables password.restrictgracesessions, since
+     * turning it on rejects any automation account whose stored password no longer meets the
+     * password requirements.
+     */
+    private boolean isDeniedByGraceRestriction() {
+        if (!graceRestricted) {
+            return false;
+        }
+
+        PasswordRequirements passwordRequirements = configurationController.getPasswordRequirements();
+
+        if (passwordRequirements == null || !passwordRequirements.isRestrictGraceSessions()) {
+            return false;
+        }
+
+        return !GRACE_PERIOD_ALLOWED_OPERATIONS.contains(operation.getName());
     }
 
     protected void checkUserAuthorizedForExtension(String extensionName) {
@@ -312,6 +357,13 @@ public abstract class MirthServlet {
                 }
                 return true;
             } else {
+                if (isDeniedByGraceRestriction()) {
+                    if (audit) {
+                        auditAuthorizationRequest(Outcome.FAILURE, extensionOperation);
+                    }
+                    throw new MirthApiException(Response.status(Status.FORBIDDEN).entity(GRACE_RESTRICTED_MESSAGE).build());
+                }
+
                 return authorizationController.isUserAuthorized(getCurrentUserId(), extensionOperation, parameterMap, getRequestIpAddress(), audit);
             }
         } catch (ControllerException e) {
