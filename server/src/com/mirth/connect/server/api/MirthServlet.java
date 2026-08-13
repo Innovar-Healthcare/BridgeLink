@@ -61,8 +61,12 @@ public abstract class MirthServlet {
      * the password change that lifts the restriction: the client has to identify itself before it
      * can change its own password, and it needs the requirements to explain a rejection. The list
      * only narrows access — an operation named here still goes through the normal permission check.
+     * <p>
+     * Logging out is included because it only destroys the session; refusing it would leave a user
+     * who declines the change with no way to end the session they cannot otherwise use. Note the
+     * logout endpoints call isUserAuthorized purely to audit, and ignore the answer.
      */
-    private static final Set<String> GRACE_PERIOD_ALLOWED_OPERATIONS = new HashSet<String>(Arrays.asList("updateUserPassword", "checkUserPassword", "getPasswordRequirements", "getCurrentUser"));
+    private static final Set<String> GRACE_PERIOD_ALLOWED_OPERATIONS = new HashSet<String>(Arrays.asList("updateUserPassword", "checkUserPassword", "getPasswordRequirements", "getCurrentUser", "logout", "inactivityLogout"));
 
     private static final String GRACE_RESTRICTED_MESSAGE = "Your password does not meet the password requirements. Until it is changed, this login may only be used to change it.";
 
