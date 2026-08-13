@@ -33,15 +33,24 @@ public abstract class MirthDialog extends JDialog {
         registerCloseAction();
     }
 
+    /*
+     * PlatformUI.MIRTH_FRAME is not assigned until the Administrator window is built, so a dialog
+     * shown before that point — the forced password change during login — would fail here rather
+     * than display. There is nothing to suppress saving on when no window exists yet.
+     */
     @Override
     public void setVisible(boolean b) {
-        PlatformUI.MIRTH_FRAME.setCanSave(!b);
+        if (PlatformUI.MIRTH_FRAME != null) {
+            PlatformUI.MIRTH_FRAME.setCanSave(!b);
+        }
         super.setVisible(b);
     }
 
     @Override
     public void dispose() {
-        PlatformUI.MIRTH_FRAME.setCanSave(true);
+        if (PlatformUI.MIRTH_FRAME != null) {
+            PlatformUI.MIRTH_FRAME.setCanSave(true);
+        }
         super.dispose();
     }
 
