@@ -151,21 +151,6 @@ public class Mirth extends Thread {
         BLOCK, WARN, OK
     }
 
-    // Package-private (not private, like ROOT_CHECK_ERROR_MSG) so DerbyPreflightTest can
-    // assert the exact verbatim IRT-1488 text — message verbatim-ness IS the requirement.
-    static final String DERBY_JAVA_ERROR_MSG =
-        "embedded Derby requires Java 21+ as of 26.9; upgrade Java or switch to an external database";
-
-    /**
-     * Pure evaluate method for the Derby/Java-21 startup preflight (JAVA-04).
-     * Unconditional per D-11: no WARN state, no override flag — blocks iff the
-     * configured database is Derby (case-insensitive) and the running JVM is below
-     * feature version 21 (Derby 10.17 requires Java SE 21+).
-     */
-    static boolean derbyPreflightBlocks(String databaseType, int javaFeatureVersion) {
-        return "derby".equalsIgnoreCase(databaseType) && javaFeatureVersion < 21;
-    }
-
     RootCheckResult evaluateRootCheck(String osName, String userName, boolean isWindowsAdmin, boolean allowRoot) {
         boolean isPrivileged;
         if (osName.toLowerCase().contains("win")) {
@@ -197,20 +182,6 @@ public class Mirth extends Thread {
             return process.exitValue() == 0;
         } catch (Exception e) {
             return false; // any exception = fail-open
-        }
-    }
-
-    private void checkDerbyJavaVersion() {
-        // mirth.properties is the authoritative source for the database type: getDatabaseType()
-        // reads the same key, and container MP_DATABASE overrides rewrite mirth.properties
-        // before the JVM starts. Reading it here keeps the preflight runnable before the
-        // shutdown hook is registered (exiting after registration would run shutdown()
-        // against uninitialized subsystems — see IRT-1488 / 16-REVIEW WR-05).
-        String dbType = mirthProperties.getString("database");
-
-        if (derbyPreflightBlocks(dbType, Runtime.version().feature())) {
-            logger.error(DERBY_JAVA_ERROR_MSG);
-            System.exit(1);
         }
     }
 
@@ -302,11 +273,6 @@ public class Mirth extends Thread {
 
             checkRunningAsRoot();
             checkNoNewPrivs();
-
-            // Derby/Java-21 startup preflight (JAVA-04) — must run BEFORE the shutdown
-            // hook is registered below, so an abort exits cleanly (same pattern as
-            // checkRunningAsRoot above)
-            checkDerbyJavaVersion();
 
             // Initialize TLS system properties as early as possible, because otherwise they will be cached
             if (System.getProperty("jdk.tls.ephemeralDHKeySize") == null) {
