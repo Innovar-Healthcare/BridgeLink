@@ -19,6 +19,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Writer;
+import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -27,12 +28,15 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -75,12 +79,14 @@ import com.mirth.connect.donkey.server.channel.MetaDataReplacer;
 import com.mirth.connect.donkey.server.channel.ResponseSelector;
 import com.mirth.connect.donkey.server.channel.ResponseTransformerExecutor;
 import com.mirth.connect.donkey.server.channel.SourceConnector;
+import com.mirth.connect.donkey.server.channel.Statistics;
 import com.mirth.connect.donkey.server.channel.StorageSettings;
 import com.mirth.connect.donkey.server.channel.components.ResponseTransformer;
 import com.mirth.connect.donkey.server.controllers.ChannelController;
 import com.mirth.connect.donkey.server.data.DonkeyDao;
 import com.mirth.connect.donkey.server.data.DonkeyDaoException;
 import com.mirth.connect.donkey.server.data.DonkeyDaoFactory;
+import com.mirth.connect.donkey.server.data.DonkeyStatisticsUpdater;
 import com.mirth.connect.donkey.server.data.buffered.BufferedDaoFactory;
 import com.mirth.connect.donkey.server.data.passthru.PassthruDaoFactory;
 import com.mirth.connect.donkey.server.event.EventDispatcher;
@@ -106,6 +112,25 @@ public class TestUtils {
     final public static String DEFAULT_OUTBOUND_TEMPLATE = null;
 
     private static Logger logger = LogManager.getLogger(TestUtils.class);
+
+    /*
+     * IRT-1788: bounded retry for statements that contend with the Statistics Updater thread.
+     * Whichever transaction the database picks as the deadlock victim, the other one committed, so
+     * one retry is normally enough. The backoffs are unequal and are not multiples of the updater's
+     * 1000 ms tick, so a retry cannot stay phase-locked to the tick and collide at the same offset
+     * every attempt; together they span more than one full tick.
+     */
+    private static final int LOCK_RETRY_ATTEMPTS = 4;
+    private static final long[] LOCK_RETRY_BACKOFF_MILLIS = { 150L, 400L, 900L };
+
+    /*
+     * Derby: 40001 deadlock, 40XL1/40XL2 lock timeout.
+     * PostgreSQL: 40001 serialization failure, 40P01 deadlock detected, 55P03 lock not available.
+     */
+    private static final Set<String> TRANSIENT_LOCK_SQL_STATES = new HashSet<String>(Arrays.asList("40001", "40XL1", "40XL2", "40P01", "55P03"));
+
+    private static Field pendingStatisticsField;
+    private static boolean pendingStatisticsWarningLogged;
 
     /**
      * Closes HikariCP connection pools held by DonkeyConnectionPools.
@@ -1286,22 +1311,240 @@ public class TestUtils {
         return stats;
     }
 
+    /**
+     * Resets the statistics for a channel, both in the database and in memory.
+     *
+     * IRT-1788: the Statistics Updater thread (DonkeyStatisticsUpdater) runs for the entire
+     * lifetime of a test class and writes D_MS&lt;localChannelId&gt; on its own schedule, so a plain
+     * "DELETE FROM D_MS&lt;n&gt;" here races it in two different ways:
+     *
+     * 1. Derby detects a row-lock cycle between our DELETE and the updater's UPDATE and rolls one
+     *    of the two transactions back, failing whatever test happened to be in setup.
+     * 2. A flush landing after our DELETE finds no rows to UPDATE, so JdbcDao falls through to
+     *    insertChannelStatistics and re-creates the rows with the previous test's counts, while
+     *    the in-memory statistics we cleared still read zero.
+     *
+     * Both come from the same defect - nothing coordinates harness cleanup with the updater - so
+     * this first takes the updater's pending deltas for this channel away from it, then deletes
+     * with a retry for a flush that was already in flight, then verifies the rows really are gone.
+     */
     public static void deleteChannelStatistics(String channelId) throws SQLException {
-        long localChannelId = ChannelController.getInstance().getLocalChannelId(channelId);
-        Connection connection = null;
+        final long localChannelId = ChannelController.getInstance().getLocalChannelId(channelId);
+        final String sql = "DELETE FROM D_MS" + localChannelId;
+
+        discardPendingStatistics(channelId);
+        executeWithLockRetry(sql, connection -> executeUpdate(connection, sql));
+
+        /*
+         * Deliberately after the DELETE, and deliberately not in a finally block: DonkeyDaoTests
+         * and ChannelControllerTests assert that the database and the in-memory statistics agree,
+         * so the two must be cleared together or not at all. Clearing memory on a path where the
+         * DELETE failed would leave memory at zero and the database stale, which surfaces as a
+         * confusing wrong-value assertion much later instead of the real error here.
+         */
+        Statistics statistics = ChannelController.getInstance().getStatistics();
+
+        if (statistics != null) {
+            statistics.remove(channelId);
+        }
+
+        /*
+         * If a flush committed between the discard and the DELETE, the rows are back. Repair once:
+         * the updater's pending deltas now hold the negated snapshot it re-applies after a
+         * successful commit, so they have to be discarded again along with the rows.
+         */
+        if (countStatisticsRows(localChannelId) > 0) {
+            logger.warn("Statistics rows for channel " + channelId + " were re-created by the Statistics Updater during cleanup; repairing (IRT-1788).");
+            discardPendingStatistics(channelId);
+            executeWithLockRetry(sql, connection -> executeUpdate(connection, sql));
+        }
+    }
+
+    /**
+     * Takes away whatever the Statistics Updater is still holding in memory for this channel, so
+     * that its next tick cannot write counts back into a table the caller is about to empty.
+     *
+     * DonkeyStatisticsUpdater keeps its pending deltas in a private field with no accessor and
+     * exposes no way to pause or flush, so the field is read reflectively. This is test-harness
+     * code and product code is deliberately left alone; if the field is ever renamed, the harness
+     * logs a warning and falls back to its previous (racy) behavior rather than breaking.
+     *
+     * Only safe because every caller resets statistics before generating the traffic it asserts
+     * on - the discarded deltas belong to traffic the test is throwing away.
+     */
+    private static void discardPendingStatistics(String channelId) {
+        DonkeyStatisticsUpdater updater = Donkey.getInstance().getStatisticsUpdater();
+
+        if (updater == null) {
+            // Engine not started yet, so there is no updater thread to race with.
+            return;
+        }
+
+        try {
+            if (pendingStatisticsField == null) {
+                Field field = DonkeyStatisticsUpdater.class.getDeclaredField("statistics");
+                field.setAccessible(true);
+                pendingStatisticsField = field;
+            }
+
+            Statistics pendingStatistics = (Statistics) pendingStatisticsField.get(updater);
+
+            if (pendingStatistics != null) {
+                // Scoped to this channel, not clear(), so multi-channel tests keep the rest.
+                pendingStatistics.remove(channelId);
+            }
+        } catch (Exception e) {
+            if (!pendingStatisticsWarningLogged) {
+                pendingStatisticsWarningLogged = true;
+                logger.warn("Unable to reach the Statistics Updater's pending statistics; channel statistics cleanup may race the updater thread (IRT-1788).", e);
+            }
+        }
+    }
+
+    private static void executeUpdate(Connection connection, String sql) throws SQLException {
         PreparedStatement statement = null;
 
         try {
-            connection = getConnection();
-            statement = connection.prepareStatement("DELETE FROM D_MS" + localChannelId);
+            statement = connection.prepareStatement(sql);
             statement.executeUpdate();
-            connection.commit();
         } finally {
             close(statement);
-            close(connection);
+        }
+    }
+
+    private static long countStatisticsRows(long localChannelId) throws SQLException {
+        final String sql = "SELECT COUNT(*) FROM D_MS" + localChannelId;
+
+        return callWithLockRetry(sql, connection -> {
+            PreparedStatement statement = null;
+            ResultSet result = null;
+
+            try {
+                statement = connection.prepareStatement(sql);
+                result = statement.executeQuery();
+                return result.next() ? result.getLong(1) : 0L;
+            } finally {
+                close(result);
+                close(statement);
+            }
+        });
+    }
+
+    private interface ConnectionCallable<T> {
+        T call(Connection connection) throws SQLException;
+    }
+
+    private interface ConnectionRunnable {
+        void run(Connection connection) throws SQLException;
+    }
+
+    private static void executeWithLockRetry(String description, ConnectionRunnable action) throws SQLException {
+        callWithLockRetry(description, connection -> {
+            action.run(connection);
+            return null;
+        });
+    }
+
+    /**
+     * Runs an action in its own transaction, retrying it on a transient lock failure.
+     *
+     * The action MUST be idempotent: every attempt gets a fresh connection and a fresh
+     * transaction, and a failed attempt is rolled back by close(Connection). Retries are bounded
+     * and the last SQLException is rethrown once they are exhausted, so a genuine database problem
+     * still fails the test - just later, with the SQLState logged.
+     */
+    private static <T> T callWithLockRetry(String description, ConnectionCallable<T> action) throws SQLException {
+        SQLException lastException = null;
+
+        for (int attempt = 1; attempt <= LOCK_RETRY_ATTEMPTS; attempt++) {
+            Connection connection = null;
+
+            try {
+                connection = getConnection();
+                T value = action.call(connection);
+                connection.commit();
+
+                if (attempt > 1) {
+                    logger.warn("\"" + description + "\" succeeded on attempt " + attempt + " of " + LOCK_RETRY_ATTEMPTS + " after transient lock contention (IRT-1788).");
+                }
+
+                return value;
+            } catch (SQLException e) {
+                lastException = e;
+
+                if (attempt == LOCK_RETRY_ATTEMPTS || !isTransientLockFailure(e)) {
+                    throw e;
+                }
+
+                logger.warn("\"" + description + "\" hit a transient lock failure (SQLState=" + e.getSQLState() + ", errorCode=" + e.getErrorCode() + ") on attempt " + attempt + " of " + LOCK_RETRY_ATTEMPTS + "; retrying. This is normally contention with the Statistics Updater thread (IRT-1788).", e);
+            } finally {
+                // close(Connection) rolls back first, so a failed attempt leaves no open
+                // transaction on the pooled connection.
+                close(connection);
+            }
+
+            try {
+                Thread.sleep(LOCK_RETRY_BACKOFF_MILLIS[attempt - 1]);
+            } catch (InterruptedException e) {
+                // Do not swallow a @Test(timeout=...) interrupt: stop retrying and report the
+                // database failure instead.
+                Thread.currentThread().interrupt();
+                throw lastException;
+            }
         }
 
-        ChannelController.getInstance().getStatistics().remove(channelId);
+        throw lastException;
+    }
+
+    /**
+     * Whether a failure means "the transaction was rolled back through no fault of the statement",
+     * i.e. re-running an idempotent statement is expected to succeed.
+     *
+     * An exact SQLState allowlist rather than a "40" class prefix: Derby's class 40 also contains
+     * 40XC0 (dead statement) and 40XD0-40XD2 (container closed), none of which is lock contention.
+     */
+    static boolean isTransientLockFailure(Throwable throwable) {
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>());
+        Deque<Throwable> pending = new ArrayDeque<Throwable>();
+
+        // ArrayDeque rejects nulls, and an unchained exception is the common case, so every add
+        // has to be guarded.
+        addIfNotNull(pending, throwable);
+
+        while (!pending.isEmpty()) {
+            Throwable current = pending.poll();
+
+            // SQLException chains link through both getCause() and getNextException(), and those
+            // can cross-link, so track what has already been visited.
+            if (!seen.add(current)) {
+                continue;
+            }
+
+            if (current instanceof SQLException) {
+                SQLException sqlException = (SQLException) current;
+
+                if (TRANSIENT_LOCK_SQL_STATES.contains(StringUtils.upperCase(sqlException.getSQLState()))) {
+                    return true;
+                }
+
+                addIfNotNull(pending, sqlException.getNextException());
+            }
+
+            // Fallback for drivers that report a useless SQLState (MySQL lock waits, Oracle).
+            if (StringUtils.containsAnyIgnoreCase(current.getMessage(), "deadlock", "lock could not be obtained", "lock wait timeout")) {
+                return true;
+            }
+
+            addIfNotNull(pending, current.getCause());
+        }
+
+        return false;
+    }
+
+    private static void addIfNotNull(Deque<Throwable> pending, Throwable throwable) {
+        if (throwable != null) {
+            pending.add(throwable);
+        }
     }
 
     /**
