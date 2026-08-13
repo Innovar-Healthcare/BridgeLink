@@ -124,6 +124,13 @@ public class TestUtils {
     private static final long[] LOCK_RETRY_BACKOFF_MILLIS = { 150L, 400L, 900L };
 
     /*
+     * How many times a statistics reset will re-run when the updater re-creates what it just
+     * removed. Every repeat is driven by an observed non-empty store, never by a timer, so this only
+     * bounds a pathological case where the updater is fed faster than the reset can clear it.
+     */
+    private static final int STATISTICS_RESET_ATTEMPTS = 3;
+
+    /*
      * Derby: 40001 deadlock, 40XL1/40XL2 lock timeout.
      * PostgreSQL: 40001 serialization failure, 40P01 deadlock detected, 55P03 lock not available.
      */
@@ -131,6 +138,18 @@ public class TestUtils {
 
     private static Field pendingStatisticsField;
     private static boolean pendingStatisticsWarningLogged;
+
+    /**
+     * Reports a harness-level contention event. These go to stdout as well as the logger on purpose:
+     * log4j2 is not configured for donkey's ant test runs (nothing puts log4j2-test.properties on the
+     * classpath root, and no target sets log4j2.configurationFile), so a logger-only warning is
+     * invisible in a CI build log - which is the one place this needs to be searchable if statistics
+     * contention ever comes back. Only fires on actual contention, so it does not add build noise.
+     */
+    private static void warnContention(String message) {
+        logger.warn(message);
+        System.out.println("WARN " + message);
+    }
 
     /**
      * Closes HikariCP connection pools held by DonkeyConnectionPools.
@@ -1325,39 +1344,73 @@ public class TestUtils {
      *    the in-memory statistics we cleared still read zero.
      *
      * Both come from the same defect - nothing coordinates harness cleanup with the updater - so
-     * this first takes the updater's pending deltas for this channel away from it, then deletes
-     * with a retry for a flush that was already in flight, then verifies the rows really are gone.
+     * this takes the updater's pending deltas for this channel away from it, deletes with a retry
+     * for a flush that was already in flight, and then repeats until neither store has anything
+     * left for the channel.
+     *
+     * The loop is not defensive padding. After a successful flush the updater re-applies the
+     * *negated* snapshot to its pending map (DonkeyStatisticsUpdater.commit), so a flush that
+     * commits between the discard and the DELETE both re-creates the rows and repopulates the
+     * pending deltas - the latter after the discard already ran. Checking only the rows, or only
+     * checking once, therefore misses the case where the rows were deleted but a negated snapshot
+     * is still pending and would be inserted a tick later.
      */
     public static void deleteChannelStatistics(String channelId) throws SQLException {
         final long localChannelId = ChannelController.getInstance().getLocalChannelId(channelId);
         final String sql = "DELETE FROM D_MS" + localChannelId;
 
-        discardPendingStatistics(channelId);
-        executeWithLockRetry(sql, connection -> executeUpdate(connection, sql));
-
-        /*
-         * Deliberately after the DELETE, and deliberately not in a finally block: DonkeyDaoTests
-         * and ChannelControllerTests assert that the database and the in-memory statistics agree,
-         * so the two must be cleared together or not at all. Clearing memory on a path where the
-         * DELETE failed would leave memory at zero and the database stale, which surfaces as a
-         * confusing wrong-value assertion much later instead of the real error here.
-         */
-        Statistics statistics = ChannelController.getInstance().getStatistics();
-
-        if (statistics != null) {
-            statistics.remove(channelId);
-        }
-
-        /*
-         * If a flush committed between the discard and the DELETE, the rows are back. Repair once:
-         * the updater's pending deltas now hold the negated snapshot it re-applies after a
-         * successful commit, so they have to be discarded again along with the rows.
-         */
-        if (countStatisticsRows(localChannelId) > 0) {
-            logger.warn("Statistics rows for channel " + channelId + " were re-created by the Statistics Updater during cleanup; repairing (IRT-1788).");
+        for (int attempt = 1; attempt <= STATISTICS_RESET_ATTEMPTS; attempt++) {
             discardPendingStatistics(channelId);
             executeWithLockRetry(sql, connection -> executeUpdate(connection, sql));
+
+            /*
+             * Deliberately after the DELETE, and deliberately not in a finally block:
+             * DonkeyDaoTests and ChannelControllerTests assert that the database and the in-memory
+             * statistics agree, so the two must be cleared together or not at all. Clearing memory
+             * on a path where the DELETE failed would leave memory at zero and the database stale,
+             * which surfaces as a confusing wrong-value assertion much later instead of the real
+             * error here.
+             */
+            Statistics statistics = ChannelController.getInstance().getStatistics();
+
+            if (statistics != null) {
+                statistics.remove(channelId);
+            }
+
+            if (!hasPendingStatistics(channelId) && countStatisticsRows(localChannelId) == 0) {
+                return;
+            }
+
+            warnContention("Statistics for channel " + channelId + " were re-created by the Statistics Updater during cleanup (attempt " + attempt + " of " + STATISTICS_RESET_ATTEMPTS + "); repeating the reset (IRT-1788).");
         }
+
+        warnContention("Statistics for channel " + channelId + " were still being re-created by the Statistics Updater after " + STATISTICS_RESET_ATTEMPTS + " reset attempts (IRT-1788).");
+    }
+
+    /**
+     * Whether the Statistics Updater is holding a non-zero pending delta for this channel, which it
+     * would write to D_MS on its next tick. Reads a snapshot, so it does not disturb the map.
+     */
+    private static boolean hasPendingStatistics(String channelId) {
+        Statistics pendingStatistics = getPendingStatistics();
+
+        if (pendingStatistics == null) {
+            return false;
+        }
+
+        Map<Integer, Map<Status, Long>> channelStats = pendingStatistics.getStats().get(channelId);
+
+        if (channelStats != null) {
+            for (Map<Status, Long> connectorStats : channelStats.values()) {
+                for (Long value : connectorStats.values()) {
+                    if (value != null && value.longValue() != 0L) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1373,11 +1426,25 @@ public class TestUtils {
      * on - the discarded deltas belong to traffic the test is throwing away.
      */
     private static void discardPendingStatistics(String channelId) {
+        Statistics pendingStatistics = getPendingStatistics();
+
+        if (pendingStatistics != null) {
+            // Scoped to this channel, not clear(), so multi-channel tests keep the rest.
+            pendingStatistics.remove(channelId);
+        }
+    }
+
+    /**
+     * The Statistics Updater's pending deltas, or null if they cannot be reached (engine not
+     * started, or the field was renamed - in which case one warning is logged and callers fall back
+     * to the previous, racier behavior).
+     */
+    private static Statistics getPendingStatistics() {
         DonkeyStatisticsUpdater updater = Donkey.getInstance().getStatisticsUpdater();
 
         if (updater == null) {
             // Engine not started yet, so there is no updater thread to race with.
-            return;
+            return null;
         }
 
         try {
@@ -1387,17 +1454,14 @@ public class TestUtils {
                 pendingStatisticsField = field;
             }
 
-            Statistics pendingStatistics = (Statistics) pendingStatisticsField.get(updater);
-
-            if (pendingStatistics != null) {
-                // Scoped to this channel, not clear(), so multi-channel tests keep the rest.
-                pendingStatistics.remove(channelId);
-            }
+            return (Statistics) pendingStatisticsField.get(updater);
         } catch (Exception e) {
             if (!pendingStatisticsWarningLogged) {
                 pendingStatisticsWarningLogged = true;
                 logger.warn("Unable to reach the Statistics Updater's pending statistics; channel statistics cleanup may race the updater thread (IRT-1788).", e);
             }
+
+            return null;
         }
     }
 
@@ -1465,7 +1529,7 @@ public class TestUtils {
                 connection.commit();
 
                 if (attempt > 1) {
-                    logger.warn("\"" + description + "\" succeeded on attempt " + attempt + " of " + LOCK_RETRY_ATTEMPTS + " after transient lock contention (IRT-1788).");
+                    warnContention("\"" + description + "\" succeeded on attempt " + attempt + " of " + LOCK_RETRY_ATTEMPTS + " after transient lock contention (IRT-1788).");
                 }
 
                 return value;
@@ -1476,7 +1540,9 @@ public class TestUtils {
                     throw e;
                 }
 
-                logger.warn("\"" + description + "\" hit a transient lock failure (SQLState=" + e.getSQLState() + ", errorCode=" + e.getErrorCode() + ") on attempt " + attempt + " of " + LOCK_RETRY_ATTEMPTS + "; retrying. This is normally contention with the Statistics Updater thread (IRT-1788).", e);
+                String failureMessage = "\"" + description + "\" hit a transient lock failure (SQLState=" + e.getSQLState() + ", errorCode=" + e.getErrorCode() + ") on attempt " + attempt + " of " + LOCK_RETRY_ATTEMPTS + "; retrying. This is normally contention with the Statistics Updater thread (IRT-1788).";
+                warnContention(failureMessage);
+                logger.debug(failureMessage, e);
             } finally {
                 // close(Connection) rolls back first, so a failed attempt leaves no open
                 // transaction on the pooled connection.
