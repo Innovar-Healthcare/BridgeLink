@@ -59,6 +59,23 @@ public class DocRenderSeamTest {
     private static final String EMPTY_HTML = "<html><body></body></html>";
 
     /**
+     * Realistic multi-table + heading fixture (SC-1, D-01, Phase 22.2). A single {@code <h1>}
+     * heading followed by TWO separate (non-nested) {@code <table>} elements, each carrying a
+     * distinct greppable token in a {@code <td>}. This is the exact template shape that threw
+     * {@code ClassCastException: Table cannot be cast to TextElementArray} under iText 2.1.7 --
+     * the old library flattened sibling tables into a single {@code TextElementArray} and choked
+     * on the second one. Phase 22.1's {@link #HTML} fixture is a single trivial one-cell table
+     * that renders identically on both libraries and never exercises this divergent path. OpenRTF
+     * renders this fixture without throwing -- a strict superset of iText 2.1.7's capability (an
+     * improvement, not a regression). The historical iText crash cannot be re-run here because
+     * iText/itext-rtf has been removed from the tree (CVE-07); this fixture instead asserts the
+     * NEW path renders content-faithfully.
+     */
+    private static final String COMPLEX_MULTI_TABLE_HEADING = "<html><body><h1>Multi-Table Report</h1>"
+            + "<table><tr><td>VITALS_TABLE_TOKEN_22P2</td></tr></table>"
+            + "<table><tr><td>MEDS_TABLE_TOKEN_22P2</td></tr></table></body></html>";
+
+    /**
      * Action invoked with a freshly-constructed {@link DocumentDispatcher} while the
      * {@code mockStatic(ControllerFactory.class)} scope from {@link #withDispatcher} is still
      * open, so any statics the dispatcher's field initializer touched remain stubbed for the
@@ -164,6 +181,37 @@ public class DocRenderSeamTest {
             }
             String rtfText = rtfDoc.getText(0, rtfDoc.getLength());
             assertTrue("RTF text must contain the fixture token", rtfText.contains(EXPECTED_TOKEN));
+        });
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Complex multi-table + heading RTF differential: the exact template shape that threw
+    // ClassCastException under iText 2.1.7 -- OpenRTF renders it content-faithfully
+    // (SC-1, D-01, Phase 22.2, CVE-07)
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    public void testComplexMultiTableRtfRendersContentFaithful() throws Exception {
+        withDispatcher(dispatcher -> {
+            DocumentDispatcherProperties props = new DocumentDispatcherProperties();
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            invokeCreateRtf(dispatcher, new ByteArrayInputStream(COMPLEX_MULTI_TABLE_HEADING.getBytes()), out, props);
+
+            byte[] rtfBytes = out.toByteArray();
+            assertTrue("RTF must start with the {\\rtf control header",
+                    new String(rtfBytes, StandardCharsets.US_ASCII).startsWith("{\\rtf"));
+
+            RTFEditorKit rtfKit = new RTFEditorKit();
+            Document rtfDoc = rtfKit.createDefaultDocument();
+            try (ByteArrayInputStream rtfIn = new ByteArrayInputStream(rtfBytes)) {
+                rtfKit.read(rtfIn, rtfDoc, 0);
+            }
+            String rtfText = rtfDoc.getText(0, rtfDoc.getLength());
+            assertTrue("RTF text must contain the heading text", rtfText.contains("Multi-Table Report"));
+            assertTrue("RTF text must contain the first table's token", rtfText.contains("VITALS_TABLE_TOKEN_22P2"));
+            assertTrue("RTF text must contain the second table's token (proving both sibling tables rendered, not just the first)",
+                    rtfText.contains("MEDS_TABLE_TOKEN_22P2"));
         });
     }
 
