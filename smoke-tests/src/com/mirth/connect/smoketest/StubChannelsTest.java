@@ -3,6 +3,7 @@ package com.mirth.connect.smoketest;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -20,6 +21,7 @@ import javax.swing.text.Document;
 import javax.swing.text.rtf.RTFEditorKit;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -87,9 +89,10 @@ public class StubChannelsTest extends SmokeTestBase {
         rest.processMessage(SOAP_CHANNEL_ID, Hl7Messages.ORU_R01_LF);
         rest.processMessage(JDBC_CHANNEL_ID, Hl7Messages.ORU_R01_LF);
         rest.processMessageBytes(DICOM_CHANNEL_ID, Files.readAllBytes(Paths.get("fixtures", "smoke-test.dcm")));
-        // doc-writer-test.xml has TWO destinations (PDF at metaDataId 1, RTF at metaDataId 2) —
-        // both must be targeted explicitly (Rule 1 fix, see RestClient.processMessage javadoc).
-        rest.processMessage(DOC_WRITER_CHANNEL_ID, Hl7Messages.ORU_R01_LF, java.util.List.of(1, 2));
+        // doc-writer-test.xml has FOUR destinations (PDF at metaDataId 1, RTF at metaDataId 2,
+        // Complex RTF at metaDataId 3, Encrypted PDF at metaDataId 4) — all four must be
+        // targeted explicitly (Rule 1 fix, see RestClient.processMessage javadoc).
+        rest.processMessage(DOC_WRITER_CHANNEL_ID, Hl7Messages.ORU_R01_LF, java.util.List.of(1, 2, 3, 4));
     }
 
     @Test
@@ -165,9 +168,24 @@ public class StubChannelsTest extends SmokeTestBase {
         });
     }
 
+    // Phase 22.2 (SC-2/SC-3/D-05): tokens/password mirror the exact fixture choices authored
+    // into doc-writer-test.xml's metaDataId 3/4 templates and DocRenderSeamTest's Wave-1
+    // tracer (22.2-01), so the end-to-end smoke assertions below stay consistent with the
+    // seam-level differential fixture they extend.
+    private static final String VITALS_TABLE_TOKEN = "VITALS_TABLE_TOKEN_22P2";
+    private static final String MEDS_TABLE_TOKEN = "MEDS_TABLE_TOKEN_22P2";
+    private static final String ENCRYPTED_PDF_PASSWORD = "s3cret";
+
     @Test
     public void docWriter() throws Exception {
-        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 1, () -> {
+        // Phase 22.2/D-05: raised from 1 to 4 — all four enabled destinations (PDF, RTF,
+        // Complex RTF, Encrypted PDF) must reach SENT status. getSentCount() aggregates the
+        // "sent" statistic across every destination connector (DonkeyEngineController
+        // #addConnectorToChannelStatistics sums per-destination SENT counts into the
+        // channel-level total), so one pumped message fanning out to four destinations
+        // produces a channel-level sent count of 4 — a silently-dropped destination would
+        // fail this >= 4 gate.
+        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 4, () -> {
             Path pdfPath = pollForFile(Paths.get(outDir, "doc", "output.pdf"), 60);
             Path rtfPath = pollForFile(Paths.get(outDir, "doc", "output.rtf"), 60);
 
@@ -189,6 +207,39 @@ public class StubChannelsTest extends SmokeTestBase {
             String rtfText = rtfDoc.getText(0, rtfDoc.getLength());
             assertTrue("RTF text extraction should contain the transformed patient token",
                     rtfText.contains(Hl7Messages.EXPECTED_PATIENT));
+
+            // Complex RTF (SC-2/D-03, Phase 22.2): metaDataId 3's multi-table + heading
+            // destination writes a DISTINCT on-disk file from the baseline output.rtf above.
+            // Asserts both sibling-table tokens survive the real end-to-end
+            // deploy -> pump -> DocumentDispatcher.createRTF() -> disk round trip.
+            Path complexRtfPath = pollForFile(Paths.get(outDir, "doc", "output-complex.rtf"), 60);
+            RTFEditorKit complexRtfKit = new RTFEditorKit();
+            Document complexRtfDoc = complexRtfKit.createDefaultDocument();
+            try (FileInputStream complexRtfIn = new FileInputStream(complexRtfPath.toFile())) {
+                complexRtfKit.read(complexRtfIn, complexRtfDoc, 0);
+            }
+            String complexRtfText = complexRtfDoc.getText(0, complexRtfDoc.getLength());
+            assertTrue("Complex RTF text extraction should contain the first table's token",
+                    complexRtfText.contains(VITALS_TABLE_TOKEN));
+            assertTrue("Complex RTF text extraction should contain the second table's token "
+                    + "(proving both sibling tables rendered, not just the first)",
+                    complexRtfText.contains(MEDS_TABLE_TOKEN));
+
+            // Encrypted PDF (SC-3/D-04, Phase 22.2): metaDataId 4's encrypt=true destination
+            // writes a DISTINCT on-disk file from the baseline output.pdf above. Mirrors
+            // DocRenderSeamTest#testEncryptPdfPasswordRoundTrip's assertion shape, proving the
+            // end-to-end channel-deployed encrypt path (not just the reflective seam) on disk.
+            Path encPdfPath = pollForFile(Paths.get(outDir, "doc", "output-enc.pdf"), 60);
+            try {
+                PDDocument.load(encPdfPath.toFile()).close();
+                fail("loading the encrypted PDF without a password should throw");
+            } catch (InvalidPasswordException expected) {
+                // pass
+            }
+            try (PDDocument encPdf = PDDocument.load(encPdfPath.toFile(), ENCRYPTED_PDF_PASSWORD)) {
+                assertTrue("document encrypted with a password must report isEncrypted() == true",
+                        encPdf.isEncrypted());
+            }
         });
     }
 }
