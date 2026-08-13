@@ -3,7 +3,7 @@
     <name>Lookup Table Management System</name>
     <author>Innovar Healthcare</author>
     <pluginVersion>2.1.1</pluginVersion>
-    <mirthVersion>26.3.0, 26.3.1, 26.6.0</mirthVersion>
+    <mirthVersion>26.3.0, 26.3.1, 26.6.0, 26.9.0</mirthVersion>
     <url>https://www.innovarhealthcare.com</url>
     <description>This plugin provides a centralized repository for key-value pairs used across channel</description>
     <clientClasses>
