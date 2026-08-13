@@ -15,6 +15,18 @@ donkey/donkey-test
 **/code-coverage-reports
 **/junit-html
 **/jacoco-html
+
+# Per-database test report output (ant test-run-<db>-db writes <dir>-<dbtype>); gitignore matches
+# whole path components, so the patterns above do not cover these.
+**/junit-reports-*
+**/code-coverage-reports-*
+**/junit-html-*
+**/jacoco-html-*
+
+# Temp files ant's forked <junit> task writes into the module directory; they leak when a forked
+# JVM is killed.
+**/junit[0-9]*.properties
+**/junitvmwatcher*.properties
 .DS_Store
 
 # /client/
