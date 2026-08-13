@@ -72,8 +72,14 @@ public class ConnectorTests {
      * whole-second boundaries. A 6800 ms window only contains 7 of those boundaries when it happens
      * to start at least 200 ms into a second, so ~20% of runs saw 6 polls on a completely idle
      * machine, before machine load was a factor at all. Waiting for the polls removes the
-     * dependency on wall clock; the elapsed-time assertion below still holds the polling frequency
-     * itself to account.
+     * dependency on wall clock.
+     *
+     * The elapsed-time assertion below bounds the polling frequency from one side only: it catches
+     * polls firing faster than configured, or the interval being ignored entirely, but not polls
+     * firing slower than configured. That is deliberate - an upper bound would have to tolerate a
+     * loaded machine and a slow database, and PollConnectorJob silently drops a fire whose
+     * predecessor is still running, so any upper bound loose enough to be stable would be too loose
+     * to catch a real regression. It would put the wall-clock flakiness straight back.
      */
     @Test
     public final void testPollConnector() throws Exception {
@@ -159,7 +165,7 @@ public class ConnectorTests {
 
         assertTrue("Expected " + expectedPollCount + " polls within " + pollTimeoutMillis + "ms but only " + actualPollCount + " completed", reachedExpectedPolls);
         // Polls are spaced by the polling frequency, so reaching the expected count any faster
-        // would mean the frequency was not honored.
+        // would mean the frequency was not honored at all.
         assertTrue("Expected " + expectedPollCount + " polls to take at least " + ((expectedPollCount - 1) * pollingFrequency) + "ms but took " + elapsedMillis + "ms", elapsedMillis >= (expectedPollCount - 1) * pollingFrequency);
         // Every poll dispatches exactly one message. Not asserted against expectedPollCount
         // directly: a further poll may fire between the latch opening and stop() completing.
