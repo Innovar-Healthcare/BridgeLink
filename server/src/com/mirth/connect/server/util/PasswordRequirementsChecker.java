@@ -34,6 +34,14 @@ public class PasswordRequirementsChecker implements Serializable {
 
     private static final String PASSWORD_IS_TOO_SHORT_MINIMUM_LENGTH = "Password is too short. Minimum length is %d characters";
 
+    /*
+     * The hardened defaults shipped since 26.6.0 already reject "admin" for length and character
+     * class. This check exists so the operator is told the actual problem rather than being sent
+     * down a list of composition failures. See IRT-1786.
+     */
+    private static final String DISALLOWED_PASSWORD = "admin";
+    private static final String PASSWORD_IS_NOT_ALLOWED = "\"%s\" is not allowed as a password";
+
     private static final String PASSWORD_MUST_CONTAIN_A_SPECIAL_CHARACTER = "Password must contain %d special character(s)";
     private static final String PASSWORD_MUST_NOT_CONTAIN_A_SPECIAL_CHARACTER = "Password must not contain a special character";
 
@@ -58,6 +66,8 @@ public class PasswordRequirementsChecker implements Serializable {
     private static final String PASSWORD_REUSE_PERIOD = "password.reuseperiod";
     private static final String PASSWORD_REUSE_LIMIT = "password.reuselimit";
     private static final String PASSWORD_ALLOW_USERNAME_ENUMERATION = "password.allowusernameenumeration";
+    private static final String PASSWORD_ENFORCE_AT_LOGIN = "password.enforceatlogin";
+    private static final String PASSWORD_RESTRICT_GRACE_SESSIONS = "password.restrictgracesessions";
 
     private static PasswordRequirementsChecker instance = null;
 
@@ -90,6 +100,8 @@ public class PasswordRequirementsChecker implements Serializable {
         passwordRequirements.setReusePeriod(securityProperties.getInt(PASSWORD_REUSE_PERIOD, 0));
         passwordRequirements.setReuseLimit(securityProperties.getInt(PASSWORD_REUSE_LIMIT, 0));
         passwordRequirements.setAllowUsernameEnumeration(securityProperties.getBoolean(PASSWORD_ALLOW_USERNAME_ENUMERATION, false));
+        passwordRequirements.setEnforceAtLogin(securityProperties.getBoolean(PASSWORD_ENFORCE_AT_LOGIN, true));
+        passwordRequirements.setRestrictGraceSessions(securityProperties.getBoolean(PASSWORD_RESTRICT_GRACE_SESSIONS, false));
         return passwordRequirements;
     }
 
@@ -103,6 +115,11 @@ public class PasswordRequirementsChecker implements Serializable {
      */
     public List<String> doesPasswordMeetRequirements(Integer userId, String plainPassword, PasswordRequirements passwordRequirements) {
         List<String> resultList = new ArrayList<String>();
+
+        if (StringUtils.equalsIgnoreCase(plainPassword, DISALLOWED_PASSWORD)) {
+            addResult(resultList, String.format(PASSWORD_IS_NOT_ALLOWED, DISALLOWED_PASSWORD));
+        }
+
         addResult(resultList, checkMinLower(plainPassword, passwordRequirements.getMinLower()));
         addResult(resultList, checkMinUpper(plainPassword, passwordRequirements.getMinUpper()));
         addResult(resultList, checkMinNumeric(plainPassword, passwordRequirements.getMinNumeric()));
