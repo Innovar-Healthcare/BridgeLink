@@ -22,6 +22,7 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
 
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import com.mirth.connect.client.core.ClientException;
@@ -115,6 +116,17 @@ public class UserServlet extends MirthServlet implements UserServletInterface {
                         session.setAttribute(SESSION_USER, validUser.getId());
                         session.setAttribute(SESSION_AUTHORIZED, true);
 
+                        /*
+                         * A grace period means the stored password no longer meets the password
+                         * requirements (or has expired). Mark the session so MirthServlet can
+                         * confine it to changing that password, if the server is configured to.
+                         */
+                        if (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD) {
+                            session.setAttribute(SESSION_GRACE_RESTRICTED, true);
+                        } else {
+                            session.removeAttribute(SESSION_GRACE_RESTRICTED);
+                        }
+
                         // set the user status to logged in in the database
                         userController.loginUser(validUser);
 
@@ -139,6 +151,30 @@ public class UserServlet extends MirthServlet implements UserServletInterface {
                 event.setAttributes(attributes);
 
                 eventController.dispatchEvent(event);
+
+                /*
+                 * Raise a distinct event when the login was allowed but the password no longer
+                 * meets requirements. Because stored passwords are hashed there is no way to audit
+                 * which accounts are affected, so this is the only way an administrator can find
+                 * them. It is dispatched here rather than in authorizeUser because that method also
+                 * runs on every Basic auth REST request, which would flood the event table.
+                 */
+                if (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD) {
+                    ServerEvent passwordEvent = new ServerEvent(configurationController.getServerId(), "Password does not meet requirements");
+                    if (validUser != null) {
+                        passwordEvent.setUserId(validUser.getId());
+                    }
+                    passwordEvent.setIpAddress(getRequestIpAddress());
+                    passwordEvent.setLevel(Level.INFORMATION);
+                    passwordEvent.setOutcome(Outcome.SUCCESS);
+
+                    Map<String, String> passwordAttributes = new HashMap<String, String>();
+                    passwordAttributes.put("username", username);
+                    passwordAttributes.put("details", loginStatus.getMessage());
+                    passwordEvent.setAttributes(passwordAttributes);
+
+                    eventController.dispatchEvent(passwordEvent);
+                }
             }
         } catch (Exception e) {
             throw new MirthApiException(e);
@@ -293,7 +329,19 @@ public class UserServlet extends MirthServlet implements UserServletInterface {
     @CheckAuthorizedUserId
     public List<String> updateUserPassword(Integer userId, String plainPassword) {
         try {
-            return userController.checkOrUpdateUserPassword(userId, plainPassword);
+            List<String> responses = userController.checkOrUpdateUserPassword(userId, plainPassword);
+
+            /*
+             * The password now meets requirements, so lift any restriction placed on this session
+             * at login. The database grace period is cleared by checkOrUpdateUserPassword, but the
+             * session flag is separate state and would otherwise persist for the life of the
+             * session, leaving the user unable to do anything after a successful change.
+             */
+            if (CollectionUtils.isEmpty(responses) && isCurrentUser(userId)) {
+                request.getSession().removeAttribute(SESSION_GRACE_RESTRICTED);
+            }
+
+            return responses;
         } catch (ControllerException e) {
             throw new MirthApiException(e);
         }
