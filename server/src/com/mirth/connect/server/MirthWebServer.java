@@ -125,6 +125,7 @@ import com.mirth.connect.server.controllers.ControllerFactory;
 import com.mirth.connect.server.controllers.ExtensionController;
 import com.mirth.connect.server.servlets.SwaggerExamplesServlet;
 import com.mirth.connect.server.servlets.SwaggerServlet;
+import com.mirth.connect.server.servlets.WebAdminUrlServlet;
 import com.mirth.connect.server.servlets.WebStartServlet;
 import com.mirth.connect.server.tools.ClassPathResource;
 import com.mirth.connect.server.util.PackagePredicate;
@@ -262,7 +263,11 @@ public class MirthWebServer extends Server {
         rootContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart.jnlp");
         rootContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart");
         rootContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart/extensions/*");
-        
+
+        // Serves the optional webadmin.url property to the landing page
+        rootContextHandler.addFilter(new FilterHolder(new MethodFilter()), "/webadmin-url", EnumSet.of(DispatcherType.REQUEST));
+        rootContextHandler.addServlet(new ServletHolder(new WebAdminUrlServlet(mirthProperties)), "/webadmin-url");
+
         // Add default servlet for static files from public_html
         String publicPath = ControllerFactory.getFactory().createConfigurationController().getBaseDir() + File.separator + "public_html";
         ServletHolder defaultServlet = new ServletHolder("default", DefaultServlet.class);
