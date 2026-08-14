@@ -320,6 +320,47 @@ public class DocRenderSeamTest {
     }
 
     // ------------------------------------------------------------------------------------------
+    // Multi-table RTF render seam: the same 5-table / 80-row fixture drives the real createRTF
+    // seam and all 5 tables' content survives RTFEditorKit read-back. No page-count assertion --
+    // RTFEditorKit does not paginate (D-06) (SC-2, Phase 22.3, CVE-07)
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    public void testLargeMultiTableRtfRendersAllTablesContentFaithful() throws Exception {
+        withDispatcher(dispatcher -> {
+            DocumentDispatcherProperties props = new DocumentDispatcherProperties();
+
+            String fixture = buildLargeMultiTableHtml(MPAGE_TABLE_COUNT, MPAGE_ROWS_PER_TABLE);
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            // Deliberately reproduce DocumentDispatcher.java:192's exact production encode --
+            // fixture.getBytes() with the platform-default charset.
+            invokeCreateRtf(dispatcher, new ByteArrayInputStream(fixture.getBytes()), out, props);
+
+            byte[] rtfBytes = out.toByteArray();
+            assertTrue("RTF must start with the {\\rtf control header",
+                    new String(rtfBytes, StandardCharsets.US_ASCII).startsWith("{\\rtf"));
+
+            RTFEditorKit rtfKit = new RTFEditorKit();
+            Document rtfDoc = rtfKit.createDefaultDocument();
+            try (ByteArrayInputStream rtfIn = new ByteArrayInputStream(rtfBytes)) {
+                rtfKit.read(rtfIn, rtfDoc, 0);
+            }
+            String rtfText = rtfDoc.getText(0, rtfDoc.getLength());
+
+            for (String token : MPAGE_TABLE_TOKENS) {
+                assertTrue("RTF text must contain table token " + token, rtfText.contains(token));
+            }
+            assertTrue("RTF text must contain the last-row truncation tripwire token",
+                    rtfText.contains(MPAGE_LAST_ROW_TOKEN_22P3));
+            assertTrue("RTF text must preserve the accented token 'José'", rtfText.contains(MPAGE_ACCENTED_EARLY));
+            assertTrue("RTF text must preserve the accented token 'Müller'", rtfText.contains(MPAGE_ACCENTED_LATE));
+            // No page-count assertion (D-06): RTFEditorKit reads into a Swing Document model and
+            // never paginates.
+        });
+    }
+
+    // ------------------------------------------------------------------------------------------
     // Non-ASCII / accented fidelity across the createPDF (Reader/char path) and createRTF
     // (InputStream/getBytes() platform-default-charset path) render seams
     // (DW-1, D-06, Phase 22.2, CVE-07)
