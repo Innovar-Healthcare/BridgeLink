@@ -85,6 +85,63 @@ public class DocRenderSeamTest {
     private static final String NON_ASCII_TOKENS = "<html><body><p>José Müller</p></body></html>";
 
     /**
+     * Multi-page / multi-table fixture scale (SC-1/SC-2, Phase 22.3). Five sibling tables, each
+     * with 80 rows, is large enough to force the real {@code createPDF} seam past a single 8.5x11
+     * page (verified empirically at plan time) while staying well within the standard JUnit batch's
+     * runtime budget.
+     */
+    private static final int MPAGE_TABLE_COUNT = 5;
+    private static final int MPAGE_ROWS_PER_TABLE = 80;
+
+    /** One distinct token per table, placed in that table's first row. */
+    private static final String[] MPAGE_TABLE_TOKENS = { "MPAGE_TABLE_TOKEN_1_22P3", "MPAGE_TABLE_TOKEN_2_22P3",
+            "MPAGE_TABLE_TOKEN_3_22P3", "MPAGE_TABLE_TOKEN_4_22P3", "MPAGE_TABLE_TOKEN_5_22P3" };
+
+    /** Truncation tripwire: placed in the FINAL row of the LAST table only. */
+    private static final String MPAGE_LAST_ROW_TOKEN_22P3 = "MPAGE_LAST_ROW_TOKEN_22P3";
+
+    /** Accented tokens baked into an early and a later table respectively (D-06 precedent). */
+    private static final String MPAGE_ACCENTED_EARLY = "José";
+    private static final String MPAGE_ACCENTED_LATE = "Müller";
+
+    /**
+     * Builds a single well-formed {@code <html><body>...</body></html>} document (multi-root
+     * fragments are rejected by {@code HtmlParser} -- 22.2-01 finding) containing
+     * {@code tableCount} sibling {@code <table>} elements, each with {@code rowsPerTable}
+     * {@code <tr><td>} rows. {@link #MPAGE_TABLE_TOKENS}[i] is emitted into the first row of table
+     * i; {@link #MPAGE_LAST_ROW_TOKEN_22P3} is emitted into the final row of the last table (the
+     * truncation tripwire); {@link #MPAGE_ACCENTED_EARLY} is emitted into an early table and
+     * {@link #MPAGE_ACCENTED_LATE} into a later table.
+     */
+    private static String buildLargeMultiTableHtml(int tableCount, int rowsPerTable) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<html><body>");
+        for (int t = 0; t < tableCount; t++) {
+            sb.append("<table>");
+            for (int r = 0; r < rowsPerTable; r++) {
+                sb.append("<tr><td>");
+                if (r == 0 && t < MPAGE_TABLE_TOKENS.length) {
+                    sb.append(MPAGE_TABLE_TOKENS[t]).append(' ');
+                }
+                if (t == 0 && r == 1) {
+                    sb.append(MPAGE_ACCENTED_EARLY).append(' ');
+                }
+                if (t == tableCount - 2 && r == 1) {
+                    sb.append(MPAGE_ACCENTED_LATE).append(' ');
+                }
+                if (t == tableCount - 1 && r == rowsPerTable - 1) {
+                    sb.append(MPAGE_LAST_ROW_TOKEN_22P3).append(' ');
+                }
+                sb.append("row ").append(t).append('-').append(r);
+                sb.append("</td></tr>");
+            }
+            sb.append("</table>");
+        }
+        sb.append("</body></html>");
+        return sb.toString();
+    }
+
+    /**
      * Action invoked with a freshly-constructed {@link DocumentDispatcher} while the
      * {@code mockStatic(ControllerFactory.class)} scope from {@link #withDispatcher} is still
      * open, so any statics the dispatcher's field initializer touched remain stubbed for the
@@ -167,6 +224,44 @@ public class DocRenderSeamTest {
     }
 
     // ------------------------------------------------------------------------------------------
+    // Multi-page / multi-table PDF render seam: a programmatically generated 5-table / 80-row-
+    // per-table fixture forces the real createPDF seam past a single page, and later-page /
+    // last-row / non-ASCII content survives PDFTextStripper read-back (SC-1, Phase 22.3, CVE-07)
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    public void testLargeMultiTableMultiPagePdfRendersContentFaithful() throws Exception {
+        withDispatcher(dispatcher -> {
+            // Keep the ctor page defaults (pageWidth="8.5", pageHeight="11", pageUnit=INCHES).
+            DocumentDispatcherProperties props = new DocumentDispatcherProperties();
+
+            String fixture = buildLargeMultiTableHtml(MPAGE_TABLE_COUNT, MPAGE_ROWS_PER_TABLE);
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            invokeCreatePdf(dispatcher, new StringReader(fixture), out, props);
+
+            byte[] pdfBytes = out.toByteArray();
+            try (PDDocument pdf = PDDocument.load(pdfBytes)) {
+                // Never == N (D-04): a library reflow must not falsely break this gate. If a
+                // future bump ever drops the count below 5, raise MPAGE_ROWS_PER_TABLE -- never
+                // lower this threshold.
+                assertTrue("PDF must paginate to at least 5 pages for a 5-table / 80-row-per-table fixture, got "
+                        + pdf.getNumberOfPages(), pdf.getNumberOfPages() >= 5);
+
+                String pdfText = new PDFTextStripper().getText(pdf);
+                assertTrue("PDF text must contain the last-row truncation tripwire token",
+                        pdfText.contains(MPAGE_LAST_ROW_TOKEN_22P3));
+                assertTrue("PDF text must contain the 5th table's token",
+                        pdfText.contains(MPAGE_TABLE_TOKENS[4]));
+                assertTrue("PDF text must preserve the accented token 'José' at document scale",
+                        pdfText.contains(MPAGE_ACCENTED_EARLY));
+                assertTrue("PDF text must preserve the accented token 'Müller' at document scale",
+                        pdfText.contains(MPAGE_ACCENTED_LATE));
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------------------------------
     // RTF render seam -- content-faithful RTF assertion, true OpenPDF RtfWriter2 leg
     // (SC-2, D-01, CVE-07)
     // ------------------------------------------------------------------------------------------
@@ -221,6 +316,47 @@ public class DocRenderSeamTest {
             assertTrue("RTF text must contain the first table's token", rtfText.contains("VITALS_TABLE_TOKEN_22P2"));
             assertTrue("RTF text must contain the second table's token (proving both sibling tables rendered, not just the first)",
                     rtfText.contains("MEDS_TABLE_TOKEN_22P2"));
+        });
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Multi-table RTF render seam: the same 5-table / 80-row fixture drives the real createRTF
+    // seam and all 5 tables' content survives RTFEditorKit read-back. No page-count assertion --
+    // RTFEditorKit does not paginate (D-06) (SC-2, Phase 22.3, CVE-07)
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    public void testLargeMultiTableRtfRendersAllTablesContentFaithful() throws Exception {
+        withDispatcher(dispatcher -> {
+            DocumentDispatcherProperties props = new DocumentDispatcherProperties();
+
+            String fixture = buildLargeMultiTableHtml(MPAGE_TABLE_COUNT, MPAGE_ROWS_PER_TABLE);
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            // Deliberately reproduce DocumentDispatcher.java:192's exact production encode --
+            // fixture.getBytes() with the platform-default charset.
+            invokeCreateRtf(dispatcher, new ByteArrayInputStream(fixture.getBytes()), out, props);
+
+            byte[] rtfBytes = out.toByteArray();
+            assertTrue("RTF must start with the {\\rtf control header",
+                    new String(rtfBytes, StandardCharsets.US_ASCII).startsWith("{\\rtf"));
+
+            RTFEditorKit rtfKit = new RTFEditorKit();
+            Document rtfDoc = rtfKit.createDefaultDocument();
+            try (ByteArrayInputStream rtfIn = new ByteArrayInputStream(rtfBytes)) {
+                rtfKit.read(rtfIn, rtfDoc, 0);
+            }
+            String rtfText = rtfDoc.getText(0, rtfDoc.getLength());
+
+            for (String token : MPAGE_TABLE_TOKENS) {
+                assertTrue("RTF text must contain table token " + token, rtfText.contains(token));
+            }
+            assertTrue("RTF text must contain the last-row truncation tripwire token",
+                    rtfText.contains(MPAGE_LAST_ROW_TOKEN_22P3));
+            assertTrue("RTF text must preserve the accented token 'José'", rtfText.contains(MPAGE_ACCENTED_EARLY));
+            assertTrue("RTF text must preserve the accented token 'Müller'", rtfText.contains(MPAGE_ACCENTED_LATE));
+            // No page-count assertion (D-06): RTFEditorKit reads into a Swing Document model and
+            // never paginates.
         });
     }
 
