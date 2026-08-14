@@ -30,6 +30,10 @@ public class MirthServletGracePeriodTest extends ServletTestBase {
     private static final Operation NORMAL_OPERATION = new Operation("getChannels", "Get channels", ExecuteType.SYNC, true);
     private static final Operation PASSWORD_OPERATION = new Operation("updateUserPassword", "Update a user's password", ExecuteType.SYNC, true);
 
+    /** The user ID ServletTestBase stores on the mock session. */
+    private static final Integer SESSION_USER_ID = 1;
+    private static final Integer OTHER_USER_ID = 2;
+
     @BeforeClass
     public static void setup() throws Exception {
         ServletTestBase.setup();
@@ -85,16 +89,71 @@ public class MirthServletGracePeriodTest extends ServletTestBase {
     }
 
     /**
-     * The whole point of the restriction is that the user can still clear it.
+     * The whole point of the restriction is that the user can still clear it. The session user is
+     * ID 1, and the real request path resolves the target from the @CheckAuthorizedUserId
+     * parameter, so this goes through checkUserAuthorized rather than isUserAuthorized directly.
      */
     @Test
-    public void restrictedSessionMayStillChangeItsPassword() throws Exception {
+    public void restrictedSessionMayStillChangeItsOwnPassword() throws Exception {
         givenGraceRestrictedSession(true);
 
         MirthServlet servlet = newServlet();
         servlet.setOperation(PASSWORD_OPERATION);
 
-        assertTrue(servlet.isUserAuthorized(false));
+        servlet.checkUserAuthorized(SESSION_USER_ID, true);
+    }
+
+    /**
+     * The restriction exists so a confined login can repair its own password and nothing else.
+     * Allowing updateUserPassword by name alone let it reset any other account and log back in as
+     * that user unrestricted, which is the whole of IRT-1798.
+     */
+    @Test
+    public void restrictedSessionCannotChangeAnotherUsersPassword() throws Exception {
+        givenGraceRestrictedSession(true);
+
+        MirthServlet servlet = newServlet();
+        servlet.setOperation(PASSWORD_OPERATION);
+
+        try {
+            servlet.checkUserAuthorized(OTHER_USER_ID, true);
+            fail("Expected a grace-restricted session to be refused another user's password");
+        } catch (Throwable t) {
+            assertForbiddenException(t);
+        }
+    }
+
+    /**
+     * A self-only operation that arrives without a resolved target cannot show it is aimed at the
+     * caller, so it is refused rather than allowed on the strength of its name.
+     */
+    @Test
+    public void restrictedSessionIsDeniedPasswordChangeWithNoTargetUser() throws Exception {
+        givenGraceRestrictedSession(true);
+
+        MirthServlet servlet = newServlet();
+        servlet.setOperation(PASSWORD_OPERATION);
+
+        try {
+            servlet.isUserAuthorized(false);
+            fail("Expected a grace-restricted session to be refused a password change with no target");
+        } catch (Throwable t) {
+            assertForbiddenException(t);
+        }
+    }
+
+    /**
+     * The scoping is part of the restriction, not a new rule of its own. With the restriction off,
+     * a grace period must leave an administrator able to change anyone's password as before.
+     */
+    @Test
+    public void restrictionDisabledLeavesOtherUsersPasswordsReachable() throws Exception {
+        givenGraceRestrictedSession(false);
+
+        MirthServlet servlet = newServlet();
+        servlet.setOperation(PASSWORD_OPERATION);
+
+        servlet.checkUserAuthorized(OTHER_USER_ID, true);
     }
 
     /**
