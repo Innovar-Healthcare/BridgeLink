@@ -26,6 +26,11 @@
 	</target>
 	
 	<!-- WebAdmin -->
+	<!--
+		The legacy webadmin war is unsupported and is no longer part of the default build (IRT-1765).
+		The browser-based console is the separate BridgeLink Web Administrator. This target is kept
+		so the module can still be built on demand, but nothing depends on it.
+	-->
 	<target name="build-webadmin" depends="init">
 		<ant antfile="${webadmin}/build.xml" dir="${webadmin}" target="dist"/>
 		<copy file="${webadmin}/dist/webadmin.war" todir="${server.build}/webapps" />
@@ -120,7 +125,7 @@
 		</copy>
 	</target>
 
-	<target name="build" depends="build-manager, build-cli, build-webadmin">
+	<target name="build" depends="build-manager, build-cli">
 		<ant antfile="${server}/build.xml" dir="${server}" target="create-setup">
 			<property name="version" value="${version}" />
 		</ant>
@@ -152,7 +157,7 @@
 		<antcall target="test-run" />
 	</target>
 
-	<target name="dist" depends="build-manager, build-cli, build-webadmin">
+	<target name="dist" depends="build-manager, build-cli">
 		<echo>Application version: ${version}</echo>
 
 		<ant antfile="${server}/build.xml" dir="${server}" target="create-dist">
