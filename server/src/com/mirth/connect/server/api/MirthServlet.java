@@ -57,16 +57,31 @@ public abstract class MirthServlet {
     protected static final String SESSION_GRACE_RESTRICTED = "graceRestricted";
 
     /**
-     * Operations a grace-restricted login may still perform. These are the ones needed to complete
-     * the password change that lifts the restriction: the client has to identify itself before it
-     * can change its own password, and it needs the requirements to explain a rejection. The list
-     * only narrows access — an operation named here still goes through the normal permission check.
+     * Operations a grace-restricted login may still perform regardless of who they are aimed at.
+     * These are the ones needed to complete the password change that lifts the restriction: the
+     * client has to identify itself before it can change its own password, and it needs the
+     * requirements to explain a rejection. None of them name another user — checkUserPassword only
+     * takes a plaintext string — so none of them need scoping; the change itself is scoped through
+     * {@link #GRACE_PERIOD_SELF_ONLY_OPERATIONS}. The list only narrows access — an operation named
+     * here still goes through the normal permission check.
      * <p>
      * Logging out is included because it only destroys the session; refusing it would leave a user
      * who declines the change with no way to end the session they cannot otherwise use. Note the
      * logout endpoints call isUserAuthorized purely to audit, and ignore the answer.
      */
-    private static final Set<String> GRACE_PERIOD_ALLOWED_OPERATIONS = new HashSet<String>(Arrays.asList("updateUserPassword", "checkUserPassword", "getPasswordRequirements", "getCurrentUser", "logout", "inactivityLogout"));
+    private static final Set<String> GRACE_PERIOD_ALLOWED_OPERATIONS = new HashSet<String>(Arrays.asList("checkUserPassword", "getPasswordRequirements", "getCurrentUser", "logout", "inactivityLogout"));
+
+    /**
+     * Operations a grace-restricted login may perform, but only against its own account. Changing
+     * a password is the one thing the restriction exists to permit, yet nothing in the operation
+     * itself limits it to the caller — so allowing it by name alone let a confined login reset
+     * another user's password and log back in as that user with no restriction at all (IRT-1798).
+     * <p>
+     * The target user ID reaches this class through
+     * {@link #checkUserAuthorized(Integer, boolean)}. If it is not known the operation is refused,
+     * since a request that cannot prove it targets the caller is exactly the one to reject.
+     */
+    private static final Set<String> GRACE_PERIOD_SELF_ONLY_OPERATIONS = new HashSet<String>(Arrays.asList("updateUserPassword"));
 
     private static final String GRACE_RESTRICTED_MESSAGE = "Your password does not meet the password requirements. Until it is changed, this login may only be used to change it.";
 
@@ -90,6 +105,7 @@ public abstract class MirthServlet {
     private boolean bypassUser;
     private int currentUserId;
     private boolean graceRestricted;
+    private Integer authorizedUserId;
 
     public MirthServlet(HttpServletRequest request, SecurityContext sc) {
         this(request, null, sc);
@@ -262,6 +278,10 @@ public abstract class MirthServlet {
     }
 
     public void checkUserAuthorized(Integer userId, boolean auditCurrentUser) {
+        // Recorded before either branch runs so the grace period check can scope the operations in
+        // GRACE_PERIOD_SELF_ONLY_OPERATIONS to the user this request is actually aimed at.
+        authorizedUserId = userId;
+
         // At first glance this logic looks unnecessary, but it is important to note
         // isUserAuthorized() will trigger an audit, so having it first in
         // the conditional means it will always trigger the audit whereas
@@ -334,7 +354,17 @@ public abstract class MirthServlet {
             return false;
         }
 
-        return !GRACE_PERIOD_ALLOWED_OPERATIONS.contains(operation.getName());
+        String operationName = operation.getName();
+
+        if (GRACE_PERIOD_ALLOWED_OPERATIONS.contains(operationName)) {
+            return false;
+        }
+
+        if (GRACE_PERIOD_SELF_ONLY_OPERATIONS.contains(operationName)) {
+            return authorizedUserId == null || !isCurrentUser(authorizedUserId);
+        }
+
+        return true;
     }
 
     protected void checkUserAuthorizedForExtension(String extensionName) {
