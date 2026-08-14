@@ -269,6 +269,9 @@ public class StubChannelsTest extends SmokeTestBase {
                 String largePdfText = new PDFTextStripper().getText(largePdf);
                 assertTrue("Large PDF text should contain the last-row truncation tripwire token",
                         largePdfText.contains(LARGE_LAST_ROW_TOKEN));
+                for (String token : LARGE_TABLE_TOKENS) {
+                    assertTrue("Large PDF text should contain table token " + token, largePdfText.contains(token));
+                }
                 assertTrue("Large PDF text should preserve the accented token 'José' at document scale",
                         largePdfText.contains(LARGE_ACCENTED_EARLY));
                 assertTrue("Large PDF text should preserve the accented token 'Müller' at document scale",

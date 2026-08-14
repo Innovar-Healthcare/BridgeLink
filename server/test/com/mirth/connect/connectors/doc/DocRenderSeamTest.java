@@ -251,8 +251,9 @@ public class DocRenderSeamTest {
                 String pdfText = new PDFTextStripper().getText(pdf);
                 assertTrue("PDF text must contain the last-row truncation tripwire token",
                         pdfText.contains(MPAGE_LAST_ROW_TOKEN_22P3));
-                assertTrue("PDF text must contain the 5th table's token",
-                        pdfText.contains(MPAGE_TABLE_TOKENS[4]));
+                for (String token : MPAGE_TABLE_TOKENS) {
+                    assertTrue("PDF text must contain table token " + token, pdfText.contains(token));
+                }
                 assertTrue("PDF text must preserve the accented token 'José' at document scale",
                         pdfText.contains(MPAGE_ACCENTED_EARLY));
                 assertTrue("PDF text must preserve the accented token 'Müller' at document scale",
