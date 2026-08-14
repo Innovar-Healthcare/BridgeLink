@@ -292,6 +292,12 @@ public class StubChannelsTest extends SmokeTestBase {
             for (String token : LARGE_TABLE_TOKENS) {
                 assertTrue("Large RTF text should contain table token " + token, largeRtfText.contains(token));
             }
+            assertTrue("Large RTF text should contain the last-row truncation tripwire token",
+                    largeRtfText.contains(LARGE_LAST_ROW_TOKEN));
+            assertTrue("Large RTF text should preserve the accented token 'José'",
+                    largeRtfText.contains(LARGE_ACCENTED_EARLY));
+            assertTrue("Large RTF text should preserve the accented token 'Müller'",
+                    largeRtfText.contains(LARGE_ACCENTED_LATE));
         });
     }
 }
