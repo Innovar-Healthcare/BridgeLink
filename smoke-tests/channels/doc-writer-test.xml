@@ -1040,7 +1040,7 @@ channelMap.put('largeDocContent', sb);]]></script>
         <pageWidth>8.5</pageWidth>
         <pageHeight>11</pageHeight>
         <pageUnit>INCHES</pageUnit>
-        <template>&lt;html&gt;&lt;body&gt;${largeDocContent}&lt;/body&gt;&lt;/html&gt;</template>
+        <template>${largeDocContent}</template>
       </properties>
       <transformer version="26.6.0">
         <elements/>
@@ -1250,7 +1250,7 @@ channelMap.put('largeDocContent', sb);]]></script>
         <pageWidth>8.5</pageWidth>
         <pageHeight>11</pageHeight>
         <pageUnit>INCHES</pageUnit>
-        <template>&lt;html&gt;&lt;body&gt;${largeDocContent}&lt;/body&gt;&lt;/html&gt;</template>
+        <template>${largeDocContent}</template>
       </properties>
       <transformer version="26.6.0">
         <elements/>
