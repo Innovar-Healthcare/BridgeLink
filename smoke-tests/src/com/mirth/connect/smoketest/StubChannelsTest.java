@@ -89,11 +89,12 @@ public class StubChannelsTest extends SmokeTestBase {
         rest.processMessage(SOAP_CHANNEL_ID, Hl7Messages.ORU_R01_LF);
         rest.processMessage(JDBC_CHANNEL_ID, Hl7Messages.ORU_R01_LF);
         rest.processMessageBytes(DICOM_CHANNEL_ID, Files.readAllBytes(Paths.get("fixtures", "smoke-test.dcm")));
-        // doc-writer-test.xml has SIX destinations (PDF at metaDataId 1, RTF at metaDataId 2,
+        // doc-writer-test.xml has EIGHT destinations (PDF at metaDataId 1, RTF at metaDataId 2,
         // Complex RTF at metaDataId 3, Encrypted PDF at metaDataId 4, Large Multi-Page PDF at
-        // metaDataId 5, Large Multi-Table RTF at metaDataId 6, Phase 22.3 SC-3) — all six must
-        // be targeted explicitly (Rule 1 fix, see RestClient.processMessage javadoc).
-        rest.processMessage(DOC_WRITER_CHANNEL_ID, Hl7Messages.ORU_R01_LF, java.util.List.of(1, 2, 3, 4, 5, 6));
+        // metaDataId 5, Large Multi-Table RTF at metaDataId 6, Discharge Summary PDF at
+        // metaDataId 7, Discharge Summary RTF at metaDataId 8, Phase 22.4 discharge port) — all
+        // eight must be targeted explicitly (Rule 1 fix, see RestClient.processMessage javadoc).
+        rest.processMessage(DOC_WRITER_CHANNEL_ID, Hl7Messages.ORU_R01_LF, java.util.List.of(1, 2, 3, 4, 5, 6, 7, 8));
     }
 
     @Test
@@ -190,14 +191,15 @@ public class StubChannelsTest extends SmokeTestBase {
 
     @Test
     public void docWriter() throws Exception {
-        // Phase 22.3/D-08: raised from 4 to 6 — all six enabled destinations (PDF, RTF,
-        // Complex RTF, Encrypted PDF, Large Multi-Page PDF, Large Multi-Table RTF) must reach
-        // SENT status. getSentCount() aggregates the "sent" statistic across every destination
-        // connector (DonkeyEngineController#addConnectorToChannelStatistics sums per-destination
-        // SENT counts into the channel-level total), so one pumped message fanning out to six
-        // destinations produces a channel-level sent count of 6 — a silently-dropped destination
-        // would fail this >= 6 gate.
-        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 6, () -> {
+        // Phase 22.4/D-10: raised from 6 to 8 — all eight enabled destinations (PDF, RTF,
+        // Complex RTF, Encrypted PDF, Large Multi-Page PDF, Large Multi-Table RTF, Discharge
+        // Summary PDF, Discharge Summary RTF) must reach SENT status. getSentCount() aggregates
+        // the "sent" statistic across every destination connector
+        // (DonkeyEngineController#addConnectorToChannelStatistics sums per-destination SENT
+        // counts into the channel-level total), so one pumped message fanning out to eight
+        // destinations produces a channel-level sent count of 8 — a silently-dropped destination
+        // would fail this >= 8 gate.
+        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 8, () -> {
             Path pdfPath = pollForFile(Paths.get(outDir, "doc", "output.pdf"), 60);
             Path rtfPath = pollForFile(Paths.get(outDir, "doc", "output.rtf"), 60);
 
@@ -298,6 +300,19 @@ public class StubChannelsTest extends SmokeTestBase {
                     largeRtfText.contains(LARGE_ACCENTED_EARLY));
             assertTrue("Large RTF text should preserve the accented token 'Müller'",
                     largeRtfText.contains(LARGE_ACCENTED_LATE));
+
+            // Discharge Summary PDF (TRACER, Phase 22.4/D-07): metaDataId 7's destination
+            // renders the realistic, fully-styled clinical discharge summary (logo header,
+            // demographics/diagnoses/meds tables, hospital-course narrative, 60-row serial-lab
+            // table, 14 daily progress notes) ported verbatim from the out-of-repo UAT export
+            // into doc-writer-test.xml. Proves the new fixture deploys and paginates on disk via
+            // the real deploy -> pump -> DocumentDispatcher.createPDF() -> disk round trip;
+            // richer footer/logo/token assertions are added in follow-on tasks.
+            Path dischargePdfPath = pollForFile(Paths.get(outDir, "doc", "output-discharge.pdf"), 60);
+            try (PDDocument dischargePdf = PDDocument.load(dischargePdfPath.toFile())) {
+                assertTrue("Discharge PDF must paginate to at least 5 pages, got "
+                        + dischargePdf.getNumberOfPages(), dischargePdf.getNumberOfPages() >= 5);
+            }
         });
     }
 }
