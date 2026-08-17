@@ -390,6 +390,36 @@ public class StubChannelsTest extends SmokeTestBase {
                 // dimensions.
                 assertSingleLogoXObject(dischargePdf, 96, 96);
             }
+
+            // Discharge Summary RTF (Phase 22.4/D-08/D-09): metaDataId 8's destination renders
+            // the same discharge content with <img> stripped and thead/tbody flattened by the
+            // transformer (the legacy com.lowagie.text.html.HtmlParser RTF path throws
+            // FileNotFoundException on a data: <img> URI and does not paginate). Proves the RTF
+            // renders cleanly with the logo removed rather than failing on the data: URI --
+            // "img-stripped, not failed." The reaches-SENT-not-ERROR half of D-08 is already
+            // enforced by the assertThreeLevels(DOC_WRITER_CHANNEL_ID, 8, ...) L1/L2 gate above.
+            Path dischargeRtfPath = pollForFile(Paths.get(outDir, "doc", "output-discharge.rtf"), 60);
+            RTFEditorKit dischargeRtfKit = new RTFEditorKit();
+            Document dischargeRtfDoc = dischargeRtfKit.createDefaultDocument();
+            try (FileInputStream dischargeRtfIn = new FileInputStream(dischargeRtfPath.toFile())) {
+                dischargeRtfKit.read(dischargeRtfIn, dischargeRtfDoc, 0);
+            }
+            String dischargeRtfText = dischargeRtfDoc.getText(0, dischargeRtfDoc.getLength());
+
+            // D-09: end marker and accented attending surname survive RTFEditorKit read-back.
+            assertTrue("Discharge RTF text should contain the end-marker token",
+                    dischargeRtfText.contains(DISCHARGE_END_MARKER));
+            assertTrue("Discharge RTF text should preserve the accented attending surname",
+                    dischargeRtfText.contains(DISCHARGE_ACCENTED_SURNAME));
+
+            // D-08: no embedded image. Raw \pict byte-scan on the file's raw text (the
+            // transformer strips every <img> tag before generating the RTF variant, so the
+            // RTF writer should never emit a \pict picture group); chosen over the
+            // RTFEditorKit document-model probe for a more direct, version-independent check
+            // (D-08 accepts either mechanism).
+            String dischargeRtfRaw = readFile(dischargeRtfPath);
+            assertTrue("Discharge RTF should carry no embedded image (\\pict) group",
+                    !dischargeRtfRaw.contains("\\pict"));
         });
     }
 }
