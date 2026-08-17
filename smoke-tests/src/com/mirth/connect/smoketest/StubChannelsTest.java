@@ -16,12 +16,19 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.swing.text.Document;
 import javax.swing.text.rtf.RTFEditorKit;
 
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
+import org.apache.pdfbox.pdmodel.graphics.PDXObject;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -189,6 +196,57 @@ public class StubChannelsTest extends SmokeTestBase {
     private static final String LARGE_ACCENTED_EARLY = "José";
     private static final String LARGE_ACCENTED_LATE = "Müller";
 
+    // Phase 22.4 (CVE-07/IRT-1491, D-05/D-06/D-09): tokens and the footer pattern mirror the
+    // discharge transformer step ported verbatim from the out-of-repo UAT export
+    // (docwriter-uat.xml) into doc-writer-test.xml's metaDataId 7/8 destinations. The end
+    // marker and the accented attending surname are asserted to survive read-back in both the
+    // Discharge PDF and Discharge RTF outputs; the footer pattern is PDF-only (CSS3 paged-media
+    // counters rendered by openhtmltopdf — the RTF path has no footer).
+    private static final String DISCHARGE_END_MARKER = "ZZ-END-9999";
+    private static final String DISCHARGE_ACCENTED_SURNAME = "Müller-Bergström";
+    private static final Pattern DISCHARGE_FOOTER_PATTERN = Pattern.compile("Page \\d+ of \\d+");
+
+    /**
+     * D-06 logo image-XObject triangulation ("right picture, right place, no regression"):
+     * walks every page's resource XObjects, collecting each {@link PDImageXObject} found along
+     * with the zero-based page index it appears on. Asserts exactly one image XObject exists
+     * across the whole document, that it appears on page index 0 and on no later page (the logo
+     * lives in the header table, not a running header — only the CSS footer repeats per page),
+     * and that its intrinsic raster dimensions are exactly 96x96 px (the base64 PNG source,
+     * regardless of the 54px CSS display size) — proving it is the real logo raster, not a
+     * corrupted/blank/swapped image.
+     */
+    private static void assertSingleLogoXObject(PDDocument doc, int expectedWidthPx, int expectedHeightPx)
+            throws java.io.IOException {
+        int imageCount = 0;
+        int firstImagePageIndex = -1;
+        for (int pageIndex = 0; pageIndex < doc.getNumberOfPages(); pageIndex++) {
+            PDPage page = doc.getPage(pageIndex);
+            PDResources resources = page.getResources();
+            if (resources == null) {
+                continue;
+            }
+            for (COSName xObjectName : resources.getXObjectNames()) {
+                PDXObject xObject = resources.getXObject(xObjectName);
+                if (xObject instanceof PDImageXObject) {
+                    PDImageXObject image = (PDImageXObject) xObject;
+                    imageCount++;
+                    if (firstImagePageIndex == -1) {
+                        firstImagePageIndex = pageIndex;
+                    }
+                    assertEquals("Logo image XObject on page " + pageIndex + " should be "
+                            + expectedWidthPx + "px wide", expectedWidthPx, image.getWidth());
+                    assertEquals("Logo image XObject on page " + pageIndex + " should be "
+                            + expectedHeightPx + "px tall", expectedHeightPx, image.getHeight());
+                    assertTrue("Logo image XObject should only appear on page 0 (the header), "
+                            + "not page " + pageIndex, pageIndex == 0);
+                }
+            }
+        }
+        assertEquals("Discharge PDF should carry exactly one image XObject (the logo)", 1, imageCount);
+        assertEquals("Logo image XObject should be present on page 0", 0, firstImagePageIndex);
+    }
+
     @Test
     public void docWriter() throws Exception {
         // Phase 22.4/D-10: raised from 6 to 8 — all eight enabled destinations (PDF, RTF,
@@ -301,17 +359,36 @@ public class StubChannelsTest extends SmokeTestBase {
             assertTrue("Large RTF text should preserve the accented token 'Müller'",
                     largeRtfText.contains(LARGE_ACCENTED_LATE));
 
-            // Discharge Summary PDF (TRACER, Phase 22.4/D-07): metaDataId 7's destination
+            // Discharge Summary PDF (Phase 22.4/D-05/D-06/D-07/D-09): metaDataId 7's destination
             // renders the realistic, fully-styled clinical discharge summary (logo header,
             // demographics/diagnoses/meds tables, hospital-course narrative, 60-row serial-lab
             // table, 14 daily progress notes) ported verbatim from the out-of-repo UAT export
             // into doc-writer-test.xml. Proves the new fixture deploys and paginates on disk via
-            // the real deploy -> pump -> DocumentDispatcher.createPDF() -> disk round trip;
-            // richer footer/logo/token assertions are added in follow-on tasks.
+            // the real deploy -> pump -> DocumentDispatcher.createPDF() -> disk round trip, and
+            // that the logo/footer/token features rendered as intended (not just "the file
+            // exists").
             Path dischargePdfPath = pollForFile(Paths.get(outDir, "doc", "output-discharge.pdf"), 60);
             try (PDDocument dischargePdf = PDDocument.load(dischargePdfPath.toFile())) {
                 assertTrue("Discharge PDF must paginate to at least 5 pages, got "
                         + dischargePdf.getNumberOfPages(), dischargePdf.getNumberOfPages() >= 5);
+
+                String dischargePdfText = new PDFTextStripper().getText(dischargePdf);
+
+                // D-05: well-formed "Page N of M" footer, regex match (not a substring check).
+                Matcher footerMatcher = DISCHARGE_FOOTER_PATTERN.matcher(dischargePdfText);
+                assertTrue("Discharge PDF text should carry a well-formed 'Page N of M' footer",
+                        footerMatcher.find());
+
+                // D-09: end marker and accented attending surname survive PDFTextStripper
+                // read-back.
+                assertTrue("Discharge PDF text should contain the end-marker token",
+                        dischargePdfText.contains(DISCHARGE_END_MARKER));
+                assertTrue("Discharge PDF text should preserve the accented attending surname",
+                        dischargePdfText.contains(DISCHARGE_ACCENTED_SURNAME));
+
+                // D-06: exactly one logo image XObject, present on page 1 only, 96x96 intrinsic
+                // dimensions.
+                assertSingleLogoXObject(dischargePdf, 96, 96);
             }
         });
     }
