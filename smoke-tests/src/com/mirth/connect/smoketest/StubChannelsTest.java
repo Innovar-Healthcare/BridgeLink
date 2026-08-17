@@ -257,30 +257,44 @@ public class StubChannelsTest extends SmokeTestBase {
                 Integer.valueOf(0), pagesResolvingLogo.first());
     }
 
-    @Test
-    public void docWriter() throws Exception {
-        // Phase 22.4/D-10: raised from 6 to 8 — all eight enabled destinations (PDF, RTF,
-        // Complex RTF, Encrypted PDF, Large Multi-Page PDF, Large Multi-Table RTF, Discharge
-        // Summary PDF, Discharge Summary RTF) must reach SENT status. getSentCount() aggregates
-        // the "sent" statistic across every destination connector
-        // (DonkeyEngineController#addConnectorToChannelStatistics sums per-destination SENT
-        // counts into the channel-level total), so one pumped message fanning out to eight
-        // destinations produces a channel-level sent count of 8 — a silently-dropped destination
-        // would fail this >= 8 gate.
-        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 8, () -> {
-            Path pdfPath = pollForFile(Paths.get(outDir, "doc", "output.pdf"), 60);
-            Path rtfPath = pollForFile(Paths.get(outDir, "doc", "output.rtf"), 60);
+    // WR-01 fix: the eight docWriter destination checks below used to live in one monolithic
+    // @Test method. JUnit aborts a @Test at its first failed assertion, so a failure in an
+    // early destination's checks previously hid every later destination's result -- exactly
+    // backwards for a regression *gate* whose entire purpose is to pinpoint *which* fidelity
+    // dimension broke after the OpenPDF/OpenRTF library swap. Split into one focused @Test per
+    // destination, each sharing the single message pumped once by pumpAll() in the class's
+    // @BeforeClass (assertThreeLevels's L1 sent-count/error-count check is idempotent against
+    // the shared channel-level stats, so re-asserting it per method is safe and cheap) -- so a
+    // `mvn test` / `ant test-run` run now reports every failing dimension independently instead
+    // of stopping at the first one.
 
+    @Test
+    public void docWriterBaselinePdf() throws Exception {
+        // Phase 22.4/D-10: eight destinations (PDF, RTF, Complex RTF, Encrypted PDF, Large
+        // Multi-Page PDF, Large Multi-Table RTF, Discharge Summary PDF, Discharge Summary RTF)
+        // must reach SENT status. getSentCount() aggregates the "sent" statistic across every
+        // destination connector (DonkeyEngineController#addConnectorToChannelStatistics sums
+        // per-destination SENT counts into the channel-level total), so one pumped message
+        // fanning out to eight destinations produces a channel-level sent count of 8 -- a
+        // silently-dropped destination would fail this >= 8 gate.
+        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 8, () -> {
             // PDF: PDFBox PDFTextStripper content extraction (D-08 — not byte-exact). This is
             // the exact Phase 22 OpenPDF fidelity baseline assertion (see class javadoc).
+            Path pdfPath = pollForFile(Paths.get(outDir, "doc", "output.pdf"), 60);
             try (PDDocument pdf = PDDocument.load(pdfPath.toFile())) {
                 String pdfText = new PDFTextStripper().getText(pdf);
                 assertTrue("PDF text extraction should contain the transformed patient token",
                         pdfText.contains(Hl7Messages.EXPECTED_PATIENT));
             }
+        });
+    }
 
+    @Test
+    public void docWriterBaselineRtf() throws Exception {
+        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 8, () -> {
             // RTF: JDK built-in RTFEditorKit content extraction (D-08 — not byte-exact). This is
             // the exact Phase 22 OpenRTF fidelity baseline assertion (see class javadoc).
+            Path rtfPath = pollForFile(Paths.get(outDir, "doc", "output.rtf"), 60);
             RTFEditorKit rtfKit = new RTFEditorKit();
             Document rtfDoc = rtfKit.createDefaultDocument();
             try (FileInputStream rtfIn = new FileInputStream(rtfPath.toFile())) {
@@ -289,7 +303,12 @@ public class StubChannelsTest extends SmokeTestBase {
             String rtfText = rtfDoc.getText(0, rtfDoc.getLength());
             assertTrue("RTF text extraction should contain the transformed patient token",
                     rtfText.contains(Hl7Messages.EXPECTED_PATIENT));
+        });
+    }
 
+    @Test
+    public void docWriterComplexRtf() throws Exception {
+        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 8, () -> {
             // Complex RTF (SC-2/D-03, Phase 22.2): metaDataId 3's multi-table + heading
             // destination writes a DISTINCT on-disk file from the baseline output.rtf above.
             // Asserts both sibling-table tokens survive the real end-to-end
@@ -306,7 +325,12 @@ public class StubChannelsTest extends SmokeTestBase {
             assertTrue("Complex RTF text extraction should contain the second table's token "
                     + "(proving both sibling tables rendered, not just the first)",
                     complexRtfText.contains(MEDS_TABLE_TOKEN));
+        });
+    }
 
+    @Test
+    public void docWriterEncryptedPdf() throws Exception {
+        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 8, () -> {
             // Encrypted PDF (SC-3/D-04, Phase 22.2): metaDataId 4's encrypt=true destination
             // writes a DISTINCT on-disk file from the baseline output.pdf above. Mirrors
             // DocRenderSeamTest#testEncryptPdfPasswordRoundTrip's assertion shape, proving the
@@ -339,7 +363,12 @@ public class StubChannelsTest extends SmokeTestBase {
                 assertTrue("document encrypted with a password must report isEncrypted() == true",
                         encPdf.isEncrypted());
             }
+        });
+    }
 
+    @Test
+    public void docWriterLargePdf() throws Exception {
+        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 8, () -> {
             // Large Multi-Page PDF (SC-3, Phase 22.3): metaDataId 5's destination writes the
             // 5-table/80-row-per-table document generated by doc-writer-test.xml's source
             // transformer to a DISTINCT on-disk file. Proves the large document survives the
@@ -364,7 +393,12 @@ public class StubChannelsTest extends SmokeTestBase {
                 assertTrue("Large PDF text should preserve the accented token 'Müller' at document scale",
                         largePdfText.contains(LARGE_ACCENTED_LATE));
             }
+        });
+    }
 
+    @Test
+    public void docWriterLargeRtf() throws Exception {
+        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 8, () -> {
             // Large Multi-Table RTF (SC-3, Phase 22.3): metaDataId 6's destination writes the
             // same large document to a DISTINCT on-disk RTF file. No page-count assertion
             // (D-06, mirrors 22.3-01): RTFEditorKit reads into a Swing Document model and never
@@ -385,7 +419,12 @@ public class StubChannelsTest extends SmokeTestBase {
                     largeRtfText.contains(LARGE_ACCENTED_EARLY));
             assertTrue("Large RTF text should preserve the accented token 'Müller'",
                     largeRtfText.contains(LARGE_ACCENTED_LATE));
+        });
+    }
 
+    @Test
+    public void docWriterDischargePdf() throws Exception {
+        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 8, () -> {
             // Discharge Summary PDF (Phase 22.4/D-05/D-06/D-07/D-09): metaDataId 7's destination
             // renders the realistic, fully-styled clinical discharge summary (logo header,
             // demographics/diagnoses/meds tables, hospital-course narrative, 60-row serial-lab
@@ -417,7 +456,12 @@ public class StubChannelsTest extends SmokeTestBase {
                 // dimensions.
                 assertSingleLogoXObject(dischargePdf, 96, 96);
             }
+        });
+    }
 
+    @Test
+    public void docWriterDischargeRtf() throws Exception {
+        assertThreeLevels(DOC_WRITER_CHANNEL_ID, 8, () -> {
             // Discharge Summary RTF (Phase 22.4/D-08/D-09): metaDataId 8's destination renders
             // the same discharge content with <img> stripped and thead/tbody flattened by the
             // transformer (the legacy com.lowagie.text.html.HtmlParser RTF path throws
