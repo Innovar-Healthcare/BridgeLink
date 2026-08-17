@@ -3,7 +3,6 @@ package com.mirth.connect.smoketest;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -313,11 +312,28 @@ public class StubChannelsTest extends SmokeTestBase {
             // DocRenderSeamTest#testEncryptPdfPasswordRoundTrip's assertion shape, proving the
             // end-to-end channel-deployed encrypt path (not just the reflective seam) on disk.
             Path encPdfPath = pollForFile(Paths.get(outDir, "doc", "output-enc.pdf"), 60);
-            try {
-                PDDocument.load(encPdfPath.toFile()).close();
-                fail("loading the encrypted PDF without a password should throw");
+            // WR-03 fix: PDFBox loads an owner-only-encrypted PDF (empty *user* password,
+            // non-empty *owner* password) WITHOUT throwing InvalidPasswordException -- so a
+            // bare load-without-password call succeeding is not, by itself, proof that the
+            // *user*-level password protection was lost; it could still legitimately be
+            // owner-only encrypted content this test never intended to allow. Assert the
+            // stronger property directly: if load-without-a-password does not throw, the
+            // returned document must still report isEncrypted() == true AND its access
+            // permissions must deny content extraction, so a regression to owner-only
+            // encryption (losing the user-level lock) is reported as a distinct, well-labeled
+            // failure rather than silently accepted here.
+            try (PDDocument encPdfNoPassword = PDDocument.load(encPdfPath.toFile())) {
+                assertTrue("PDF loaded without a password unexpectedly did not throw "
+                        + "InvalidPasswordException, but must still report isEncrypted() == "
+                        + "true (an owner-only-encryption weakening would load successfully "
+                        + "here without this)", encPdfNoPassword.isEncrypted());
+                assertTrue("PDF loaded without the user password must deny content "
+                        + "extraction (canExtractContent permission) -- an owner-only "
+                        + "encryption weakening would otherwise grant it",
+                        !encPdfNoPassword.getCurrentAccessPermission().canExtractContent());
             } catch (InvalidPasswordException expected) {
-                // pass
+                // pass -- the expected path given this fixture's non-empty user password
+                // (s3cret, doc-writer-test.xml)
             }
             try (PDDocument encPdf = PDDocument.load(encPdfPath.toFile(), ENCRYPTED_PDF_PASSWORD)) {
                 assertTrue("document encrypted with a password must report isEncrypted() == true",
