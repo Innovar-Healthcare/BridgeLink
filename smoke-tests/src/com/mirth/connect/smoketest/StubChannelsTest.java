@@ -218,8 +218,19 @@ public class StubChannelsTest extends SmokeTestBase {
      */
     private static void assertSingleLogoXObject(PDDocument doc, int expectedWidthPx, int expectedHeightPx)
             throws java.io.IOException {
-        int imageCount = 0;
-        int firstImagePageIndex = -1;
+        // WR-02 fix: PDPage#getResources() returns resources INHERITED from the page-tree
+        // /Pages node, so the same logo XObject can resolve under a name on more than one
+        // page without ever being drawn there more than once. Counting resolution hits (as
+        // this method used to) conflates "resolvable via inherited resources" with "one
+        // image" -- if the rendering engine ever attaches the logo to a shared/inherited
+        // resource dictionary, imageCount would equal the page count and the pageIndex == 0
+        // check would spuriously fail on page 1+. Dedup by the underlying COSObject identity
+        // instead: track every page each DISTINCT image resolves on, so a genuinely
+        // different second logo (a real regression) is still caught by the distinct-count
+        // assertion below, while benign resource inheritance of the SAME image across pages
+        // is not misreported as "logo leaked onto later pages".
+        java.util.Map<org.apache.pdfbox.cos.COSBase, java.util.SortedSet<Integer>> pagesByImageIdentity =
+                new java.util.IdentityHashMap<>();
         for (int pageIndex = 0; pageIndex < doc.getNumberOfPages(); pageIndex++) {
             PDPage page = doc.getPage(pageIndex);
             PDResources resources = page.getResources();
@@ -230,21 +241,21 @@ public class StubChannelsTest extends SmokeTestBase {
                 PDXObject xObject = resources.getXObject(xObjectName);
                 if (xObject instanceof PDImageXObject) {
                     PDImageXObject image = (PDImageXObject) xObject;
-                    imageCount++;
-                    if (firstImagePageIndex == -1) {
-                        firstImagePageIndex = pageIndex;
-                    }
-                    assertEquals("Logo image XObject on page " + pageIndex + " should be "
+                    assertEquals("Logo image XObject should be "
                             + expectedWidthPx + "px wide", expectedWidthPx, image.getWidth());
-                    assertEquals("Logo image XObject on page " + pageIndex + " should be "
+                    assertEquals("Logo image XObject should be "
                             + expectedHeightPx + "px tall", expectedHeightPx, image.getHeight());
-                    assertTrue("Logo image XObject should only appear on page 0 (the header), "
-                            + "not page " + pageIndex, pageIndex == 0);
+                    pagesByImageIdentity
+                            .computeIfAbsent(image.getCOSObject(), key -> new java.util.TreeSet<>())
+                            .add(pageIndex);
                 }
             }
         }
-        assertEquals("Discharge PDF should carry exactly one image XObject (the logo)", 1, imageCount);
-        assertEquals("Logo image XObject should be present on page 0", 0, firstImagePageIndex);
+        assertEquals("Discharge PDF should carry exactly one distinct image XObject (the logo)",
+                1, pagesByImageIdentity.size());
+        java.util.SortedSet<Integer> pagesResolvingLogo = pagesByImageIdentity.values().iterator().next();
+        assertEquals("The distinct logo image XObject should resolve starting on page 0 (the header)",
+                Integer.valueOf(0), pagesResolvingLogo.first());
     }
 
     @Test
