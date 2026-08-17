@@ -652,6 +652,13 @@ donkey/donkey-test
 /smoke-tests/junit-reports/
 # regression-scripts/test-irt1541-jsch-sftp-upgrade.sh per-run evidence log — 25.1-03 (SC-3)
 /regression-scripts/irt1541-evidence.log
+# regression-scripts/test-docwriter-upgrade-migration.sh — 22.5-01 (CVE-07/IRT-1491):
+# cached S3 release tarball (~300MB) + per-run evidence dir/log (rtf-diff-surviving.txt in
+# the evidence dir feeds plan 22.5-02's empirical allowlist derivation, so it is NOT
+# wiped between runs by the script itself — but it is build/run output, never committed)
+/regression-scripts/.dist-cache/
+/regression-scripts/docwriter-migration-evidence/
+/regression-scripts/docwriter-migration-evidence.log
 # offline dependency-check-offline target output (Phase 23, D-19) — build output, not evidence
 /dependency-check-out/
 
