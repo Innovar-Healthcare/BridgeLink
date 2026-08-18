@@ -2651,6 +2651,17 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     }
 
     /**
+     * Returns the default data type properties XML for a data type declared by the named
+     * extension. The response is raw XML.
+     *
+     * @see ExtensionServletInterface#getWebAdminDataTypeDefaults
+     */
+    @Override
+    public javax.ws.rs.core.Response getWebAdminDataTypeDefaults(String extensionName, String dataTypeName) throws ClientException {
+        return getServlet(ExtensionServletInterface.class).getWebAdminDataTypeDefaults(extensionName, dataTypeName);
+    }
+
+    /**
      * Returns the enabled status of an extension.
      *
      * @see ExtensionServletInterface#isExtensionEnabled
