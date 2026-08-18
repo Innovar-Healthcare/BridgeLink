@@ -141,7 +141,7 @@ public class ServerSMTPConnection {
         this.socketTimeout = socketTimeout;
     }
 
-    public void send(String toList, String ccList, String from, String subject, String body, String charset) throws EmailException {
+    public void send(String toList, String ccList, String bccList, String from, String subject, String body, String charset) throws EmailException {
         Email email = new SimpleEmail();
 
         // Set the charset if it was specified. Otherwise use the system's default.
@@ -188,9 +188,15 @@ public class ServerSMTPConnection {
             email.addTo(to);
         }
 
-        if (StringUtils.isNotEmpty(ccList)) {
+        if (StringUtils.isNotBlank(ccList)) {
             for (String cc : StringUtils.split(ccList, ",")) {
                 email.addCc(cc);
+            }
+        }
+
+        if (StringUtils.isNotBlank(bccList)) {
+            for (String bcc : StringUtils.split(bccList, ",")) {
+                email.addBcc(bcc);
             }
         }
 
@@ -198,6 +204,10 @@ public class ServerSMTPConnection {
         email.setSubject(subject);
         email.setMsg(body);
         email.send();
+    }
+
+    public void send(String toList, String ccList, String from, String subject, String body, String charset) throws EmailException {
+        send(toList, ccList, null, from, subject, body, charset);
     }
 
     public void send(String toList, String ccList, String from, String subject, String body) throws EmailException {

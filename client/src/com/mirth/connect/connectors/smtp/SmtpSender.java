@@ -130,6 +130,8 @@ public class SmtpSender extends ConnectorSettingsPanel {
         properties.setOAuthTokenEndpointUrl(oAuthTokenUrlField.getText());
         properties.setOAuthScope(oAuthScopeField.getText());
         properties.setTo(toField.getText());
+        properties.setCc(ccField.getText());
+        properties.setBcc(bccField.getText());
         properties.setFrom(fromField.getText());
         properties.setSubject(subjectField.getText());
 
@@ -211,6 +213,8 @@ public class SmtpSender extends ConnectorSettingsPanel {
         oAuthTokenUrlField.setText(props.getOAuthTokenEndpointUrl());
         oAuthScopeField.setText(props.getOAuthScope());
         toField.setText(props.getTo());
+        ccField.setText(props.getCc());
+        bccField.setText(props.getBcc());
         fromField.setText(props.getFrom());
         subjectField.setText(props.getSubject());
 
@@ -790,6 +794,12 @@ public class SmtpSender extends ConnectorSettingsPanel {
         toLabel = new JLabel("To:");
         toField = new MirthTextField();
 
+        ccLabel = new JLabel("CC:");
+        ccField = new MirthTextField();
+
+        bccLabel = new JLabel("BCC:");
+        bccField = new MirthTextField();
+
         fromLabel = new JLabel("From:");
         fromField = new MirthTextField();
 
@@ -928,6 +938,8 @@ public class SmtpSender extends ConnectorSettingsPanel {
         oAuthTokenUrlField.setToolTipText("OAuth 2.0 token endpoint URL (e.g. https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token).");
         oAuthScopeField.setToolTipText("OAuth 2.0 scope (e.g. https://outlook.office365.com/.default).");
         toField.setToolTipText("The name of the mailbox (person, usually) to which the email should be sent.");
+        ccField.setToolTipText("Optional comma-separated list of mailboxes to which the email should be sent as a carbon copy.");
+        bccField.setToolTipText("Optional comma-separated list of mailboxes to which the email should be sent as a blind carbon copy.");
         fromField.setToolTipText("The name that should appear as the \"From address\" in the email.");
         subjectField.setToolTipText("The text that should appear as the subject of the email, as seen by the receiver's email client.");
         charsetEncodingComboBox.setToolTipText("<html>Select the character set encoding used by the sender of the message,<br> or Default to assume the default character set encoding for the JVM running BridgeLink.</html>");
@@ -946,7 +958,7 @@ public class SmtpSender extends ConnectorSettingsPanel {
     }
 
     private void initLayout() {
-        setLayout(new MigLayout("insets 0 8 0 8, novisualpadding, gap 12 6", "[][]6[]", "[][]4[]4[][][]4[]4[]4[][][][][][]4[]4[][][]"));
+        setLayout(new MigLayout("insets 0 8 0 8, novisualpadding, gap 12 6", "[][]6[]", "[][]4[]4[][][]4[]4[]4[][][][][][]4[]4[]4[]4[][][]"));
 
         add(smtpHostLabel, "right");
         add(smtpHostField, "w 200!, sx, split 2");
@@ -984,6 +996,10 @@ public class SmtpSender extends ConnectorSettingsPanel {
         add(oAuthScopeField, "w 300!, sx");
         add(toLabel, "newline, right");
         add(toField, "w 200!, sx");
+        add(ccLabel, "newline, right");
+        add(ccField, "w 200!, sx");
+        add(bccLabel, "newline, right");
+        add(bccField, "w 200!, sx");
         add(fromLabel, "newline, right");
         add(fromField, "w 200!, sx");
         add(subjectLabel, "newline, right");
@@ -1163,6 +1179,10 @@ public class SmtpSender extends ConnectorSettingsPanel {
     private MirthTextField oAuthScopeField;
     private JLabel toLabel;
     private MirthTextField toField;
+    private JLabel ccLabel;
+    private MirthTextField ccField;
+    private JLabel bccLabel;
+    private MirthTextField bccField;
     private JLabel fromLabel;
     private MirthTextField fromField;
     private JLabel subjectLabel;

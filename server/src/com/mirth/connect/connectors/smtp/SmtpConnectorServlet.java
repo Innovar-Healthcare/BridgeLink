@@ -43,6 +43,8 @@ public class SmtpConnectorServlet extends MirthServlet implements SmtpConnectorS
             props.put("username", replacer.replaceValues(properties.getUsername(), channelId, channelName));
             props.put("password", replacer.replaceValues(properties.getPassword(), channelId, channelName));
             props.put("toAddress", replacer.replaceValues(properties.getTo(), channelId, channelName));
+            props.put("ccAddress", replacer.replaceValues(properties.getCc(), channelId, channelName));
+            props.put("bccAddress", replacer.replaceValues(properties.getBcc(), channelId, channelName));
             props.put("fromAddress", replacer.replaceValues(properties.getFrom(), channelId, channelName));
             props.put("authType", properties.getAuthType());
             props.put("oAuthClientId", properties.getOAuthClientId());
