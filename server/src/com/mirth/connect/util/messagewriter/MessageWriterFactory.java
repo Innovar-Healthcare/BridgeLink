@@ -10,6 +10,7 @@
 package com.mirth.connect.util.messagewriter;
 
 import java.io.File;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 
@@ -41,6 +42,17 @@ public class MessageWriterFactory {
     public MessageWriter getMessageWriter(MessageWriterOptions options, Encryptor encryptor) throws MessageWriterException {
         String baseFolder = StringUtils.defaultString(options.getBaseFolder(), System.getProperty("user.dir"));
         String rootFolder = FilenameUtils.getAbsolutePath(new File(baseFolder), options.getRootFolder());
+        // Path traversal validation: Ensure that rootFolder is a subdirectory of baseFolder
+        try {
+            File baseDir = new File(baseFolder).getCanonicalFile();
+            File rootDir = new File(rootFolder).getCanonicalFile();
+            if (!isSafeSubdirectory(baseDir, rootDir)) {
+                throw new MessageWriterException("Invalid root folder: traversal outside of base directory is not allowed.");
+            }
+        } catch (java.io.IOException e) {
+            throw new MessageWriterException("Failed to validate export folder path: " + e.getMessage(), e);
+        }
+
         String filePattern = options.getFilePattern();
 
         if (filePattern.substring(0, 1).equals(IOUtils.DIR_SEPARATOR)) {
@@ -85,5 +97,23 @@ public class MessageWriterFactory {
         }
 
         return archiver + "." + compressor;
+    }
+    /**
+     * Checks if candidate is a subdirectory (or the same directory) as base.
+     */
+    private boolean isSafeSubdirectory(File base, File candidate) {
+        try {
+            String basePath = base.getCanonicalPath();
+            String candidatePath = candidate.getCanonicalPath();
+            if (basePath.equals(candidatePath)) {
+                return true;
+            }
+            if (candidatePath.startsWith(basePath + File.separator)) {
+                return true;
+            }
+            return false;
+        } catch (java.io.IOException e) {
+            return false;
+        }
     }
 }
