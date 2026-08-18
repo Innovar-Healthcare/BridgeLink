@@ -411,6 +411,10 @@ public class SmtpDispatcherProperties extends ConnectorProperties implements Des
         builder.append(cc);
         builder.append(newLine);
 
+        builder.append("BCC: ");
+        builder.append(bcc);
+        builder.append(newLine);
+
         builder.append("SUBJECT: ");
         builder.append(subject);
         builder.append(newLine);
