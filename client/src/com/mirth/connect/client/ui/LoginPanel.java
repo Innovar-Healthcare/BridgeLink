@@ -574,6 +574,7 @@ public class LoginPanel extends AbstractLoginPanel {
                 preferenceNames.add("checkForNotifications");
                 preferenceNames.add("showNotificationPopup");
                 preferenceNames.add("archivedNotifications");
+                preferenceNames.add("webAdminMigrationWarningDismissed");
                 try {
                     userPreferences = client.getUserPreferences(currentUser.getId(), preferenceNames);
 
@@ -638,6 +639,19 @@ public class LoginPanel extends AbstractLoginPanel {
                     KeystoreWarningDialog dialog = new KeystoreWarningDialog(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME);
                     if (dialog.wasOkClicked() && dialog.isRegenerateRequested()) {
                         triggerKeystoreRegeneration();
+                    }
+                }
+
+                // Warn that BridgeLink has moved to the WebAdmin client, unless the user has dismissed it
+                String webAdminWarningDismissed = userPreferences.getProperty("webAdminMigrationWarningDismissed");
+                if (webAdminWarningDismissed == null || !BooleanUtils.toBoolean(webAdminWarningDismissed)) {
+                    WebAdminMigrationDialog webAdminDialog = new WebAdminMigrationDialog(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME);
+                    if (webAdminDialog.isDoNotShowAgainChecked()) {
+                        try {
+                            client.setUserPreference(currentUser.getId(), "webAdminMigrationWarningDismissed", "true");
+                        } catch (ClientException e) {
+                            com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
+                        }
                     }
                 }
 
