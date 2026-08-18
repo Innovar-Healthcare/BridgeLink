@@ -7,9 +7,9 @@ name: Test matrix (JDK 17/21/25)
 
 on:
   push:
-    branches: [feature/26.9.x, bridgelink_development]
+    branches: [feature/26.9.x, feature/26.9.x-clean, bridgelink_development]
   pull_request:
-    branches: [feature/26.9.x, bridgelink_development]
+    branches: [feature/26.9.x, feature/26.9.x-clean, bridgelink_development]
 
 jobs:
   test:
