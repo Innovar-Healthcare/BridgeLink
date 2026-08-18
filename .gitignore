@@ -662,3 +662,9 @@ donkey/donkey-test
 # offline dependency-check-offline target output (Phase 23, D-19) — build output, not evidence
 /dependency-check-out/
 
+
+# CVE scan outputs (regenerated every run by scripts/scan-local.sh and CI; REPORT.md is tracked)
+/report.html
+/summary.md
+/trivy.json
+/dependency-check-report.*
