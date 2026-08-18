@@ -366,7 +366,12 @@ public class LookupService {
 
                 importValues = filtered;
             }
-            int count = valueDao.importValues(tableName, importValues);
+            int count;
+            if (isValueJson) {
+                count = valueDao.importValuesJson(tableName, importValues);
+            } else {
+                count = valueDao.importValues(tableName, importValues);
+            }
 
             // Audit
             recordAudit(groupId, tableName, "*", "IMPORT", null, count + " values imported", userId);
