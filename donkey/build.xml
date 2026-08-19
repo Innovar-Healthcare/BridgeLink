@@ -104,6 +104,15 @@
 	<taskdef uri="antlib:org.jacoco.ant"
 			 resource="org/jacoco/ant/antlib.xml"
 			 classpathref="jacoco.classpath"/>
+
+	<!-- ant-contrib provides <trycatch>, used to guarantee docker cleanup when a
+	     database test run fails (IRT-1539). Already vendored alongside jacoco, so
+	     this adds no new dependency. -->
+	<taskdef resource="net/sf/antcontrib/antlib.xml">
+		<classpath>
+			<fileset dir="${server}/lib/ant" includes="ant-contrib*.jar"/>
+		</classpath>
+	</taskdef>
 	
 	<target name="test-run" depends="test-compile" description="Run unit tests and generate code coverage">
 		<property name="junit-reports" value="junit-reports" />
@@ -620,16 +629,37 @@
 		</antcall>
 	</target>
 
+	<!--
+	     Runs test-run-db-only and cleans up the container whether the tests pass or
+	     fail (IRT-1539). test-run-db-only ends in <fail if="test.failed">, which
+	     throws out of the <antcall> and would otherwise skip the caller's cleanup on
+	     exactly the runs that need it - leaving a stale container and volume for the
+	     next run to silently reuse. There is no <catch>, so the failure still
+	     propagates and the build stays red.
+	-->
+	<target name="test-run-db-with-cleanup" depends="init">
+		<fail unless="db.type" message="Database type not specified."/>
+		<trycatch>
+			<try>
+				<antcall target="test-run-db-only">
+					<param name="db.type" value="${db.type}"/>
+				</antcall>
+			</try>
+			<finally>
+				<antcall target="docker-cleanup-db">
+					<param name="db.type" value="${db.type}"/>
+				</antcall>
+			</finally>
+		</trycatch>
+	</target>
+
 	<target name="test-run-postgres-db" depends="test-compile" description="Run tests against PostgreSQL database">
 		<echo message=""/>
 		<echo message="[2/5] Testing PostgreSQL..."/>
 		<antcall target="docker-start-db">
 			<param name="db.type" value="postgres"/>
 		</antcall>
-		<antcall target="test-run-db-only">
-			<param name="db.type" value="postgres"/>
-		</antcall>
-		<antcall target="docker-cleanup-db">
+		<antcall target="test-run-db-with-cleanup">
 			<param name="db.type" value="postgres"/>
 		</antcall>
 	</target>
@@ -640,10 +670,7 @@
 		<antcall target="docker-start-db">
 			<param name="db.type" value="mysql"/>
 		</antcall>
-		<antcall target="test-run-db-only">
-			<param name="db.type" value="mysql"/>
-		</antcall>
-		<antcall target="docker-cleanup-db">
+		<antcall target="test-run-db-with-cleanup">
 			<param name="db.type" value="mysql"/>
 		</antcall>
 	</target>
@@ -654,10 +681,7 @@
 		<antcall target="docker-start-db">
 			<param name="db.type" value="sqlserver"/>
 		</antcall>
-		<antcall target="test-run-db-only">
-			<param name="db.type" value="sqlserver"/>
-		</antcall>
-		<antcall target="docker-cleanup-db">
+		<antcall target="test-run-db-with-cleanup">
 			<param name="db.type" value="sqlserver"/>
 		</antcall>
 	</target>
