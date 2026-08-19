@@ -3,6 +3,11 @@
 
 name: Build bridgelink
 
+# Cancel superseded runs on the same ref (PR #190 / IRT-1539 hardening item 1).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
@@ -14,6 +19,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Bound total runtime (PR #190 / IRT-1539 hardening item 2). Value is a RESEARCH [ASSUMED]
+    # default (A2) pending reconciliation against the public #190 diff.
+    timeout-minutes: 60
+    env:
+      # Heap parity with the ant junit -Xmx2048m forks (PR #190 / IRT-1539 hardening item 3).
+      # Value is a RESEARCH [ASSUMED] default (A2).
+      ANT_OPTS: -Xmx2048m
 
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +36,11 @@ jobs:
           java-version: '17'
           java-package: 'jdk+fx'
           distribution: 'zulu'
+
+      # Explicit Ant install — do not rely on the runner's preinstalled ant (PR #190 / IRT-1539
+      # hardening item 4). apt-get invocation form is a RESEARCH [ASSUMED] default (A2).
+      - name: Install Ant
+        run: sudo apt-get update && sudo apt-get install -y ant
 
       - name: Build Bridgelink - signed
         if: github.ref == 'refs/heads/bridgelink_development'
@@ -43,3 +60,12 @@ jobs:
         with:
           name: bridgelink-build
           path: bridgelink.tar.gz
+
+      # Upload junit reports even on a RED build (PR #190 / IRT-1539 hardening item 5). Path glob
+      # is a RESEARCH [ASSUMED] default (A2); per-module dirs, build does not aggregate.
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-reports
+          path: '**/junit-reports/**'
