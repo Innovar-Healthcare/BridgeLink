@@ -15,6 +15,18 @@ donkey/donkey-test
 **/code-coverage-reports
 **/junit-html
 **/jacoco-html
+
+# Per-database test report output (ant test-run-<db>-db writes <dir>-<dbtype>); gitignore matches
+# whole path components, so the patterns above do not cover these.
+**/junit-reports-*
+**/code-coverage-reports-*
+**/junit-html-*
+**/jacoco-html-*
+
+# Temp files ant's forked <junit> task writes into the module directory; they leak when a forked
+# JVM is killed.
+**/junit[0-9]*.properties
+**/junitvmwatcher*.properties
 .DS_Store
 
 # /client/
@@ -662,3 +674,9 @@ donkey/donkey-test
 # offline dependency-check-offline target output (Phase 23, D-19) — build output, not evidence
 /dependency-check-out/
 
+
+# CVE scan outputs (regenerated every run by scripts/scan-local.sh and CI; REPORT.md is tracked)
+/report.html
+/summary.md
+/trivy.json
+/dependency-check-report.*

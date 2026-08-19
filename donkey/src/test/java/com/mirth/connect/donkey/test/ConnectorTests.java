@@ -10,6 +10,11 @@
 package com.mirth.connect.donkey.test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.mirth.connect.donkey.test.util.TestConnectorProperties;
 import com.mirth.connect.donkey.test.util.TestResponseTransformer;
@@ -27,7 +32,6 @@ import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.StartException;
 import com.mirth.connect.donkey.server.channel.DestinationChainProvider;
 import com.mirth.connect.donkey.server.channel.MetaDataReplacer;
-import com.mirth.connect.donkey.server.channel.SourceConnector;
 import com.mirth.connect.donkey.server.controllers.ChannelController;
 import com.mirth.connect.donkey.test.util.TestChannel;
 import com.mirth.connect.donkey.test.util.TestDataType;
@@ -59,17 +63,31 @@ public class ConnectorTests {
     }
 
     /*
-     * Create a new poll connector channel Set the polling frequency to 500 ms Starts the channel,
-     * waits 3250 ms, asserts that: - 7 messages are processed by the channel
+     * Creates a poll connector channel with a 1000 ms polling frequency, waits until 7 polls have
+     * completed, and asserts that each poll produced exactly one processed message.
+     *
+     * IRT-1788: this used to sleep 6800 ms and assert exactly 7 polls, which failed roughly 1 run
+     * in 4. Quartz anchors an interval trigger at midnight rather than at channel.start()
+     * (TriggerFactory.createDailyInterval), and pollOnStart is false, so polls fire on absolute
+     * whole-second boundaries. A 6800 ms window only contains 7 of those boundaries when it happens
+     * to start at least 200 ms into a second, so ~20% of runs saw 6 polls on a completely idle
+     * machine, before machine load was a factor at all. Waiting for the polls removes the
+     * dependency on wall clock.
+     *
+     * The elapsed-time assertion below bounds the polling frequency from one side only: it catches
+     * polls firing faster than configured, or the interval being ignored entirely, but not polls
+     * firing slower than configured. That is deliberate - an upper bound would have to tolerate a
+     * loaded machine and a slow database, and PollConnectorJob silently drops a fire whose
+     * predecessor is still running, so any upper bound loose enough to be stable would be too loose
+     * to catch a real regression. It would put the wall-clock flakiness straight back.
      */
     @Test
     public final void testPollConnector() throws Exception {
         final int pollingFrequency = 1000;
-        // Polls fire at t=0, 1000, 2000, 3000, 4000, 5000, 6000ms (7 total).
-        // 6800ms gives 800ms buffer for the 7th poll to complete on slow DBs (MySQL)
-        // while stopping before the 8th poll fires at t=7000ms.
-        final int sleepMillis = 6800;
-        final int expectedMessageCount = 7;
+        final int expectedPollCount = 7;
+        // 7 polls need at least 6 s of wall clock, so this is generous margin for a loaded machine
+        // rather than a timing assumption - only the failure path waits this long.
+        final long pollTimeoutMillis = 30000L;
 
         String channelId = TestUtils.DEFAULT_CHANNEL_ID;
         String serverId = TestUtils.DEFAULT_SERVER_ID;
@@ -90,7 +108,7 @@ public class ConnectorTests {
         ((PollConnectorPropertiesInterface) connectorProperties).getPollConnectorProperties().setPollingType(PollingType.INTERVAL);
         ((PollConnectorPropertiesInterface) connectorProperties).getPollConnectorProperties().setPollingFrequency(pollingFrequency);
 
-        SourceConnector sourceConnector = new TestPollConnector();
+        CountingPollConnector sourceConnector = new CountingPollConnector(expectedPollCount);
         sourceConnector.setConnectorProperties(connectorProperties);
         sourceConnector.setInboundDataType(new TestDataType());
         sourceConnector.setOutboundDataType(new TestDataType());
@@ -132,11 +150,53 @@ public class ConnectorTests {
         channel.setProcessLock(processLock);
 
         channel.deploy();
+
+        long startNanos = System.nanoTime();
         channel.start(null);
-        Thread.sleep(sleepMillis);
+        boolean reachedExpectedPolls = sourceConnector.awaitPolls(pollTimeoutMillis, TimeUnit.MILLISECONDS);
+        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+
+        // stop() shuts the Quartz scheduler down and waits for any in-flight poll, so the counts
+        // below are stable once it returns.
         channel.stop();
         channel.undeploy();
 
-        assertEquals(expectedMessageCount, channel.getNumMessages());
+        int actualPollCount = sourceConnector.getPollCount();
+
+        assertTrue("Expected " + expectedPollCount + " polls within " + pollTimeoutMillis + "ms but only " + actualPollCount + " completed", reachedExpectedPolls);
+        // Polls are spaced by the polling frequency, so reaching the expected count any faster
+        // would mean the frequency was not honored at all.
+        assertTrue("Expected " + expectedPollCount + " polls to take at least " + ((expectedPollCount - 1) * pollingFrequency) + "ms but took " + elapsedMillis + "ms", elapsedMillis >= (expectedPollCount - 1) * pollingFrequency);
+        // Every poll dispatches exactly one message. Not asserted against expectedPollCount
+        // directly: a further poll may fire between the latch opening and stop() completing.
+        assertEquals(actualPollCount, channel.getNumMessages());
+    }
+
+    /**
+     * Counts completed polls so a test can wait for them instead of sleeping for a fixed time.
+     * Mirrors the CountDownJob pattern in PollConnectorJobTests.
+     */
+    private static class CountingPollConnector extends TestPollConnector {
+        private final AtomicInteger pollCount = new AtomicInteger();
+        private final CountDownLatch latch;
+
+        CountingPollConnector(int expectedPolls) {
+            latch = new CountDownLatch(expectedPolls);
+        }
+
+        @Override
+        protected void poll() {
+            super.poll();
+            pollCount.incrementAndGet();
+            latch.countDown();
+        }
+
+        boolean awaitPolls(long timeout, TimeUnit unit) throws InterruptedException {
+            return latch.await(timeout, unit);
+        }
+
+        int getPollCount() {
+            return pollCount.get();
+        }
     }
 }
