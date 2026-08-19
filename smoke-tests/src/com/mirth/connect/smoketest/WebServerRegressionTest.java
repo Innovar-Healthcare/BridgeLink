@@ -191,6 +191,58 @@ public class WebServerRegressionTest extends SmokeTestBase {
     }
 
     // ------------------------------------------------------------------
+    // IRT-1765 / PR #195 — legacy web dashboard de-shipped, signpost Web Admin
+    //
+    // WebAdminUrlServlet is a plain unauthenticated JSON property-server, NOT a redirect
+    // servlet — it serves {"url":"<webadmin.url>"}. These boot-level assertions therefore
+    // check plain status codes + body shape only; no 3xx/redirect assertion (26.2-03,
+    // REQ-26.2-195). Authored here; executed against the integrated dist by Plan 04's
+    // batch-level smoke run.
+    // ------------------------------------------------------------------
+
+    /**
+     * The legacy Stripes/JSP dashboard is de-shipped by dropping {@code build-webadmin} from
+     * the build/dist depends chains (the WAR is mounted by a {@code webapps/*.war} directory
+     * scan, so not building it removes the route with no Java change). A request to the legacy
+     * dashboard action path must now return a clean 404, not the dashboard.
+     */
+    @Test
+    public void legacyWebAdminDashboardReturns404() throws Exception {
+        HttpResponse<byte[]> response = get("/webadmin/Index.action");
+        assertEquals("Legacy /webadmin dashboard must be de-shipped and return 404 (IRT-1765, PR #195)",
+                404, response.statusCode());
+    }
+
+    /**
+     * {@code WebAdminUrlServlet} serves the optional {@code webadmin.url} property as JSON for
+     * the landing page's client-side link-upgrade. No redirect, no 3xx — a plain 200 with an
+     * {@code application/json} body containing a {@code url} key.
+     */
+    @Test
+    public void webAdminUrlReturnsJson() throws Exception {
+        HttpResponse<byte[]> response = get("/webadmin-url");
+        assertEquals("GET /webadmin-url should return 200 with a JSON body (IRT-1765, PR #195)",
+                200, response.statusCode());
+        assertTrue("Response Content-Type should be application/json, was "
+                        + response.headers().firstValue("Content-Type").orElse("<absent>"),
+                response.headers().firstValue("Content-Type").orElse("").contains("application/json"));
+        String body = new String(response.body(), java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue("Response body should contain a \"url\" JSON key, was: " + body,
+                body.contains("\"url\""));
+    }
+
+    /**
+     * The landing page ({@code public_html/index.html}) renders the BridgeLink signpost in
+     * place of the former jQuery-probe-and-redirect-into-/webadmin page.
+     */
+    @Test
+    public void landingPageReturns200() throws Exception {
+        HttpResponse<byte[]> response = get("/");
+        assertEquals("GET / should serve the BridgeLink signpost landing page (IRT-1765, PR #195)",
+                200, response.statusCode());
+    }
+
+    // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
 
