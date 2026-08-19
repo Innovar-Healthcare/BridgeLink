@@ -7,7 +7,19 @@ custom-extensions/*/testlib/
 .idea
 **/*.iml
 .vscode/
-.claude/
+
+# Claude Code: shared config IS committed (skills, agents, hooks, settings.json) so every
+# contributor gets the same setup; everything else under .claude/ is personal or generated.
+# Note the pattern must be `.claude/*`, not `.claude/` — git does not descend into an
+# excluded directory, so a trailing-slash exclusion cannot be negated and the negations
+# below would silently do nothing. Adding a new SHARED dir (commands/, rules/)? Add a
+# negation here, or it never shows up in git status.
+.claude/*
+!.claude/skills/
+!.claude/agents/
+!.claude/hooks/
+!.claude/settings.json
+
 donkey/donkey-src
 donkey/donkey-test
 .sonar
