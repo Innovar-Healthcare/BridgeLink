@@ -93,7 +93,7 @@ public class WebAdminMigrationDialog extends MirthDialog {
         String rule = "body { font-family: " + labelFont.getFamily() + "; font-size: "
                 + labelFont.getSize() + "pt; }";
         ((javax.swing.text.html.HTMLDocument) messagePane.getDocument()).getStyleSheet().addRule(rule);
-        messagePane.setText("<html><body>BridgeLink has transitioned to a new administrator client, WebAdmin."
+        messagePane.setText("<html><body>BridgeLink is transitioning to our new browser-based administrator client, WebAdmin."
                 + "<br>Click <a href=\"" + WEB_ADMIN_URL + "\">here</a> to learn more."
                 + "</body></html>");
         messagePane.addHyperlinkListener(new HyperlinkListener() {
