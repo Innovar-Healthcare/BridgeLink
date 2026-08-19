@@ -125,6 +125,21 @@ public interface ExtensionServletInterface extends BaseServletInterface {
             @Param("transportName") @Parameter(description = "The transport name of the connector to instantiate defaults for.", required = true) @PathParam("transportName") String transportName) throws ClientException;
     // @formatter:on
 
+    /*
+     * Produces declares JSON as well so JSON-accepting clients (the WebAdmin fetch wrapper sends
+     * Accept: application/json) are not rejected with 406; the implementation pins the actual
+     * response Content-Type to application/xml.
+     */
+    @GET
+    @Path("/{extensionName}/webadmin/datatype-defaults/{dataTypeName}")
+    @Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
+    @Operation(summary = "Returns the default data type properties XML for a data type declared by the named extension. Raw XML response (Content-Type application/xml), not the standard serialized envelope. Returns 404 when the extension is missing, disabled, has no webadmin manifest, or does not declare the data type.")
+    @MirthOperation(name = "getWebAdminDataTypeDefaults", display = "Get webadmin data type defaults", auditable = false)
+    public Response getWebAdminDataTypeDefaults(// @formatter:off
+            @Param("extensionName") @Parameter(description = "The name of the extension declaring the data type.", required = true) @PathParam("extensionName") String extensionName,
+            @Param("dataTypeName") @Parameter(description = "The plugin point name of the data type to instantiate defaults for.", required = true) @PathParam("dataTypeName") String dataTypeName) throws ClientException;
+    // @formatter:on
+
     @GET
     @Path("/{extensionName}/enabled")
     @Operation(summary = "Returns the enabled status of an extension.")
