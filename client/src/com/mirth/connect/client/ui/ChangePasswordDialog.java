@@ -15,10 +15,16 @@ import java.awt.Point;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
-import javax.swing.JDialog;
+import java.util.List;
 
+import javax.swing.JDialog;
+import javax.swing.JOptionPane;
+
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import com.mirth.connect.client.core.Client;
+import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.ui.util.DisplayUtil;
 import com.mirth.connect.model.User;
 
@@ -26,11 +32,32 @@ public class ChangePasswordDialog extends MirthDialog {
 
     private Frame parent;
     private User currentUser;
+    private Client client;
+    private boolean result;
 
+    /**
+     * Shows the dialog over the main Administrator window, updating the password through it.
+     */
     public ChangePasswordDialog(User currentUser, String message) {
-        super(PlatformUI.MIRTH_FRAME);
+        this(PlatformUI.MIRTH_FRAME, null, currentUser, message);
+    }
+
+    /**
+     * Shows the dialog before the main Administrator window exists, talking to the server directly.
+     * <p>
+     * A password serving out a grace period may be confined by the server to password-change
+     * operations, so the change has to happen before the Administrator starts issuing requests it
+     * is not allowed to make. Use {@link #getResult()} to find out whether the change was made.
+     */
+    public ChangePasswordDialog(Client client, User currentUser, String message) {
+        this(null, client, currentUser, message);
+    }
+
+    private ChangePasswordDialog(Frame parent, Client client, User currentUser, String message) {
+        super(parent);
         this.currentUser = currentUser;
-        this.parent = PlatformUI.MIRTH_FRAME;
+        this.parent = parent;
+        this.client = client;
         initComponents();
         DisplayUtil.setResizable(this, false);
 
@@ -55,17 +82,66 @@ public class ChangePasswordDialog extends MirthDialog {
         });
 
         pack();
-        Dimension dlgSize = getPreferredSize();
-        Dimension frmSize = parent.getSize();
-        Point loc = parent.getLocation();
 
-        if ((frmSize.width == 0 && frmSize.height == 0) || (loc.x == 0 && loc.y == 0)) {
+        if (parent == null) {
             setLocationRelativeTo(null);
         } else {
-            setLocation((frmSize.width - dlgSize.width) / 2 + loc.x, (frmSize.height - dlgSize.height) / 2 + loc.y);
+            Dimension dlgSize = getPreferredSize();
+            Dimension frmSize = parent.getSize();
+            Point loc = parent.getLocation();
+
+            if ((frmSize.width == 0 && frmSize.height == 0) || (loc.x == 0 && loc.y == 0)) {
+                setLocationRelativeTo(null);
+            } else {
+                setLocation((frmSize.width - dlgSize.width) / 2 + loc.x, (frmSize.height - dlgSize.height) / 2 + loc.y);
+            }
         }
 
         setVisible(true);
+    }
+
+    /**
+     * Whether the password was actually changed. False if the user dismissed the dialog, in which
+     * case a caller gating login on the change should abort it.
+     */
+    public boolean getResult() {
+        return result;
+    }
+
+    /**
+     * Applies the new password, returning true if the server accepted it. Requirement violations are
+     * reported in the same format the Administrator uses elsewhere.
+     */
+    private boolean updatePassword(String newPassword) {
+        if (parent != null) {
+            return parent.checkOrUpdateUserPassword(this, currentUser, newPassword);
+        }
+
+        try {
+            List<String> responses = client.updateUserPassword(currentUser.getId(), newPassword);
+
+            if (CollectionUtils.isNotEmpty(responses)) {
+                StringBuilder builder = new StringBuilder("Your password is not valid. Please fix the following:\n");
+                for (String response : responses) {
+                    builder.append(" - ").append(response).append("\n");
+                }
+                alert(builder.toString());
+                return false;
+            }
+        } catch (ClientException e) {
+            alert("The password could not be changed: " + e.getMessage());
+            return false;
+        }
+
+        return true;
+    }
+
+    private void alert(String message) {
+        if (parent != null) {
+            parent.alertError(this, message);
+        } else {
+            JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     public void setFinishButtonEnabled(boolean enabled) {
@@ -174,7 +250,7 @@ public class ChangePasswordDialog extends MirthDialog {
         passwordTextArea.setFont(new java.awt.Font("Tahoma", 0, 11)); // NOI18N
         passwordTextArea.setLineWrap(true);
         passwordTextArea.setRows(2);
-        passwordTextArea.setText("Your password has expired. You are required to change your password in the next 14 days and 23 hours.");
+        passwordTextArea.setText("");
         passwordTextArea.setWrapStyleWord(true);
         passwordTextArea.setEnabled(false);
         passwordPane.setViewportView(passwordTextArea);
@@ -254,12 +330,13 @@ public class ChangePasswordDialog extends MirthDialog {
         password.requestFocusInWindow();
 
         if (!String.valueOf(password.getPassword()).equals(String.valueOf(confirmPassword.getPassword()))) {
-            parent.alertError(this, "The passwords you entered do not match.");
+            alert("The passwords you entered do not match.");
             return;
-        } else if (!parent.checkOrUpdateUserPassword(this, currentUser, String.valueOf(password.getPassword()))) {
+        } else if (!updatePassword(String.valueOf(password.getPassword()))) {
             return;
         }
 
+        result = true;
         this.dispose();
     }//GEN-LAST:event_finishButtonActionPerformed
 
@@ -272,6 +349,7 @@ public class ChangePasswordDialog extends MirthDialog {
     }//GEN-LAST:event_confirmPasswordKeyReleased
 
     private void cancelButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cancelButtonActionPerformed
+        result = false;
         this.dispose();
     }//GEN-LAST:event_cancelButtonActionPerformed
 

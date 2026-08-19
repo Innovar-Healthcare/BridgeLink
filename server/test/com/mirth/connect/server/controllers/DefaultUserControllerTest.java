@@ -12,6 +12,7 @@ package com.mirth.connect.server.controllers;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,6 +28,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -46,6 +48,7 @@ import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.model.Credentials;
 import com.mirth.connect.model.LoginStrike;
 import com.mirth.connect.model.LoginStatus;
+import com.mirth.connect.model.PasswordRequirements;
 import com.mirth.connect.model.User;
 import com.mirth.connect.server.util.SqlConfig;
 import com.mirth.connect.server.util.StatementLock;
@@ -1236,5 +1239,43 @@ public class DefaultUserControllerTest {
             // Other exceptions acceptable for extreme input
             assertNotNull("Should handle extreme input", e);
         }
+    }
+
+    // ========== LOGIN-TIME PASSWORD POLICY (IRT-1791) ==========
+
+    /**
+     * The login-time check must not run the reuse-history rules. A user's current password is
+     * always in their own credential history, so running them here would report every compliant
+     * password as reused on every login for any customer with a reuse policy configured — a
+     * violation the user has no way to clear. It would also add a database query to a method that
+     * runs on every Basic auth REST request.
+     */
+    @Test
+    public void testStoredPasswordViolations_IgnoresReuseHistory() {
+        // Both reuse rules on, which is what would trigger the history lookup
+        PasswordRequirements requirements = new PasswordRequirements(8, 1, 1, 1, 1, 0, 0, 0, 0, -1, -1, false);
+
+        List<String> violations = userController.getStoredPasswordViolations("Th1$isAtestTEST*#", requirements);
+
+        assertNull("A compliant password must not be reported as reused at login", violations);
+    }
+
+    @Test
+    public void testStoredPasswordViolations_ReportsNonCompliantPassword() {
+        PasswordRequirements requirements = new PasswordRequirements(8, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, false);
+
+        List<String> violations = userController.getStoredPasswordViolations("admin", requirements);
+
+        assertNotNull("A password failing the current rules must be reported", violations);
+        assertTrue(violations.contains("\"admin\" is not allowed as a password"));
+    }
+
+    @Test
+    public void testBuildRequirementsMessage_BulletsEachViolation() {
+        String message = DefaultUserController.buildRequirementsMessage(Arrays.asList("First problem", "Second problem"));
+
+        assertTrue(message.startsWith("Your password no longer meets the password requirements."));
+        assertTrue(message.contains("\n - First problem"));
+        assertTrue(message.contains("\n - Second problem"));
     }
 }

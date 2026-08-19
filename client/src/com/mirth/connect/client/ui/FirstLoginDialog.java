@@ -44,18 +44,29 @@ public class FirstLoginDialog extends javax.swing.JDialog implements com.mirth.c
 
     private Frame parent;
     private boolean result = false;
+    private boolean passwordRequired;
     private static Preferences preferences;
 
     /** Creates new form UserDialog */
     public FirstLoginDialog(User currentUser) {
+        this(currentUser, true);
+    }
+
+    /**
+     * @param passwordRequired
+     *            false when the password has already been changed earlier in the login, so that the
+     *            user is not asked for a new one twice.
+     */
+    public FirstLoginDialog(User currentUser, boolean passwordRequired) {
         super(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME);
         this.parent = com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME;
+        this.passwordRequired = passwordRequired;
         initComponents();
         DisplayUtil.setResizable(this, false);
         finishButton.setEnabled(false);
 
         userEditPanel.setUser(this, currentUser);
-        userEditPanel.setRequiredFields(false, true); 
+        userEditPanel.setRequiredFields(false, passwordRequired);
         if (currentUser.getId() == 1) {
             registerCheckBox.setVisible(false);
         }
@@ -326,7 +337,8 @@ public class FirstLoginDialog extends javax.swing.JDialog implements com.mirth.c
         	userConsentCheckBox.setSelected(false);
         	userConsentCheckBox.setEnabled(false);
         }
-        userEditPanel.setRequiredFields(allRequired, true);
+        // Keep honoring an already-completed password change, rather than asking for one again
+        userEditPanel.setRequiredFields(allRequired, passwordRequired);
     }//GEN-LAST:event_registerCheckBoxActionPerformed
     
     public boolean getResult() {
