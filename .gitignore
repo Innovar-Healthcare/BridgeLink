@@ -680,3 +680,10 @@ donkey/donkey-test
 /summary.md
 /trivy.json
 /dependency-check-report.*
+
+# Residual docker-test/derby-log ignores from public PR #189 (IRT-1539) not already covered above
+# (/donkey/derby.log and /server/derby.log are pre-existing; these four are the missing subset)
+/donkey/donkeytest
+/donkeytest
+/derby.log
+/server/donkeytest
