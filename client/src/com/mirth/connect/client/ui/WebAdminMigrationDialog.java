@@ -23,10 +23,11 @@ import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
+import javax.swing.GroupLayout;
 import javax.swing.JEditorPane;
 import javax.swing.JLabel;
-import javax.swing.JPanel;
-import javax.swing.UIManager;
+import javax.swing.JSeparator;
+import javax.swing.LayoutStyle.ComponentPlacement;
 import javax.swing.event.HyperlinkEvent;
 import javax.swing.event.HyperlinkEvent.EventType;
 import javax.swing.event.HyperlinkListener;
@@ -56,26 +57,44 @@ public class WebAdminMigrationDialog extends MirthDialog {
     private void initComponents() {
         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
 
-        javax.swing.Icon infoIcon = UIManager.getIcon("OptionPane.informationIcon");
-        JLabel iconLabel = new JLabel(infoIcon);
-        int iconWidth = (infoIcon != null) ? infoIcon.getIconWidth() : 32;
+        // Same branded heading banner as the login/about screens (MirthHeadingPanel paints
+        // PlatformUI.BACKGROUND_IMAGE), laid out identically to AboutMirth's header.
+        MirthHeadingPanel headingPanel = new MirthHeadingPanel();
+        JLabel titleLabel = new JLabel("WebAdmin");
+        titleLabel.setFont(new Font("Tahoma", Font.BOLD, 18));
+        titleLabel.setForeground(UIConstants.HEADER_TITLE_TEXT_COLOR);
+
+        GroupLayout headingLayout = new GroupLayout(headingPanel);
+        headingPanel.setLayout(headingLayout);
+        headingLayout.setHorizontalGroup(
+            headingLayout.createParallelGroup(GroupLayout.Alignment.LEADING)
+                .addGroup(headingLayout.createSequentialGroup()
+                    .addContainerGap()
+                    .addComponent(titleLabel, GroupLayout.DEFAULT_SIZE, 358, Short.MAX_VALUE)
+                    .addContainerGap())
+        );
+        headingLayout.setVerticalGroup(
+            headingLayout.createParallelGroup(GroupLayout.Alignment.LEADING)
+                .addGroup(headingLayout.createSequentialGroup()
+                    .addContainerGap()
+                    .addComponent(titleLabel, GroupLayout.DEFAULT_SIZE, 27, Short.MAX_VALUE)
+                    .addContainerGap())
+        );
 
         // Use a JEditorPane so the "here" hyperlink is clickable. Match the look of a JLabel by
         // stripping the editor background/border and applying the default label font.
-        Font labelFont = UIManager.getFont("Label.font");
+        Font labelFont = UIConstants.DIALOG_FONT;
         JEditorPane messagePane = new JEditorPane();
         messagePane.setContentType("text/html");
         messagePane.setEditable(false);
         messagePane.setOpaque(false);
         messagePane.setBackground(new Color(0, 0, 0, 0));
         messagePane.setBorder(null);
-        if (labelFont != null) {
-            String rule = "body { font-family: " + labelFont.getFamily() + "; font-size: "
-                    + labelFont.getSize() + "pt; }";
-            ((javax.swing.text.html.HTMLDocument) messagePane.getDocument()).getStyleSheet().addRule(rule);
-        }
-        messagePane.setText("<html><body>BridgeLink has transitioned to a new administrator client, "
-                + "WebAdmin. Click <a href=\"" + WEB_ADMIN_URL + "\">here</a> to learn more."
+        String rule = "body { font-family: " + labelFont.getFamily() + "; font-size: "
+                + labelFont.getSize() + "pt; }";
+        ((javax.swing.text.html.HTMLDocument) messagePane.getDocument()).getStyleSheet().addRule(rule);
+        messagePane.setText("<html><body>BridgeLink has transitioned to a new administrator client, WebAdmin."
+                + "<br>Click <a href=\"" + WEB_ADMIN_URL + "\">here</a> to learn more."
                 + "</body></html>");
         messagePane.addHyperlinkListener(new HyperlinkListener() {
             public void hyperlinkUpdate(HyperlinkEvent evt) {
@@ -94,6 +113,7 @@ public class WebAdminMigrationDialog extends MirthDialog {
         });
 
         doNotShowAgainCheckBox = new MirthCheckBox("Don't show this warning again");
+        doNotShowAgainCheckBox.setOpaque(false);
 
         MirthButton okButton = new MirthButton("OK");
         okButton.setPreferredSize(new java.awt.Dimension(80, 24));
@@ -103,33 +123,45 @@ public class WebAdminMigrationDialog extends MirthDialog {
             }
         });
 
-        JPanel buttonPanel = new JPanel();
-        buttonPanel.add(okButton);
+        JSeparator separator = new JSeparator();
 
-        javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
+        // White content area with the heading spanning edge-to-edge and the OK button pushed to the
+        // bottom-right corner -- the same GroupLayout structure AboutMirth uses so the dialog packs
+        // tight instead of leaving trailing whitespace.
+        getContentPane().setBackground(UIConstants.BACKGROUND_COLOR);
+        GroupLayout layout = new GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
-        layout.setAutoCreateGaps(true);
-        layout.setAutoCreateContainerGaps(true);
 
         layout.setHorizontalGroup(
-            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            layout.createParallelGroup(GroupLayout.Alignment.LEADING)
+                .addComponent(headingPanel, GroupLayout.DEFAULT_SIZE, 378, Short.MAX_VALUE)
                 .addGroup(layout.createSequentialGroup()
-                    .addComponent(iconLabel)
-                    .addComponent(messagePane))
+                    .addContainerGap()
+                    .addComponent(messagePane, GroupLayout.DEFAULT_SIZE, GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addContainerGap())
                 .addGroup(layout.createSequentialGroup()
-                    .addGap(iconWidth + 6)
-                    .addComponent(doNotShowAgainCheckBox))
-                .addComponent(buttonPanel, javax.swing.GroupLayout.DEFAULT_SIZE,
-                        javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addContainerGap()
+                    .addComponent(separator, GroupLayout.DEFAULT_SIZE, GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addContainerGap())
+                .addGroup(layout.createSequentialGroup()
+                    .addContainerGap()
+                    .addComponent(doNotShowAgainCheckBox)
+                    .addPreferredGap(ComponentPlacement.RELATED, GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(okButton)
+                    .addContainerGap())
         );
         layout.setVerticalGroup(
             layout.createSequentialGroup()
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.CENTER)
-                    .addComponent(iconLabel)
-                    .addComponent(messagePane))
-                .addComponent(doNotShowAgainCheckBox)
-                .addComponent(buttonPanel, javax.swing.GroupLayout.PREFERRED_SIZE,
-                        javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(headingPanel, GroupLayout.PREFERRED_SIZE, 49, GroupLayout.PREFERRED_SIZE)
+                .addGap(14, 14, 14)
+                .addComponent(messagePane, GroupLayout.PREFERRED_SIZE, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(ComponentPlacement.UNRELATED)
+                .addComponent(separator, GroupLayout.PREFERRED_SIZE, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(ComponentPlacement.RELATED)
+                .addGroup(layout.createParallelGroup(GroupLayout.Alignment.CENTER)
+                    .addComponent(doNotShowAgainCheckBox)
+                    .addComponent(okButton))
+                .addContainerGap()
         );
 
         pack();
