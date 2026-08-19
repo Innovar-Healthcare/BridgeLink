@@ -10,6 +10,7 @@
 package com.mirth.connect.donkey.test.util;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -26,7 +27,7 @@ import com.mirth.connect.donkey.util.SerializerProvider;
 import com.mirth.connect.donkey.util.xstream.XStreamSerializer;
 
 public class TestChannel extends Channel {
-    private List<Long> messageIds = new ArrayList<Long>();
+    private List<Long> messageIds = Collections.synchronizedList(new ArrayList<Long>());
     private boolean isDeployed = false;
     private volatile boolean queueThreadRunning = false;
     private List<Message> unfinishedMessages = null;

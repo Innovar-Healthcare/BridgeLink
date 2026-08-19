@@ -10,6 +10,7 @@
 package com.mirth.connect.donkey.test.util;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import com.mirth.connect.donkey.model.message.RawMessage;
@@ -22,7 +23,7 @@ public class TestSourceConnector extends SourceConnector {
     protected TestConnectorProperties connectorProperties;
     private List<DispatchResult> recoveredDispatchResults = new ArrayList<DispatchResult>();
     private boolean isDeployed = false;
-    private List<Long> messageIds = new ArrayList<Long>();
+    private List<Long> messageIds = Collections.synchronizedList(new ArrayList<Long>());
 
     public List<DispatchResult> getRecoveredDispatchResults() {
         return recoveredDispatchResults;
