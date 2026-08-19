@@ -38,9 +38,17 @@ jobs:
           distribution: 'zulu'
 
       # Explicit Ant install — do not rely on the runner's preinstalled ant (PR #190 / IRT-1539
-      # hardening item 4). apt-get invocation form is a RESEARCH [ASSUMED] default (A2).
+      # hardening item 4). Hard-bounded with `timeout` so the step can never hang on an apt lock
+      # OR a mirror/network stall (IRT-1539: the unbounded form stalled the whole run to its
+      # 60-min timeout). Falls back to the runner's preinstalled ant if apt is unavailable, then
+      # asserts ant is on PATH so a genuine absence still fails the step.
       - name: Install Ant
-        run: sudo apt-get update && sudo apt-get install -y ant
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          timeout 180 sudo apt-get -o DPkg::Lock::Timeout=60 update || echo "apt-get update skipped (timeout/lock/mirror)"
+          timeout 180 sudo apt-get -o DPkg::Lock::Timeout=60 install -y ant || echo "apt-get install ant skipped (timeout/lock); using preinstalled ant"
+          ant -version
 
       - name: Build Bridgelink - signed
         if: github.ref == 'refs/heads/bridgelink_development'
