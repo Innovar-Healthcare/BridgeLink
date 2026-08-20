@@ -80,11 +80,23 @@ public class ConnectorPropertiesUtil {
             }
         }
 
-        String xml = ObjectXMLSerializer.getInstance().serialize(properties);
+        return toRetaggedXml(properties, "properties");
+    }
+
+    /**
+     * Serializes an instance with XStream and retags the root element to the given neutral name,
+     * moving the class name XStream emitted as the root into a class attribute — the same form
+     * the instance takes when embedded in a channel. Shared by {@link #toConnectorPropertiesXml}
+     * (root name "properties") and {@code ExtensionServlet.getWebAdminDataTypeDefaults} (root name
+     * "dataTypeProperties"), so both webadmin defaults endpoints share one retagging/whitespace/
+     * transformer implementation.
+     */
+    public static String toRetaggedXml(Object instance, String rootName) throws Exception {
+        String xml = ObjectXMLSerializer.getInstance().serialize(instance);
         DonkeyElement element = new DonkeyElement(xml);
         // The standalone root node name is exactly what XStream emits as the class attribute
         element.setAttribute("class", element.getNodeName());
-        element.setNodeName("properties");
+        element.setNodeName(rootName);
         stripStructuralWhitespace(element.getElement());
 
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
