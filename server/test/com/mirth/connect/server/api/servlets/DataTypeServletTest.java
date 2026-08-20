@@ -18,15 +18,24 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.CookieParam;
+import javax.ws.rs.FormParam;
+import javax.ws.rs.HeaderParam;
+import javax.ws.rs.MatrixParam;
+import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
+import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
@@ -36,7 +45,11 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.mirth.connect.client.core.api.MirthApiException;
+import com.mirth.connect.client.core.api.Param;
 import com.mirth.connect.client.core.api.RawContent;
+import com.mirth.connect.client.core.api.servlets.CodeTemplateServletInterface;
+import com.mirth.connect.client.core.api.servlets.ConfigurationServletInterface;
+import com.mirth.connect.client.core.api.servlets.ConnectorServletInterface;
 import com.mirth.connect.client.core.api.servlets.DataTypeServletInterface;
 import com.mirth.connect.donkey.model.message.MessageSerializer;
 import com.mirth.connect.donkey.model.message.MessageSerializerException;
@@ -244,6 +257,101 @@ public class DataTypeServletTest extends ServletTestBase {
         assertEquals(MediaType.APPLICATION_JSON_TYPE, response.getMediaType());
         RawContent body = (RawContent) response.getEntity();
         assertNotNull(body.getContent());
+    }
+
+    // ========== @Param-presence reflection guard (Plan 26.5-02 Task 3, silent-500 standing guard) ==========
+
+    /**
+     * JAX-RS parameter-binding annotations that identify an HTTP-bound argument. Per the connect
+     * CLAUDE.md gotcha: "A missing {@code @Param} on every servlet parameter produces an empty HTTP
+     * 500 with no log entry, which reads like a network fault." Every argument carrying one of
+     * these MUST also carry {@code com.mirth.connect.client.core.api.Param} - the audit-log
+     * metadata annotation the CLAUDE.md gotcha refers to.
+     */
+    private static final Set<Class<? extends Annotation>> JAXRS_BINDING_ANNOTATIONS = new HashSet<>(Arrays.asList(
+            QueryParam.class, PathParam.class, HeaderParam.class, FormParam.class, MatrixParam.class, CookieParam.class));
+
+    /**
+     * The PR #12 servlet-interface methods this guard covers: {@link ConnectorServletInterface} and
+     * {@link DataTypeServletInterface} are brand-new interfaces (every declared method is PR #12's),
+     * plus the specific PR #12-added methods on the pre-existing
+     * {@link ConfigurationServletInterface} and {@link CodeTemplateServletInterface} (RESEARCH
+     * "Endpoint Inventory"). Declared as (interface, methodName, paramTypes) tuples rather than
+     * {@code getDeclaredMethods()} over the whole pre-existing interfaces, so this guard stays
+     * scoped to PR #12's own surface and does not silently start asserting on unrelated endpoints.
+     */
+    private static final Object[][] PR12_METHOD_SIGNATURES = {
+            // ConnectorServletInterface - entirely new
+            { ConnectorServletInterface.class, "defaults", new Class<?>[] { String.class } },
+            { ConnectorServletInterface.class, "nextFireTime", new Class<?>[] { String.class } },
+            // DataTypeServletInterface - entirely new
+            { DataTypeServletInterface.class, "toTree", new Class<?>[] { String.class, String.class } },
+            { DataTypeServletInterface.class, "serialize", new Class<?>[] { String.class, String.class, String.class } },
+            { DataTypeServletInterface.class, "defaultProperties", new Class<?>[] { String.class } },
+            // ConfigurationServletInterface - PR #12-added methods only
+            { ConfigurationServletInterface.class, "getScriptReferences", new Class<?>[] {} },
+            { ConfigurationServletInterface.class, "validateScript", new Class<?>[] { String.class } },
+            { ConfigurationServletInterface.class, "validateScripts", new Class<?>[] { String.class } },
+            { ConfigurationServletInterface.class, "validateCron", new Class<?>[] { String.class } },
+            { ConfigurationServletInterface.class, "replaceTemplate", new Class<?>[] { String.class, String.class } },
+            { ConfigurationServletInterface.class, "prettyPrintScript", new Class<?>[] { String.class } },
+            // CodeTemplateServletInterface - PR #12-added method only
+            { CodeTemplateServletInterface.class, "generateDoc", new Class<?>[] { String.class } } };
+
+    /**
+     * Converts RESEARCH's one-time git-diff {@code @Param} audit (§Endpoint Inventory) into a
+     * standing test, closing the CLAUDE.md silent-500 gotcha that ROADMAP Success Criterion 2 names
+     * as verified-by-test. Walks {@link Method#getParameterAnnotations()} at runtime (both
+     * {@code @Param} and every JAX-RS binding annotation are {@code @Retention(RUNTIME)}, so they
+     * are reflectable) and, for every parameter carrying a JAX-RS binding annotation, asserts the
+     * same parameter ALSO carries {@code com.mirth.connect.client.core.api.Param}.
+     * <p>
+     * Falsifiable by construction: this is a static-shape assertion over real annotations read from
+     * the compiled interfaces - it does not instantiate a servlet, mock a controller, or issue an
+     * HTTP call. Deleting a single {@code @Param} from any covered interface method's JAX-RS-bound
+     * parameter turns this test RED, naming the offending interface/method/parameter/JAX-RS-binding.
+     */
+    @Test
+    public void testPr12InterfaceMethodsCarryParamOnEveryJaxRsBoundArgument() throws Exception {
+        for (Object[] signature : PR12_METHOD_SIGNATURES) {
+            Class<?> interfaceClass = (Class<?>) signature[0];
+            String methodName = (String) signature[1];
+            Class<?>[] paramTypes = (Class<?>[]) signature[2];
+
+            Method method = interfaceClass.getMethod(methodName, paramTypes);
+            Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+
+            for (int i = 0; i < parameterAnnotations.length; i++) {
+                String jaxRsBindingDescription = jaxRsBindingDescriptionIfPresent(parameterAnnotations[i]);
+                if (jaxRsBindingDescription == null) {
+                    // Not an HTTP-bound argument (e.g. a plain @RequestBody parameter) - out of
+                    // scope for this guard.
+                    continue;
+                }
+
+                boolean hasParamAnnotation = false;
+                for (Annotation annotation : parameterAnnotations[i]) {
+                    if (annotation.annotationType() == Param.class) {
+                        hasParamAnnotation = true;
+                        break;
+                    }
+                }
+
+                assertTrue(interfaceClass.getSimpleName() + "." + methodName + "() parameter " + i + " ("
+                        + jaxRsBindingDescription + ") is missing @" + Param.class.getName()
+                        + " - a future edit dropping @Param here produces a silent empty HTTP 500 with no "
+                        + "log entry (CLAUDE.md gotcha)", hasParamAnnotation);
+            }
+        }
+    }
+
+    private static String jaxRsBindingDescriptionIfPresent(Annotation[] parameterAnnotations) {
+        for (Annotation annotation : parameterAnnotations) {
+            if (JAXRS_BINDING_ANNOTATIONS.contains(annotation.annotationType())) {
+                return annotation.toString();
+            }
+        }
+        return null;
     }
 
     /**
