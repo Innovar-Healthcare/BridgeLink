@@ -46,8 +46,6 @@ public class WebAdminMigrationDialogTest {
 
     @Before
     public void setUp() {
-        Assume.assumeFalse("Needs a display to construct a dialog", GraphicsEnvironment.isHeadless());
-
         originalFrame = PlatformUI.MIRTH_FRAME;
         PlatformUI.MIRTH_FRAME = null;
     }
@@ -63,6 +61,8 @@ public class WebAdminMigrationDialogTest {
      */
     @Test
     public void dialogWiringLoadsHeadlesslyViaNoShowSeam() {
+        Assume.assumeFalse("Needs a display to construct a dialog", GraphicsEnvironment.isHeadless());
+
         WebAdminMigrationDialog dialog = new WebAdminMigrationDialog(null, false);
 
         assertNotNull(dialog);
@@ -77,6 +77,8 @@ public class WebAdminMigrationDialogTest {
      */
     @Test
     public void doNotShowAgainCheckBoxTogglesTheAccessor() throws Exception {
+        Assume.assumeFalse("Needs a display to construct a dialog", GraphicsEnvironment.isHeadless());
+
         WebAdminMigrationDialog dialog = new WebAdminMigrationDialog(null, false);
 
         assertFalse(dialog.isDoNotShowAgainChecked());
