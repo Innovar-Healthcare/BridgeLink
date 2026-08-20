@@ -70,10 +70,15 @@ jobs:
           path: bridgelink.tar.gz
 
       # Upload junit reports even on a RED build (PR #190 / IRT-1539 hardening item 5). Path glob
-      # is a RESEARCH [ASSUMED] default (A2); per-module dirs, build does not aggregate.
+      # verified against build-aggregate-reports.xml and donkey/build.xml (Phase 26.3 WR-02): the
+      # DB-gated targets write junit-reports-<db> (derby/postgres/mysql/sqlserver/oracle), which
+      # the single **/junit-reports/** glob does not match, so the second glob covers those.
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: junit-reports
-          path: '**/junit-reports/**'
+          path: |
+            **/junit-reports/**
+            **/junit-reports-*/**
+          if-no-files-found: warn
