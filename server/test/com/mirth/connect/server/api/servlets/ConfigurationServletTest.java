@@ -34,6 +34,8 @@ import java.util.Properties;
 import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
 
 import org.junit.Before;
@@ -45,6 +47,7 @@ import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.api.MirthApiException;
+import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.model.ChannelDependency;
 import com.mirth.connect.model.ChannelMetadata;
 import com.mirth.connect.model.ChannelTag;
@@ -475,6 +478,162 @@ public class ConfigurationServletTest extends ServletTestBase {
     public void testGetProperty() throws Exception {
         when(mockConfigController.getProperty(anyString(), anyString())).thenReturn("propertyValue");
         assertEquals("propertyValue", servlet.getProperty("group1", "name1"));
+    }
+
+    // ========== validateScript (IRT-1514) ==========
+
+    @Test
+    public void testValidateScriptValid() {
+        RawContent content = servlet.validateScript("var x = 1;");
+        assertNotNull(content);
+        assertTrue(content.getContent().contains("\"valid\":true"));
+    }
+
+    @Test
+    public void testValidateScriptInvalid() {
+        RawContent content = servlet.validateScript("var x = ;");
+        assertNotNull(content);
+        assertTrue(content.getContent().contains("\"valid\":false"));
+    }
+
+    // ========== validateScripts (IRT-1514) ==========
+
+    @Test
+    public void testValidateScriptsMixedResults() {
+        RawContent content = servlet.validateScripts("{\"a\":\"var x = 1;\",\"b\":\"var x = ;\"}");
+        assertNotNull(content);
+        String json = content.getContent();
+        // Results are keyed by the request ids; "a" compiles, "b" does not.
+        assertTrue(json.contains("\"a\":{\"valid\":true"));
+        assertTrue(json.contains("\"b\":{\"valid\":false"));
+    }
+
+    @Test
+    public void testValidateScriptsEmptyObject() {
+        RawContent content = servlet.validateScripts("{}");
+        assertNotNull(content);
+        assertEquals("{}", content.getContent());
+    }
+
+    @Test(expected = MirthApiException.class)
+    public void testValidateScriptsMalformedJson() {
+        servlet.validateScripts("not json");
+    }
+
+    // ========== validateCron (IRT-1518) ==========
+
+    @Test
+    public void testValidateCronValid() {
+        RawContent content = servlet.validateCron("0 0 12 * * ?");
+        assertTrue(content.getContent().contains("\"valid\":true"));
+    }
+
+    @Test
+    public void testValidateCronInvalid() {
+        RawContent content = servlet.validateCron("not a cron expression");
+        assertTrue(content.getContent().contains("\"valid\":false"));
+    }
+
+    // ========== replaceTemplate (IRT-1519) ==========
+
+    @Test
+    public void testReplaceTemplatePlainStringPassthrough() {
+        RawContent content = servlet.replaceTemplate(null, "plain string, no templating");
+        assertTrue(content.getContent().contains("plain string, no templating"));
+    }
+
+    @Test(expected = MirthApiException.class)
+    public void testReplaceTemplateBlankTemplate() {
+        servlet.replaceTemplate(null, "");
+    }
+
+    // ========== prettyPrintScript (IRT-1521) ==========
+
+    @Test
+    public void testPrettyPrintScript() {
+        Response response = servlet.prettyPrintScript("var x=1;");
+        assertEquals(200, response.getStatus());
+        assertNotNull(response.getEntity());
+    }
+
+    @Test
+    public void testPrettyPrintScriptBlank() {
+        // JavaScriptSharedUtil.prettyPrint degrades gracefully on blank input instead of throwing.
+        Response response = servlet.prettyPrintScript(null);
+        assertEquals(200, response.getStatus());
+    }
+
+    /**
+     * {@code _prettyPrintScript}'s {@code @Produces} admits {@code application/json} (WebAdmin's
+     * fetch wrapper sends {@code Accept: application/json}), but the actual response Content-Type
+     * must stay pinned to {@code text/plain} - a bare formatted-script String, never the JSON
+     * envelope and never wrapped in {@link com.mirth.connect.client.core.api.RawContent} (its
+     * {@code MessageBodyWriter} only advertises XML/JSON, RESEARCH Pitfall 5). Neither
+     * {@link #testPrettyPrintScript} nor {@link #testPrettyPrintScriptBlank} assert
+     * {@link Response#getMediaType()}, so a future edit that dropped the explicit
+     * {@code MediaType.TEXT_PLAIN_TYPE} argument from {@code ConfigurationServlet.prettyPrintScript}'s
+     * {@code Response.ok(...)} call would pass the shipped suite silently.
+     */
+    @Test
+    public void testPrettyPrintScriptMediaTypePinnedToTextPlainAsBareString() {
+        Response response = servlet.prettyPrintScript("var x=1;");
+        assertEquals(200, response.getStatus());
+        assertEquals(MediaType.TEXT_PLAIN_TYPE, response.getMediaType());
+        String body = (String) response.getEntity();
+        assertNotNull(body);
+    }
+
+    // ========== validateScript Rhino compile-only documenting assertion (IRT-1514 EoP, T-26.5-03) ==========
+
+    /**
+     * Documents that {@code _validateScript} / {@code JavaScriptSharedUtil.validateScriptStructured}
+     * COMPILES the script via Rhino's {@code Context.compileString(...)} but never EXECUTES it - the
+     * phase's one high-severity security surface (IRT-1514 elevation-of-privilege mitigation,
+     * threat T-26.5-03). A script that is syntactically valid but would throw at runtime (calling an
+     * undefined function) must still report {@code valid=true}, since {@code compileString} never
+     * runs the body. Confirmed by reading {@code JavaScriptSharedUtil.validateScriptStructured} this
+     * session: it only calls {@code Context.compileString(...)} inside a try/catch for
+     * {@code EvaluatorException}, never {@code Context.evaluateString(...)} or {@code Script.exec(...)}
+     * (RESEARCH A4). If a future edit switched to evaluating the script, calling an undefined
+     * function would throw a Rhino {@code EcmaError} - a subclass of the same
+     * {@code EvaluatorException} this method already catches - and be reported as
+     * {@code valid=false}, turning this assertion RED.
+     */
+    @Test
+    public void testValidateScriptCompilesButDoesNotExecuteRuntimeThrowingScript() {
+        RawContent content = servlet.validateScript("undefinedFunctionCallXyz123();");
+        assertNotNull(content);
+        assertTrue("A script that only fails at RUNTIME (calling an undefined function) must still "
+                + "compile successfully, proving validation never executes the script",
+                content.getContent().contains("\"valid\":true"));
+    }
+
+    /**
+     * Companion leg: a genuine COMPILE-time syntax error must still be caught and reported with a
+     * fully populated structured error, distinguishing the two failure modes this endpoint's
+     * contract distinguishes ({@code util.ScriptValidationResult}).
+     */
+    @Test
+    public void testValidateScriptSyntaxErrorReturnsStructuredError() {
+        RawContent content = servlet.validateScript("var x = ;");
+        assertNotNull(content);
+        String json = content.getContent();
+        assertTrue(json.contains("\"valid\":false"));
+        assertTrue(json.contains("\"line\""));
+        assertTrue(json.contains("\"column\""));
+        assertTrue(json.contains("\"message\""));
+    }
+
+    // ========== getScriptReferences (IRT-1520) ==========
+
+    @Test
+    public void testGetScriptReferences() throws Exception {
+        RawContent content = servlet.getScriptReferences();
+        assertNotNull(content);
+        assertTrue(content.getContent().trim().startsWith("["));
+        // ~209 static entries per IRT-1520; a gross size check catches accidental truncation without
+        // duplicating ScriptReferenceUtilTest's exact-count assertion here.
+        assertTrue(content.getContent().length() > 1000);
     }
 
     /**
