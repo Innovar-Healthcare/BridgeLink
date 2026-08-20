@@ -11,6 +11,7 @@ package com.mirth.connect.server.api.servlets;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
@@ -130,7 +131,9 @@ public class MockDimseSampleContractTest {
 
         for (String sourceRoot : new String[] { "shared", "server" }) {
             File samplePackageDir = new File(sampleDir, sourceRoot + "/" + SAMPLE_PACKAGE_DIR);
-            for (File sampleFile : samplePackageDir.listFiles((d, fileName) -> fileName.endsWith(".java"))) {
+            File[] sampleFiles = samplePackageDir.listFiles((d, fileName) -> fileName.endsWith(".java"));
+            assertNotNull("sample source root missing or unreadable: " + samplePackageDir, sampleFiles);
+            for (File sampleFile : sampleFiles) {
                 File mirrorFile = new File(testTreeDir, sampleFile.getName());
                 assertTrue("no test-tree mirror for sample class " + sampleFile.getName(), mirrorFile.isFile());
                 assertTrue("test-tree mirror of " + sampleFile.getName() + " differs from the sample source — keep the copies byte-identical",
