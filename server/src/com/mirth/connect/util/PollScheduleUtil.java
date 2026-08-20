@@ -18,6 +18,7 @@ package com.mirth.connect.util;
 
 import java.text.ParseException;
 import java.util.Calendar;
+import java.util.List;
 import java.util.UUID;
 
 import org.apache.commons.lang3.StringUtils;
@@ -81,11 +82,14 @@ public class PollScheduleUtil {
      */
     public static void validateForNextFireTime(PollConnectorProperties properties) {
         if (properties.getPollingType() == PollingType.CRON) {
-            for (CronProperty cronJob : properties.getCronJobs()) {
-                try {
-                    CronExpression.validateExpression(StringUtils.defaultString(cronJob.getExpression()));
-                } catch (ParseException e) {
-                    throw new IllegalArgumentException(e.getMessage());
+            List<CronProperty> cronJobs = properties.getCronJobs();
+            if (cronJobs != null) {
+                for (CronProperty cronJob : cronJobs) {
+                    try {
+                        CronExpression.validateExpression(StringUtils.defaultString(cronJob.getExpression()));
+                    } catch (ParseException e) {
+                        throw new IllegalArgumentException(e.getMessage());
+                    }
                 }
             }
             return; // CRON ignores the weekly/daily restrictions entirely; nothing else to validate.
@@ -97,6 +101,9 @@ public class PollScheduleUtil {
         }
 
         boolean[] inactiveDays = advanced.getInactiveDays();
+        if (inactiveDays == null) {
+            return; // no restriction data present; nothing to validate.
+        }
         for (int day = Calendar.SUNDAY; day <= Calendar.SATURDAY; day++) {
             if (day < inactiveDays.length && !inactiveDays[day]) {
                 return; // at least one active day
