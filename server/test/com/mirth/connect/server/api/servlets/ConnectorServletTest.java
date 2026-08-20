@@ -23,13 +23,17 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.Produces;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
 
@@ -42,6 +46,7 @@ import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.mirth.connect.client.core.api.MirthApiException;
 import com.mirth.connect.client.core.api.RawContent;
+import com.mirth.connect.client.core.api.servlets.ConnectorServletInterface;
 import com.mirth.connect.connectors.dimse.DICOMDispatcherProperties;
 import com.mirth.connect.connectors.dimse.DICOMReceiverProperties;
 import com.mirth.connect.connectors.doc.DocumentDispatcherProperties;
@@ -265,6 +270,110 @@ public class ConnectorServletTest extends ServletTestBase {
         String xml = ((RawContent) response.getEntity()).getContent();
         assertTrue(xml.contains("<scheme>FILE</scheme>"));
         assertTrue("Expected an empty <template/> default, not a pre-filled value", xml.contains("<template/>"));
+    }
+
+    // ========== defaults content-type / contract gap coverage (IRT-1516, public #173 pattern) ==========
+
+    /**
+     * #173 regression guard: {@code ConnectorServletInterface.defaults}'s {@code @Produces} admits
+     * {@code application/json} so WebAdmin's {@code Accept: application/json} fetch does not 406,
+     * but the actual response Content-Type must always stay pinned to {@code application/xml} - a
+     * raw {@code <properties class="...">} document, never the JSON envelope. Neither
+     * {@link #testDefaultsReturnsConnectorPropertiesXml} nor
+     * {@link #testDefaultsForAllAdoptableConnectorTypes} assert
+     * {@link Response#getMediaType()}, so a future edit that drops the explicit
+     * {@code MediaType.APPLICATION_XML_TYPE} argument from {@code ConnectorServlet.defaults}'s
+     * {@code Response.ok(...)} call would pass the shipped suite silently.
+     */
+    @Test
+    public void testDefaultsMediaTypePinnedToXml() {
+        Response response = servlet.defaults(CONNECTOR_TYPE);
+        assertEquals(200, response.getStatus());
+        assertEquals(MediaType.APPLICATION_XML_TYPE, response.getMediaType());
+        RawContent body = (RawContent) response.getEntity();
+        assertTrue("expected the serialized connector properties class attribute", body.getContent().contains("class=\""));
+    }
+
+    /**
+     * 406-avoidance contract guard: even though {@code defaults} always pins
+     * {@code application/xml} on the wire (see {@link #testDefaultsMediaTypePinnedToXml}), the
+     * interface's {@code @Produces} must keep advertising {@code application/json} so a
+     * JSON-preferring client is not rejected with 406 Not Acceptable before the resource method
+     * ever runs. Reads the annotation directly off {@link ConnectorServletInterface#defaults} (with
+     * a type-level fallback, since JAX-RS permits {@code @Produces} at either level) rather than
+     * duplicating the media-type list as a literal, so the guard tracks the real contract.
+     */
+    @Test
+    public void testDefaultsInterfaceProducesIncludesJson() throws Exception {
+        Method defaultsMethod = ConnectorServletInterface.class.getMethod("defaults", String.class);
+        Produces produces = defaultsMethod.getAnnotation(Produces.class);
+        if (produces == null) {
+            produces = ConnectorServletInterface.class.getAnnotation(Produces.class);
+        }
+        assertNotNull("defaults() must carry a @Produces annotation (method- or type-level)", produces);
+        List<String> producedTypes = Arrays.asList(produces.value());
+        assertTrue("406-avoidance: @Produces must still list application/json", producedTypes.contains(MediaType.APPLICATION_JSON));
+    }
+
+    /**
+     * Explicit status-code pin for the unknown-type leg: {@link #testDefaultsUnknownType} only
+     * asserts the exception type via {@code @Test(expected = ...)}, which would still pass if the
+     * servlet ever started throwing {@code MirthApiException} with a different (e.g. 500) status
+     * for an unknown connector type. Assert the 404 explicitly.
+     */
+    @Test
+    public void testDefaultsUnknownTypeReturns404() {
+        try {
+            servlet.defaults(UNKNOWN_CONNECTOR_TYPE);
+            fail("expected a 404 Not Found for an unknown connector type");
+        } catch (MirthApiException e) {
+            assertEquals(404, e.getResponse().getStatus());
+        }
+    }
+
+    /**
+     * IRT-1516 documenting test (accepted-risk security note, not a vulnerability): {@code defaults}
+     * carries {@code @MirthOperation(..., auditable = false)} and its implementation never calls
+     * {@code checkUserAuthorized()} / {@code isUserAuthorized()} - it is intentionally reachable
+     * without any permission gate, because the data returned is a static, non-PHI connector-defaults
+     * shape (the same shape WebAdmin needs pre-auth-scoping). Every other test in this class runs
+     * against {@link TestConnectorServlet}, which defensively overrides {@code isUserAuthorized()}
+     * to {@code true} - that override is never exercised by {@code defaults}, so this test
+     * deliberately uses a servlet subclass with NO such override to prove the endpoint needs none.
+     * If this test ever starts failing because {@code defaults} began calling
+     * {@code checkUserAuthorized()}, that is a deliberate access-control change to review, not a
+     * regression to "fix" by re-adding an override here.
+     */
+    @Test
+    public void testDefaultsUngatedWithoutAuthBypassOverride() {
+        ConnectorServlet ungatedServlet = new ConnectorServlet(request, mock(SecurityContext.class)) {
+            // Intentionally no isUserAuthorized() override - documents that defaults() never
+            // consults it.
+        };
+
+        Response response = ungatedServlet.defaults(CONNECTOR_TYPE);
+        assertEquals("IRT-1516: defaults() must stay reachable with no permission gate installed", 200, response.getStatus());
+    }
+
+    // ========== nextFireTime content-type gap coverage (IRT-1518/IRT-1759) ==========
+
+    /**
+     * Companion media-type pin to {@link #testNextFireTimeValidCronSchedule}: the valid-cron path
+     * must keep returning {@code application/json} (never falling back to the XML envelope the way
+     * {@code defaults} intentionally pins XML).
+     */
+    @Test
+    public void testNextFireTimeValidCronMediaTypePinnedToJson() throws Exception {
+        PollConnectorProperties properties = new PollConnectorProperties();
+        properties.setPollingType(PollingType.CRON);
+        List<CronProperty> cronJobs = new ArrayList<CronProperty>();
+        cronJobs.add(new CronProperty("noon daily", "0 0 12 * * ?"));
+        properties.setCronJobs(cronJobs);
+        String xml = ObjectXMLSerializer.getInstance().serialize(properties);
+
+        Response response = servlet.nextFireTime(xml);
+        assertEquals(200, response.getStatus());
+        assertEquals(MediaType.APPLICATION_JSON_TYPE, response.getMediaType());
     }
 
     // ========== defaults — known IRT-1516 group C gap (NOT in ADOPTABLE_CONNECTORS) ==========
