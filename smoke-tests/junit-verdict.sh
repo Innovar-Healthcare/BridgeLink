@@ -53,8 +53,10 @@ if [ ! -f "$REPORT" ]; then
 fi
 
 # Extract the opening <testsuite ...> tag (attributes may appear in any
-# order; the element may or may not self-close).
-TESTSUITE_TAG=$(grep -o '<testsuite[^>]*>' "$REPORT" | head -1 || true)
+# order; the element may or may not self-close). Anchor on a following
+# space or `>` so an aggregate <testsuites ...> root (whose roll-up totals
+# are not this named class's counts) is never matched (WR-02).
+TESTSUITE_TAG=$(grep -oE '<testsuite[ >][^>]*>' "$REPORT" | head -1 || true)
 if [ -z "$TESTSUITE_TAG" ]; then
   echo "VERDICT: FAIL $FQCN no <testsuite> element found in: $REPORT" >&2
   exit 1
