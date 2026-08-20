@@ -48,10 +48,21 @@ public class WebAdminMigrationDialog extends MirthDialog {
     private MirthCheckBox doNotShowAgainCheckBox;
 
     public WebAdminMigrationDialog(Window owner) {
+        this(owner, true);
+    }
+
+    /**
+     * Test-support seam (REQ-26.4-002 / IRT-1609): package-private constructor that builds the
+     * dialog's components without the blocking {@code setVisible(true)} the public constructor
+     * issues. Modality is unchanged -- {@code visible} only controls whether the dialog is shown.
+     * Production callers must continue to use {@link #WebAdminMigrationDialog(Window)}, which
+     * delegates here with {@code visible=true} and is therefore unchanged in behavior.
+     */
+    WebAdminMigrationDialog(Window owner, boolean visible) {
         super(owner, "BridgeLink Administrator", true);
         initComponents();
         setLocationRelativeTo(owner);
-        setVisible(true);
+        setVisible(visible);
     }
 
     private void initComponents() {
