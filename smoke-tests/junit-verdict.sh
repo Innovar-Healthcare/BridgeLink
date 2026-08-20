@@ -69,6 +69,11 @@ TESTS=$(extract_attr tests)
 FAILURES=$(extract_attr failures)
 ERRORS=$(extract_attr errors)
 SKIPPED=$(extract_attr skipped)
+# JUnit XML schema does not require a `skipped` attribute on <testsuite>;
+# several formatters omit it. Default to 0 so an otherwise-green report
+# without it does not spuriously FAIL (WR-01). It is only hard-required to
+# be numeric when it will actually be enforced, below.
+SKIPPED="${SKIPPED:-0}"
 
 require_numeric() {
   # $1 = attribute name, $2 = value
@@ -83,7 +88,9 @@ require_numeric() {
 require_numeric tests "$TESTS"
 require_numeric failures "$FAILURES"
 require_numeric errors "$ERRORS"
-require_numeric skipped "$SKIPPED"
+if [ "$NO_SKIP" -eq 1 ]; then
+  require_numeric skipped "$SKIPPED"
+fi
 
 if [ "$TESTS" -eq 0 ]; then
   echo "VERDICT: FAIL $FQCN tests=0 (no tests executed)" >&2
