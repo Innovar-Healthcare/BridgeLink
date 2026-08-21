@@ -12,6 +12,7 @@ package com.mirth.connect.model;
 public class ExtendedLoginStatus extends LoginStatus {
 
     private String clientPluginClass;
+    private String pendingGraceMessage;
 
     public ExtendedLoginStatus(Status status, String message) {
         this(status, message, null, null);
@@ -22,7 +23,22 @@ public class ExtendedLoginStatus extends LoginStatus {
         this.clientPluginClass = clientPluginClass;
     }
 
+    /*
+     * Used internally to carry a login-time password-policy verdict across a two-leg MFA
+     * challenge, since the challenge response otherwise discards it and the second leg never
+     * sees the plaintext password to re-derive it. See IRT-1802.
+     */
+    public ExtendedLoginStatus(ExtendedLoginStatus challenge, String pendingGraceMessage) {
+        super(challenge.getStatus(), challenge.getMessage(), challenge.getUpdatedUsername());
+        this.clientPluginClass = challenge.getClientPluginClass();
+        this.pendingGraceMessage = pendingGraceMessage;
+    }
+
     public String getClientPluginClass() {
         return clientPluginClass;
+    }
+
+    public String getPendingGraceMessage() {
+        return pendingGraceMessage;
     }
 }

@@ -678,8 +678,18 @@ public class DefaultUserController extends UserController {
              * Restore it only when the plugin has finished and simply passed the login through: an
              * ExtendedLoginStatus means it is mid-flow and is driving the client itself.
              */
-            if (priorStatus.getStatus() == Status.SUCCESS_GRACE_PERIOD && loginStatus != null && loginStatus.getStatus() == Status.SUCCESS && !(loginStatus instanceof ExtendedLoginStatus)) {
-                loginStatus = new LoginStatus(Status.SUCCESS_GRACE_PERIOD, priorStatus.getMessage(), loginStatus.getUpdatedUsername());
+            if (priorStatus.getStatus() == Status.SUCCESS_GRACE_PERIOD && loginStatus != null) {
+                if (loginStatus.getStatus() == Status.SUCCESS && !(loginStatus instanceof ExtendedLoginStatus)) {
+                    loginStatus = new LoginStatus(Status.SUCCESS_GRACE_PERIOD, priorStatus.getMessage(), loginStatus.getUpdatedUsername());
+                } else if (loginStatus instanceof ExtendedLoginStatus) {
+                    /*
+                     * Two-leg MFA: this request only reaches the challenge stage, not a completed
+                     * login, and the second leg never sees the plaintext password to re-derive the
+                     * verdict. Carry it forward on the challenge itself so the servlet can stash it
+                     * in the session and restore it once the second leg completes. See IRT-1802.
+                     */
+                    loginStatus = new ExtendedLoginStatus((ExtendedLoginStatus) loginStatus, priorStatus.getMessage());
+                }
             }
         }
 
