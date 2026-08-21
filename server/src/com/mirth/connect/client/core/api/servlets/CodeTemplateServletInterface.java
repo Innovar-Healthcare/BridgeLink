@@ -32,6 +32,7 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 
 import org.glassfish.jersey.media.multipart.FormDataParam;
 
@@ -171,6 +172,19 @@ public interface CodeTemplateServletInterface extends BaseServletInterface {
                     @ExampleObject(name = "guid_to_int_map", ref = "../apiexamples/guid_to_int_map_xml") }),
             @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
                     @ExampleObject(name = "guid_to_int_map", ref = "../apiexamples/guid_to_int_map_json") }) }) Map<String, Integer> clientRevisions) throws ClientException;
+
+    /*
+     * Produces declares JSON as well so JSON-accepting clients (the WebAdmin fetch wrapper sends
+     * Accept: application/json) are not rejected with 406; the implementation pins the actual
+     * response Content-Type to text/plain.
+     */
+    @POST
+    @Path("/codeTemplates/_generateDoc")
+    @Consumes(MediaType.TEXT_PLAIN)
+    @Produces({ MediaType.TEXT_PLAIN, MediaType.APPLICATION_JSON })
+    @Operation(summary = "Regenerates the JSDoc comment block for a code template's JavaScript, parsing any existing @param/@return annotations. Raw text response (Content-Type text/plain), not the standard serialized envelope.")
+    @MirthOperation(name = "generateCodeTemplateDoc", display = "Generate code template documentation", type = ExecuteType.ASYNC, auditable = false)
+    public Response generateDoc(@Param("code") @RequestBody(description = "The code template's JavaScript source.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String code) throws ClientException;
 
     @PUT
     @Path("/codeTemplates/{codeTemplateId}")

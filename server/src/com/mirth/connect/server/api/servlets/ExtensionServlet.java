@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,13 +49,7 @@ import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.api.MirthApiException;
 import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.client.core.api.servlets.ExtensionServletInterface;
-import com.mirth.connect.donkey.model.channel.ConnectorPluginProperties;
 import com.mirth.connect.donkey.model.channel.ConnectorProperties;
-import com.mirth.connect.donkey.model.channel.DestinationConnectorProperties;
-import com.mirth.connect.donkey.model.channel.DestinationConnectorPropertiesInterface;
-import com.mirth.connect.donkey.model.channel.SourceConnectorProperties;
-import com.mirth.connect.donkey.model.channel.SourceConnectorPropertiesInterface;
-import com.mirth.connect.donkey.server.Constants;
 import com.mirth.connect.donkey.util.DonkeyElement;
 import com.mirth.connect.model.ConnectorMetaData;
 import com.mirth.connect.model.MetaData;
@@ -71,6 +64,7 @@ import com.mirth.connect.server.api.MirthServlet;
 import com.mirth.connect.server.controllers.ControllerFactory;
 import com.mirth.connect.server.controllers.ExtensionController;
 import com.mirth.connect.server.controllers.ExtensionController.InstallationResult;
+import com.mirth.connect.server.util.ConnectorPropertiesUtil;
 
 public class ExtensionServlet extends MirthServlet implements ExtensionServletInterface {
 
@@ -237,7 +231,7 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
              * The explicit media type pins the response to application/xml even when the client
              * sent Accept: application/json (which the method's Produces admits to avoid a 406).
              */
-            RawContent body = new RawContent(toConnectorPropertiesXml(instance));
+            RawContent body = new RawContent(ConnectorPropertiesUtil.toConnectorPropertiesXml(instance));
             return Response.ok(body, MediaType.APPLICATION_XML_TYPE).build();
         } catch (MirthApiException e) {
             throw e;
@@ -333,18 +327,6 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
         return ExtensionController.getExtensionsPath();
     }
 
-    private int getDefaultQueueBufferSize() {
-        try {
-            Integer queueBufferSize = ControllerFactory.getFactory().createConfigurationController().getServerSettings().getQueueBufferSize();
-            if (queueBufferSize != null && queueBufferSize > 0) {
-                return queueBufferSize;
-            }
-        } catch (Exception e) {
-            // Fall through to the donkey default
-        }
-        return Constants.DEFAULT_QUEUE_BUFFER_SIZE;
-    }
-
     /**
      * Resolves an extension's webadmin manifest file, guarding against paths that traverse outside
      * the extensions directory. Returns null when the resolved file escapes the directory.
@@ -363,39 +345,6 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
         } catch (IOException e) {
             return null;
         }
-    }
-
-    /**
-     * Serializes freshly instantiated connector properties into the same form they take when
-     * embedded in a channel: a root <properties> element carrying class and version attributes.
-     */
-    private String toConnectorPropertiesXml(ConnectorProperties properties) throws Exception {
-        /*
-         * Client-created channels always carry a pluginProperties element (the Swing client sets
-         * an empty set); serialize the same form so defaults match saved channel XML.
-         */
-        if (properties.getPluginProperties() == null) {
-            properties.setPluginProperties(new HashSet<ConnectorPluginProperties>());
-        }
-
-        /*
-         * The Swing client replaces a zero queue buffer size with the server's configured default
-         * before displaying defaults (ConnectorPanel); do the same so served defaults match.
-         */
-        if (properties instanceof SourceConnectorPropertiesInterface) {
-            SourceConnectorProperties sourceProperties = ((SourceConnectorPropertiesInterface) properties).getSourceConnectorProperties();
-            if (sourceProperties != null && sourceProperties.getQueueBufferSize() <= 0) {
-                sourceProperties.setQueueBufferSize(getDefaultQueueBufferSize());
-            }
-        }
-        if (properties instanceof DestinationConnectorPropertiesInterface) {
-            DestinationConnectorProperties destinationProperties = ((DestinationConnectorPropertiesInterface) properties).getDestinationConnectorProperties();
-            if (destinationProperties != null && destinationProperties.getQueueBufferSize() <= 0) {
-                destinationProperties.setQueueBufferSize(getDefaultQueueBufferSize());
-            }
-        }
-
-        return toRetaggedXml(properties, "properties");
     }
 
     /**
