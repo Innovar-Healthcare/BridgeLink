@@ -27,6 +27,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -46,10 +47,13 @@ import org.mockito.MockitoAnnotations;
 
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.model.Credentials;
+import com.mirth.connect.model.ExtendedLoginStatus;
 import com.mirth.connect.model.LoginStrike;
 import com.mirth.connect.model.LoginStatus;
 import com.mirth.connect.model.PasswordRequirements;
 import com.mirth.connect.model.User;
+import com.mirth.connect.plugins.AuthorizationPlugin;
+import com.mirth.connect.plugins.MultiFactorAuthenticationPlugin;
 import com.mirth.connect.server.util.SqlConfig;
 import com.mirth.connect.server.util.StatementLock;
 
@@ -1277,5 +1281,112 @@ public class DefaultUserControllerTest {
         assertTrue(message.startsWith("Your password no longer meets the password requirements."));
         assertTrue(message.contains("\n - First problem"));
         assertTrue(message.contains("\n - Second problem"));
+    }
+
+    /*
+     * IRT-1802: a two-leg MFA challenge must not discard a login-time password-policy verdict
+     * formed on the first leg, since the second leg never sees the plaintext password to
+     * re-derive it. handleSecondaryAuthentication is private, so these tests reach it through
+     * authorizeUser via a mocked AuthorizationPlugin, which skips the DB-backed credential check
+     * and calls straight into handleSecondaryAuthentication with a controlled LoginStatus.
+     */
+
+    private void setExtensionController(ExtensionController mockExtensionController) throws Exception {
+        Field field = DefaultUserController.class.getDeclaredField("extensionController");
+        field.setAccessible(true);
+        field.set(userController, mockExtensionController);
+    }
+
+    @Test
+    public void testAuthorizeUser_TwoLegMfaChallenge_CarriesGraceMessageForward() throws Exception {
+        try (var mockedStatementLock = mockStatic(StatementLock.class)) {
+            StatementLock mockLock = mock(StatementLock.class);
+            mockedStatementLock.when(() -> StatementLock.getInstance(anyString())).thenReturn(mockLock);
+
+            ExtensionController mockExtensionController = mock(ExtensionController.class);
+            AuthorizationPlugin mockAuthPlugin = mock(AuthorizationPlugin.class);
+            MultiFactorAuthenticationPlugin mockMfaPlugin = mock(MultiFactorAuthenticationPlugin.class);
+
+            String graceMessage = "Your password does not meet the current requirements.";
+            when(mockAuthPlugin.authorizeUser("user1", "pw")).thenReturn(new LoginStatus(LoginStatus.Status.SUCCESS_GRACE_PERIOD, graceMessage));
+            when(mockMfaPlugin.authenticate(eq("user1"), any(LoginStatus.class), anyString())).thenReturn(new ExtendedLoginStatus(LoginStatus.Status.FAIL, "Enter your OTP code", null, "com.example.MfaChallengeClient"));
+
+            when(mockExtensionController.getAuthorizationPlugin()).thenReturn(mockAuthPlugin);
+            when(mockExtensionController.getMultiFactorAuthenticationPlugin()).thenReturn(mockMfaPlugin);
+            setExtensionController(mockExtensionController);
+
+            LoginStatus result = userController.authorizeUser("user1", "pw", "http://localhost:8080");
+
+            assertTrue("Result should be the MFA challenge", result instanceof ExtendedLoginStatus);
+            ExtendedLoginStatus extended = (ExtendedLoginStatus) result;
+            assertEquals(LoginStatus.Status.FAIL, extended.getStatus());
+            assertEquals("Challenge message shown to the user must be unchanged", "Enter your OTP code", extended.getMessage());
+            assertEquals("Client plugin name must be unchanged", "com.example.MfaChallengeClient", extended.getClientPluginClass());
+            assertEquals("Discarded grace verdict must be carried forward on the challenge", graceMessage, extended.getPendingGraceMessage());
+        }
+    }
+
+    @Test
+    public void testAuthorizeUser_TwoLegMfaChallenge_NoPriorGrace_LeavesChallengeUnmodified() throws Exception {
+        try (var mockedStatementLock = mockStatic(StatementLock.class)) {
+            StatementLock mockLock = mock(StatementLock.class);
+            mockedStatementLock.when(() -> StatementLock.getInstance(anyString())).thenReturn(mockLock);
+
+            ExtensionController mockExtensionController = mock(ExtensionController.class);
+            AuthorizationPlugin mockAuthPlugin = mock(AuthorizationPlugin.class);
+            MultiFactorAuthenticationPlugin mockMfaPlugin = mock(MultiFactorAuthenticationPlugin.class);
+
+            // Password is compliant: authorizeUser returns plain SUCCESS, no grace verdict to carry
+            when(mockAuthPlugin.authorizeUser("user1", "pw")).thenReturn(new LoginStatus(LoginStatus.Status.SUCCESS, ""));
+            ExtendedLoginStatus challenge = new ExtendedLoginStatus(LoginStatus.Status.FAIL, "Enter your OTP code", null, "com.example.MfaChallengeClient");
+            when(mockMfaPlugin.authenticate(eq("user1"), any(LoginStatus.class), anyString())).thenReturn(challenge);
+
+            when(mockExtensionController.getAuthorizationPlugin()).thenReturn(mockAuthPlugin);
+            when(mockExtensionController.getMultiFactorAuthenticationPlugin()).thenReturn(mockMfaPlugin);
+            setExtensionController(mockExtensionController);
+
+            LoginStatus result = userController.authorizeUser("user1", "pw", "http://localhost:8080");
+
+            assertSame("Challenge must pass through unmodified when there is no grace verdict to carry", challenge, result);
+            assertNull("No grace verdict means no pending grace message", ((ExtendedLoginStatus) result).getPendingGraceMessage());
+        }
+    }
+
+    @Test
+    public void testAuthorizeUser_OneLegMfaPassthrough_RestoresGracePeriod() throws Exception {
+        try (var mockedStatementLock = mockStatic(StatementLock.class);
+             var mockedSqlConfig = mockStatic(SqlConfig.class)) {
+
+            StatementLock mockLock = mock(StatementLock.class);
+            SqlConfig mockSqlConfig = mock(SqlConfig.class);
+            SqlSessionManager mockSessionManager = mock(SqlSessionManager.class);
+
+            mockedStatementLock.when(() -> StatementLock.getInstance(anyString())).thenReturn(mockLock);
+            mockedSqlConfig.when(SqlConfig::getInstance).thenReturn(mockSqlConfig);
+            when(mockSqlConfig.getReadOnlySqlSessionManager()).thenReturn(mockSessionManager);
+            // Reaching SUCCESS_GRACE_PERIOD makes handleSecondaryAuthentication try to reset login
+            // strikes, which looks the user up again; there is no users table in this test, so let
+            // that lookup fail the same way it would against an unreachable database.
+            when(mockSessionManager.selectOne(anyString(), any())).thenThrow(new PersistenceException("user table not available in test"));
+
+            ExtensionController mockExtensionController = mock(ExtensionController.class);
+            AuthorizationPlugin mockAuthPlugin = mock(AuthorizationPlugin.class);
+            MultiFactorAuthenticationPlugin mockMfaPlugin = mock(MultiFactorAuthenticationPlugin.class);
+
+            String graceMessage = "Your password does not meet the current requirements.";
+            when(mockAuthPlugin.authorizeUser("user1", "pw")).thenReturn(new LoginStatus(LoginStatus.Status.SUCCESS_GRACE_PERIOD, graceMessage));
+            // MFA not required for this user: the plugin passes the login straight through
+            when(mockMfaPlugin.authenticate(eq("user1"), any(LoginStatus.class), anyString())).thenReturn(new LoginStatus(LoginStatus.Status.SUCCESS, ""));
+
+            when(mockExtensionController.getAuthorizationPlugin()).thenReturn(mockAuthPlugin);
+            when(mockExtensionController.getMultiFactorAuthenticationPlugin()).thenReturn(mockMfaPlugin);
+            setExtensionController(mockExtensionController);
+
+            LoginStatus result = userController.authorizeUser("user1", "pw", "http://localhost:8080");
+
+            assertEquals("Passthrough must restore the discarded grace verdict", LoginStatus.Status.SUCCESS_GRACE_PERIOD, result.getStatus());
+            assertEquals(graceMessage, result.getMessage());
+            assertFalse("Restored status must be a plain LoginStatus, not an MFA challenge", result instanceof ExtendedLoginStatus);
+        }
     }
 }

@@ -55,6 +55,7 @@ public abstract class MirthServlet {
     protected static final String SESSION_USER = "user";
     protected static final String SESSION_AUTHORIZED = "authorized";
     protected static final String SESSION_GRACE_RESTRICTED = "graceRestricted";
+    protected static final String SESSION_PENDING_GRACE_MESSAGE = "pendingGraceMessage";
 
     /**
      * Operations a grace-restricted login may still perform regardless of who they are aimed at.
