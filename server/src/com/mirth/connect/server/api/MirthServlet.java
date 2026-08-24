@@ -419,17 +419,10 @@ public abstract class MirthServlet {
     }
 
     protected String getRequestIpAddress() {
-        // NOTE: x-forwarded-for is a client-supplied header and is not verified against a
-        // trusted-proxy list here, so it can be spoofed by any caller. This value is used for
-        // audit trail / authorization-decision IP display, not as a sole gate on access. Only
-        // the first (client-facing) hop is used so a caller cannot pad the header with
-        // additional forged hops to disguise their own address.
         String address = request.getHeader("x-forwarded-for");
 
         if (address == null) {
             address = request.getRemoteAddr();
-        } else {
-            address = address.split(",", 2)[0].trim();
         }
 
         return address;
