@@ -4,6 +4,7 @@
 	<property name="keystore_property_file" value="keystore.properties" />
 	<property name="manifest_thread_count" value="4" />
 	<property name="signjar_thread_count" value="4" />
+	<property name="junit_thread_count" value="2" />
 	<property name="jdk_src_path" value="" />
 
 	<target name="help">
@@ -1327,7 +1328,9 @@
 		<mkdir dir="${junit-html}" />
 
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
-			<junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="perTest">
+			<!-- threads only applies with forkmode="perTest": each test class already runs in
+			     its own JVM, so running forks concurrently preserves per-JVM isolation. -->
+			<junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="perTest" threads="${junit_thread_count}" dir="${basedir}">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 <!--				&lt;!&ndash;Uncomment the following and add additional dashes in front of the arguments to allow Java 9+-->
