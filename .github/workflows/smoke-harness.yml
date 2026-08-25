@@ -95,3 +95,46 @@ jobs:
         with:
           name: smoke-jdk${{ matrix.java }}
           path: smoke-tests/out/**
+
+  # smoke-postgres (Phase 26.8, SC-3/D-01/D-02): a sibling job for the postgres backend
+  # (smoke-tests/run-smoke-test.sh --db postgres, landed in 26.8-02). Unlike the derby job
+  # above, this leg runs PLAINLY on all three JDKs and expects exit 0 on EACH -- postgres
+  # bypasses the Derby/Java-21 preflight entirely (Phase 16 JAVA-04), so JDK 17 is a
+  # legitimate, honest green here, the first on this branch's smoke harness. Do NOT copy
+  # the derby job's JDK-17 expected-fail-signature wrapper onto this job (Pitfall 6): that
+  # wrapper exists because embedded Derby cannot boot below Java 21, a constraint this
+  # backend does not share.
+  smoke-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['17', '21', '25']
+    # Job name carries the raw JDK version (same per-leg green-reporting convention as the
+    # derby job above), and the artifact name below is distinct from smoke-jdk${{ matrix.java }}
+    # to avoid an upload-artifact name collision between the two jobs.
+    name: smoke-postgres (${{ matrix.java }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'zulu'
+          java-package: 'jdk+fx'
+
+      - name: Build BridgeLink - unsigned
+        working-directory: server
+        run: ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true
+
+      - name: Run smoke harness (postgres)
+        run: bash smoke-tests/run-smoke-test.sh --db postgres
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-postgres-jdk${{ matrix.java }}
+          path: smoke-tests/out/**

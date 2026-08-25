@@ -34,7 +34,9 @@ import com.mirth.connect.server.controllers.ControllerFactory;
 
 /**
  * Proves Migrate26_9_0 (CVE-04): the retired jTDS DriverInfo entry is stripped from the
- * persisted driver list, the Microsoft SQL Server entry is retained, the surviving entries keep
+ * persisted driver list when a Microsoft SQL Server entry already survives, or substituted in
+ * place with the canonical Microsoft SQL Server entry when it is the list's only SQL Server
+ * driver (IRT-1912); the Microsoft SQL Server entry is retained, the surviving entries keep
  * their original relative order, the migration is idempotent on a second run, and it is safe
  * (no exception, true no-op — {@code setDatabaseDrivers} is never invoked) on an empty list or a
  * list carrying no jTDS entry.
@@ -152,6 +154,89 @@ public class Migrate26_9_0Test {
         expected.add(postgres);
 
         assertEquals("Surviving entries must keep their original relative order", expected, result);
+    }
+
+    @Test
+    public void substitutesMssqlWhenAbsent() throws Exception {
+        // The real-world IRT-1912 profile: a persisted list carrying jTDS alongside other
+        // drivers but NO Microsoft SQL Server entry. Removing jTDS outright would leave the
+        // install with no SQL Server driver; the migrator must substitute the Microsoft entry
+        // in place instead.
+        DriverInfo mysql = new DriverInfo("MySQL", "com.mysql.cj.jdbc.Driver", "jdbc:mysql://host:port/dbname", "SELECT * FROM ? LIMIT 1");
+        DriverInfo oracle = new DriverInfo("Oracle", "oracle.jdbc.driver.OracleDriver", "jdbc:oracle:thin:@host:port:dbname", "SELECT * FROM ? WHERE ROWNUM < 2");
+        DriverInfo postgres = new DriverInfo("PostgreSQL", "org.postgresql.Driver", "jdbc:postgresql://host:port/dbname", "SELECT * FROM ? LIMIT 1");
+        DriverInfo sqlite = new DriverInfo("SQLite", "org.sqlite.JDBC", "jdbc:sqlite:dbfile.db", "SELECT * FROM ? LIMIT 1");
+
+        List<DriverInfo> drivers = new ArrayList<DriverInfo>();
+        drivers.add(mysql);
+        drivers.add(oracle);
+        drivers.add(postgres);
+        drivers.add(jtdsEntry());
+        drivers.add(sqlite);
+
+        when(configurationController.getDatabaseDrivers()).thenReturn(new ArrayList<DriverInfo>(drivers));
+
+        new Migrate26_9_0().migrate();
+
+        List<DriverInfo> result = captureSetDatabaseDrivers();
+
+        assertFalse("jTDS entry must be gone", containsClass(result, JTDS_CLASS));
+        assertTrue("Microsoft SQL Server must be substituted in when it was absent", containsClass(result, MSSQL_CLASS));
+
+        // Substituted in place: the Microsoft entry takes jTDS's former position (index 3) and
+        // the surrounding drivers are untouched, so the whole list matches expected exactly.
+        List<DriverInfo> expected = new ArrayList<DriverInfo>();
+        expected.add(mysql);
+        expected.add(oracle);
+        expected.add(postgres);
+        expected.add(mssqlEntry());
+        expected.add(sqlite);
+
+        assertEquals("Microsoft entry must be substituted in place, preserving list order and size", expected, result);
+    }
+
+    @Test
+    public void substitutesMssqlWhenJtdsIsOnlyEntry() throws Exception {
+        // A list whose sole entry is jTDS must not be emptied; it must become the single
+        // Microsoft SQL Server entry, so the install still has a SQL Server driver.
+        List<DriverInfo> drivers = new ArrayList<DriverInfo>();
+        drivers.add(jtdsEntry());
+
+        when(configurationController.getDatabaseDrivers()).thenReturn(new ArrayList<DriverInfo>(drivers));
+
+        new Migrate26_9_0().migrate();
+
+        List<DriverInfo> result = captureSetDatabaseDrivers();
+
+        List<DriverInfo> expected = new ArrayList<DriverInfo>();
+        expected.add(mssqlEntry());
+
+        assertEquals("jTDS-only list must substitute to a single Microsoft SQL Server entry", expected, result);
+    }
+
+    @Test
+    public void substitutesFirstJtdsAndRemovesTheRest() throws Exception {
+        // A pathological list carrying more than one jTDS row and no Microsoft entry must
+        // yield exactly ONE Microsoft SQL Server entry (the first jTDS is substituted in
+        // place, any further jTDS rows are removed), never a duplicate Microsoft row.
+        DriverInfo oracle = new DriverInfo("Oracle", "oracle.jdbc.driver.OracleDriver", "jdbc:oracle:thin:@host:port:dbname", "SELECT * FROM ? WHERE ROWNUM < 2");
+
+        List<DriverInfo> drivers = new ArrayList<DriverInfo>();
+        drivers.add(jtdsEntry());
+        drivers.add(oracle);
+        drivers.add(jtdsEntry());
+
+        when(configurationController.getDatabaseDrivers()).thenReturn(new ArrayList<DriverInfo>(drivers));
+
+        new Migrate26_9_0().migrate();
+
+        List<DriverInfo> result = captureSetDatabaseDrivers();
+
+        List<DriverInfo> expected = new ArrayList<DriverInfo>();
+        expected.add(mssqlEntry());
+        expected.add(oracle);
+
+        assertEquals("first jTDS substituted, additional jTDS rows removed, no duplicate Microsoft entry", expected, result);
     }
 
     private List<DriverInfo> captureSetDatabaseDrivers() throws ControllerException {

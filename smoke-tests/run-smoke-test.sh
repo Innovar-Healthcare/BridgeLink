@@ -154,14 +154,57 @@ report_duration() {
 }
 
 # ---------------------------------------------------------------------------
-# Stage: configure_db — D-03 pluggable --db parameter, derby-only for Phase 18
+# Stage: configure_db — D-03 pluggable --db parameter. derby is the Phase 18
+# default; postgres is added in 26.8-02 (SC-2, D-05) as a self-managed
+# postgres:16-alpine container, modeled on generate_sftp_fixtures()'s
+# docker-availability preflight, pinned-tag digest record, and readiness-poll
+# shape (:536-603). mysql/mssql remain unsupported (D-03/Phase 24).
 # ---------------------------------------------------------------------------
 configure_db() {
     case "$DB_TYPE" in
         derby)
             info "Database backend: derby (embedded, fresh per-run appdata)"
             ;;
-        mysql|postgres|mssql)
+        postgres)
+            if ! docker info > /dev/null 2>&1; then
+                fatal "Docker is not available (docker info failed). The --db postgres smoke leg (SC-2) requires a running Docker daemon:
+  - macOS: open -a Docker (Docker Desktop) and wait for it to finish starting
+  - Linux: sudo systemctl start docker
+Re-run smoke-tests/run-smoke-test.sh --db postgres once Docker is available."
+            fi
+
+            PG_PORT=$(free_port)
+            PG_CONTAINER_NAME="smoke-postgres-$$"
+
+            # Pinned tag (never :latest, T-26.8-02-I); resolve and record the concrete
+            # digest at execution time, mirroring generate_sftp_fixtures():569-572.
+            docker pull postgres:16-alpine > /dev/null
+            local pg_image_digest
+            pg_image_digest=$(docker inspect --format '{{index .RepoDigests 0}}' postgres:16-alpine 2>/dev/null || echo "unknown")
+            info "Postgres image: postgres:16-alpine (${pg_image_digest})"
+
+            # Fixed throwaway creds (mirthdb/mirthdb) scoped to this ephemeral per-run
+            # container: test-only values, never a real credential (T-26.8-02-SC).
+            docker run -d \
+                --name "${PG_CONTAINER_NAME}" \
+                -p "127.0.0.1:${PG_PORT}:5432" \
+                -e POSTGRES_DB=mirthdb -e POSTGRES_USER=mirthdb -e POSTGRES_PASSWORD=mirthdb \
+                postgres:16-alpine \
+                > /dev/null
+
+            local attempts=0
+            until docker exec "${PG_CONTAINER_NAME}" pg_isready -U mirthdb -d mirthdb -q; do
+                attempts=$((attempts + 1))
+                if [[ ${attempts} -ge 30 ]]; then
+                    fatal "postgres not ready in 60s"
+                fi
+                sleep 2
+            done
+
+            export PG_PORT PG_CONTAINER_NAME
+            pass "Postgres container ready: container=${PG_CONTAINER_NAME} port=${PG_PORT} db=mirthdb"
+            ;;
+        mysql|mssql)
             fatal "--db ${DB_TYPE} is not yet supported in Phase 18, see D-03/Phase 24"
             ;;
     esac
@@ -533,6 +576,11 @@ except OSError:
 SFTP_CONTAINER_NAME=""
 SFTP_IMAGE_TAG="atmoz/sftp:alpine"
 
+# 26.8-02 (SC-2, D-05): the postgres container name, initialized empty at top level so
+# cleanup()'s guard below is safe under `set -u` when postgres was never selected
+# (DB_TYPE=derby is the default and does not call this arm of configure_db()).
+PG_CONTAINER_NAME=""
+
 generate_sftp_fixtures() {
     hr
     info "Generating modern SFTP fixtures (container + keypair + known_hosts)..."
@@ -658,15 +706,54 @@ patch_properties() {
 
     APPDATA="$(mktemp -d)/appdata-$$"
 
-    sed -i.smoke-bak \
-        -e "s|^http.port *=.*|http.port = ${HTTP_PORT}|" \
-        -e "s|^https.port *=.*|https.port = ${HTTPS_PORT}|" \
-        -e "s|^dir.appdata *=.*|dir.appdata = ${APPDATA}|" \
-        -e "s|^http.host *=.*|http.host = 127.0.0.1|" \
-        -e "s|^https.host *=.*|https.host = 127.0.0.1|" \
-        "${MIRTH_PROPS}"
+    local sed_args=(
+        -e "s|^http.port *=.*|http.port = ${HTTP_PORT}|"
+        -e "s|^https.port *=.*|https.port = ${HTTPS_PORT}|"
+        -e "s|^dir.appdata *=.*|dir.appdata = ${APPDATA}|"
+        -e "s|^http.host *=.*|http.host = 127.0.0.1|"
+        -e "s|^https.host *=.*|https.host = 127.0.0.1|"
+    )
+
+    # 26.8-02 (SC-2, D-05, D-06): postgres DB keys, guarded on DB_TYPE so derby runs
+    # stay byte-identical to today. mirth.properties (not an env var) is the
+    # load-bearing backend selector; database.driver is left commented out/inferred
+    # (O-1: confirmed at first boot that `database = postgres` alone resolves
+    # org.postgresql.Driver with no no-suitable-driver/ClassNotFound error, so no
+    # extra sed clause is needed). D-06: no DDL seeded here; DatabaseTaskController
+    # auto-creates the schema against the empty mirthdb database on first boot.
+    if [[ "${DB_TYPE}" == "postgres" ]]; then
+        sed_args+=(
+            -e "s|^database *=.*|database = postgres|"
+            -e "s|^database.url *=.*|database.url = jdbc:postgresql://127.0.0.1:${PG_PORT}/mirthdb|"
+            -e "s|^database.username *=.*|database.username = mirthdb|"
+            -e "s|^database.password *=.*|database.password = mirthdb|"
+        )
+        # Diagnostic marker only (A3): mirth.properties' database key above is what
+        # actually selects the backend.
+        export MP_DATABASE=postgres
+
+        # 26.8-03 (D-08 Tier 2 falsifiability): SMOKE_PG_BREAK is a dormant knob, additive
+        # and gated on both DB_TYPE=postgres and a non-empty value. When set, it overrides
+        # the correct database.password clause above with a deliberately wrong one, so the
+        # booted dist authenticates against the healthy container with bad credentials and
+        # fails with a deterministic SCRAM/password-authentication-failed signature.
+        # Normal runs (knob unset) are unaffected -- this clause is appended AFTER the
+        # correct password clause, so sed_args processes them in order and the last
+        # matching -e wins.
+        if [[ -n "${SMOKE_PG_BREAK:-}" ]]; then
+            sed_args+=(
+                -e "s|^database.password *=.*|database.password = break-wrong-password|"
+            )
+            info "SMOKE_PG_BREAK set: database.password will be patched to a deliberately wrong value (D-08 Tier 2 break-proof)"
+        fi
+    fi
+
+    sed -i.smoke-bak "${sed_args[@]}" "${MIRTH_PROPS}"
 
     pass "mirth.properties patched: http.port=${HTTP_PORT} https.port=${HTTPS_PORT} dir.appdata=${APPDATA} http.host=127.0.0.1 https.host=127.0.0.1"
+    if [[ "${DB_TYPE}" == "postgres" ]]; then
+        pass "mirth.properties DB keys patched: database=postgres database.url=jdbc:postgresql://127.0.0.1:${PG_PORT}/mirthdb database.username=mirthdb"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1664,6 +1751,43 @@ scan_mirth_log() {
     pass "L3 log scan clean (no unallowlisted ERROR lines in mirth.log)"
 }
 
+# ---------------------------------------------------------------------------
+# Stage: postgres driver-error signature scan — 26.8-02 (D-07/D-08): a targeted,
+# DB_TYPE=postgres-gated positive scan of mirth.log for the verified pgjdbc
+# failure literals (extracted from postgresql-42.7.12.jar / pgjdbc protocol
+# strings). A clean boot must contain NONE of these; a break-proof run
+# (deliberately-absent driver, bad creds, or unreachable DB) is expected to
+# match exactly one. Mirrors MssqlJdbcParamsTest.mirthLogContainsCertValidationFailure()'s
+# positive line-scan idiom (no new curl-pipe-grep pipeline, Pitfall 3).
+# ---------------------------------------------------------------------------
+scan_postgres_driver_errors() {
+    if [[ "${DB_TYPE}" != "postgres" ]]; then
+        return 0
+    fi
+
+    hr
+    info "Postgres driver-error signature scan (D-07): scanning mirth.log for pgjdbc failure signatures..."
+
+    local log_file="${SERVER_SETUP}/logs/mirth.log"
+    if [[ ! -f "${log_file}" ]]; then
+        info "No mirth.log found at ${log_file} — skipping postgres signature scan"
+        return 0
+    fi
+
+    local hits
+    hits="$(grep -E 'SCRAM|No suitable driver|ClassNotFoundException: org.postgresql.Driver|Connection to .* refused|password authentication failed' "${log_file}" || true)"
+
+    if [[ -n "${hits}" ]]; then
+        echo "SMOKE-FAILURE-CLASS: log"
+        echo "--- postgres driver/auth error signature(s) in mirth.log ---"
+        echo "${hits}"
+        echo "-----------------------------------------------"
+        fail "mirth.log contains a postgres JDBC driver/auth error signature (SCRAM/no-suitable-driver/ClassNotFound/connection-refused/password-auth-failed)"
+        return 1
+    fi
+
+    pass "postgres driver-error signature scan clean (no SCRAM/no-suitable-driver/ClassNotFound/connection-refused/password-auth-failed signature in mirth.log)"
+}
 
 # ---------------------------------------------------------------------------
 # Stage: teardown / cleanup — trap on EXIT (Pitfall 3: unconditional, always runs)
@@ -1724,6 +1848,14 @@ cleanup() {
     if [[ -n "${SFTP_CONTAINER_NAME}" ]]; then
         docker rm -f "${SFTP_CONTAINER_NAME}" > /dev/null 2>&1 || true
         info "Removed modern SFTP container ${SFTP_CONTAINER_NAME}"
+    fi
+
+    # 26.8-02 (SC-2, D-05, T-26.8-02-D): unconditional, trap-safe removal of the
+    # postgres container. The trap is registered before configure_db runs, so a
+    # container that fails to become ready is still removed on every exit path.
+    if [[ -n "${PG_CONTAINER_NAME}" ]]; then
+        docker rm -f "${PG_CONTAINER_NAME}" > /dev/null 2>&1 || true
+        info "Removed postgres container ${PG_CONTAINER_NAME}"
     fi
 
     if [[ -n "${COOKIE_JAR}" && -f "${COOKIE_JAR}" ]]; then
@@ -1788,5 +1920,6 @@ fi
 # PASS/FAIL banner (cleanup() below checks FAIL_COUNT).
 run_driver || true
 scan_mirth_log || true
+scan_postgres_driver_errors || true
 
 exit 0
