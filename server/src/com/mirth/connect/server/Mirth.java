@@ -692,6 +692,11 @@ public class Mirth extends Thread {
         logger.info("This product was developed by Innovar Healthcare (https://www.innovarhealthcare.com) and its contributors (c)2025-now.");
         logger.info("Running " + System.getProperty("java.vm.name") + " " + System.getProperty("java.version") + " on " + System.getProperty("os.name") + " (" + System.getProperty("os.version") + ", " + System.getProperty("os.arch") + "), " + configurationController.getDatabaseType() + ", with charset " + Charset.defaultCharset() + ".");
 
+        String encodingWarning = defaultEncodingMismatchWarning(Charset.defaultCharset(), System.getProperty("native.encoding"), System.getProperty("ca.uhn.hl7v2.llp.charset"));
+        if (encodingWarning != null) {
+            logger.warn(encodingWarning);
+        }
+
         if (webServer != null) {
             String httpUrl = null;
             if (isUsingHttp()) {
@@ -701,6 +706,39 @@ public class Mirth extends Thread {
 
             logger.info("Web server running at " + (httpUrl != null ? httpUrl + " and " : "") + httpsUrl);
         }
+    }
+
+    /**
+     * Builds a startup warning (or null) when the JVM default charset differs from the host's native
+     * encoding. Connectors set to DEFAULT_ENCODING follow {@link Charset#defaultCharset()}, which JEP
+     * 400 made UTF-8 on Java 18+ regardless of the host; on a server migrated from a Java-17-or-earlier
+     * install this silently changes how those connectors decode. The {@code native.encoding} system
+     * property (added in Java 17) reports the host encoding the old default would have used. Returns
+     * null when the two agree, when {@code native.encoding} is unavailable, or when the operator has
+     * already pinned a default encoding ({@code configuredEncoding}).
+     */
+    static String defaultEncodingMismatchWarning(Charset defaultCharset, String nativeEncoding, String configuredEncoding) {
+        // The operator has explicitly pinned a default encoding (IRT-1913 server.defaultencoding or
+        // the legacy ca.uhn.hl7v2.llp.charset, exported to this system property before startup). That
+        // pinned charset overrides Charset.defaultCharset() for DEFAULT_ENCODING connectors, so there
+        // is nothing to warn about — and warning would misstate what those connectors actually use.
+        if (StringUtils.isNotBlank(configuredEncoding)) {
+            return null;
+        }
+
+        if (StringUtils.isBlank(nativeEncoding)) {
+            return null;
+        }
+
+        try {
+            if (defaultCharset.equals(Charset.forName(nativeEncoding))) {
+                return null;
+            }
+        } catch (IllegalArgumentException e) {
+            // native.encoding is not a resolvable charset name; fall through and surface it verbatim.
+        }
+
+        return "JVM default charset is " + defaultCharset.name() + " but the host (native) encoding is " + nativeEncoding + ". Connectors set to DEFAULT_ENCODING will decode and encode using " + defaultCharset.name() + ". If this server was migrated from a Java-17-or-earlier install where the default differed, set an explicit Encoding on those connectors, or set server.defaultencoding (legacy alias: ca.uhn.hl7v2.llp.charset) in mirth.properties.";
     }
 
     private boolean isUsingHttp() {
