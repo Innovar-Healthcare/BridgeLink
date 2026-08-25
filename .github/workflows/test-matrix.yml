@@ -10,6 +10,16 @@ on:
     branches: [feature/26.9.x, feature/26.9.x-clean, bridgelink_development]
   pull_request:
     branches: [feature/26.9.x, feature/26.9.x-clean, bridgelink_development]
+  schedule:
+    # Nightly JDK 25 leg (IRT-1932). The 25 leg is known-red until mockito/byte-buddy
+    # are bumped (pinned 5.1.1/1.14.13), so it tracks the signal without gating PRs.
+    - cron: '0 6 * * *'
+
+# Superseded pushes to the same ref stop consuming runners (IRT-1932).
+# The nightly schedule gets its own group and is never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   test:
@@ -18,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: ['17', '21', '25']
+        java: ${{ github.event_name == 'schedule' && fromJSON('["25"]') || fromJSON('["17", "21"]') }}
 
     steps:
       - uses: actions/checkout@v4
