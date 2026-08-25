@@ -6,6 +6,8 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -95,6 +97,13 @@ public class TcpReceiverTest {
 		waitFor("server socket to bind", 5000, () -> receiver.getServerSocket() != null && receiver.getServerSocket().isBound());
 	}
 
+	// An OS-assigned free port avoids collisions when test classes run concurrently.
+	private static int findFreePort() throws IOException {
+		try (ServerSocket socket = new ServerSocket(0)) {
+			return socket.getLocalPort();
+		}
+	}
+
 	private static void waitFor(String description, long timeoutMillis, BooleanSupplier condition) throws InterruptedException {
 		long deadline = System.currentTimeMillis() + timeoutMillis;
 		while (!condition.getAsBoolean()) {
@@ -123,35 +132,38 @@ public class TcpReceiverTest {
 	
 	@Test
 	public void testServerSocketLocalHost1() throws Exception {
+		int port = findFreePort();
 		TcpReceiverProperties props = new TcpReceiverProperties();
 		props.getListenerConnectorProperties().setHost("127.0.0.1");
-		props.getListenerConnectorProperties().setPort("6666");
+		props.getListenerConnectorProperties().setPort(String.valueOf(port));
 		setupReceiver(props);
-		
+
 		assertEquals("127.0.0.1", receiver.getServerSocket().getInetAddress().getHostAddress());
-		assertEquals(6666, receiver.getServerSocket().getLocalPort());
+		assertEquals(port, receiver.getServerSocket().getLocalPort());
 	}
-	
+
 	@Test
 	public void testServerSocketLocalHost2() throws Exception {
+		int port = findFreePort();
 		TcpReceiverProperties props = new TcpReceiverProperties();
 		props.getListenerConnectorProperties().setHost("localhost");
-		props.getListenerConnectorProperties().setPort("6666");
+		props.getListenerConnectorProperties().setPort(String.valueOf(port));
 		setupReceiver(props);
-		
+
 		assertEquals("localhost", receiver.getServerSocket().getInetAddress().getHostName());
-		assertEquals(6666, receiver.getServerSocket().getLocalPort());
+		assertEquals(port, receiver.getServerSocket().getLocalPort());
 	}
-	
+
 	@Test
 	public void testServerSocketAllInterfaces() throws Exception {
+		int port = findFreePort();
 		TcpReceiverProperties props = new TcpReceiverProperties();
 		props.getListenerConnectorProperties().setHost("0.0.0.0");
-		props.getListenerConnectorProperties().setPort("6666");
+		props.getListenerConnectorProperties().setPort(String.valueOf(port));
 		setupReceiver(props);
-		
+
 		assertEquals("0.0.0.0", receiver.getServerSocket().getInetAddress().getHostAddress());
-		assertEquals(6666, receiver.getServerSocket().getLocalPort());
+		assertEquals(port, receiver.getServerSocket().getLocalPort());
 	}
 	
 	@Test

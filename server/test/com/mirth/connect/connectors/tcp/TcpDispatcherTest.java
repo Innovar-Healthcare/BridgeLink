@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -55,13 +56,15 @@ public class TcpDispatcherTest {
 	private static final String CONNECTOR_MAP_ALL_RESPONSES_KEY = "allResponses";
 	private static final boolean PRINT_DEBUG_MESSAGES = false;
 	
-	private static AtomicInteger incrementingPort = new AtomicInteger(9000);
 	private static AtomicInteger incrementingSocketListenerId = new AtomicInteger(0);
 	private TcpDispatcherProperties dispatcherProps;
 	private TcpDispatcher dispatcher;
-	
-	private static int getNextPort() {
-        return incrementingPort.getAndIncrement();
+
+	// An OS-assigned free port avoids collisions when test classes run concurrently.
+	private static int getNextPort() throws IOException {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
     }
 	
 	private static int getNextSocketListenerId() {
@@ -627,38 +630,41 @@ public class TcpDispatcherTest {
 	
 	@Test
 	public void testServerSocketLocalHost1() throws Exception {
+		int port = getNextPort();
 		TcpDispatcherProperties props = new TcpDispatcherProperties();
 		props.setLocalAddress("127.0.0.1");
-		props.setLocalPort("6666");
+		props.setLocalPort(String.valueOf(port));
 		props.setServerMode(true);
 		setupDispatcher(props);
-		
+
 		assertEquals("127.0.0.1", dispatcher.getServerSocket().getInetAddress().getHostAddress());
-		assertEquals(6666, dispatcher.getServerSocket().getLocalPort());
+		assertEquals(port, dispatcher.getServerSocket().getLocalPort());
 	}
-	
+
 	@Test
 	public void testServerSocketLocalHost2() throws Exception {
+		int port = getNextPort();
 		TcpDispatcherProperties props = new TcpDispatcherProperties();
 		props.setLocalAddress("localhost");
-		props.setLocalPort("6666");
+		props.setLocalPort(String.valueOf(port));
 		props.setServerMode(true);
 		setupDispatcher(props);
-		
+
 		assertEquals("localhost", dispatcher.getServerSocket().getInetAddress().getHostName());
-		assertEquals(6666, dispatcher.getServerSocket().getLocalPort());
+		assertEquals(port, dispatcher.getServerSocket().getLocalPort());
 	}
-	
+
 	@Test
 	public void testServerSocketAllInterfaces() throws Exception {
+		int port = getNextPort();
 		TcpDispatcherProperties props = new TcpDispatcherProperties();
 		props.setLocalAddress("0.0.0.0");
-		props.setLocalPort("6666");
+		props.setLocalPort(String.valueOf(port));
 		props.setServerMode(true);
 		setupDispatcher(props);
-		
+
 		assertEquals("0.0.0.0", dispatcher.getServerSocket().getInetAddress().getHostAddress());
-		assertEquals(6666, dispatcher.getServerSocket().getLocalPort());
+		assertEquals(port, dispatcher.getServerSocket().getLocalPort());
 	}
 	
 	@Test
