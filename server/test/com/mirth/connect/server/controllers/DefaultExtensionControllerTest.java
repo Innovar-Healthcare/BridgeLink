@@ -28,7 +28,7 @@ public class DefaultExtensionControllerTest {
     public void testExtractZipEntryZipSlipWithRelativePath() throws Exception {
         DefaultExtensionController extensionController = new DefaultExtensionController();
 
-        File installTempDir = new File("tests/zipextraction");
+        File installTempDir = new File("tests/zipextraction-extensioncontroller");
         ZipEntry entry = new ZipEntry("../ZipSlip.txt");
         ZipFile zipFile = createTempZipFile("ZipSlip.txt");
 
@@ -37,7 +37,7 @@ public class DefaultExtensionControllerTest {
 
     @Test
     public void testExtractZipEntryValidPath() throws Exception {
-        File installTempDir = new File("tests/zipextraction/");
+        File installTempDir = new File("tests/zipextraction-extensioncontroller/");
 
         DefaultExtensionController extensionController = new DefaultExtensionController();
 
@@ -45,13 +45,13 @@ public class DefaultExtensionControllerTest {
         ZipFile zipFile = createTempZipFile("good.txt");
         extensionController.extractZipEntry(entry, installTempDir, zipFile);
 
-        File extractedFile = new File("tests/zipextraction/", "good.txt");
+        File extractedFile = new File("tests/zipextraction-extensioncontroller/", "good.txt");
         assertTrue(extractedFile.exists());
     }
 
     @Before
     public void createTestFolder() {
-        File installTempDir = new File("tests/zipextraction/");
+        File installTempDir = new File("tests/zipextraction-extensioncontroller/");
         if (!installTempDir.exists()) {
             installTempDir.mkdir();
         } else {
@@ -61,7 +61,7 @@ public class DefaultExtensionControllerTest {
 
     @After
     public void cleanupTestFolder() {
-        File tempDir = new File("tests/zipextraction/");
+        File tempDir = new File("tests/zipextraction-extensioncontroller/");
         if (tempDir.exists()) {
             for (File file : tempDir.listFiles()) {
                 file.delete();
