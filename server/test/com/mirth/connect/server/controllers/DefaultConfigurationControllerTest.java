@@ -10,6 +10,7 @@
 package com.mirth.connect.server.controllers;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -36,6 +37,8 @@ import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.invocation.Invocation;
@@ -272,6 +275,61 @@ public class DefaultConfigurationControllerTest {
 			exceptionCaught = true;
 		}
     	assertTrue(exceptionCaught);
+    }
+
+    // -------------------------------------------------------------------------
+    // resolveDefaultEncoding (IRT-1913)
+    // -------------------------------------------------------------------------
+
+    private static final Logger ENCODING_LOGGER = LogManager.getLogger(DefaultConfigurationControllerTest.class);
+
+    @Test
+    public void resolveDefaultEncoding_aliasValid() {
+        assertEquals("windows-1252", DefaultConfigurationController.resolveDefaultEncoding("windows-1252", null, ENCODING_LOGGER));
+    }
+
+    @Test
+    public void resolveDefaultEncoding_aliasBlankFallsBackToLegacy() {
+        assertEquals("windows-1252", DefaultConfigurationController.resolveDefaultEncoding("   ", "windows-1252", ENCODING_LOGGER));
+    }
+
+    @Test
+    public void resolveDefaultEncoding_valueTrimmed() {
+        assertEquals("windows-1252", DefaultConfigurationController.resolveDefaultEncoding("  windows-1252  ", null, ENCODING_LOGGER));
+    }
+
+    @Test
+    public void resolveDefaultEncoding_aliasWinsOverLegacy() {
+        assertEquals("US-ASCII", DefaultConfigurationController.resolveDefaultEncoding("US-ASCII", "windows-1252", ENCODING_LOGGER));
+    }
+
+    @Test
+    public void resolveDefaultEncoding_bothBlankReturnsNull() {
+        assertNull(DefaultConfigurationController.resolveDefaultEncoding(null, "", ENCODING_LOGGER));
+    }
+
+    @Test
+    public void resolveDefaultEncoding_unsupportedReturnsNull() {
+        assertNull(DefaultConfigurationController.resolveDefaultEncoding("bogus-charset-name", null, ENCODING_LOGGER));
+    }
+
+    @Test
+    public void resolveDefaultEncoding_illegalNameReturnsNull() {
+        // Reserved characters make this an illegal charset name (IllegalCharsetNameException),
+        // not merely unsupported; it must still be rejected, not propagated.
+        assertNull(DefaultConfigurationController.resolveDefaultEncoding("not a charset!", null, ENCODING_LOGGER));
+    }
+
+    @Test
+    public void resolveDefaultEncoding_legacyOnlyInvalidReturnsNull() {
+        assertNull(DefaultConfigurationController.resolveDefaultEncoding(null, "windows1252", ENCODING_LOGGER));
+    }
+
+    @Test
+    public void resolveDefaultEncoding_aliasInvalidDoesNotFallBackToLegacy() {
+        // A non-blank but invalid alias is rejected outright; the valid legacy value is NOT used as a
+        // fallback — fail toward the platform default rather than a value the operator superseded.
+        assertNull(DefaultConfigurationController.resolveDefaultEncoding("bogus-charset-name", "windows-1252", ENCODING_LOGGER));
     }
 
     private void assertDefaultDrivers(List<DriverInfo> drivers, boolean includeODBC) {
