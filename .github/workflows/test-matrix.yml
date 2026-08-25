@@ -42,7 +42,7 @@ jobs:
 
       - name: Build Bridgelink - unsigned
         working-directory: server
-        run: ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true
+        run: ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true -Dskip.javadocs=true
 
       - name: Test + aggregate coverage
         working-directory: server

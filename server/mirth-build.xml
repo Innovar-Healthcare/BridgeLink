@@ -208,7 +208,11 @@
 	</target>
 
 	<target name="test-run" depends="init, test-extensions-init">
-		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run"/>
+		<!-- test-run assumes a completed build (server tests need server/classes), so
+		     donkey does not need to clean and recompile what that build just produced. -->
+		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run">
+			<property name="skip.recompile" value="true"/>
+		</ant>
 		<ant antfile="${server}/build.xml" dir="${server}" target="test-run"/>
 		<ant antfile="${client}/ant-build.xml" dir="${client}" target="test-run"/>
 		<ant antfile="${cli}/build.xml" dir="${cli}" target="test-run"/>

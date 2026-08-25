@@ -9,12 +9,14 @@
 		</path>
 	</target>
 	
-	<target name="clean" depends="init">
+	<!-- skip.recompile keeps an existing ${classes} from a prior full build; both targets
+	     must carry it because unless skips a target body but not its dependency chain. -->
+	<target name="clean" depends="init" unless="skip.recompile">
 		<delete dir="${classes}" />
 		<delete dir="${setup}" />
 	</target>
-	
-	<target name="compile" depends="clean">
+
+	<target name="compile" depends="clean" unless="skip.recompile">
 		<mkdir dir="${classes}" />
 
 		<javac srcdir="${src}" destdir="${classes}" debug="on" includeAntRuntime="false" release="17">

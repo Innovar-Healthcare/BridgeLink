@@ -1139,7 +1139,9 @@
 		<mkdir dir="${dist}" />
 	</target>
 
-	<target name="create-javadocs" depends="init">
+	<!-- skip.javadocs skips userutil javadoc generation; CI test builds set it since
+	     nothing in the test run consumes the docs. Release builds must not set it. -->
+	<target name="create-javadocs" depends="init" unless="skip.javadocs">
 		<mkdir dir="${docs.javadocs}" />
 
 		<javadoc sourcepath="${src}:${jdk_src_path}" destdir="${docs.javadocs.userapi}" packagenames="com.mirth.connect.server.userutil,com.mirth.connect.userutil,com.mirth.connect.plugins.httpauth.userutil" link="https://docs.oracle.com/javase/8/docs/api/">
