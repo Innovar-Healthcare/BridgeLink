@@ -2,12 +2,14 @@ package com.mirth.connect.connectors.tcp;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,7 +76,11 @@ public class TcpReceiverTest {
 			receiver.stop();
 			logger.debug("Undeploying TCP Receiver...");
 			receiver.onUndeploy();
-			Thread.sleep(1000);
+			// Lenient: cleanup only, the old Thread.sleep(1000) never verified anything either.
+			long deadline = System.currentTimeMillis() + 3000;
+			while (!(receiver.getServerSocket() == null || receiver.getServerSocket().isClosed()) && System.currentTimeMillis() < deadline) {
+				Thread.sleep(25);
+			}
 		}
 	}
 	
@@ -86,7 +92,17 @@ public class TcpReceiverTest {
 		receiver.onDeploy();
 		logger.debug("Starting TCP Receiver...");
 		receiver.start();
-		Thread.sleep(1000);
+		waitFor("server socket to bind", 5000, () -> receiver.getServerSocket() != null && receiver.getServerSocket().isBound());
+	}
+
+	private static void waitFor(String description, long timeoutMillis, BooleanSupplier condition) throws InterruptedException {
+		long deadline = System.currentTimeMillis() + timeoutMillis;
+		while (!condition.getAsBoolean()) {
+			if (System.currentTimeMillis() > deadline) {
+				fail("Timed out after " + timeoutMillis + "ms waiting for " + description);
+			}
+			Thread.sleep(25);
+		}
 	}
 
 	private TcpReceiver createTcpReceiver(TcpReceiverProperties receiverProps) {

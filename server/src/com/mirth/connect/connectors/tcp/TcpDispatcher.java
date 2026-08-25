@@ -788,6 +788,12 @@ public class TcpDispatcher extends DestinationConnector {
     	return serverSocket;
     }
 
+    protected int getServerModeSocketCount() {
+        synchronized (serverModeSockets) {
+            return serverModeSockets.size();
+        }
+    }
+
     private String getLocalAddress() {
         return TcpUtil.getFixedHost(replacer.replaceValues(connectorProperties.getLocalAddress(), getChannelId(), getChannel().getName()));
     }
