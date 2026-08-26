@@ -29,7 +29,7 @@ public class UnzipEngineTest {
 
     @Before
     public void createTestFolder() {
-        File installTempDir = new File("tests/zipextraction");
+        File installTempDir = new File("tests/zipextraction-unzipengine");
         if (!installTempDir.exists()) {
             installTempDir.mkdir();
         } else {
@@ -39,7 +39,7 @@ public class UnzipEngineTest {
 
     @After
     public void cleanupTestFolder() {
-        File tempDir = new File("tests/zipextraction");
+        File tempDir = new File("tests/zipextraction-unzipengine");
         if (tempDir.exists()) {
             for (File file : tempDir.listFiles()) {
                 file.delete();
@@ -60,7 +60,7 @@ public class UnzipEngineTest {
         UnzipEngine engine = new UnzipEngine(zipModel, fileHeader);
 
         ProgressMonitor progressMonitor = new ProgressMonitor();
-        String outPath = "tests/zipextraction";
+        String outPath = "tests/zipextraction-unzipengine";
         String newFileName = null;
         UnzipParameters unzipParams = new UnzipParameters();
 
@@ -84,7 +84,7 @@ public class UnzipEngineTest {
         UnzipEngine engine = new UnzipEngine(zipModel, fileHeader);
 
         ProgressMonitor progressMonitor = new ProgressMonitor();
-        String outPath = "tests/zipextraction";
+        String outPath = "tests/zipextraction-unzipengine";
         String newFileName = "evil.txt";
         UnzipParameters unzipParams = new UnzipParameters();
 
@@ -107,7 +107,7 @@ public class UnzipEngineTest {
         UnzipEngine engine = new UnzipEngine(zipModel, fileHeader);
 
         ProgressMonitor progressMonitor = new ProgressMonitor();
-        String outPath = "tests/zipextraction";
+        String outPath = "tests/zipextraction-unzipengine";
         String newFileName = maliciousFileName;
         UnzipParameters unzipParams = new UnzipParameters();
 
@@ -130,7 +130,7 @@ public class UnzipEngineTest {
         UnzipEngine engine = new UnzipEngine(zipModel, fileHeader);
 
         ProgressMonitor progressMonitor = new ProgressMonitor();
-        String outPath = "tests/zipextraction";
+        String outPath = "tests/zipextraction-unzipengine";
         String newFileName = null;
         UnzipParameters unzipParams = new UnzipParameters();
 
@@ -152,7 +152,7 @@ public class UnzipEngineTest {
         UnzipEngine engine = new UnzipEngine(zipModel, fileHeader);
 
         ProgressMonitor progressMonitor = new ProgressMonitor();
-        String outPath = "tests/zipextraction";
+        String outPath = "tests/zipextraction-unzipengine";
         String newFileName = "good2.txt";
         UnzipParameters unzipParams = new UnzipParameters();
 
@@ -176,7 +176,7 @@ public class UnzipEngineTest {
         UnzipEngine engine = new UnzipEngine(zipModel, fileHeader);
 
         ProgressMonitor progressMonitor = new ProgressMonitor();
-        String outPath = "tests/zipextraction";
+        String outPath = "tests/zipextraction-unzipengine";
         String newFileName = "../../../../../../../../../../../../../../../../../../../../../../../../../../../../../../../../../../../../../../../../tmp/evil.txt";
         UnzipParameters unzipParams = new UnzipParameters();
 

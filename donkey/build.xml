@@ -9,12 +9,14 @@
 		</path>
 	</target>
 	
-	<target name="clean" depends="init">
+	<!-- skip.recompile keeps an existing ${classes} from a prior full build; both targets
+	     must carry it because unless skips a target body but not its dependency chain. -->
+	<target name="clean" depends="init" unless="skip.recompile">
 		<delete dir="${classes}" />
 		<delete dir="${setup}" />
 	</target>
-	
-	<target name="compile" depends="clean">
+
+	<target name="compile" depends="clean" unless="skip.recompile">
 		<mkdir dir="${classes}" />
 
 		<javac srcdir="${src}" destdir="${classes}" debug="on" includeAntRuntime="false" release="17">
@@ -71,6 +73,19 @@
 	</target>
 
 	<target name="test-compile" depends="compile, test-init">
+		<!-- skip.recompile promises a prior full build; fail loudly if there is none
+		     rather than testing whatever stale classes happen to be lying around. -->
+		<fail message="skip.recompile is set but ${classes} does not exist; run a full build first">
+			<condition>
+				<and>
+					<isset property="skip.recompile" />
+					<not>
+						<available file="${classes}" type="dir" />
+					</not>
+				</and>
+			</condition>
+		</fail>
+
 		<!-- compile the source -->
 		<mkdir dir="${test_classes}" />
 
