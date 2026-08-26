@@ -17,7 +17,6 @@ custom-extensions/*/testlib/
 .claude/*
 !.claude/skills/
 !.claude/agents/
-!.claude/hooks/
 !.claude/settings.json
 
 donkey/donkey-src
