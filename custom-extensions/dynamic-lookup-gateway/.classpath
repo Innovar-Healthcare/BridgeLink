@@ -26,13 +26,13 @@
 	<classpathentry kind="lib" path="../../server/lib/commons/httpcore-4.4.13.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/commons/commons-dbutils-1.7.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/donkey/guava/guava-32.0.1-jre.jar"/>
-	<classpathentry kind="lib" path="../../server/lib/swagger/swagger-annotations-2.0.10.jar"/>
+	<classpathentry kind="lib" path="../../server/lib/swagger/swagger-annotations-2.2.28.jar"/>
 	<classpathentry kind="lib" path="../../server/lib/mybatis-3.1.1.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/miglayout-core-4.2.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/miglayout-swing-4.2.jar"/>
-	<classpathentry kind="lib" path="../../client/lib/jackson-annotations-2.14.3.jar"/>
-	<classpathentry kind="lib" path="../../client/lib/jackson-core-2.14.3.jar"/>
-	<classpathentry kind="lib" path="../../client/lib/jackson-databind-2.14.3.jar"/>
+	<classpathentry kind="lib" path="../../client/lib/jackson-annotations-2.18.10.jar"/>
+	<classpathentry kind="lib" path="../../client/lib/jackson-core-2.18.10.jar"/>
+	<classpathentry kind="lib" path="../../client/lib/jackson-databind-2.18.10.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/commons-lang3-3.13.0.jar"/>
 	<classpathentry kind="lib" path="../../client/lib/swingx-core-1.6.2.jar">
 		<attributes>

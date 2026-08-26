@@ -171,7 +171,9 @@ public class JsonXmlUtil {
     }
 
     public static String reOrderJsonString(String jsonStr) throws JsonMappingException, JsonProcessingException {
-        ObjectMapper objectMapper = new ObjectMapper();
+        // D-01: reuse MirthJsonUtil's shared tuned factory so this seam's string-length ceiling
+        // matches the one greppable, test-asserted constant (MirthJsonUtil.MAX_JSON_STRING_LEN).
+        ObjectMapper objectMapper = new ObjectMapper(MirthJsonUtil.tunedFactory());
 
         JsonNode jsonNode = objectMapper.readTree(jsonStr);
         reOrderJsonNode(jsonNode);

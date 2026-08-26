@@ -154,7 +154,7 @@ report_duration() {
 }
 
 # ---------------------------------------------------------------------------
-# Stage: configure_db — D-03 pluggable --db parameter. derby is the Phase 18
+# Stage: configure_db. D-03 pluggable --db parameter. derby is the Phase 18
 # default; postgres is added in 26.8-02 (SC-2, D-05) as a self-managed
 # postgres:16-alpine container, modeled on generate_sftp_fixtures()'s
 # docker-availability preflight, pinned-tag digest record, and readiness-poll
@@ -1752,7 +1752,7 @@ scan_mirth_log() {
 }
 
 # ---------------------------------------------------------------------------
-# Stage: postgres driver-error signature scan — 26.8-02 (D-07/D-08): a targeted,
+# Stage: postgres driver-error signature scan (26.8-02, D-07/D-08): a targeted,
 # DB_TYPE=postgres-gated positive scan of mirth.log for the verified pgjdbc
 # failure literals (extracted from postgresql-42.7.12.jar / pgjdbc protocol
 # strings). A clean boot must contain NONE of these; a break-proof run
@@ -1770,7 +1770,7 @@ scan_postgres_driver_errors() {
 
     local log_file="${SERVER_SETUP}/logs/mirth.log"
     if [[ ! -f "${log_file}" ]]; then
-        info "No mirth.log found at ${log_file} — skipping postgres signature scan"
+        info "No mirth.log found at ${log_file}; skipping postgres signature scan"
         return 0
     fi
 
