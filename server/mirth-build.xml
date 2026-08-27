@@ -224,6 +224,41 @@
 		<antcall target="aggregate-test-reports"/>
 	</target>
 
+	<!-- CI shard targets (IRT-1932): split test-run across two parallel jobs. Group A pairs
+	     donkey with the com.mirth.connect.server.* slice of the server suite (~37% of its
+	     runtime), group B runs the rest of the server suite plus the small modules. The same
+	     pattern is group A's includes and group B's excludes, so the union is always the full
+	     suite and the intersection is always empty. test-run stays the unsharded whole (used
+	     locally and by the nightly leg). -->
+	<property name="server.shard.pattern" value="com/mirth/connect/server/**/*Test.class" />
+
+	<target name="test-run-group-a" depends="init">
+		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run">
+			<property name="skip.recompile" value="true"/>
+		</ant>
+		<ant antfile="${server}/build.xml" dir="${server}" target="test-run">
+			<property name="server.test.includes" value="${server.shard.pattern}"/>
+		</ant>
+	</target>
+
+	<target name="test-run-group-b" depends="init, test-extensions-init">
+		<ant antfile="${server}/build.xml" dir="${server}" target="test-run">
+			<property name="server.test.excludes" value="${server.shard.pattern}"/>
+		</ant>
+		<ant antfile="${client}/ant-build.xml" dir="${client}" target="test-run"/>
+		<ant antfile="${cli}/build.xml" dir="${cli}" target="test-run"/>
+		<ant antfile="build.xml" dir="${custom-extensions}/dynamic-lookup-gateway" target="test-run"/>
+		<ant antfile="build.xml" dir="${custom-extensions}/message-trends" target="test-run"/>
+	</target>
+
+	<target name="test-run-group-a-and-aggregate" depends="test-run-group-a" description="Run shard A tests and aggregate their reports">
+		<antcall target="aggregate-test-reports"/>
+	</target>
+
+	<target name="test-run-group-b-and-aggregate" depends="test-run-group-b" description="Run shard B tests and aggregate their reports">
+		<antcall target="aggregate-test-reports"/>
+	</target>
+
 	<!-- ========================================================================= -->
 	<!-- Aggregated Test Reporting                                                 -->
 	<!-- ========================================================================= -->
