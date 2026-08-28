@@ -1369,7 +1369,9 @@
 				</classpath>
 				<formatter type="xml" />
 				<batchtest todir="${junit-reports}">
-					<fileset dir="${test_classes}" includes="${server.test.includes}" excludes="${server.test.excludes}" />
+					<fileset dir="${test_classes}" includes="${server.test.includes}" excludes="${server.test.excludes}">
+						<exclude name="**/*$*.class" />
+					</fileset>
 				</batchtest>
 			</junit>
 		</jacoco:coverage>

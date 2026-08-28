@@ -6,10 +6,18 @@
   Docs: https://jeremylong.github.io/DependencyCheck/general/suppression.html
 -->
 <suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
-  <!--
+  <!-- First real entry below (23.1-05, IRT-1489) replaces the former placeholder example.
+       Add the next reviewed/accepted finding as a sibling entry. -->
   <suppress>
-    <notes>Vendored upstream Mirth jar; not fixable on our schedule. review 2026-Q4</notes>
-    <cve>CVE-2022-46337</cve>
+    <notes>
+      server/test/fixtures/rhino-1.7.13.jar is the deliberately vulnerable Rhino engine kept as
+      the 23.1-05 two-jar behavioral-compatibility differential fixture (IRT-1489). It is never on
+      any production or ant classpath and is outside SCAN_DIR (server/setup), so this entry is
+      defense in depth against a future SCAN_DIR widening, not a working suppression today. Scoped
+      by file path plus the Rhino CPE only -- not by CVE id -- so it cannot mask a finding on any
+      other artifact. Reviewed 2026-08-26. Re-review 2026-Q4.
+    </notes>
+    <filePath regex="true">.*[\\/]server[\\/]test[\\/]fixtures[\\/]rhino-1\.7\.13\.jar</filePath>
+    <cpe>cpe:/a:mozilla:rhino</cpe>
   </suppress>
-  -->
 </suppressions>

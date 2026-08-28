@@ -10,7 +10,6 @@
 package com.mirth.connect.util;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -65,8 +64,8 @@ public class RhinoEs6DivergenceProofTest {
             // --- Run 1: VERSION_DEFAULT ---
             // for...of is not valid grammar under VERSION_DEFAULT in the vendored Rhino
             // 1.7.15.1; it must throw here for the divergence to be real (D-11: falsifiable,
-            // not tautological -- if this run ever silently evaluated a value, the assertion
-            // below asserting non-equality with ES6's "6" could go green for the wrong reason).
+            // not tautological -- if this run ever silently evaluated a value, the fail() call
+            // above would not fire and the assertTrue below would go red).
             String defaultOutcome;
             try {
                 String evaluated = run(Context.VERSION_DEFAULT, DIVERGENT_SCRIPT);
@@ -79,11 +78,15 @@ public class RhinoEs6DivergenceProofTest {
             // --- Run 2: VERSION_ES6 ---
             String es6Outcome = run(Context.VERSION_ES6, DIVERGENT_SCRIPT);
 
-            // Falsifiable per D-11/D-14: this test fails if DEFAULT and ES6 ever produced the
-            // same outcome (both throwing, or both evaluating to the same value), and fails if
-            // ES6's numeric result were ever wrong -- there is no assumeTrue/skip channel that
-            // could report PASS without both branches actually executing and being compared.
-            assertNotEquals("DEFAULT and ES6 must diverge on the same for...of script", defaultOutcome, es6Outcome);
+            // Falsifiability core (23.1-04, WR-03): these two assertions carry the whole proof.
+            // assertTrue below fails if DEFAULT ever silently evaluated instead of throwing;
+            // assertEquals below fails if ES6's numeric result were ever wrong -- there is no
+            // assumeTrue/skip channel that could report PASS without both branches actually
+            // executing and being compared. A structurally always-green non-equality check on
+            // defaultOutcome and es6Outcome previously stood here: defaultOutcome can only ever
+            // be assigned "THROW:" + EvaluatorException's class name (the only other path is
+            // pre-empted by fail() above), so the two values were unequal by construction, not
+            // because the seam under test diverged -- it could never fail and was deleted.
             assertTrue("DEFAULT must throw (not silently evaluate)", defaultOutcome.startsWith("THROW:"));
             assertEquals("ES6 must evaluate the for...of loop to the numeric sum of [1,2,3]", "6", es6Outcome);
         } finally {

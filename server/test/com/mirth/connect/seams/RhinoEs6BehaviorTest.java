@@ -41,7 +41,7 @@ import com.mirth.connect.server.util.javascript.MirthContextFactory;
  * Rhino 1.7.15.1 seams (server/lib/rhino-1.7.15.1.jar), run under the ES6 language version that
  * is the shipped {@code mirth.properties} default ({@code rhino.languageversion = es6}).
  * <p>
- * This is a NEW, standalone suite (D-05) &mdash; it does NOT extend {@link RhinoSeamTest}, the
+ * This is a NEW, standalone suite (D-05): it does NOT extend {@link RhinoSeamTest}, the
  * landed Phase-23 seam link-proof baseline, which is not modified. The {@code @BeforeClass}
  * bootstrap below is copied verbatim from {@code RhinoSeamTest} (same mocked
  * {@code ControllerFactory}/{@code ConfigurationController}/{@code ExtensionController}, same
@@ -49,17 +49,17 @@ import com.mirth.connect.server.util.javascript.MirthContextFactory;
  * exercise scripts through the same real {@code MirthContextFactory} seam (D-07), not a raw
  * {@code Context.enter()}.
  * <p>
- * Scope (D-06): only the seams a Rhino version bump actually shifts &mdash; {@code NativeDate}
+ * Scope (D-06): only the seams a Rhino version bump actually shifts: {@code NativeDate},
  * (zero coverage before this suite), number/string coercion, regex, and {@code JSON.stringify}
  * over a {@code NativeJavaObject} (the vendored unwrap-to-{@code NativeArray} seam in
  * {@code NativeJSON.str()}). NOT a broad built-in sweep.
  * <p>
- * Every assertion below asserts a concrete input&rarr;output value (D-11), never a tautology or a
+ * Every assertion below asserts a concrete input-to-output value (D-11), never a tautology or a
  * bare {@code typeof}/non-null check. Each expected literal was captured from a standalone spike
  * run of the exact script through the real vendored jar + shadowed {@code server/src} classes
  * (the same shadow-precedence classpath ordering {@code server/build.xml}'s testclasspath uses)
  * under both {@code Context.VERSION_ES6} and {@code Context.VERSION_DEFAULT} before being locked
- * here &mdash; see 23.1-02-SUMMARY.md for the recorded spike output. The Date/coercion/regex
+ * here (see 23.1-02-SUMMARY.md for the recorded spike output). The Date/coercion/regex
  * values are identical under both language versions (they are standard ECMA behavior, not
  * ES6-specific), which is itself the expected, verified result, not a fabricated guess.
  */
@@ -120,18 +120,15 @@ public class RhinoEs6BehaviorTest {
         }
     }
 
-    private Object evaluateTyped(String script) {
+    private String evaluate(String script) {
         Context cx = contextFactory.enterContext();
         try {
             Scriptable scope = cx.initStandardObjects();
-            return cx.evaluateString(scope, script, "es6behaviortest", 1, null);
+            Object result = cx.evaluateString(scope, script, "es6behaviortest", 1, null);
+            return Context.toString(result);
         } finally {
             Context.exit();
         }
-    }
-
-    private String evaluate(String script) {
-        return Context.toString(evaluateTyped(script));
     }
 
     // ========== T2: NativeDate (highest priority, zero coverage before this suite) ==========
@@ -221,6 +218,115 @@ public class RhinoEs6BehaviorTest {
         // left where PV1 was deleted (recorded in 23.1-02-SUMMARY.md), proving this assertion would
         // go RED if the XmlProcessor.addTextNodesToRemoveAndTrim/toString(Node) seam regressed.
         assertEquals("<HL7Message><PID><PID.1>1</PID.1></PID></HL7Message>", evaluate(script));
+    }
+
+    // ========== Gap closure (23.1-04): evaluate() converts inside the Context (CR-02) ==========
+
+    /**
+     * Falsifiability pin for the CR-02 fix (23.1-REVIEW.md): both scripts below return a
+     * {@link Scriptable} (an array literal, an object literal), and converting a Scriptable to a
+     * String after leaving the Rhino Context throws {@code RuntimeException: No Context associated
+     * with current Thread}, because {@code ScriptRuntime.toString(Object)} calls
+     * {@code getDefaultValue()} for a Scriptable, which requires the current Context. This method
+     * therefore reddens if {@code evaluate()} ever regresses to converting outside the context, the
+     * pre-fix shape 23.1-REVIEW.md CR-02 found. The correct shape is
+     * {@code RhinoSeamTest.evaluate()} (RhinoSeamTest.java:118-127), which this method's helper was
+     * copied from and is now fixed to match.
+     */
+    @Test
+    public void evaluateReturnsScriptableResultsWithinTheContext() {
+        assertEquals("1,2,3", evaluate("[1,2,3];"));
+        assertEquals("[object Object]", evaluate("({a:1});"));
+    }
+
+    // ========== Gap closure (23.1-03): toFixed() rounding/tie-breaking + precision (CVE-2025-66453) ==========
+
+    // NOTE (23.1-04, CR-01): this method is an ES6 toFixed() formatting characterization backstop
+    // and a bounded-time forward regression tripwire. It is NOT regression evidence for
+    // CVE-2025-66453. 23.1-REVIEW.md on 2026-08-26 replayed these exact scripts against
+    // rhino-1.7.13.jar (the vulnerable artifact Phase 23 replaced) and got byte-identical output,
+    // with a 340-case differential fuzz over 34 doubles crossed with 10 precisions finding zero
+    // differences. The 1.7.15.1 fix changed a resource bound, not any formatted value, so no
+    // value-only assertion can evidence it. CVE-13's CVE-2025-66453 protection is carried by
+    // version attestation: the Phase 23 re-land of rhino-1.7.15.1 plus the RhinoSeamTest
+    // link-proof. Two-jar behavioral-compatibility evidence lands in
+    // RhinoEngineVersionDifferentialTest (23.1-05).
+    //
+    // The @Test timeout below is a forward regression tripwire, not a CVE discriminator: it is
+    // chosen generously (30000 ms) so it cannot flake on a loaded CI runner, and it does NOT
+    // discriminate rhino-1.7.13.jar from rhino-1.7.15.1.jar (23.1-REVIEW.md measured both
+    // returning in about 1 ms). server/build.xml's junit task runs haltonfailure="false" with
+    // forkmode="perTest" and no per-test bound, so without this timeout an unbounded toFixed path
+    // reintroduced by a future Rhino bump would stall the fork -- and the JDK 17, 21, and 25 legs
+    // with it -- producing no failure signal at all; with it, the method reddens instead.
+    @Test(timeout = 30000)
+    public void numberToFixedRoundingTieBreakingAndPrecision() {
+        // Every literal below was captured from a standalone spike run of the exact script through
+        // the real vendored jar (server/classes:server/lib/rhino-1.7.15.1.jar shadow-precedence
+        // classpath, matching 23.1-02's pattern) under Context.VERSION_ES6, NOT guessed (D-11).
+
+        // (1) IEEE-754 tie-breaking: 1.005 is stored as ~1.00499999999999989 (not exactly 1.005),
+        // so the correct ECMA/Rhino output rounds DOWN to "1.00" -- the naive expectation "1.01"
+        // (rounding the decimal literal as written) is WRONG. Falsifiable: asserting the real
+        // spike-captured "1.00" means a regression that rounded the naive way ("1.01") -- or any
+        // other tie-breaking regression -- would redden this assert.
+        assertEquals("1.00", evaluate("(1.005).toFixed(2);"));
+
+        // (2) A common precision (not this engine's limit): zero padded to exactly 20 fractional
+        // digits. The engine accepts up to 100 fractionDigits and rejects 101 with RangeError; see
+        // (3) for the accepted maximum. Asserting the rejected side is out of this plan's scope.
+        assertEquals("0.00000000000000000000", evaluate("(0).toFixed(20);"));
+
+        // (3) Large-precision call at fractionDigits=100, the ECMA/vendored-engine maximum
+        // (spike-confirmed: 101 throws RangeError). This is a FORMATTING backstop, not CVE
+        // evidence (see the class-level NOTE above): 23.1-REVIEW.md measured this same script
+        // returning the identical 102-character string in ~1ms on the vulnerable rhino-1.7.13.jar,
+        // so no value-only assertion here can evidence the CVE-2025-66453 patch.
+        assertEquals("0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", evaluate("(0).toFixed(100);"));
+    }
+
+    // ========== Gap closure (23.1-03): JSON.stringify+JSON.parse round-trip, empty/single-element identity ==========
+
+    @Test
+    public void jsonRoundTripEmptyAndSingleElementNativeJavaObject() {
+        // Closes the JSON half of the "empty edge" compound must_have: the existing
+        // jsonStringifyUnwrapsNativeJavaObject() above is stringify-only over a 2-element list.
+        // This test performs a real JSON.stringify()+JSON.parse() round-trip over an EMPTY and a
+        // SINGLE-element injected java.util.List, exercising the NativeJavaObject unwrap seam at
+        // NativeJSON.str() L273-282 (unwrap() -> Collection.toArray -> new NativeArray(...)) plus
+        // the empty-array branch at NativeJSON.ja() and the parse() path, asserting BOTH the exact
+        // intermediate JSON text AND the round-tripped structure so a regressed unwrap (rendering
+        // an empty list as "{}"/a stringified toString(), or adding/dropping an element) reddens
+        // the assert -- not merely a presence/length-only check.
+        //
+        // Every literal below was captured from a standalone spike run through the real vendored
+        // jar (same shadow-precedence classpath as above), NOT guessed (A3/D-11).
+
+        Context cx = contextFactory.enterContext();
+        try {
+            ScriptableObject scope = (ScriptableObject) cx.initStandardObjects();
+
+            // Empty case: 0 elements in -> 0 elements out, none spuriously added.
+            List<String> emptyList = new ArrayList<String>();
+            scope.put("emptyList", scope, Context.javaToJS(emptyList, scope));
+            Object emptyResult = cx.evaluateString(scope,
+                    "var s = JSON.stringify(emptyList); var p = JSON.parse(s); s + '|' + p.length + '|' + Array.isArray(p);",
+                    "es6behaviortest", 1, null);
+            // Spike-captured: intermediate text "[]", round-tripped length 0, Array.isArray true.
+            assertEquals("[]|0|true", Context.toString(emptyResult));
+
+            // Single-element case: the one element survives the round-trip, none dropped/duplicated.
+            List<String> singleList = new ArrayList<String>();
+            singleList.add("only");
+            scope.put("singleList", scope, Context.javaToJS(singleList, scope));
+            Object singleResult = cx.evaluateString(scope,
+                    "var s = JSON.stringify(singleList); var p = JSON.parse(s); s + '|' + p.length + '|' + p[0];",
+                    "es6behaviortest", 1, null);
+            // Spike-captured: intermediate text ["only"], round-tripped length 1, element "only".
+            assertEquals("[\"only\"]|1|only", Context.toString(singleResult));
+        } finally {
+            Context.exit();
+        }
     }
 
 }
