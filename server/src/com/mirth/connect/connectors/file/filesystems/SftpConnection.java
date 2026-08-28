@@ -170,6 +170,14 @@ public class SftpConnection implements FileSystemConnection {
         }
     }
 
+    /**
+     * Visible for testing: constructs a connection around an already-connected client, bypassing the
+     * JSch session setup so directory-access behavior can be exercised without a live SFTP server.
+     */
+    SftpConnection(ChannelSftp client) {
+        this.client = client;
+    }
+
     @Override
     public List<FileInfo> listFiles(String fromDir, String filenamePattern, boolean isRegex, boolean ignoreDot) throws Exception {
         lastDir = fromDir;
@@ -252,6 +260,9 @@ public class SftpConnection implements FileSystemConnection {
             cwd(readDir);
             return true;
         } catch (Exception e) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Unable to read from directory " + readDir + " on server " + (session != null ? session.getHost() : "unknown"), e);
+            }
             return false;
         }
     }
@@ -263,7 +274,20 @@ public class SftpConnection implements FileSystemConnection {
             cwd(writeDir);
             return true;
         } catch (Exception e) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Unable to write to directory " + writeDir + " on server " + (session != null ? session.getHost() : "unknown"), e);
+            }
             return false;
+        }
+    }
+
+    @Override
+    public void checkDirectoryAccess(String dir, boolean read) throws IOException {
+        try {
+            lastDir = dir;
+            cwd(dir);
+        } catch (Exception e) {
+            throw new IOException(e.getMessage(), e);
         }
     }
 
