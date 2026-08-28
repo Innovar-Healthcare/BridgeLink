@@ -51,11 +51,12 @@ therefore asserts freshness itself beforehand.
 smoke-tests/run-smoke-test.sh [--db derby|mysql|postgres|mssql] [--boot-only] [--deploy-only] [--help]
 ```
 
-- `--db` (default `derby`): selects the harness database backend. Only `derby` is
-  functional in Phase 18 (D-03) — the other three values are accepted and routed to a
-  `configure_db()` stub that fails fast with a "not yet supported in Phase 18, see
-  D-03/Phase 24" message. This keeps the flag's shape stable for Phase 24, when Derby
-  10.17 lands and the JDK-17 leg flips to an external DB.
+- `--db` (default `derby`): selects the harness database backend. `derby` (embedded) and
+  `postgres` (containerized, Phase 26.8) are functional; `mysql` and `mssql` are accepted
+  but routed to a `configure_db()` arm that fails fast with a "not yet supported" message.
+  Both functional backends run on all of JDK 17/21/25 in CI (the old rule that the JDK-17
+  derby leg must fail at the JAVA-04 Derby/Java-21 preflight ended when that preflight was
+  reverted on 2026-08-13; see the HISTORY note in `.github/workflows/smoke-harness.yml`).
 - `--boot-only`: stop after the health check succeeds and tear down immediately — proves
   the boot/teardown machinery in isolation (18-01), skipping the import/deploy stage.
 - `--deploy-only`: boot, then import and deploy every registered reference channel fixture
