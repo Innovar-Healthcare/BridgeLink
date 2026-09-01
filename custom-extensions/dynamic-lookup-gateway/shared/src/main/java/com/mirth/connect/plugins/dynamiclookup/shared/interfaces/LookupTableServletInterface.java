@@ -358,6 +358,38 @@ public interface LookupTableServletInterface extends BaseServletInterface {
             @PathParam("name") String name
     ) throws ClientException;
 
+    @POST
+    @Path("/groups/by-name")
+    @Operation(
+            summary = "Returns a specific lookup group by name (name supplied in the request body).",
+            description = "Body-based counterpart of GET /groups/name/{name}. The group name travels in "
+                    + "the JSON body so names containing characters Jetty rejects in a URL path segment "
+                    + "(/, %, \\, control characters) can still be resolved. See IRT-1997.",
+            hidden = true
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "The lookup group returned as a JSON object.",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON)
+    )
+    @MirthOperation(name = "getGroupByNameBody", display = "Get lookup group", permission = PERMISSION_ACCESS)
+    public String getGroupByNameBody(
+            @Param("requestBody")
+            @RequestBody(
+                    description = "JSON body containing the group name.",
+                    required = true,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            examples = @ExampleObject(
+                                    name = "GetGroupByNameRequest",
+                                    summary = "Group name to resolve",
+                                    value = "{ \"name\": \"Billing Codes\" }"
+                            )
+                    )
+            )
+            String requestBody
+    ) throws ClientException;
+
     @DELETE
     @Path("/groups/{groupId}")
     @Operation(summary = "Delete a specific group.")
@@ -557,6 +589,110 @@ public interface LookupTableServletInterface extends BaseServletInterface {
                     required = true
             )
             @PathParam("key") String key
+    ) throws ClientException;
+
+    @POST
+    @Path("/groups/{groupId}/values/get")
+    @Operation(
+            summary = "Retrieve a lookup value by group and key (key supplied in the request body).",
+            description = "Body-based counterpart of GET /groups/{groupId}/values/{key}. The key travels in "
+                    + "the JSON body so keys containing characters Jetty rejects in a URL path segment "
+                    + "(/, %, \\, control characters) can still be fetched. See IRT-1997.",
+            hidden = true
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "Successfully retrieved the lookup value.",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON)
+    )
+    @MirthOperation(name = "getValueBody", display = "Retrieve Lookup Value", permission = PERMISSION_ACCESS)
+    public String getValueBody(
+            @Param("groupId")
+            @Parameter(description = "The unique ID of the lookup group containing the value.", example = "1", required = true)
+            @PathParam("groupId") Integer groupId,
+
+            @Param("requestBody")
+            @RequestBody(
+                    description = "JSON body containing the key to retrieve.",
+                    required = true,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            examples = @ExampleObject(
+                                    name = "GetValueRequest",
+                                    summary = "Key to fetch",
+                                    value = "{ \"key\": \"99213\" }"
+                            )
+                    )
+            )
+            String requestBody
+    ) throws ClientException;
+
+    @POST
+    @Path("/groups/{groupId}/values/set")
+    @Operation(
+            summary = "Set or update a lookup value (key supplied in the request body).",
+            description = "Body-based counterpart of PUT /groups/{groupId}/values/{key}. The key travels in "
+                    + "the JSON body alongside the value so keys containing characters Jetty rejects in a URL "
+                    + "path segment (/, %, \\, control characters) can still be set or updated. See IRT-1997.",
+            hidden = true
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "The lookup value returned as a JSON object.",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON)
+    )
+    @MirthOperation(name = "setValueBody", display = "Set Lookup Value", permission = PERMISSION_ACCESS)
+    public String setValueBody(
+            @Param("groupId")
+            @Parameter(description = "The unique ID of the lookup group containing the key-value pair.", example = "42", required = true)
+            @PathParam("groupId") Integer groupId,
+
+            @Param("requestBody")
+            @RequestBody(
+                    description = "JSON body containing a 'key' and a 'value' field.",
+                    required = true,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            examples = @ExampleObject(
+                                    name = "SetValueRequest",
+                                    summary = "Key and value to set",
+                                    value = "{ \"key\": \"99213\", \"value\": \"Office Visit, Established Patient - Level 3\" }"
+                            )
+                    )
+            )
+            String requestBody
+    ) throws ClientException;
+
+    @POST
+    @Path("/groups/{groupId}/values/delete")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "Delete a lookup value by group and key (key supplied in the request body).",
+            description = "Body-based counterpart of DELETE /groups/{groupId}/values/{key}. The key travels in "
+                    + "the JSON body so keys containing characters Jetty rejects in a URL path segment "
+                    + "(/, %, \\, control characters) can still be deleted. See IRT-1997.",
+            hidden = true
+    )
+    @MirthOperation(name = "deleteValueBody", display = "Delete Lookup Value", permission = PERMISSION_ACCESS)
+    public void deleteValueBody(
+            @Param("groupId")
+            @Parameter(description = "The unique ID of the lookup group containing the value.", example = "42", required = true)
+            @PathParam("groupId") Integer groupId,
+
+            @Param("requestBody")
+            @RequestBody(
+                    description = "JSON body containing the key to delete.",
+                    required = true,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            examples = @ExampleObject(
+                                    name = "DeleteValueRequest",
+                                    summary = "Key to delete",
+                                    value = "{ \"key\": \"M\" }"
+                            )
+                    )
+            )
+            String requestBody
     ) throws ClientException;
 
     @POST
