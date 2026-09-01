@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="How BridgeLink runs in high availability: active/passive and active/active topologies, server ID design, and what is shared across nodes.">
+<title>BridgeLink High Availability</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,300;0,400;0,500;0,600;0,700;0,900;1,300;1,400;1,500;1,600;1,700;1,900&family=Roboto+Slab:wght@200;300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --bl-orange: #F78D2D;
+    --bl-blue: #1B3D6D;
+    --bl-blue-secondary: #005AB2;
+    --bl-teal: #00A9B8;
+    --bl-darkest-blue: #002753;
+    --bl-gold: #F9C84F;
+    --bl-bg: #FFFFFF;
+    --bl-surface: #FFFFFF;
+    --bl-text: #002753;
+    --bl-text-secondary: #5A6A7A;
+    --bl-border: #D5DCE4;
+    --bl-error: #C8102E;
+    --bl-success: #2E7D32;
+    --bl-tint: #F0F4F8;
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-2xl: 48px;
+    --space-3xl: 64px;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --shadow-card: 0 1px 4px rgba(0, 39, 83, 0.06);
+    --shadow-elevated: 0 4px 12px rgba(0, 39, 83, 0.1);
+    --font-heading: 'Montserrat', Arial, sans-serif;
+    --font-body: 'Roboto Slab', Georgia, serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-body);
+    color: var(--bl-text);
+    background: var(--bl-bg);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    text-align: left;
+  }
+
+  h1, h2, h3, h4 { font-family: var(--font-heading); color: var(--bl-blue); }
+  h1 { font-weight: 700; font-size: 2.25rem; line-height: 1.2; }
+  h2 { font-weight: 600; font-size: 1.75rem; line-height: 1.3; }
+  h3 { font-weight: 600; font-size: 1.375rem; line-height: 1.35; }
+  h4 { font-weight: 600; font-size: 1.125rem; line-height: 1.4; }
+
+  p { margin-bottom: var(--space-md); }
+  strong { font-weight: 600; }
+  code {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 0.875em;
+    background: var(--bl-tint);
+    border: 1px solid var(--bl-border);
+    border-radius: var(--radius-sm);
+    padding: 1px 5px;
+    color: var(--bl-blue);
+    white-space: nowrap;
+  }
+
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 var(--space-lg); }
+  @media (min-width: 768px) { .wrap { padding: 0 var(--space-xl); } }
+  @media (min-width: 1024px) { .wrap { padding: 0 var(--space-2xl); } }
+
+  section { padding: var(--space-3xl) 0; }
+  .muted-bg { background: var(--bl-tint); }
+  .lede { font-size: 1.0625rem; max-width: 68ch; }
+  .kicker {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: 0.75rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--bl-orange);
+    margin-bottom: var(--space-sm);
+  }
+  .section-head { margin-bottom: var(--space-xl); }
+  .section-head h2 { margin-bottom: var(--space-md); }
+
+  /* Header */
+  .site-header { background: var(--bl-blue); padding: var(--space-md) 0; }
+  .site-header .wrap {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-md); flex-wrap: wrap;
+  }
+  .bl-logo { height: 40px; width: auto; display: block; }
+  .site-header .tag {
+    font-family: var(--font-heading); font-weight: 500; font-size: 0.875rem;
+    color: #FFFFFF; letter-spacing: 0.04em;
+  }
+
+  /* Hero */
+  .hero { padding: var(--space-3xl) 0 var(--space-2xl); }
+  .hero h1 { margin-bottom: var(--space-md); max-width: 22ch; }
+  .hero .lede { font-size: 1.125rem; }
+  .hero-rule { height: 4px; width: 72px; background: var(--bl-orange);
+    border-radius: 2px; margin-bottom: var(--space-lg); }
+
+  /* Tables */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-lg); border: 1px solid var(--bl-border); }
+  table { width: 100%; border-collapse: collapse; min-width: 640px; background: var(--bl-surface); }
+  thead th {
+    background: var(--bl-blue); color: #FFFFFF;
+    font-family: var(--font-heading); font-weight: 600; font-size: 0.875rem;
+    text-align: left; padding: 12px 16px; vertical-align: bottom;
+  }
+  tbody td, tbody th {
+    padding: 12px 16px; border-top: 1px solid var(--bl-border);
+    font-size: 0.9375rem; vertical-align: top; text-align: left; font-weight: 400;
+  }
+  tbody th { font-family: var(--font-heading); font-weight: 600; color: var(--bl-blue); width: 20%; }
+  tbody tr:nth-child(even) { background: var(--bl-tint); }
+
+  /* Cards */
+  .cards { display: grid; gap: var(--space-lg); }
+  @media (min-width: 768px) { .cards.two { grid-template-columns: 1fr 1fr; } }
+  .card {
+    background: var(--bl-surface); border: 1px solid var(--bl-border);
+    border-radius: var(--radius-lg); padding: var(--space-lg); box-shadow: var(--shadow-card);
+  }
+  .card h3 { margin-bottom: var(--space-sm); }
+  .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+  .pill {
+    display: inline-block; font-family: var(--font-heading); font-weight: 600;
+    font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #FFFFFF; background: var(--bl-orange);
+    padding: 3px 10px; border-radius: 999px; margin-bottom: var(--space-sm);
+  }
+
+  ul.ticks { list-style: none; margin: 0 0 var(--space-md); }
+  ul.ticks li { position: relative; padding-left: 22px; margin-bottom: var(--space-sm); font-size: 0.9375rem; }
+  ul.ticks li:before {
+    content: ""; position: absolute; left: 0; top: 0.62em;
+    width: 7px; height: 7px; border-radius: 2px; background: var(--bl-orange);
+  }
+  ul.ticks li:last-child { margin-bottom: 0; }
+
+  /* Callouts */
+  .callout {
+    border-radius: var(--radius-md); padding: var(--space-md) var(--space-lg);
+    margin: var(--space-lg) 0; font-size: 0.9375rem;
+  }
+  .callout h4 { margin-bottom: var(--space-xs); font-size: 1rem; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout.warn { background: #FEF7E6; border-left: 4px solid var(--bl-gold); }
+  .callout.info { background: #E8F7F9; border-left: 4px solid var(--bl-teal); }
+  .callout.warn h4 { color: var(--bl-darkest-blue); }
+
+  /* FAQ */
+  .faq { display: grid; gap: var(--space-md); }
+  @media (min-width: 900px) { .faq { grid-template-columns: 1fr 1fr; } }
+  .qa {
+    border: 1px solid var(--bl-border); border-radius: var(--radius-lg);
+    padding: var(--space-lg); background: var(--bl-surface); break-inside: avoid;
+  }
+  .qa h4 { margin-bottom: var(--space-xs); }
+  .qa p { margin-bottom: 0; font-size: 0.9375rem; }
+
+  /* Footer */
+  .site-footer { background: var(--bl-darkest-blue); color: #FFFFFF; padding: var(--space-2xl) 0; }
+  .site-footer .wrap { display: flex; gap: var(--space-xl); flex-wrap: wrap; justify-content: space-between; }
+  .site-footer p, .site-footer address {
+    font-family: var(--font-body); font-size: 0.875rem; font-style: normal;
+    color: #B0BEC5; line-height: 1.6; margin: 0;
+  }
+  .site-footer .name { color: #FFFFFF; font-weight: 600; }
+  .site-footer a { color: #FFFFFF; text-decoration: none; }
+  .site-footer a:hover { text-decoration: underline; }
+
+  a { color: var(--bl-blue); }
+  a:visited { color: var(--bl-darkest-blue); }
+
+  /* Print */
+  @media print {
+    @page { size: letter; margin: 0.45in; }
+    html, body { line-height: 1.32; font-size: 8.4pt; }
+    p { margin-bottom: 5pt; }
+    section { padding: 9pt 0; }
+    .wrap { padding: 0; max-width: none; }
+    .site-header { background: none; padding: 0 0 6pt; border-bottom: 2px solid var(--bl-blue); }
+    .site-header .tag { color: var(--bl-blue); }
+    .bl-logo { height: 24px; }
+    .bl-logo path[style*="ffffff"] { fill: #1B3D6D !important; }
+    .muted-bg { background: none; }
+    .hero { padding: 10pt 0 6pt; }
+    .hero-rule { margin-bottom: 8pt; height: 3px; }
+    h1 { font-size: 17pt; margin-bottom: 6pt; max-width: none; }
+    h2 { font-size: 12.5pt; } h3 { font-size: 10pt; } h4 { font-size: 8.8pt; }
+    .lede, .hero .lede { font-size: 8.6pt; max-width: none; }
+    .kicker { font-size: 6.6pt; margin-bottom: 3pt; }
+    .section-head { margin-bottom: 8pt; }
+    .section-head h2 { margin-bottom: 4pt; }
+    .table-scroll { overflow: visible; }
+    table { min-width: 0; }
+    thead th { padding: 5pt 7pt; font-size: 8pt;
+      background: #1B3D6D !important; color: #fff !important;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    tbody td, tbody th { padding: 4.5pt 7pt; font-size: 8pt; }
+    tbody tr:nth-child(even), .callout, .pill {
+      -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cards { gap: 9pt; }
+    .cards.two { grid-template-columns: 1fr 1fr; }
+    .card { padding: 9pt; box-shadow: none; }
+    .callout { margin: 8pt 0; padding: 7pt 10pt; font-size: 8pt; }
+    ul.ticks li { font-size: 8pt; margin-bottom: 3pt; }
+    /* Two columns of FAQ, flowing across pages. */
+    .faq { display: block; column-count: 2; column-gap: 14pt; }
+    .qa { padding: 8pt; margin-bottom: 8pt; font-size: 8pt; }
+    .qa p { font-size: 8pt; }
+    /* Keep atomic blocks whole, but let SECTIONS flow across pages. */
+    .card, .qa, .table-scroll, .callout { break-inside: avoid; page-break-inside: avoid; }
+    /* A kicker or heading must never be the last thing on a page. */
+    .section-head { break-inside: avoid; page-break-inside: avoid; }
+    .kicker, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+    .site-footer { background: none; color: var(--bl-text);
+      border-top: 1px solid var(--bl-border); padding: 8pt 0 0; }
+    .site-footer p, .site-footer address { color: var(--bl-text-secondary); font-size: 7.5pt; }
+    .site-footer .name, .site-footer a { color: var(--bl-blue); }
+  }
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <svg class="bl-logo" viewBox="0 0 638.14667 118.56" role="img" aria-label="BridgeLink" xmlns="http://www.w3.org/2000/svg"><g id="g1"><g id="group-R5"><path id="path2" d="m 1697.87,514.727 c 0,58.847 -43.32,84.714 -122.86,84.714 H 1415.28 V 429.375 h 159.73 c 79.54,0 122.86,25.859 122.86,85.352 z M 1415.28,803.145 V 638.887 h 144.21 c 72.43,0 114.46,27.812 114.46,82.129 0,54.324 -42.03,82.129 -114.46,82.129 z m 330.45,-292.297 c 0,-76.953 -56.91,-120.926 -170.07,-120.926 h -208.23 v 452.664 h 195.29 c 100.89,0 159.08,-42.676 159.08,-116.395 0,-51.738 -27.8,-86.007 -69.19,-102.824 58.2,-12.929 93.12,-51.082 93.12,-112.519" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path3" d="m 1977.85,732.656 v -44.621 c -3.88,0 -7.76,0.645 -10.99,0.645 -71.13,0 -114.46,-45.262 -114.46,-125.45 V 389.922 h -45.91 v 340.144 h 43.97 v -66.601 c 21.34,45.265 64.66,69.191 127.39,69.191" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path4" d="m 2047.67,730.066 h 45.91 V 389.922 h -45.91 z m -10.35,107.356 c 0,17.461 14.87,32.332 33.63,32.332 18.75,0 33.62,-14.227 33.62,-31.688 0,-18.761 -14.23,-33.632 -33.62,-33.632 -18.76,0 -33.63,14.871 -33.63,32.988" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path5" d="m 2460.87,560 c 0,79.543 -54.31,132.566 -126.09,132.566 -72.43,0 -126.75,-53.023 -126.75,-132.566 0,-79.539 54.32,-132.57 126.75,-132.57 71.78,0 126.09,53.031 126.09,132.57 z m 45.28,309.754 V 389.922 h -43.98 v 67.254 c -27.81,-45.918 -75.02,-70.488 -131.28,-70.488 -96.99,0 -169.42,70.488 -169.42,173.312 0,102.82 72.43,172.656 169.42,172.656 54.33,0 100.89,-23.281 129.34,-67.258 v 204.356 h 45.92" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path6" d="m 2878.59,568.406 c 0,73.723 -54.32,124.16 -129.34,124.16 -75.01,0 -128.68,-50.437 -128.68,-124.16 0,-73.718 53.67,-124.812 128.68,-124.812 75.02,0 129.34,51.094 129.34,124.812 z m 44.62,161.66 V 431.309 c 0,-117.051 -57.55,-170.079 -170.07,-170.079 -62.08,0 -122.87,18.758 -158.44,52.383 l 23.28,34.922 c 32.34,-29.101 81.48,-46.562 133.86,-46.562 86,0 125.46,39.453 125.46,123.515 v 43.328 c -28.46,-43.328 -76.96,-65.957 -132.57,-65.957 -97,0 -170.72,67.903 -170.72,165.547 0,97.649 73.72,164.25 170.72,164.25 56.9,0 106.05,-23.281 134.5,-67.902 v 65.312 h 43.98" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path7" d="m 3036.34,563.23 c 0,-5.175 0,-9.695 0.65,-14.226 l 239.92,46.562 c -9.71,55.614 -54.33,97.645 -117.05,97.645 -72.44,0 -123.52,-53.027 -123.52,-129.981 z m 239.27,-91.179 25.87,-29.746 c -30.39,-36.211 -76.96,-55.617 -130.63,-55.617 -106.05,0 -179.13,72.433 -179.13,173.312 0,100.879 70.49,172.656 168.14,172.656 91.18,0 159.72,-66.601 162.96,-162.316 l -279.36,-54.317 c 16.81,-54.968 64.66,-88.593 128.04,-88.593 42.03,0 78.89,14.875 104.11,44.621" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path8" d="m 3413.32,842.586 h 84.07 V 461.055 h 236.68 v -71.133 h -320.75 v 452.664" style="fill:#f57d2a;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path9" d="m 3792.88,735.242 h 80.83 v -345.32 h -80.83 z m -10.99,105.41 c 0,27.161 21.99,48.496 51.74,48.496 29.74,0 51.72,-20.046 51.72,-46.562 0,-28.445 -21.33,-50.438 -51.72,-50.438 -29.75,0 -51.74,21.348 -51.74,48.504" style="fill:#f57d2a;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path10" d="M 4306.97,587.801 V 389.922 h -80.83 v 187.539 c 0,61.426 -30.4,91.18 -82.13,91.18 -57.56,0 -96.36,-34.922 -96.36,-104.121 V 389.922 h -80.83 v 345.32 h 76.95 v -44.617 c 26.52,31.688 68.55,48.496 118.99,48.496 82.77,0 144.21,-47.207 144.21,-151.32" style="fill:#f57d2a;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path11" d="m 4537.8,538.008 -60.15,-56.906 v -91.18 h -80.83 v 479.832 h 80.83 V 580.047 l 167.49,155.195 h 97 L 4597.93,590.391 4755.72,389.922 h -98.3 L 4537.8,538.008" style="fill:#f57d2a;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path12" d="m 928.848,130.469 c -8.942,-7.461 -22.012,-11.192 -39.231,-11.192 h -45.742 v 86.082 h 45.742 c 17.219,0 30.289,-3.777 39.231,-11.316 8.929,-7.539 13.402,-18.195 13.402,-31.973 0,-13.605 -4.473,-24.14 -13.402,-31.601 z m -1.11,83.621 c -10.496,4.668 -23.039,7.004 -37.629,7.004 H 825.676 V 48.9453 h 18.199 v 54.3557 h 46.234 c 14.59,0 27.133,2.371 37.629,7.129 10.492,4.754 18.571,11.511 24.223,20.281 5.66,8.769 8.484,19.23 8.484,31.359 0,12.461 -2.824,23.075 -8.484,31.856 -5.652,8.769 -13.731,15.488 -24.223,20.164" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path13" d="m 1094.85,87.1875 c -4.18,-7.6289 -9.88,-13.5273 -17.09,-17.707 -7.22,-4.1797 -15.5,-6.2696 -24.84,-6.2696 -9.19,0 -17.34,2.0899 -24.47,6.2696 -7.13,4.1797 -12.83,10.0781 -17.09,17.707 -4.27,7.625 -6.4,16.4375 -6.4,26.4375 0,10.164 2.13,19.02 6.4,26.559 4.26,7.539 10,13.41 17.21,17.589 7.21,4.18 15.41,6.27 24.59,6.27 9.18,0 17.38,-2.09 24.6,-6.27 7.21,-4.179 12.91,-10.05 17.09,-17.589 4.18,-7.539 6.27,-16.395 6.27,-26.559 0,-10 -2.09,-18.8125 -6.27,-26.4375 z m -7.87,83.6135 c -9.92,5.664 -21.27,8.484 -34.06,8.484 -12.63,0 -23.86,-2.781 -33.69,-8.359 -9.84,-5.574 -17.63,-13.281 -23.367,-23.113 -5.742,-9.844 -8.609,-21.243 -8.609,-34.188 0,-12.629 2.867,-23.9375 8.609,-33.9375 5.737,-10 13.527,-17.832 23.367,-23.4883 9.83,-5.6523 21.06,-8.4844 33.69,-8.4844 12.62,0 23.93,2.8321 33.93,8.4844 10,5.6563 17.84,13.4375 23.49,23.3594 5.66,9.9219 8.49,21.2814 8.49,34.0664 0,12.945 -2.83,24.305 -8.49,34.059 -5.65,9.757 -13.44,17.461 -23.36,23.117" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path14" d="M 1288.4,68.4336 1247.21,178.055 H 1232.2 L 1190.57,68.4609 1150.06,178.055 h -16.72 l 48.69,-129.1097 h 16.48 l 40.94,105.9337 40.71,-105.9337 h 16.48 l 48.94,129.1097 h -15.99 L 1288.4,68.4336" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path15" d="m 1382.96,140.926 c 3.93,7.375 9.42,13.117 16.48,17.207 7.04,4.101 15,6.152 23.85,6.152 9.01,0 16.97,-2.051 23.86,-6.152 6.88,-4.09 12.33,-9.793 16.35,-17.09 3.26,-5.91 5.12,-12.531 5.74,-19.793 h -91.88 c 0.63,7.223 2.46,13.801 5.6,19.676 z m 72.67,30.129 c -9.43,5.488 -20.21,8.23 -32.34,8.23 -11.97,0 -22.75,-2.82 -32.34,-8.484 -9.59,-5.656 -17.13,-13.399 -22.63,-23.235 -5.49,-9.843 -8.23,-21.148 -8.23,-33.941 0,-12.785 2.86,-24.1445 8.6,-34.0664 5.74,-9.9219 13.69,-17.7031 23.86,-23.3594 10.16,-5.6523 21.96,-8.4844 35.41,-8.4844 10.33,0 19.8,1.8047 28.41,5.4102 8.6,3.6016 15.78,8.8555 21.52,15.7422 l -9.84,11.3086 c -4.92,-5.7422 -10.78,-10 -17.58,-12.7852 -6.81,-2.7929 -14.14,-4.1797 -22.01,-4.1797 -10.01,0 -18.91,2.0899 -26.69,6.2696 -7.79,4.1797 -13.86,10 -18.2,17.4609 -3.63,6.2422 -5.66,13.3636 -6.25,21.2696 h 108.43 c 0,0.988 0.04,1.926 0.13,2.832 0.08,0.898 0.12,1.758 0.12,2.582 0,12.945 -2.7,24.383 -8.11,34.305 -5.41,9.922 -12.83,17.625 -22.26,23.125" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path16" d="m 1543.3,152.809 v 25.246 h -16.72 V 48.9453 h 17.46 v 65.9067 c 0,15.253 3.85,27.011 11.56,35.293 7.7,8.281 18.36,12.421 31.97,12.421 0.65,0 1.31,-0.046 1.96,-0.125 0.66,-0.089 1.32,-0.117 1.97,-0.117 v 16.961 c -12.62,0 -23.2,-2.574 -31.72,-7.742 -7.37,-4.465 -12.79,-10.781 -16.48,-18.734" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path17" d="m 1636.76,140.926 c 3.93,7.375 9.42,13.117 16.48,17.207 7.04,4.101 15,6.152 23.85,6.152 9.01,0 16.97,-2.051 23.86,-6.152 6.88,-4.09 12.33,-9.793 16.35,-17.09 3.26,-5.91 5.12,-12.531 5.74,-19.793 h -91.89 c 0.64,7.223 2.47,13.801 5.61,19.676 z m 72.67,30.129 c -9.43,5.488 -20.21,8.23 -32.34,8.23 -11.97,0 -22.75,-2.82 -32.34,-8.484 -9.59,-5.656 -17.13,-13.399 -22.63,-23.235 -5.49,-9.843 -8.24,-21.148 -8.24,-33.941 0,-12.785 2.87,-24.1445 8.61,-34.0664 5.74,-9.9219 13.69,-17.7031 23.86,-23.3594 10.16,-5.6523 21.96,-8.4844 35.41,-8.4844 10.33,0 19.8,1.8047 28.4,5.4102 8.61,3.6016 15.79,8.8555 21.53,15.7422 l -9.84,11.3086 c -4.92,-5.7422 -10.78,-10 -17.58,-12.7852 -6.81,-2.7929 -14.14,-4.1797 -22.02,-4.1797 -10,0 -18.9,2.0899 -26.68,6.2696 -7.79,4.1797 -13.86,10 -18.2,17.4609 -3.63,6.2422 -5.66,13.3636 -6.25,21.2696 h 108.43 c 0,0.988 0.04,1.926 0.13,2.832 0.08,0.898 0.12,1.758 0.12,2.582 0,12.945 -2.7,24.383 -8.11,34.305 -5.41,9.922 -12.83,17.625 -22.26,23.125" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path18" d="m 1874.93,87.1875 c -4.18,-7.6289 -9.92,-13.5273 -17.21,-17.707 -7.3,-4.1797 -15.53,-6.2696 -24.71,-6.2696 -9.02,0 -17.14,2.0899 -24.35,6.2696 -7.22,4.1797 -12.95,10.0781 -17.22,17.707 -4.26,7.625 -6.39,16.4375 -6.39,26.4375 0,10.164 2.13,19.02 6.39,26.559 4.27,7.539 10,13.41 17.22,17.589 7.21,4.18 15.33,6.27 24.35,6.27 9.18,0 17.41,-2.09 24.71,-6.27 7.29,-4.179 13.03,-10.05 17.21,-17.589 4.19,-7.539 6.28,-16.395 6.28,-26.559 0,-10 -2.09,-18.8125 -6.28,-26.4375 z m 6.03,66.3165 c -4.99,7.711 -11.21,13.836 -18.81,18.164 -8.94,5.082 -19.06,7.617 -30.37,7.617 -12.3,0 -23.33,-2.742 -33.08,-8.23 -9.76,-5.5 -17.43,-13.164 -23,-23 -5.57,-9.832 -8.36,-21.317 -8.36,-34.43 0,-12.953 2.79,-24.3867 8.36,-34.3086 5.57,-9.9219 13.24,-17.668 23,-23.2422 9.75,-5.5742 20.78,-8.3594 33.08,-8.3594 11.47,0 21.68,2.586 30.62,7.7461 7.9,4.5704 14.28,11.0821 19.3,19.3164 v -25.832 h 16.72 V 231.426 h -17.46 v -77.922" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path19" d="m 2128.61,87.1875 c -4.26,-7.6289 -10,-13.5273 -17.21,-17.707 -7.22,-4.1797 -15.42,-6.2696 -24.6,-6.2696 -9.18,0 -17.42,2.0899 -24.71,6.2696 -7.3,4.1797 -13.03,10.0781 -17.22,17.707 -4.18,7.625 -6.27,16.4375 -6.27,26.4375 0,10.164 2.09,19.02 6.27,26.559 4.19,7.539 9.92,13.41 17.22,17.589 7.29,4.18 15.53,6.27 24.71,6.27 9.18,0 17.38,-2.09 24.6,-6.27 7.21,-4.179 12.95,-10.05 17.21,-17.589 4.26,-7.539 6.4,-16.395 6.4,-26.559 0,-10 -2.14,-18.8125 -6.4,-26.4375 z m -7.5,83.8675 c -9.75,5.488 -20.78,8.23 -33.07,8.23 -11.16,0 -21.24,-2.535 -30.25,-7.617 -7.68,-4.332 -13.94,-10.461 -18.94,-18.176 v 77.934 h -17.47 V 48.9453 h 16.73 v 25.836 c 5.03,-8.2383 11.44,-14.75 19.43,-19.3204 9.01,-5.1601 19.18,-7.7461 30.5,-7.7461 12.29,0 23.32,2.7852 33.07,8.3594 9.75,5.5742 17.42,13.3203 22.99,23.2422 5.58,9.9219 8.37,21.3556 8.37,34.3086 0,13.113 -2.79,24.598 -8.37,34.43 -5.57,9.836 -13.24,17.5 -22.99,23" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path20" d="m 2232.18,68.3242 -48.72,109.7308 h -18.2 l 57.71,-128.7816 -5.57,-12.625 c -3.78,-8.0351 -7.75,-13.6484 -11.93,-16.8437 -4.18,-3.2031 -9.14,-4.7969 -14.88,-4.7969 -4.76,0 -9.06,0.8594 -12.91,2.5781 -3.85,1.7188 -7.42,4.1407 -10.7,7.2579 l -8.11,-13.0391 c 3.93,-3.93361 8.64,-6.88282 14.14,-8.84376 C 2178.5,0.984375 2184.28,0 2190.34,0 c 6.23,0 11.89,1.03516 16.97,3.07422 5.08,2.05469 9.8,5.53906 14.14,10.46098 4.34,4.9101 8.32,11.5507 11.93,19.9101 l 64.68,144.6097 h -17.21 L 2232.18,68.3242" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path21" d="m 2400.61,48.9453 h 18.2 V 221.094 h -18.2 V 48.9453" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path22" d="m 2569.69,173.262 c -7.96,4.011 -17.18,6.023 -27.67,6.023 -12.47,0 -23.2,-2.664 -32.22,-7.988 -7.29,-4.313 -12.89,-10 -16.97,-16.934 v 23.692 h -16.72 V 48.9453 h 17.46 v 67.8787 c 0,9.836 1.84,18.235 5.53,25.207 3.69,6.961 8.94,12.293 15.74,15.985 6.8,3.695 14.8,5.527 23.98,5.527 12.3,0 21.85,-3.477 28.65,-10.449 6.81,-6.969 10.21,-17.254 10.21,-30.86 V 48.9453 h 17.46 v 75.0077 c 0,12.465 -2.26,22.785 -6.76,30.988 -4.51,8.192 -10.75,14.309 -18.69,18.321" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path23" d="m 2740.85,173.262 c -7.95,4.011 -17.18,6.023 -27.66,6.023 -12.47,0 -23.21,-2.664 -32.22,-7.988 -7.29,-4.313 -12.9,-10 -16.97,-16.934 v 23.692 h -16.73 V 48.9453 h 17.46 v 67.8787 c 0,9.836 1.85,18.235 5.54,25.207 3.69,6.961 8.93,12.293 15.74,15.985 6.8,3.695 14.79,5.527 23.98,5.527 12.29,0 21.84,-3.477 28.65,-10.449 6.8,-6.969 10.21,-17.254 10.21,-30.86 V 48.9453 h 17.46 v 75.0077 c 0,12.465 -2.26,22.785 -6.77,30.988 -4.51,8.192 -10.74,14.309 -18.69,18.321" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path24" d="m 2913,87.1875 c -4.18,-7.6289 -9.88,-13.5273 -17.09,-17.707 -7.22,-4.1797 -15.49,-6.2696 -24.84,-6.2696 -9.18,0 -17.34,2.0899 -24.47,6.2696 -7.13,4.1797 -12.83,10.0781 -17.09,17.707 -4.27,7.625 -6.4,16.4375 -6.4,26.4375 0,10.164 2.13,19.02 6.4,26.559 4.26,7.539 10,13.41 17.22,17.589 7.21,4.18 15.4,6.27 24.59,6.27 9.18,0 17.37,-2.09 24.59,-6.27 7.21,-4.179 12.91,-10.05 17.09,-17.589 4.19,-7.539 6.28,-16.395 6.28,-26.559 0,-10 -2.09,-18.8125 -6.28,-26.4375 z m -7.87,83.6135 c -9.92,5.664 -21.27,8.484 -34.06,8.484 -12.62,0 -23.86,-2.781 -33.69,-8.359 -9.84,-5.574 -17.63,-13.281 -23.36,-23.113 -5.75,-9.844 -8.61,-21.243 -8.61,-34.188 0,-12.629 2.86,-23.9375 8.61,-33.9375 5.73,-10 13.52,-17.832 23.36,-23.4883 9.83,-5.6523 21.07,-8.4844 33.69,-8.4844 12.62,0 23.94,2.8321 33.94,8.4844 10,5.6563 17.83,13.4375 23.48,23.3594 5.66,9.9219 8.49,21.2814 8.49,34.0664 0,12.945 -2.83,24.305 -8.49,34.059 -5.65,9.757 -13.44,17.461 -23.36,23.117" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path25" d="m 3016.32,68.0156 -48.35,110.0394 h -18.2 l 57.3,-129.1097 h 17.96 l 57.54,129.1097 h -17.21 L 3016.32,68.0156" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path26" d="m 3171.73,68.2539 c -7.14,-4.5156 -15.62,-6.7695 -25.46,-6.7695 -10.33,0 -18.36,2.2148 -24.1,6.6406 -5.74,4.4336 -8.61,10.332 -8.61,17.7148 0,6.5508 2.42,12.0508 7.26,16.4732 4.83,4.425 13.48,6.64 25.94,6.64 h 40.58 V 87.8008 c -3.28,-8.5235 -8.48,-15.0469 -15.61,-19.5469 z m -19.31,111.0311 c -10.17,0 -19.84,-1.512 -29.02,-4.551 -9.18,-3.035 -17.05,-7.332 -23.61,-12.91 l 7.87,-13.035 c 5.24,4.59 11.64,8.281 19.18,11.074 7.54,2.782 15.5,4.18 23.86,4.18 12.13,0 21.27,-2.949 27.42,-8.859 6.15,-5.899 9.22,-14.344 9.22,-25.332 v -7.872 h -41.07 c -12.3,0 -22.1,-1.679 -29.39,-5.039 -7.3,-3.355 -12.54,-7.781 -15.74,-13.281 -3.19,-5.4881 -4.79,-11.6014 -4.79,-18.3202 0,-7.371 1.88,-13.8945 5.65,-19.5468 3.77,-5.6563 9.22,-10.0821 16.36,-13.2852 7.13,-3.1914 15.53,-4.793 25.21,-4.793 12.29,0 22.5,2.5391 30.61,7.625 5.94,3.7149 10.55,8.375 13.9,13.9375 v -20.332 h 16.72 v 80.1757 c 0,16.883 -4.55,29.465 -13.64,37.742 -9.11,8.282 -22.02,12.422 -38.74,12.422" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path27" d="m 3273.9,152.809 v 25.246 h -16.72 V 48.9453 h 17.46 v 65.9067 c 0,15.253 3.85,27.011 11.56,35.293 7.71,8.281 18.36,12.421 31.97,12.421 0.66,0 1.32,-0.046 1.97,-0.125 0.65,-0.089 1.31,-0.117 1.97,-0.117 v 16.961 c -12.63,0 -23.21,-2.574 -31.73,-7.742 -7.36,-4.465 -12.78,-10.781 -16.48,-18.734" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path28" d="m 3559.67,144.363 h -107.71 v 76.731 h -18.2 V 48.9453 h 18.2 v 79.4337 h 107.71 V 48.9453 h 17.95 V 221.094 h -17.95 v -76.731" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path29" d="m 3644.76,140.926 c 3.93,7.375 9.43,13.117 16.48,17.207 7.04,4.101 15,6.152 23.86,6.152 9.01,0 16.96,-2.051 23.85,-6.152 6.89,-4.09 12.33,-9.793 16.36,-17.09 3.25,-5.91 5.12,-12.531 5.74,-19.793 h -91.89 c 0.64,7.223 2.47,13.801 5.6,19.676 z m 72.67,30.129 c -9.42,5.488 -20.2,8.23 -32.33,8.23 -11.97,0 -22.75,-2.82 -32.34,-8.484 -9.59,-5.656 -17.14,-13.399 -22.63,-23.235 -5.5,-9.843 -8.24,-21.148 -8.24,-33.941 0,-12.785 2.87,-24.1445 8.61,-34.0664 5.73,-9.9219 13.68,-17.7031 23.86,-23.3594 10.15,-5.6523 21.96,-8.4844 35.41,-8.4844 10.33,0 19.79,1.8047 28.41,5.4102 8.6,3.6016 15.77,8.8555 21.51,15.7422 l -9.83,11.3086 c -4.93,-5.7422 -10.78,-10 -17.59,-12.7852 -6.81,-2.7929 -14.14,-4.1797 -22.01,-4.1797 -10,0 -18.9,2.0899 -26.68,6.2696 -7.8,4.1797 -13.86,10 -18.21,17.4609 -3.63,6.2422 -5.65,13.3636 -6.24,21.2696 h 108.43 c 0,0.988 0.04,1.926 0.13,2.832 0.08,0.898 0.12,1.758 0.12,2.582 0,12.945 -2.71,24.383 -8.12,34.305 -5.41,9.922 -12.83,17.625 -22.26,23.125" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path30" d="m 3849.26,68.2539 c -7.14,-4.5156 -15.61,-6.7695 -25.46,-6.7695 -10.32,0 -18.36,2.2148 -24.1,6.6406 -5.74,4.4336 -8.6,10.332 -8.6,17.7148 0,6.5508 2.41,12.0508 7.25,16.4732 4.84,4.425 13.49,6.64 25.95,6.64 h 40.58 V 87.8008 c -3.29,-8.5235 -8.49,-15.0469 -15.62,-19.5469 z m -19.31,111.0311 c -10.16,0 -19.84,-1.512 -29.02,-4.551 -9.18,-3.035 -17.05,-7.332 -23.6,-12.91 l 7.87,-13.035 c 5.24,4.59 11.63,8.281 19.18,11.074 7.54,2.782 15.49,4.18 23.86,4.18 12.12,0 21.26,-2.949 27.42,-8.859 6.14,-5.899 9.22,-14.344 9.22,-25.332 v -7.872 h -41.08 c -12.29,0 -22.09,-1.679 -29.38,-5.039 -7.3,-3.355 -12.54,-7.781 -15.75,-13.281 -3.19,-5.4881 -4.79,-11.6014 -4.79,-18.3202 0,-7.371 1.88,-13.8945 5.65,-19.5468 3.77,-5.6563 9.23,-10.0821 16.36,-13.2852 7.13,-3.1914 15.53,-4.793 25.21,-4.793 12.29,0 22.51,2.5391 30.62,7.625 5.94,3.7188 10.55,8.379 13.9,13.9415 v -20.336 h 16.72 v 80.1757 c 0,16.883 -4.55,29.465 -13.66,37.742 -9.09,8.282 -22.01,12.422 -38.73,12.422" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path31" d="m 3934.71,48.9453 h 17.46 V 231.426 h -17.46 V 48.9453" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path32" d="m 4046.37,62.7148 c -7.22,0 -12.75,2.0508 -16.6,6.1524 -3.85,4.0937 -5.78,9.9101 -5.78,17.4609 v 77.2149 h 39.35 v 14.512 h -39.35 v 28.535 h -17.46 v -28.535 h -23.12 v -14.512 h 23.12 V 85.3398 c 0,-11.9726 3.28,-21.2304 9.84,-27.7929 6.55,-6.5508 15.9,-9.8321 28.04,-9.8321 5.08,0 10.04,0.7422 14.87,2.2149 4.83,1.4766 8.97,3.7695 12.42,6.8867 l -6.15,12.5391 c -5.08,-4.4258 -11.47,-6.6407 -19.18,-6.6407" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path33" d="m 4201.92,173.262 c -7.95,4.011 -17.17,6.023 -27.67,6.023 -12.46,0 -23.2,-2.664 -32.22,-7.988 -6.82,-4.031 -12.22,-9.223 -16.23,-15.555 v 75.684 h -17.46 V 48.9453 h 17.46 v 67.8787 c 0,9.836 1.85,18.235 5.54,25.207 3.69,6.961 8.94,12.293 15.74,15.985 6.8,3.695 14.79,5.527 23.98,5.527 12.29,0 21.84,-3.477 28.65,-10.449 6.8,-6.969 10.21,-17.254 10.21,-30.86 V 48.9453 h 17.46 v 75.0077 c 0,12.465 -2.26,22.785 -6.77,30.988 -4.51,8.192 -10.73,14.309 -18.69,18.321" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path34" d="m 4308.03,157.773 c 7.38,4.18 15.66,6.27 24.84,6.27 7.71,0 14.84,-1.563 21.4,-4.68 6.55,-3.113 12.05,-7.945 16.48,-14.5 l 13.03,8.848 c -5.09,8.523 -12.05,14.922 -20.91,19.18 -8.84,4.265 -18.77,6.394 -29.75,6.394 -12.79,0 -24.22,-2.781 -34.31,-8.359 -10.08,-5.574 -18,-13.281 -23.73,-23.113 -5.74,-9.844 -8.61,-21.243 -8.61,-34.188 0,-12.785 2.87,-24.1445 8.61,-34.0664 5.73,-9.9219 13.65,-17.7031 23.73,-23.3594 10.09,-5.6523 21.52,-8.4844 34.31,-8.4844 10.98,0 20.91,2.168 29.75,6.5118 8.86,4.3476 15.82,10.7031 20.91,19.0664 l -13.03,8.8554 c -4.43,-6.3945 -9.93,-11.1523 -16.48,-14.2695 -6.56,-3.1133 -13.69,-4.668 -21.4,-4.668 -9.18,0 -17.46,2.0899 -24.84,6.2696 -7.37,4.1797 -13.19,10.039 -17.46,17.5781 -4.26,7.5391 -6.39,16.3984 -6.39,26.5664 0,10.164 2.13,19.02 6.39,26.559 4.27,7.539 10.09,13.41 17.46,17.589" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path35" d="m 4487.44,68.2539 c -7.13,-4.5156 -15.61,-6.7695 -25.45,-6.7695 -10.33,0 -18.36,2.2148 -24.11,6.6406 -5.74,4.4336 -8.6,10.332 -8.6,17.7148 0,6.5508 2.41,12.0508 7.26,16.4732 4.83,4.425 13.48,6.64 25.94,6.64 h 40.58 V 87.8008 c -3.28,-8.5235 -8.49,-15.0469 -15.62,-19.5469 z m -19.3,111.0311 c -10.17,0 -19.85,-1.512 -29.03,-4.551 -9.18,-3.035 -17.05,-7.332 -23.6,-12.91 l 7.87,-13.035 c 5.25,4.59 11.63,8.281 19.18,11.074 7.54,2.782 15.49,4.18 23.86,4.18 12.13,0 21.27,-2.949 27.42,-8.859 6.14,-5.899 9.22,-14.344 9.22,-25.332 v -7.872 h -41.07 c -12.3,0 -22.09,-1.679 -29.39,-5.039 -7.29,-3.355 -12.54,-7.781 -15.74,-13.281 -3.19,-5.4881 -4.8,-11.6014 -4.8,-18.3202 0,-7.371 1.89,-13.8945 5.66,-19.5468 3.77,-5.6563 9.23,-10.0821 16.36,-13.2852 7.12,-3.1914 15.52,-4.793 25.2,-4.793 12.3,0 22.51,2.5391 30.63,7.625 5.93,3.7188 10.54,8.379 13.89,13.9415 v -20.336 h 16.72 v 80.1757 c 0,16.883 -4.55,29.465 -13.65,37.742 -9.09,8.282 -22.01,12.422 -38.73,12.422" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path36" d="m 4589.63,152.828 v 25.227 H 4572.9 V 48.9453 h 17.46 v 65.9067 c 0,15.253 3.85,27.011 11.57,35.293 7.7,8.281 18.36,12.421 31.97,12.421 0.65,0 1.31,-0.046 1.96,-0.125 0.66,-0.089 1.31,-0.117 1.97,-0.117 v 16.961 c -12.62,0 -23.2,-2.574 -31.72,-7.742 -7.37,-4.461 -12.78,-10.77 -16.48,-18.715" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path37" d="m 4683.08,140.926 c 3.93,7.375 9.43,13.117 16.48,17.207 7.04,4.101 15,6.152 23.86,6.152 9.01,0 16.96,-2.051 23.85,-6.152 6.89,-4.09 12.33,-9.793 16.36,-17.09 3.25,-5.91 5.12,-12.531 5.74,-19.793 h -91.89 c 0.64,7.223 2.47,13.801 5.6,19.676 z m 94.93,7.004 c -5.41,9.922 -12.83,17.625 -22.26,23.125 -9.42,5.488 -20.2,8.23 -32.33,8.23 -11.97,0 -22.75,-2.82 -32.34,-8.484 -9.59,-5.656 -17.14,-13.399 -22.63,-23.235 -5.5,-9.843 -8.24,-21.148 -8.24,-33.941 0,-12.785 2.87,-24.1445 8.61,-34.0664 5.73,-9.9219 13.68,-17.7031 23.86,-23.3594 10.15,-5.6523 21.96,-8.4844 35.41,-8.4844 10.33,0 19.79,1.8047 28.41,5.4102 8.6,3.6016 15.77,8.8555 21.51,15.7422 l -9.83,11.3086 c -4.93,-5.7422 -10.78,-10 -17.59,-12.7852 -6.81,-2.7929 -14.14,-4.1797 -22.01,-4.1797 -10,0 -18.9,2.0899 -26.68,6.2696 -7.8,4.1797 -13.86,10 -18.21,17.4609 -3.63,6.2422 -5.65,13.3636 -6.24,21.2696 h 108.43 c 0,0.988 0.04,1.926 0.13,2.832 0.08,0.898 0.12,1.758 0.12,2.582 0,12.945 -2.71,24.383 -8.12,34.305" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path38" d="M 40.3711,416.855 C 22.7578,576.027 251.719,736.957 551.766,776.301 c 72.312,9.484 142.144,11.023 206.75,5.695 -86.75,23.395 -193.313,30.137 -306.61,15.281 C 181.523,761.82 -5.15234,622.227 0.109375,476.844 1.63672,434.594 18.9453,394.137 56.2305,363.398 47.8438,380.281 42.4414,398.137 40.3711,416.855" style="fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /><path id="path39" d="m 1222.04,645.859 c -118.11,53.356 -271.216,85.559 -438.501,85.559 -373.75,0 -676.73,-160.727 -676.73,-358.992 C 106.809,183.32 382.43,28.3672 732.191,14.4492 503.758,66.8594 343.91,187.477 343.91,327.906 c 0,76.614 47.578,147.328 127.91,204.293 V 178.012 c 21.789,24.679 48.118,48.301 78.375,70.472 v 329.891 c 34.739,17.07 73.032,32.133 114.227,44.84 V 316.281 c 24.805,11.981 50.98,23.172 78.375,33.461 v 293.996 c 36.512,7.965 74.707,14.203 114.226,18.516 V 385.48 c 25.454,6.493 51.606,12.258 78.372,17.223 v 265.461 c 17.156,0.727 34.5,1.106 52.007,1.106 82.798,0 161.938,-8.301 234.638,-23.411" style="fill:#f57d2a;fill-opacity:1;fill-rule:nonzero;stroke:none" transform="matrix(0.13333333,0,0,-0.13333333,0,118.56)" /></g></g></svg>
+    <span class="tag">High Availability</span>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-rule"></div>
+    <h1>BridgeLink runs highly available on infrastructure you already have.</h1>
+    <p class="lede">Active/passive for straightforward failover. Active/active for scale-out. There is
+    no proprietary clustering license to buy, no message broker to stand up, and no shared filesystem
+    to maintain. Nodes coordinate through the same database BridgeLink already uses.</p>
+  </div>
+</section>
+
+<section class="muted-bg">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="kicker">Choose a topology</p>
+      <h2>Two shapes, one platform</h2>
+      <p class="lede">Both topologies run the same BridgeLink build with the same configuration.
+      The difference is how many nodes process messages at once.</p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col"></th>
+            <th scope="col">Active / Passive</th>
+            <th scope="col">Active / Active</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Shape</th>
+            <td>Two nodes. One processes messages, one stands ready.</td>
+            <td>Two or more nodes, all processing at the same time.</td>
+          </tr>
+          <tr>
+            <th scope="row">Protects against</th>
+            <td>Host, operating system, or process failure.</td>
+            <td>The same, plus the capacity ceiling of a single host.</td>
+          </tr>
+          <tr>
+            <th scope="row">Throughput</th>
+            <td>One node's worth.</td>
+            <td>Grows as you add nodes.</td>
+          </tr>
+          <tr>
+            <th scope="row">On failure</th>
+            <td>Promote the standby. Recovery is a defined, testable step.</td>
+            <td>Surviving nodes keep processing. Nothing to promote.</td>
+          </tr>
+          <tr>
+            <th scope="row">Good fit for</th>
+            <td>Most clinical interface deployments, where volume fits one host
+            comfortably and the requirement is continuity.</td>
+            <td>High volume, wide geographic spread, or a maintenance window you
+            cannot take.</td>
+          </tr>
+          <tr>
+            <th scope="row">Operational effort</th>
+            <td>Low. One live configuration to reason about.</td>
+            <td>Moderate. Inbound traffic distribution becomes a design decision.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="kicker">The one decision that matters</p>
+      <h2>Choose a node identity pattern, then keep it stable</h2>
+      <p class="lede">Every BridgeLink node carries a server ID. It is how a node knows which work
+      belongs to it: the messages it has in flight, the messages waiting in its channel queues, and
+      the statistics it reports. Two patterns are supported. The choice follows from whether your
+      node count is a fixed set or an elastic one.</p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col"></th>
+            <th scope="col">Distinct ID per node</th>
+            <th scope="col">One shared ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Suits</th>
+            <td>A fixed, known set of nodes.</td>
+            <td>An elastic set that scales in and out on its own.</td>
+          </tr>
+          <tr>
+            <th scope="row">Channel queues</th>
+            <td>Built-in channel queues work normally.</td>
+            <td>Must be off. Use Work Queue to distribute work instead.</td>
+          </tr>
+          <tr>
+            <th scope="row">Message storage</th>
+            <td>Any storage mode.</td>
+            <td>RAW. See the note below.</td>
+          </tr>
+          <tr>
+            <th scope="row">Adding a node</th>
+            <td>Assign and record a new identity.</td>
+            <td>Clone an existing one. No new identity to manage.</td>
+          </tr>
+          <tr>
+            <th scope="row">Each node owns</th>
+            <td>Its own in-flight and queued work.</td>
+            <td>Nothing node-specific. Nodes are interchangeable.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="cards two">
+      <div class="card">
+        <h3>Distinct ID per node</h3>
+        <p>Each node owns its work outright. No two nodes reach for the same message, so there is no
+        contention and no risk of double delivery, and you keep full message storage including the
+        record of what you sent and what came back.</p>
+        <p>The trade: a node's queued backlog waits for that node to return rather than moving to a
+        peer, and every node is an identity you assign and track. That is easy for a fixed pair and
+        awkward for a fleet that scales itself.</p>
+      </div>
+      <div class="card">
+        <h3>One shared ID</h3>
+        <p>Every node presents the same identity, so a new instance is a clone rather than a new
+        thing to register. This is the pattern that makes autoscaling straightforward, and it pairs
+        naturally with Work Queue, which distributes the real work across nodes and handles a node
+        disappearing.</p>
+        <p>It requires two settings, not one: built-in channel queues off, <strong>and</strong> RAW
+        message storage. Both are load-bearing, and the reason is below.</p>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <h4>Why a shared ID requires RAW storage</h4>
+      <p>Nodes sharing an identity also share a view of in-flight work. When a channel starts on a
+      new node, BridgeLink's message recovery would otherwise pick up messages its peers are still
+      processing and run them a second time. RAW storage turns recovery off, which is what makes the
+      shared pattern safe. In exchange, RAW keeps the raw inbound message and attachments but not the
+      transformed or sent content, the responses, or the channel maps, and it commits
+      asynchronously rather than waiting for each write to be flushed. Weigh that against your audit
+      and durability requirements before choosing it.</p>
+    </div>
+
+    <h3 style="margin-bottom:var(--space-sm)">Either way, keep the identity stable</h3>
+    <p>A server ID needs to survive restarts, upgrades and redeploys. On a traditional install it is
+    written into the application data directory the first time the node starts and persists there.
+    In Docker and Kubernetes, set the <code>SERVER_ID</code> environment variable on each node, which
+    pins the identity regardless of how the container filesystem is managed and is more reliable
+    than depending on a mounted volume surviving a redeploy.</p>
+
+    <div class="callout info">
+      <h4>Licensing follows your topology</h4>
+      <p>Commercial plugin licensing accounts for the nodes you run. Bring your intended topology
+      into the conversation early and we will issue licensing that matches it, so a planned scale-out
+      is never a surprise.</p>
+    </div>
+
+    <h3 style="margin-bottom:var(--space-sm)">Message identifiers will not collide</h3>
+    <p>A common concern with any shared-database deployment is two nodes assigning the same
+    identifier to different messages. BridgeLink does not have this problem. Message identifiers are
+    issued by the shared database itself rather than by each node independently, so two nodes writing
+    to the same channel are safe by construction. Message history stays a single, coherent record
+    across the cluster.</p>
+  </div>
+</section>
+
+<section class="muted-bg">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="kicker">Deployment checklist</p>
+      <h2>What is shared, and what belongs to each node</h2>
+      <p class="lede">When nodes point at one database, most configuration is shared for free. A
+      short list has to be made identical by you, and a short list is deliberately per node.</p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Shared automatically</th>
+            <th scope="col">Make identical across nodes</th>
+            <th scope="col">Per node by design</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Channel configuration</td>
+            <td>Keystore and its passwords</td>
+            <td>Server ID</td>
+          </tr>
+          <tr>
+            <td>Code templates</td>
+            <td>Installed extensions and plugins</td>
+            <td>Statistics and dashboard counts</td>
+          </tr>
+          <tr>
+            <td>Users, roles and permissions</td>
+            <td>Server properties file</td>
+            <td>Global map contents</td>
+          </tr>
+          <tr>
+            <td>Alert definitions</td>
+            <td>TLS certificates</td>
+            <td>Messages in flight and in channel queues</td>
+          </tr>
+          <tr>
+            <td>Message history</td>
+            <td></td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <h4>The keystore is the one that catches people out</h4>
+      <p>The keystore holds the key BridgeLink uses to encrypt stored credentials and message
+      content. Every node in a shared-database deployment must use the same keystore, <strong>and the
+      same keystore passwords</strong>. Distributing the file alone is not enough: a node given the
+      right file with its own generated password cannot open it and will not finish starting.
+      Provision the keystore and its passwords together to every node and the issue never arises.</p>
+    </div>
+
+    <h3 style="margin-bottom:var(--space-sm)">Two settings that move node-local state into the database</h3>
+    <p>Both default to storing state on the individual node, which is the right default for a single
+    server and the wrong one for a cluster. Change both when you go multi-node.</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Setting</th>
+            <th scope="col">Default</th>
+            <th scope="col">Why it matters across nodes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Session storage</th>
+            <td>In memory, per node</td>
+            <td>Administration and API sessions live on the node that created them. Behind a load
+            balancer a user routed to a different node is logged out mid-task. Storing sessions in
+            the shared database lets any node serve any request, so the load balancer does not need
+            session affinity. Turn the per-node session cache off at the same time, or a node can
+            still answer from a stale local copy.</td>
+          </tr>
+          <tr>
+            <th scope="row">Configuration map</th>
+            <td>A file on each node</td>
+            <td>Environment values such as endpoints and credentials otherwise have to be edited on
+            every node and kept in step by hand. Pointing the configuration map at the database makes
+            it behave like the rest of your shared configuration: updated once, correct everywhere.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="kicker">On the roadmap</p>
+      <h2>Where multi-node BridgeLink is going</h2>
+      <p class="lede">Two pieces of work extend what is described above: one lets nodes share a
+      single pool of work, the other gives you one place to operate every node.</p>
+    </div>
+
+    <div class="cards two">
+      <div class="card">
+        <span class="pill">Coming soon</span>
+        <h3>Work Queue</h3>
+        <p>A durable queuing layer whose state is keyed by queue rather than by node, held in the
+        database BridgeLink already uses. Every node running a reader against a queue is a
+        participant.</p>
+        <ul class="ticks">
+          <li>Concurrent nodes take different messages without coordinating with each other.</li>
+          <li>Strict ordering, where you need it, holds across the whole cluster rather than only
+          within one node.</li>
+          <li>If a node stops mid-processing, its messages become available again on their own and
+          another node picks them up. No operator action and no failover script.</li>
+          <li>Nothing new in the topology: no broker, no shared filesystem, no leader election.</li>
+        </ul>
+        <p style="font-size:0.875rem;color:var(--bl-text-secondary);margin-top:var(--space-md)">Requires
+        PostgreSQL. Consumers should be written to tolerate a redelivery.</p>
+      </div>
+      <div class="card">
+        <span class="pill">Coming soon</span>
+        <h3>Fleet cluster management</h3>
+        <p>Fleet treats a set of BridgeLink nodes as one unit, so channel operations stop being
+        something you repeat node by node.</p>
+        <ul class="ticks">
+          <li>Register nodes yourself, or have Fleet discover them from an AWS Auto Scaling Group as
+          they come and go.</li>
+          <li>Start, stop, pause, resume, deploy and undeploy channels across every node from one
+          screen.</li>
+          <li>Every action recorded: what was run, by whom, and which nodes it reached.</li>
+          <li>See at a glance when one node is on a different version mid-upgrade, or has stopped
+          responding.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="muted-bg">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="kicker">Plan this first</p>
+      <h2>The database is the shared dependency</h2>
+    </div>
+    <p class="lede">BridgeLink nodes coordinate through the database, which means a highly available
+    BridgeLink assumes a highly available database beneath it. That is the piece to design first,
+    because no amount of BridgeLink redundancy compensates for a single database that can stop.</p>
+    <p class="lede">The good news is that BridgeLink asks nothing unusual of it. Whatever replication,
+    failover and backup practice your team already runs applies unchanged. PostgreSQL is the
+    recommended backend, and it is required if you plan to adopt Work Queue.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="kicker">Questions we get</p>
+      <h2>Frequently asked</h2>
+    </div>
+
+    <div class="faq">
+      <div class="qa">
+        <h4>Do we need a special clustering license or add-on?</h4>
+        <p>No. Running multiple BridgeLink nodes against a shared database is a supported deployment
+        of the standard product, not a separately licensed feature.</p>
+      </div>
+      <div class="qa">
+        <h4>Can two BridgeLink nodes share one database?</h4>
+        <p>Yes, and it is the standard pattern. Channel configuration, code templates, users and
+        message history are then shared automatically, so the nodes stay consistent without you
+        synchronizing anything.</p>
+      </div>
+      <div class="qa">
+        <h4>Should the nodes share a server ID?</h4>
+        <p>Either pattern is supported. Distinct IDs suit a fixed set of nodes and keep full message
+        storage. A shared ID suits an autoscaled fleet, and requires built-in channel queues off and
+        RAW storage. Whichever you pick, keep the identity stable.</p>
+      </div>
+      <div class="qa">
+        <h4>What happens to messages in flight when a node fails?</h4>
+        <p>With distinct IDs they stay recorded in the shared database and that node resumes them when
+        it returns. With a shared ID and Work Queue, the queue redelivers the work to a surviving node
+        instead, which is the point of pairing the two.</p>
+      </div>
+      <div class="qa">
+        <h4>Will two nodes generate colliding message identifiers?</h4>
+        <p>No. Identifiers are issued by the shared database rather than by each node independently,
+        so message history remains one coherent record across the cluster.</p>
+      </div>
+      <div class="qa">
+        <h4>If I deploy a channel on one node, does it deploy on all of them?</h4>
+        <p>Not today. Configuration is shared, but each node is deployed to individually. Fleet
+        cluster management is the answer to this, and it fans channel operations out across every
+        node from one screen.</p>
+      </div>
+      <div class="qa">
+        <h4>How do we keep server IDs stable in Docker or Kubernetes?</h4>
+        <p>Set the <code>SERVER_ID</code> environment variable on each node. That fixes the identity
+        without depending on a mounted volume surviving a redeploy.</p>
+      </div>
+      <div class="qa">
+        <h4>Can inbound TCP and MLLP listeners run active/active?</h4>
+        <p>They can, and how depends on what sits in front of them. Distributing a long-lived
+        clinical connection is a different exercise from load balancing HTTP, so it is worth a short
+        design conversation rather than a general answer.</p>
+      </div>
+      <div class="qa">
+        <h4>Which database should we use?</h4>
+        <p>PostgreSQL is the recommendation for new deployments, and it is required for Work Queue.
+        BridgeLink also supports SQL Server, Oracle and MySQL for the platform itself.</p>
+      </div>
+      <div class="qa">
+        <h4>Can Work Queue and the built-in channel queues be used together?</h4>
+        <p>Yes. They solve different problems and coexist. Built-in queues buffer work within a
+        channel; Work Queue distributes work across nodes.</p>
+      </div>
+      <div class="qa">
+        <h4>Does any patient data leave our environment?</h4>
+        <p>No. Everything described here runs inside your own infrastructure, and coordination between
+        nodes happens through your own database.</p>
+      </div>
+      <div class="qa">
+        <h4>Can we autoscale BridgeLink nodes?</h4>
+        <p>Yes, using the shared identity pattern: channel queues off, RAW storage, and Work Queue
+        distributing the work. New instances are clones with no identity to register, and scale-in
+        does not strand a backlog because the queue holds it.</p>
+      </div>
+      <div class="qa">
+        <h4>Where do we start?</h4>
+        <p>Bring us your uptime target, your message volume and your database HA practice. Those three
+        answers point at the right topology, and we will size it with you.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <address>
+      <span class="name">Innovar Healthcare</span><br>
+      1110 Montlimar Drive, Suite 902<br>
+      Mobile, AL 36609
+    </address>
+    <p>
+      <a href="https://www.bridgelink.net">www.bridgelink.net</a><br>
+      <a href="https://www.innovarhealthcare.com">www.innovarhealthcare.com</a>
+    </p>
+  </div>
+</footer>
+</body>
+</html>
