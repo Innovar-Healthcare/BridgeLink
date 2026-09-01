@@ -126,11 +126,13 @@
   /* Cards */
   .cards { display: grid; gap: var(--space-lg); }
   @media (min-width: 768px) { .cards.two { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 980px) { .cards.three { grid-template-columns: repeat(3, 1fr); } }
   .card {
     background: var(--bl-surface); border: 1px solid var(--bl-border);
     border-radius: var(--radius-lg); padding: var(--space-lg); box-shadow: var(--shadow-card);
   }
   .card h3 { margin-bottom: var(--space-sm); }
+  .card .note { font-size: 0.8125rem; color: var(--bl-text-secondary); margin-top: var(--space-md); }
   .card p:last-child, .card ul:last-child { margin-bottom: 0; }
   .pill {
     display: inline-block; font-family: var(--font-heading); font-weight: 600;
@@ -185,9 +187,9 @@
   /* Print */
   @media print {
     @page { size: letter; margin: 0.45in; }
-    html, body { line-height: 1.32; font-size: 8.4pt; }
+    html, body { line-height: 1.28; font-size: 8pt; }
     p { margin-bottom: 5pt; }
-    section { padding: 9pt 0; }
+    section { padding: 7pt 0; }
     .wrap { padding: 0; max-width: none; }
     .site-header { background: none; padding: 0 0 6pt; border-bottom: 2px solid var(--bl-blue); }
     .site-header .tag { color: var(--bl-blue); }
@@ -200,24 +202,25 @@
     h2 { font-size: 12.5pt; } h3 { font-size: 10pt; } h4 { font-size: 8.8pt; }
     .lede, .hero .lede { font-size: 8.6pt; max-width: none; }
     .kicker { font-size: 6.6pt; margin-bottom: 3pt; }
-    .section-head { margin-bottom: 8pt; }
+    .section-head { margin-bottom: 6pt; }
     .section-head h2 { margin-bottom: 4pt; }
     .table-scroll { overflow: visible; }
     table { min-width: 0; }
     thead th { padding: 5pt 7pt; font-size: 8pt;
       background: #1B3D6D !important; color: #fff !important;
       -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    tbody td, tbody th { padding: 4.5pt 7pt; font-size: 8pt; }
+    tbody td, tbody th { padding: 4pt 7pt; font-size: 7.8pt; }
     tbody tr:nth-child(even), .callout, .pill {
       -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .cards { gap: 9pt; }
     .cards.two { grid-template-columns: 1fr 1fr; }
-    .card { padding: 9pt; box-shadow: none; }
+    .cards.three { grid-template-columns: repeat(3, 1fr); }
+    .card { padding: 8pt; box-shadow: none; }
     .callout { margin: 8pt 0; padding: 7pt 10pt; font-size: 8pt; }
     ul.ticks li { font-size: 8pt; margin-bottom: 3pt; }
     /* Two columns of FAQ, flowing across pages. */
     .faq { display: block; column-count: 2; column-gap: 14pt; }
-    .qa { padding: 8pt; margin-bottom: 8pt; font-size: 8pt; }
+    .qa { padding: 7pt; margin-bottom: 6pt; font-size: 7.8pt; }
     .qa p { font-size: 8pt; }
     /* Keep atomic blocks whole, but let SECTIONS flow across pages. */
     .card, .qa, .table-scroll, .callout { break-inside: avoid; page-break-inside: avoid; }
@@ -507,13 +510,81 @@
 <section>
   <div class="wrap">
     <div class="section-head">
-      <p class="kicker">On the roadmap</p>
-      <h2>Where multi-node BridgeLink is going</h2>
-      <p class="lede">Two pieces of work extend what is described above: one lets nodes share a
-      single pool of work, the other gives you one place to operate every node.</p>
+      <p class="kicker">Per channel, not per server</p>
+      <h2>Which channels can run on every node</h2>
+      <p class="lede">In an active/active cluster the deciding question is asked per channel, not
+      per server: would two nodes doing the same thing duplicate work? That splits cleanly by how
+      the channel receives its messages.</p>
     </div>
 
-    <div class="cards two">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Source connector</th>
+            <th scope="col">Run it on</th>
+            <th scope="col">Why</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Push and listener</th>
+            <td><strong>Every node</strong></td>
+            <td>HTTP Listener, TCP and MLLP Listener and the rest only handle what is sent to them.
+            The load balancer decides which node receives a message, so there is nothing to
+            duplicate. These scale out with no coordination at all.</td>
+          </tr>
+          <tr>
+            <th scope="row">Polling</th>
+            <td><strong>One node at a time</strong></td>
+            <td>File Reader, Database Reader, JavaScript Reader, SFTP Reader, Amazon S3 Reader and
+            HTTP Polling Consumer go looking for work. Left alone, every node polls the same
+            directory, table or bucket and picks up the same files or rows.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout info">
+      <h4>The second row is the part usually left to you</h4>
+      <p>Most integration platforms hand you that problem and expect scripts, cron guards and a
+      runbook to solve it. Channel Coordinator, below, does it for you: it picks one node per
+      channel, keeps the channel started there and stopped everywhere else, and moves it when that
+      node goes quiet.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <p class="kicker">On the roadmap</p>
+      <h2>Where multi-node BridgeLink is going</h2>
+      <p class="lede">Three pieces of work extend what is described above: one decides which node
+      runs a channel, one lets nodes share a single pool of work, and one gives you a single place
+      to operate every node.</p>
+    </div>
+
+    <div class="cards three">
+      <div class="card">
+        <span class="pill">Coming soon</span>
+        <h3>Channel Coordinator</h3>
+        <p>Elects one leader node for each managed polling channel and keeps the channel started
+        there and stopped everywhere else, so a File Reader or Database Reader can sit in an
+        active/active cluster without duplicating work.</p>
+        <ul class="ticks">
+          <li>The leader publishes a heartbeat. If it goes quiet, another node claims the channel
+          and starts it, about three minutes later, with no operator action.</li>
+          <li>Force Failover moves a channel to another node immediately, for when you want to
+          choose the moment rather than wait.</li>
+          <li>Per channel you control whether the coordinator manages it at all, and whether it
+          should be running or deliberately held stopped.</li>
+          <li>A health view shows which node currently leads each channel and how fresh its
+          heartbeat is.</li>
+        </ul>
+        <p class="note">Managed entirely from the web administration interface, with no server-side
+        component to install on the nodes.</p>
+      </div>
       <div class="card">
         <span class="pill">Coming soon</span>
         <h3>Work Queue</h3>
@@ -528,8 +599,7 @@
           another node picks them up. No operator action and no failover script.</li>
           <li>Nothing new in the topology: no broker, no shared filesystem, no leader election.</li>
         </ul>
-        <p style="font-size:0.875rem;color:var(--bl-text-secondary);margin-top:var(--space-md)">Requires
-        PostgreSQL. Consumers should be written to tolerate a redelivery.</p>
+        <p class="note">Requires PostgreSQL. Consumers should be written to tolerate a redelivery.</p>
       </div>
       <div class="card">
         <span class="pill">Coming soon</span>
@@ -613,10 +683,17 @@
         without depending on a mounted volume surviving a redeploy.</p>
       </div>
       <div class="qa">
+        <h4>Can File Readers and Database Readers run in an active/active cluster?</h4>
+        <p>Yes, but only one node may poll at a time or they will pick up the same work. Channel
+        Coordinator handles that election for you and moves the channel automatically if the node
+        running it stops responding.</p>
+      </div>
+      <div class="qa">
         <h4>Can inbound TCP and MLLP listeners run active/active?</h4>
-        <p>They can, and how depends on what sits in front of them. Distributing a long-lived
-        clinical connection is a different exercise from load balancing HTTP, so it is worth a short
-        design conversation rather than a general answer.</p>
+        <p>Yes. Listener connectors need no coordination between nodes, because each one only
+        handles what is sent to it. How the connections themselves are distributed depends on what
+        sits in front of them, and a long-lived clinical connection is a different exercise from
+        load balancing HTTP, so that part is worth a short design conversation.</p>
       </div>
       <div class="qa">
         <h4>Which database should we use?</h4>
