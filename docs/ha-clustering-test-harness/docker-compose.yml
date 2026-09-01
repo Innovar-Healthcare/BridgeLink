@@ -1,0 +1,91 @@
+# Two BridgeLink nodes against one PostgreSQL, plus a deliberately slow sink.
+#
+# The variable under test is SERVER_ID: set both nodes to the same value to
+# reproduce the shared-server-ID topology, or to different values for the control.
+# Everything else is held constant between runs.
+#
+# Every credential in this file is a throwaway fixture for a local, disposable stack.
+# Nothing here is a real secret and nothing here reaches an Innovar environment.
+#
+# The keystore is shared via MP_KEYSTORE_PATH onto a common volume. Without that,
+# each node generates its own encryption key and cannot read what the other wrote,
+# which would confound the result with a second, unrelated failure.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: bridgelinkdb
+      POSTGRES_USER: bridgelink
+      POSTGRES_PASSWORD: bridgelink
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bridgelink -d bridgelinkdb"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  sink:
+    image: python:3.12-alpine
+    environment:
+      HOLD_SECONDS: "${HOLD_SECONDS:-150}"
+      PORT: "9000"
+    volumes:
+      - ./sink:/app:ro
+    command: ["python3", "/app/server.py"]
+    ports:
+      - "9000:9000"
+
+  keystore-perms:
+    image: alpine:3.20
+    command: ["sh", "-c", "chown -R 1000:1000 /shared && chmod 775 /shared"]
+    volumes:
+      - shared-keystore:/shared
+
+  bl-a:
+    image: innovarhealthcare/bridgelink:26.6.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keystore-perms:
+        condition: service_completed_successfully
+    environment:
+      SERVER_ID: "${BL_A_SERVER_ID:?set BL_A_SERVER_ID}"
+      MP_DATABASE: postgres
+      MP_DATABASE_URL: jdbc:postgresql://postgres:5432/bridgelinkdb
+      MP_DATABASE_USERNAME: bridgelink
+      MP_DATABASE_PASSWORD: bridgelink
+      MP_KEYSTORE_PATH: /shared/keystore.jks
+      MP_KEYSTORE_STOREPASS: sharedstorepass
+      MP_KEYSTORE_KEYPASS: sharedkeypass
+      MP_SERVER_STARTUPDEPLOY: "false"
+    volumes:
+      - shared-keystore:/shared
+    ports:
+      - "8443:8443"
+      - "8081:8081"
+
+  bl-b:
+    image: innovarhealthcare/bridgelink:26.6.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keystore-perms:
+        condition: service_completed_successfully
+    environment:
+      SERVER_ID: "${BL_B_SERVER_ID:?set BL_B_SERVER_ID}"
+      MP_DATABASE: postgres
+      MP_DATABASE_URL: jdbc:postgresql://postgres:5432/bridgelinkdb
+      MP_DATABASE_USERNAME: bridgelink
+      MP_DATABASE_PASSWORD: bridgelink
+      MP_KEYSTORE_PATH: /shared/keystore.jks
+      MP_KEYSTORE_STOREPASS: sharedstorepass
+      MP_KEYSTORE_KEYPASS: sharedkeypass
+      MP_SERVER_STARTUPDEPLOY: "false"
+    volumes:
+      - shared-keystore:/shared
+    ports:
+      - "8444:8443"
+      - "8082:8081"
+
+volumes:
+  shared-keystore:

@@ -1,0 +1,73 @@
+{
+  "total_deliveries": 10,
+  "distinct_message_ids": 10,
+  "duplicated_message_ids": 0,
+  "extra_deliveries": 0,
+  "in_flight_now": 10,
+  "duplicate_detail": {},
+  "by_node": {
+    "9c8de2995b4c": 10
+  },
+  "deliveries": [
+    {
+      "id": "4",
+      "node": "9c8de2995b4c",
+      "at": 11.782,
+      "first": true
+    },
+    {
+      "id": "5",
+      "node": "9c8de2995b4c",
+      "at": 11.782,
+      "first": true
+    },
+    {
+      "id": "7",
+      "node": "9c8de2995b4c",
+      "at": 11.783,
+      "first": true
+    },
+    {
+      "id": "1",
+      "node": "9c8de2995b4c",
+      "at": 11.783,
+      "first": true
+    },
+    {
+      "id": "2",
+      "node": "9c8de2995b4c",
+      "at": 11.784,
+      "first": true
+    },
+    {
+      "id": "6",
+      "node": "9c8de2995b4c",
+      "at": 11.785,
+      "first": true
+    },
+    {
+      "id": "3",
+      "node": "9c8de2995b4c",
+      "at": 11.786,
+      "first": true
+    },
+    {
+      "id": "8",
+      "node": "9c8de2995b4c",
+      "at": 11.786,
+      "first": true
+    },
+    {
+      "id": "10",
+      "node": "9c8de2995b4c",
+      "at": 11.786,
+      "first": true
+    },
+    {
+      "id": "9",
+      "node": "9c8de2995b4c",
+      "at": 11.787,
+      "first": true
+    }
+  ]
+}

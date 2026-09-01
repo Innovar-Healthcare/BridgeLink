@@ -1,0 +1,7 @@
+# Generated per run from the smoke-test template
+channel.xml
+channel-raw.xml
+# Written by docker compose from run-test.sh
+.env
+# API session jars
+cookies-*.txt
