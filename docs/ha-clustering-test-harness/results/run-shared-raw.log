@@ -33,11 +33,11 @@
   distinct message ids     : 10
   ids delivered more than once: 0
   EXTRA (duplicate) deliveries: 0
-  by node                  : {'9c8de2995b4c': 10}
+  by node                  : {'737b6544ec50': 10}
 
   VERDICT: no duplicates observed
 
 [1m== Did node B run recovery?[0m
-  (no recovery log lines)
+bl-b-1  | INFO  2026-09-02 14:51:43.827 [Recovery Task Thread on HA Shared Server ID Test (0000ha01-0000-0000-0000-0000000ha001) < pool-8-thread-1] com.mirth.connect.donkey.server.channel.RecoveryTask: Incomplete messages found for channel HA Shared Server ID Test (0000ha01-0000-0000-0000-0000000ha001) but message storage settings do not support recovery. Skipping recovery task.
 
-Full JSON: result-shared-raw.json
+Full JSON: results/result-shared-raw.json

@@ -187,48 +187,48 @@
   /* Print */
   @media print {
     @page { size: letter; margin: 0.45in; }
-    html, body { line-height: 1.28; font-size: 8pt; }
-    p { margin-bottom: 5pt; }
-    section { padding: 7pt 0; }
+    html, body { line-height: 1.24; font-size: 7.5pt; }
+    p { margin-bottom: 4pt; }
+    section { padding: 4pt 0; }
     .wrap { padding: 0; max-width: none; }
     .site-header { background: none; padding: 0 0 6pt; border-bottom: 2px solid var(--bl-blue); }
     .site-header .tag { color: var(--bl-blue); }
     .bl-logo { height: 24px; }
     .bl-logo path[style*="ffffff"] { fill: #1B3D6D !important; }
     .muted-bg { background: none; }
-    .hero { padding: 10pt 0 6pt; }
+    .hero { padding: 6pt 0 4pt; }
     .hero-rule { margin-bottom: 8pt; height: 3px; }
-    h1 { font-size: 17pt; margin-bottom: 6pt; max-width: none; }
-    h2 { font-size: 12.5pt; } h3 { font-size: 10pt; } h4 { font-size: 8.8pt; }
-    .lede, .hero .lede { font-size: 8.6pt; max-width: none; }
+    h1 { font-size: 15.5pt; margin-bottom: 5pt; max-width: none; }
+    h2 { font-size: 11.5pt; } h3 { font-size: 9.4pt; } h4 { font-size: 8.4pt; }
+    .lede, .hero .lede { font-size: 8pt; max-width: none; }
     .kicker { font-size: 6.6pt; margin-bottom: 3pt; }
-    .section-head { margin-bottom: 6pt; }
+    .section-head { margin-bottom: 4pt; }
     .section-head h2 { margin-bottom: 4pt; }
     .table-scroll { overflow: visible; }
     table { min-width: 0; }
-    thead th { padding: 5pt 7pt; font-size: 8pt;
+    thead th { padding: 4pt 6pt; font-size: 7.6pt;
       background: #1B3D6D !important; color: #fff !important;
       -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    tbody td, tbody th { padding: 4pt 7pt; font-size: 7.8pt; }
+    tbody td, tbody th { padding: 3.4pt 6pt; font-size: 7.4pt; }
     tbody tr:nth-child(even), .callout, .pill {
       -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .cards { gap: 9pt; }
+    .cards { gap: 7pt; }
     .cards.two { grid-template-columns: 1fr 1fr; }
     .cards.three { grid-template-columns: repeat(3, 1fr); }
-    .card { padding: 8pt; box-shadow: none; }
-    .callout { margin: 8pt 0; padding: 7pt 10pt; font-size: 8pt; }
-    ul.ticks li { font-size: 8pt; margin-bottom: 3pt; }
+    .card { padding: 7pt; box-shadow: none; }
+    .callout { margin: 5pt 0; padding: 5pt 8pt; font-size: 7.4pt; }
+    ul.ticks li { font-size: 7.4pt; margin-bottom: 2.4pt; }
     /* Two columns of FAQ, flowing across pages. */
     .faq { display: block; column-count: 2; column-gap: 14pt; }
-    .qa { padding: 7pt; margin-bottom: 6pt; font-size: 7.8pt; }
-    .qa p { font-size: 8pt; }
+    .qa { padding: 5.5pt; margin-bottom: 4pt; font-size: 7.4pt; }
+    .qa p { font-size: 7.4pt; }
     /* Keep atomic blocks whole, but let SECTIONS flow across pages. */
     .card, .qa, .table-scroll, .callout { break-inside: avoid; page-break-inside: avoid; }
     /* A kicker or heading must never be the last thing on a page. */
     .section-head { break-inside: avoid; page-break-inside: avoid; }
     .kicker, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
     .site-footer { background: none; color: var(--bl-text);
-      border-top: 1px solid var(--bl-border); padding: 8pt 0 0; }
+      border-top: 1px solid var(--bl-border); padding: 6pt 0 0; }
     .site-footer p, .site-footer address { color: var(--bl-text-secondary); font-size: 7.5pt; }
     .site-footer .name, .site-footer a { color: var(--bl-blue); }
   }
@@ -248,7 +248,9 @@
     <h1>BridgeLink runs highly available on infrastructure you already have.</h1>
     <p class="lede">Active/passive for straightforward failover. Active/active for scale-out. There is
     no proprietary clustering license to buy, no message broker to stand up, and no shared filesystem
-    to maintain. Nodes coordinate through the same database BridgeLink already uses.</p>
+    to maintain. Nodes coordinate through the same database BridgeLink already uses. Two of the
+    capabilities described here, Channel Coordinator and Work Queue, are licensed commercial
+    plugins.</p>
   </div>
 </section>
 
@@ -259,6 +261,11 @@
       <h2>Two shapes, one platform</h2>
       <p class="lede">Both topologies run the same BridgeLink build with the same configuration.
       The difference is how many nodes process messages at once.</p>
+      <p class="lede"><strong>High availability</strong> means the service survives losing a
+      machine. <strong>Failover</strong> is what happens next: the work moves to a machine that is
+      still up. <strong>Load balancing</strong> is the separate job of spreading incoming traffic
+      across the machines that are up, and it is something you put in front of BridgeLink rather
+      than something BridgeLink does.</p>
     </div>
 
     <div class="table-scroll">
@@ -338,7 +345,7 @@
           <tr>
             <th scope="row">Channel queues</th>
             <td>Built-in channel queues work normally.</td>
-            <td>Must be off. Use Work Queue to distribute work instead.</td>
+            <td>Must be off. Work Queue, once available, distributes the work instead.</td>
           </tr>
           <tr>
             <th scope="row">Message storage</th>
@@ -371,9 +378,9 @@
       </div>
       <div class="card">
         <h3>One shared ID</h3>
-        <p>Every node presents the same identity, so a new instance is a clone rather than a new
-        thing to register. This is the pattern that makes autoscaling straightforward, and it pairs
-        naturally with Work Queue, which distributes the real work across nodes and handles a node
+        <p>Every node presents the same identity, so a new instance is a clone rather than a new thing to
+        register. This is the pattern that makes autoscaling straightforward, and it is designed to pair
+        with Work Queue, which will distribute the real work across nodes and handle a node
         disappearing.</p>
         <p>It requires two settings, not one: built-in channel queues off, <strong>and</strong> RAW
         message storage. Both are load-bearing, and the reason is below.</p>
@@ -386,9 +393,12 @@
       new node, BridgeLink's message recovery would otherwise pick up messages its peers are still
       processing and run them a second time. RAW storage turns recovery off, which is what makes the
       shared pattern safe. In exchange, RAW keeps the raw inbound message and attachments but not the
-      transformed or sent content, the responses, or the channel maps, and it commits
-      asynchronously rather than waiting for each write to be flushed. Weigh that against your audit
-      and durability requirements before choosing it.</p>
+      transformed or sent content, the responses, or the channel maps. The inbound message itself is
+      still written and flushed before the sender is acknowledged, so an acknowledged message is not
+      at risk; on PostgreSQL and Oracle the follow-on status updates are committed asynchronously,
+      which puts status detail rather than messages at risk if the database stops abruptly. What you
+      are really weighing is the loss of the audit trail: with RAW you keep what arrived, but not the
+      record of what you sent or what came back.</p>
     </div>
 
     <h3 style="margin-bottom:var(--space-sm)">Either way, keep the identity stable</h3>
@@ -399,10 +409,13 @@
     than depending on a mounted volume surviving a redeploy.</p>
 
     <div class="callout info">
-      <h4>Licensing follows your topology</h4>
-      <p>Commercial plugin licensing accounts for the nodes you run. Bring your intended topology
-      into the conversation early and we will issue licensing that matches it, so a planned scale-out
-      is never a surprise.</p>
+      <h4>What is licensed, and what is not</h4>
+      <p>Running several BridgeLink nodes against a shared database needs no special licence. The two
+      capabilities that make active/active straightforward do: <strong>Channel Coordinator</strong>,
+      for running polling channels on one node at a time, and <strong>Work Queue</strong>, for
+      distributing work across nodes. Both are licensed commercial plugins, and licensing accounts
+      for the nodes you run. Bring your intended topology into the conversation early and we will
+      quote it as a whole, so neither a scale-out nor a plugin is a surprise later.</p>
     </div>
 
     <h3 style="margin-bottom:var(--space-sm)">Message identifiers will not collide</h3>
@@ -441,7 +454,7 @@
           <tr>
             <td>Code templates</td>
             <td>Installed extensions and plugins</td>
-            <td>Statistics and dashboard counts</td>
+            <td>Statistics and dashboard counts, per server ID</td>
           </tr>
           <tr>
             <td>Users, roles and permissions</td>
@@ -532,7 +545,9 @@
             <td><strong>Every node</strong></td>
             <td>HTTP Listener, TCP and MLLP Listener and the rest only handle what is sent to them.
             The load balancer decides which node receives a message, so there is nothing to
-            duplicate. These scale out with no coordination at all.</td>
+            duplicate. These scale out with no coordination at all. One exception: a JMS Listener on
+            a topic delivers every message to every subscriber, so treat that as a polling
+            channel.</td>
           </tr>
           <tr>
             <th scope="row">Polling</th>
@@ -548,10 +563,33 @@
     <div class="callout info">
       <h4>The second row is the part usually left to you</h4>
       <p>Most integration platforms hand you that problem and expect scripts, cron guards and a
-      runbook to solve it. Channel Coordinator, below, does it for you: it picks one node per
-      channel, keeps the channel started there and stopped everywhere else, and moves it when that
-      node goes quiet.</p>
+      runbook to solve it. Channel Coordinator, below, is being built to do it for you:
+      one node per channel, the channel started there and stopped everywhere else, and moved when
+      that node goes quiet. Until then, run the channel on a single node.</p>
     </div>
+
+    <h3 style="margin-bottom:var(--space-sm)">Background jobs, and four rules that follow</h3>
+    <p>Message recovery, channel statistics and message trends are all scoped to the node that owns
+    the work, so they are safe on any number of nodes and need no configuration. The BridgeLink engine
+    sends no usage or telemetry data from any node; the web administration interface checks once a
+    day whether a newer version exists, sending only its own version number, and that check can be
+    turned off. Four things do need a decision.</p>
+    <ul class="ticks">
+      <li><strong>Run the data pruner on one node.</strong> It ships disabled. If you schedule it,
+      every node prunes every channel and they contend on the same rows. It will not touch messages
+      another node is still processing. <strong>Never point two nodes at the same archive
+      directory</strong>: they will overwrite each other's archives. Keep it node-local, or drive
+      pruning on demand against a single node.</li>
+      <li><strong>Expect one alert notification per node.</strong> Every node evaluates every enabled
+      alert against the traffic it handles, so a failure affecting both nodes notifies twice. The
+      alerted count on a dashboard is that node's count, not the cluster's.</li>
+      <li><strong>Start nodes one at a time on install and upgrade.</strong> Schema creation and
+      migration are not coordinated between nodes. Once running, order stops mattering.</li>
+      <li><strong>Plugin settings and alert activation do not propagate.</strong> Server settings
+      live in the shared database and reach every node, but pruner settings and enabling or
+      disabling an alert take effect only on the node that served the request. Repeat those on each
+      node, or restart the others.</li>
+    </ul>
   </div>
 </section>
 
@@ -569,21 +607,24 @@
       <div class="card">
         <span class="pill">Coming soon</span>
         <h3>Channel Coordinator</h3>
-        <p>Elects one leader node for each managed polling channel and keeps the channel started
+        <p>Will elect one leader node for each managed polling channel and keep the channel started
         there and stopped everywhere else, so a File Reader or Database Reader can sit in an
         active/active cluster without duplicating work.</p>
         <ul class="ticks">
-          <li>The leader publishes a heartbeat. If it goes quiet, another node claims the channel
-          and starts it, about three minutes later, with no operator action.</li>
-          <li>Force Failover moves a channel to another node immediately, for when you want to
-          choose the moment rather than wait.</li>
+          <li>The leader publishes a heartbeat. If it goes quiet, another node claims the channel and
+          starts it: one heartbeat timeout plus one cycle, which is about three and a half minutes at
+          the shipped defaults. Both intervals are settings you can tune.</li>
+          <li>Force Failover hands a channel to another node when you want to choose the moment. The
+          leader stops the channel before releasing it, so it is never running in two places, and the
+          handover takes two or three cycles plus however long the channel needs to stop.</li>
           <li>Per channel you control whether the coordinator manages it at all, and whether it
           should be running or deliberately held stopped.</li>
           <li>A health view shows which node currently leads each channel and how fresh its
           heartbeat is.</li>
         </ul>
-        <p class="note">Managed entirely from the web administration interface, with no server-side
-        component to install on the nodes.</p>
+        <p class="note">A licensed plugin installed on each node and administered from the web
+        interface. It needs the Lookup Table Management System extension enabled, and the channels it
+        manages deployed on every node so any of them can take over.</p>
       </div>
       <div class="card">
         <span class="pill">Coming soon</span>
@@ -631,7 +672,7 @@
     because no amount of BridgeLink redundancy compensates for a single database that can stop.</p>
     <p class="lede">The good news is that BridgeLink asks nothing unusual of it. Whatever replication,
     failover and backup practice your team already runs applies unchanged. PostgreSQL is the
-    recommended backend, and it is required if you plan to adopt Work Queue.</p>
+    recommended backend, and it will be required if you plan to adopt Work Queue.</p>
   </div>
 </section>
 
@@ -645,8 +686,9 @@
     <div class="faq">
       <div class="qa">
         <h4>Do we need a special clustering license or add-on?</h4>
-        <p>No. Running multiple BridgeLink nodes against a shared database is a supported deployment
-        of the standard product, not a separately licensed feature.</p>
+        <p>Not for clustering itself. Running multiple BridgeLink nodes against a shared database is a
+        supported deployment of the standard product. Channel Coordinator and Work Queue, the two
+        capabilities that make active/active straightforward, are licensed commercial plugins.</p>
       </div>
       <div class="qa">
         <h4>Can two BridgeLink nodes share one database?</h4>
@@ -657,14 +699,16 @@
       <div class="qa">
         <h4>Should the nodes share a server ID?</h4>
         <p>Either pattern is supported. Distinct IDs suit a fixed set of nodes and keep full message
-        storage. A shared ID suits an autoscaled fleet, and requires built-in channel queues off and
-        RAW storage. Whichever you pick, keep the identity stable.</p>
+        storage. A shared ID suits an autoscaled fleet, and requires built-in channel queues off and RAW
+        storage; it also leans on Work Queue to distribute the work, which is coming soon. Whichever you
+        pick, keep the identity stable.</p>
       </div>
       <div class="qa">
         <h4>What happens to messages in flight when a node fails?</h4>
-        <p>With distinct IDs they stay recorded in the shared database and that node resumes them when
-        it returns. With a shared ID and Work Queue, the queue redelivers the work to a surviving node
-        instead, which is the point of pairing the two.</p>
+        <p>With distinct IDs and full message storage they stay recorded in the shared database, and the
+        node that owned them resumes them when it returns. With a shared ID and RAW storage nothing
+        resumes them today, because RAW is what turns recovery off. Work Queue, once available, will
+        redeliver that work to a surviving node, which is the reason to pair it with a shared identity.</p>
       </div>
       <div class="qa">
         <h4>Will two nodes generate colliding message identifiers?</h4>
@@ -673,9 +717,8 @@
       </div>
       <div class="qa">
         <h4>If I deploy a channel on one node, does it deploy on all of them?</h4>
-        <p>Not today. Configuration is shared, but each node is deployed to individually. Fleet
-        cluster management is the answer to this, and it fans channel operations out across every
-        node from one screen.</p>
+        <p>Not today. Configuration is shared, but each node is deployed to individually. Fleet cluster
+        management will address this, fanning channel operations out across every node from one screen.</p>
       </div>
       <div class="qa">
         <h4>How do we keep server IDs stable in Docker or Kubernetes?</h4>
@@ -684,9 +727,9 @@
       </div>
       <div class="qa">
         <h4>Can File Readers and Database Readers run in an active/active cluster?</h4>
-        <p>Yes, but only one node may poll at a time or they will pick up the same work. Channel
-        Coordinator handles that election for you and moves the channel automatically if the node
-        running it stops responding.</p>
+        <p>Only one node may poll at a time, or they will pick up the same work. Today that means running
+        the channel on a single node. Channel Coordinator, coming soon, will hold that election for you
+        and move the channel automatically if the node running it stops responding.</p>
       </div>
       <div class="qa">
         <h4>Can inbound TCP and MLLP listeners run active/active?</h4>
@@ -697,13 +740,14 @@
       </div>
       <div class="qa">
         <h4>Which database should we use?</h4>
-        <p>PostgreSQL is the recommendation for new deployments, and it is required for Work Queue.
+        <p>PostgreSQL is the recommendation for new deployments, and it will be required for Work Queue.
         BridgeLink also supports SQL Server, Oracle and MySQL for the platform itself.</p>
       </div>
       <div class="qa">
         <h4>Can Work Queue and the built-in channel queues be used together?</h4>
-        <p>Yes. They solve different problems and coexist. Built-in queues buffer work within a
-        channel; Work Queue distributes work across nodes.</p>
+        <p>They will, with distinct server IDs. Built-in queues buffer work within a channel; Work Queue
+        distributes work across nodes. The shared identity pattern is the exception, because it requires
+        built-in channel queues to be off.</p>
       </div>
       <div class="qa">
         <h4>Does any patient data leave our environment?</h4>
@@ -712,9 +756,10 @@
       </div>
       <div class="qa">
         <h4>Can we autoscale BridgeLink nodes?</h4>
-        <p>Yes, using the shared identity pattern: channel queues off, RAW storage, and Work Queue
-        distributing the work. New instances are clones with no identity to register, and scale-in
-        does not strand a backlog because the queue holds it.</p>
+        <p>That is what the shared identity pattern is for: channel queues off, RAW storage, and Work Queue
+        distributing the work. New instances are clones with no identity to register, and scale-in does
+        not strand a backlog because the queue holds it. It depends on Work Queue, so it lands when that
+        does.</p>
       </div>
       <div class="qa">
         <h4>Where do we start?</h4>

@@ -27,12 +27,14 @@ The only variable between arms is `SERVER_ID`.
 |---|---|---|
 | `distinct` (control) | different per node | no duplicates; B's recovery matches nothing |
 | `shared` | identical on both | B recovers A's live in-flight messages |
+| `shared-raw` | identical, with RAW storage | recovery disabled, so B recovers nothing |
 
 ## Running it
 
 ```bash
 ./run-test.sh distinct
 ./run-test.sh shared
+./run-test.sh shared-raw
 ```
 
 Each arm tears the stack down and recreates the database, so the arms cannot contaminate
@@ -49,7 +51,7 @@ message node A received is visible directly.
 Corroborate it against node B's own log:
 
 ```bash
-docker compose logs bl-b | grep -i "message recovery"
+docker compose logs bl-b | grep -iE "message recovery|recovery task"
 ```
 
 `Starting message recovery ... Incomplete unfinished messages found` on node B, for messages
@@ -82,14 +84,19 @@ node A received, is the mechanism in BridgeLink's own words.
 ## Scope
 
 Measures duplicate *processing* on a scale-out with a shared server ID. It does not measure
-throughput, failover timing, or Work Queue behaviour, and it does not test `RAW` storage
-(where recovery is disabled outright and the result should by inspection be zero).
+throughput, failover timing, or Work Queue behaviour, The `shared-raw` arm does test RAW storage; what it does
+not measure is RAW's own durability trade.
 
 ## Results (2026-09-01, BridgeLink 26.6.0, 10 messages, 240s hold)
 
+The `shared-raw` arm was re-run on 2026-09-02 after the corroboration grep was
+widened; its committed log is from that run. `RecoveryTask` logs at INFO only when it
+finds messages, so no log can show a positive "ran and found nothing" for the
+`distinct` arm; that row is an absence of the line the other two arms show.
+
 | Arm | Server IDs | Storage | Deliveries | Duplicated IDs | Recovery on node B |
 |---|---|---|---|---|---|
-| `distinct` | different | PRODUCTION | 10 / 10 | 0 | did not run |
+| `distinct` | different | PRODUCTION | 10 / 10 | 0 | nothing to recover |
 | `shared` | identical | PRODUCTION | **20** / 10 | **10** | `Successfully recovered 10 out of 10 messages` |
 | `shared-raw` | identical | RAW | 10 / 10 | 0 | `message storage settings do not support recovery. Skipping recovery task.` |
 
@@ -100,6 +107,13 @@ of it: all ten messages were delivered twice, once by each node, on a single sca
 the shared-ID visibility is real, and declined to act on them because recovery is disabled in
 that mode.
 
+RAW's cost is narrower than an earlier draft of this file claimed. It leaves `rawDurable` true
+(only METADATA clears it), and the commit gating the source acknowledgement is
+`dao.commit(storageSettings.isRawDurable())`, so an acknowledged message is still flushed. Only
+the follow-on status commits relax, and only on PostgreSQL and Oracle, which are the sole
+dialects that set an `asyncCommitCommand`. What RAW really costs is stored content: the
+transformed and sent payloads, the responses and the channel maps.
+
 So the shared-identity pattern is safe only with both settings together: internal channel queues
 off **and** RAW storage. Queues off alone is not sufficient, which was the original claim under
 test.
@@ -108,8 +122,9 @@ test.
 
 - Work Queue was not installed. The pattern pairs a shared ID with Work Queue for distribution;
   this harness tested only the recovery collision.
-- RAW also commits asynchronously. The durability cost of that was not measured here and would
-  need a database-crash test.
+- RAW's asynchronous commit applies only to the follow-on status writes, and only on
+  PostgreSQL and Oracle. That durability trade was not measured here and would need a
+  database-crash test.
 - Only queues, recovery and statistics were examined for server-ID scoping. That is not proven
   to be the complete set.
 - Single run per arm, one message rate, one destination latency. The effect was total rather than
