@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Does a BridgeLink node reprocess a peer's in-flight messages when they share a server ID?
 #
-#   ./run-test.sh shared     both nodes get the same SERVER_ID   (the topology under test)
-#   ./run-test.sh distinct   each node gets its own SERVER_ID    (the control)
+#   ./run-test.sh distinct     each node gets its own SERVER_ID   (the control)
+#   ./run-test.sh shared       both nodes share one SERVER_ID    (the topology under test)
+#   ./run-test.sh shared-raw   shared SERVER_ID, RAW storage     (the mitigation)
 #
-# Everything except SERVER_ID is identical between the two arms. Internal queues are off on
-# both the source and destination, and storage is PRODUCTION so message recovery is enabled.
+# Internal queues are off on both the source and destination in every arm. The distinct and
+# shared arms use PRODUCTION storage so message recovery is enabled; shared-raw uses RAW,
+# which disables it. Only SERVER_ID and the storage mode vary.
 #
 # Sequence: load node A until N messages are in flight against a deliberately slow
 # destination, then start node B and deploy the same channel on it. That deploy is the
@@ -82,8 +84,10 @@ wait_api "$A" "node A" || exit 1
 echo "  login A: $(login "$A" cookies-a.txt)"
 
 say "Deploying the channel on node A"
-api "$A" cookies-a.txt POST /api/channels -H 'Content-Type: application/xml' \
-    --data-binary @"$CHANNEL_FILE" -o /dev/null -w '  import HTTP %{http_code}\n'
+code=$(api "$A" cookies-a.txt POST /api/channels -H 'Content-Type: application/xml' \
+    --data-binary @"$CHANNEL_FILE" -o /dev/null -w '%{http_code}')
+echo "  import HTTP $code"
+[[ "$code" == "200" ]] || { echo "  import failed" >&2; exit 1; }
 api "$A" cookies-a.txt POST "/api/channels/$CH/_deploy?returnErrors=true" \
     -o /dev/null -w '  deploy HTTP %{http_code}\n'
 for i in $(seq 1 20); do
@@ -107,6 +111,12 @@ for i in $(seq 1 40); do
 done
 BEFORE=$(curl -sS --max-time 5 http://127.0.0.1:9000/report | python3 -c 'import json,sys; print(json.load(sys.stdin)["total_deliveries"])')
 echo "  deliveries before scale-out: $BEFORE"
+# Without this, a failed import or a port collision yields BEFORE=0 and the run still prints
+# "no duplicates observed" -- a false negative dressed as a result.
+if [[ "$BEFORE" -ne "$N_MESSAGES" ]]; then
+  echo "  SETUP FAILED: $BEFORE of $N_MESSAGES messages in flight; not a valid run" >&2
+  exit 1
+fi
 
 say "SCALE-OUT: starting node B and deploying the same channel"
 docker compose up -d bl-b >/dev/null 2>&1
@@ -140,6 +150,9 @@ print("  VERDICT:", "DUPLICATE PROCESSING OBSERVED" if extra else "no duplicates
 PY
 
 say "Did node B run recovery?"
-docker compose logs bl-b 2>&1 | grep -i "message recovery" | tail -5 || echo "  (no recovery log lines)"
+# Two distinct lines matter and only one contains "message recovery": the RAW arm logs
+# "...but message storage settings do not support recovery. Skipping recovery task."
+docker compose logs bl-b 2>&1 | grep -iE "message recovery|recovery task" | tail -5 \
+  || echo "  (no recovery log lines)"
 echo
 echo "Full JSON: $RESULT"
