@@ -19,6 +19,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -192,14 +193,26 @@ public class ChannelStatusServletTest extends ServletTestBase {
         assertEquals("4", dashboardChannelInfo.getDashboardStatuses().get(1).getChannelId());
     }
 
+    /**
+     * The redaction case runs against both method objects Jersey could hand the invocation
+     * handler. It used to check only the interface method, and the implementation method is the
+     * one Jersey actually passes since the 2.48 upgrade -- CheckAuthorizedChannelId resolves its
+     * channel by matching a Param name, and Param is declared only on the interface, so a handler
+     * that trusts the method it is given loses the channel and lets a restricted user reach a
+     * redacted channel (IRT-1798).
+     */
     @Test
     public void getChannelStatus() throws Throwable {
         DashboardStatus status = (DashboardStatus) ih.invoke(new ChannelStatusServlet(request, sc, controllerFactory), ChannelStatusServlet.class.getMethod("getChannelStatus", String.class), new Object[] {
                 CHANNEL_ID1 });
         assertEquals(CHANNEL_ID1, status.getChannelId());
 
-        assertForbiddenInvocation(new ChannelStatusServlet(request, sc, controllerFactory), ChannelStatusServletInterface.class.getMethod("getChannelStatus", String.class), new Object[] {
-                DISALLOWED_CHANNEL_ID });
+        for (Method method : new Method[] {
+                ChannelStatusServlet.class.getMethod("getChannelStatus", String.class),
+                ChannelStatusServletInterface.class.getMethod("getChannelStatus", String.class) }) {
+            assertForbiddenInvocation(new ChannelStatusServlet(request, sc, controllerFactory), method, new Object[] {
+                    DISALLOWED_CHANNEL_ID });
+        }
     }
 
     @Test
