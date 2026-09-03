@@ -99,6 +99,8 @@ A channel that will not stop no longer sits in Stopping with nothing to look at.
   Stopping so the operator can decide between waiting and halting. Nothing escalates to halt
   on its own, and an undeploy or redeploy of a channel in that state is refused with the same
   advice, because tearing it down under a live dispatch thread could deliver a message twice.
+  Keep the period at ten seconds or more: a source queue thread polls in one-second slices, so a
+  very short period trips on healthy stops.
   Halt interrupts the threads the stop gave up on; a later start waits one more grace period
   for them. Setting the period to 0 restores the previous wait-forever behaviour.
 - **New endpoint `GET /channels/{channelId}/_threads`.** Returns every live thread that
@@ -114,6 +116,32 @@ A channel that will not stop no longer sits in Stopping with nothing to look at.
   thread is still blocked inside a Java call now appears in the threads endpoint flagged as a
   cancelled script.
 
-Part 2 (bounded halt and forced undeploy) follows in a separate change.
+## Bounded halt and forced undeploy (IRT-2107, part 2)
+
+Halt now reaches Stopped in bounded time no matter what a connector or script is doing.
+
+- **Halt is bounded by the same grace period.** Every wait inside halt (the lifecycle lock, each
+  connector's halt hook, the dispatch-thread drain, the destination queue-thread joins, the
+  channel executor) gives up at the deadline. Whatever is still running is logged with its
+  stack frames, recorded as abandoned, and the channel is marked Stopped anyway. Abandoned
+  threads stay visible in `GET /channels/{channelId}/_threads` (flagged `abandoned`) across a
+  redeploy, and the next halt interrupts them again.
+- **Forced mode.** If a wedged stop or start still holds the channel's lifecycle lock after the
+  grace period, halt proceeds without it, interrupts the holder, and reports it. The same applies
+  to undeploy after a forced halt, so a redeploy always builds a fresh channel instance.
+- **The lifecycle lock is timed everywhere.** Deploy, start, stop, pause, resume and remove-all
+  wait at most the grace period for the lock and fail naming the operation holding it. Note the
+  engine still runs one task at a time per channel, so a task queued behind a wedged one does
+  not run until a halt replaces that queue; after the halt, the next start fails quickly naming
+  the wedged operation instead of hanging, and a redeploy builds a fresh channel.
+- **Abandoned queue threads stay retired.** A destination or source queue thread a halt gave up
+  on exits when its blocked call finally returns, instead of resuming next to the restarted
+  queue thread as a second sender.
+- **Stale permit protection.** A dispatch thread abandoned by a halt that completes after a
+  restart no longer releases a permit into the restarted channel's process lock.
+- **The REST halt call returns within a bounded time** (twice the grace period plus 30 seconds)
+  and reports a timeout error if the task is still running; the task itself continues.
+- **Halt still trades a possible duplicate for never losing a message**, exactly as before; the
+  Web UI's halt confirmation should say so and mention that threads may be abandoned.
 
 ---

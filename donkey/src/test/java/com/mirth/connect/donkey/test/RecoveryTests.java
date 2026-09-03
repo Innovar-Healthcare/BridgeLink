@@ -10,6 +10,7 @@
 package com.mirth.connect.donkey.test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -18,6 +19,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
 import java.util.Calendar;
 import java.util.List;
 
@@ -30,6 +34,8 @@ import org.junit.Test;
 
 import com.mirth.connect.donkey.model.channel.SourceConnectorProperties;
 import com.mirth.connect.donkey.model.message.ConnectorMessage;
+import com.mirth.connect.donkey.server.channel.AbandonedThreadRegistry;
+import com.mirth.connect.donkey.model.channel.DeployedState;
 import com.mirth.connect.donkey.model.message.ContentType;
 import com.mirth.connect.donkey.model.message.Message;
 import com.mirth.connect.donkey.model.message.MessageContent;
@@ -389,6 +395,74 @@ public class RecoveryTests {
             TestUtils.close(result);
             TestUtils.close(statement);
             TestUtils.close(connection);
+        }
+    }
+
+    /**
+     * IRT-2107: halt must work while the channel is STARTING with recovery in progress. Recovery runs
+     * inside start() with the lifecycle lock held; when it is blocked in a call that ignores
+     * interrupts, halt times out on the lock, proceeds in forced mode, and reaches STOPPED within its
+     * grace period. The interrupted start then fails instead of bringing the channel back up.
+     *
+     * <p>
+     * Invariant: abandoning a recovery mid-way is the same as a crash mid-recovery. Nothing is
+     * dropped; whatever was not finished is still unfinished in storage and the next start recovers
+     * it (with the usual possibility of a duplicate send, which is the documented halt contract).
+     */
+    @Test(timeout = 60000)
+    public final void testHaltDuringBlockedRecoveryIsBounded() throws Exception {
+        final long grace = 750;
+        TestChannel channel = TestUtils.createDefaultChannel(channelId, serverId, true, 1, 1);
+        channel.setName(channelId);
+        channel.setStopGracePeriodMillis(grace);
+        CountDownLatch gate = new CountDownLatch(1);
+        Thread starter = null;
+
+        try {
+            channel.deploy();
+            channel.blockRecovery(gate);
+
+            final AtomicReference<Throwable> startError = new AtomicReference<Throwable>();
+            starter = new Thread(() -> {
+                try {
+                    channel.start(null);
+                } catch (Throwable t) {
+                    startError.set(t);
+                }
+            }, "IRT-2107 starter on " + channelId);
+            starter.start();
+            assertTrue("recovery never began", channel.getRecoveryEntered().await(30, TimeUnit.SECONDS));
+            assertEquals(DeployedState.STARTING, channel.getCurrentState());
+
+            long started = System.currentTimeMillis();
+            channel.halt();
+            long elapsed = System.currentTimeMillis() - started;
+
+            assertTrue("halt during recovery took " + elapsed + " ms, which is not bounded", elapsed < 15000);
+            assertEquals("halt must reach STOPPED even while start holds the lock", DeployedState.STOPPED, channel.getCurrentState());
+            assertNotNull(channel.getLastLifecycleTimeout());
+            assertEquals("Halt", channel.getLastLifecycleTimeout().getPhase());
+            assertTrue(channel.getAbandonedLifecycleThreads().contains(starter));
+
+            // Release recovery: the interrupted start must fail, not restart the channel behind the halt
+            gate.countDown();
+            starter.join(30000);
+            assertFalse(starter.isAlive());
+            assertTrue("start must fail after the forced halt interrupted it", startError.get() instanceof StartException);
+            assertEquals(DeployedState.STOPPED, channel.getCurrentState());
+
+            // A clean start afterwards recovers normally
+            channel.blockRecovery(null);
+            channel.start(null);
+            assertEquals(DeployedState.STARTED, channel.getCurrentState());
+            channel.stop();
+            channel.undeploy();
+        } finally {
+            gate.countDown();
+            if (starter != null) {
+                starter.join(30000);
+            }
+            AbandonedThreadRegistry.clear(channelId);
         }
     }
 }

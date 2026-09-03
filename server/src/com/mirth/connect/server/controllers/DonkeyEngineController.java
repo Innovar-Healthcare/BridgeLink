@@ -187,6 +187,9 @@ public class DonkeyEngineController implements EngineController {
 
     protected AtomicInteger queueBufferSize = new AtomicInteger(Constants.DEFAULT_QUEUE_BUFFER_SIZE);
 
+    /** Added to twice the grace period to bound the REST wait for a halt (IRT-2107). */
+    protected static final long HALT_WAIT_MARGIN_MILLIS = 30000L;
+
     private enum StatusTask {
         START, STOP, PAUSE, RESUME
     };
@@ -668,7 +671,14 @@ public class DonkeyEngineController implements EngineController {
 
     @Override
     public void haltChannels(Set<String> channelIds, ChannelTaskHandler handler) {
-        waitForTasks(submitHaltTasks(channelIds, handler));
+        /*
+         * IRT-2107: the REST thread waits a bounded time. A halt itself is bounded by two grace
+         * periods (the lock wait and the halt body), so anything past that plus a margin means the
+         * task is wedged before it even reached the channel; the caller is told and the task is left
+         * to finish on its own. Unbounded when the grace period is disabled.
+         */
+        long gracePeriod = getStopGracePeriodMillis();
+        waitForTasks(submitHaltTasks(channelIds, handler), gracePeriod > 0 ? gracePeriod * 2 + HALT_WAIT_MARGIN_MILLIS : 0);
     }
 
     @Override
@@ -1818,14 +1828,32 @@ public class DonkeyEngineController implements EngineController {
     }
 
     protected void waitForTasks(List<ChannelFuture> futures) {
+        waitForTasks(futures, 0);
+    }
+
+    /**
+     * Waits for the tasks, at most timeoutMillis (non-positive waits without bound). On timeout every
+     * task still running is reported to its handler as errored with a TimeoutException and left
+     * running; nothing is cancelled, because the task is doing the cleanup the caller asked for.
+     */
+    protected void waitForTasks(List<ChannelFuture> futures, long timeoutMillis) {
         /*
          * Create a new list to prevent modifying the one that is passed in, in case it will be used
          * afterwards.
          */
         List<ChannelFuture> remainingFutures = new ArrayList<ChannelFuture>(futures);
+        long deadline = timeoutMillis > 0 ? System.currentTimeMillis() + timeoutMillis : Long.MAX_VALUE;
 
         int attemptsUntilPause = 10;
         while (CollectionUtils.isNotEmpty(remainingFutures)) {
+            if (deadline != Long.MAX_VALUE && System.currentTimeMillis() >= deadline) {
+                for (ChannelFuture future : remainingFutures) {
+                    // The handler logs it (LoggingTaskHandler) and, for a REST caller, surfaces it as the response error
+                    future.reportError(new TimeoutException("Channel task for channel " + future.getChannelId() + " did not complete within " + timeoutMillis + " ms. It is still running; check the channel's thread diagnostics (GET /channels/{channelId}/_threads)."));
+                }
+                return;
+            }
+
             if (attemptsUntilPause > 0) {
                 attemptsUntilPause--;
             } else {
@@ -1845,11 +1873,11 @@ public class DonkeyEngineController implements EngineController {
                 ChannelFuture future = iterator.next();
 
                 try {
-                    if (remainingFutures.size() == 1) {
+                    if (remainingFutures.size() == 1 && deadline == Long.MAX_VALUE) {
                         // Wait indefinitely when only one future remains.
                         future.get();
                     } else {
-                        // When multiple futures remain, timeout the wait so we can check others in the meantime.
+                        // When multiple futures remain, or the wait is bounded, timeout the wait so we can check others in the meantime.
                         future.get(50, TimeUnit.MILLISECONDS);
                     }
                     finished = true;

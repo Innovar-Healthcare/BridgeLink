@@ -17,7 +17,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +31,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -113,11 +113,11 @@ public class Channel implements Runnable {
     private volatile long stopGracePeriodMillis = Constants.DEFAULT_STOP_GRACE_PERIOD_MILLIS;
     private volatile ChannelLifecycleTimeout lastLifecycleTimeout;
     /*
-     * Threads a lifecycle operation gave up waiting on (a connector hook or a dispatch thread that
-     * outlived the grace period). Halt interrupts them, start joins them for one more grace period,
-     * and the diagnostics endpoint reports them as abandoned. Dead threads are pruned on read.
+     * Threads a lifecycle operation gave up waiting on (a connector hook, a dispatch thread or a queue
+     * thread that outlived the grace period) live in AbandonedThreadRegistry, keyed by channel id, so
+     * they survive the redeploy that replaces this instance. Halt interrupts them, start joins them for
+     * one more grace period, and the diagnostics endpoint reports them as abandoned.
      */
-    private final Set<Thread> abandonedLifecycleThreads = Collections.synchronizedSet(new HashSet<Thread>());
 
     private StorageSettings storageSettings = new StorageSettings();
     private DonkeyDaoFactory daoFactory;
@@ -145,14 +145,54 @@ public class Channel implements Runnable {
      * want to use up all connections in the pool.
      */
     public static Semaphore DELETE_PERMIT = new Semaphore(2, true);
-    // A cached thread pool executor that executes recovery tasks and destination chain tasks
-    private ExecutorService channelExecutor;
+    // A cached thread pool executor that executes recovery tasks and destination chain tasks.
+    // Volatile: a forced halt reads it without the lifecycle lock (IRT-2107).
+    private volatile ExecutorService channelExecutor;
     private Set<Thread> dispatchThreads = new HashSet<Thread>();
     private volatile boolean shuttingDown = false;
 
     private volatile boolean stopSourceQueue = false;
     private ChannelProcessLock processLock;
-    private Lock removeContentLock = new ReentrantLock(true);
+    // Volatile: reassigned by start() and read by dispatch threads without the lifecycle lock
+    private volatile Lock removeContentLock = new ReentrantLock(true);
+
+    /*
+     * IRT-2107: replaces synchronized on the lifecycle methods (deploy, undeploy, start, stop, pause,
+     * resume, removeAllMessages). Every one of them waits up to the stop grace period for it and fails
+     * naming the holder when it cannot get it, so a stop or start wedged inside a connector can never
+     * pin the channel's engine executor for good. Halt is the exception: after the grace period it
+     * proceeds WITHOUT the lock ("forced mode"), interrupts the holder, and marks the channel STOPPED
+     * with the surviving threads reported as abandoned. The fields halt touches in forced mode while
+     * the holder may still be running are all safe to write concurrently: currentState, shuttingDown,
+     * stopSourceQueue, channelExecutor and removeContentLock are volatile; dispatchThreads is guarded
+     * by its own monitor; queueThreads is a ConcurrentHashMap; processLock is assigned once at deploy
+     * and its permits are generation-checked (see processLockGeneration).
+     */
+    private final ReentrantLock lifecycleLock = new ReentrantLock(true);
+    private volatile Thread lifecycleLockOwner;
+    private volatile String lifecycleLockOperation;
+    /*
+     * Bumped by every forced halt. A start that was merely slow rather than dead can swallow the single
+     * interrupt forced mode sends it and carry on; it re-checks this at every step and before declaring
+     * itself STARTED, and rolls back if a halt was forced underneath it (IRT-2107).
+     */
+    private volatile long forcedHaltEpoch;
+
+    /** Thrown inside start when a forced halt ran underneath it; routed through the rollback branch. */
+    private static class ForcedHaltDuringStartException extends Exception {
+        ForcedHaltDuringStartException(String message) {
+            super(message);
+        }
+    }
+
+    /*
+     * Generation of the process lock (IRT-2107). start() resets the permits, so a dispatch thread that
+     * was abandoned by a halt and completes later must not release a permit into the new generation
+     * or the restarted channel silently gains concurrency. Each acquire remembers the generation in a
+     * thread-local; a release whose remembered generation is stale is a no-op.
+     */
+    private final AtomicLong processLockGeneration = new AtomicLong();
+    private final ThreadLocal<Long> heldProcessLockGeneration = new ThreadLocal<Long>();
 
     /*
      * Serializes overwriting dispatches that target the same message id. The quiesce, the delete of the
@@ -432,18 +472,13 @@ public class Channel implements Runnable {
      * dropped from the underlying set as a side effect.
      */
     public Set<Thread> getAbandonedLifecycleThreads() {
-        Set<Thread> alive = new HashSet<Thread>();
-        synchronized (abandonedLifecycleThreads) {
-            for (Iterator<Thread> it = abandonedLifecycleThreads.iterator(); it.hasNext();) {
-                Thread thread = it.next();
-                if (thread.isAlive()) {
-                    alive.add(thread);
-                } else {
-                    it.remove();
-                }
-            }
+        return AbandonedThreadRegistry.alive(channelId);
+    }
+
+    private void abandonThread(Thread thread) {
+        if (thread != null && thread != Thread.currentThread()) {
+            AbandonedThreadRegistry.add(channelId, thread);
         }
-        return alive;
     }
 
     /**
@@ -452,9 +487,82 @@ public class Channel implements Runnable {
      */
     private void recordLifecycleTimeout(LifecycleTimeoutException timeout) {
         lastLifecycleTimeout = new ChannelLifecycleTimeout(timeout);
-        if (timeout.getThread() != null) {
-            abandonedLifecycleThreads.add(timeout.getThread());
+        abandonThread(timeout.getThread());
+    }
+
+    /**
+     * Takes the lifecycle lock for a non-halt operation, waiting at most the stop grace period.
+     *
+     * @throws LifecycleTimeoutException
+     *             naming the thread and operation holding the lock
+     */
+    private void acquireLifecycleLock(String operation) throws InterruptedException, LifecycleTimeoutException {
+        if (!tryAcquireLifecycleLock(operation, ThreadUtils.deadline(stopGracePeriodMillis))) {
+            throw new LifecycleTimeoutException(operation, lifecycleLockOwner, "the channel lifecycle lock is still held by " + StringUtils.defaultString(lifecycleLockOperation, "another operation"));
         }
+    }
+
+    /**
+     * Takes the lifecycle lock, waiting until the deadline. Returns false if it could not. The owner
+     * is recorded so a caller that times out can name it.
+     */
+    private boolean tryAcquireLifecycleLock(String operation, long deadline) throws InterruptedException {
+        boolean locked;
+        if (deadline == Long.MAX_VALUE) {
+            lifecycleLock.lockInterruptibly();
+            locked = true;
+        } else {
+            locked = lifecycleLock.tryLock(ThreadUtils.remaining(deadline), TimeUnit.MILLISECONDS);
+        }
+        if (locked && lifecycleLock.getHoldCount() == 1) {
+            lifecycleLockOwner = Thread.currentThread();
+            lifecycleLockOperation = operation;
+        }
+        return locked;
+    }
+
+    private void releaseLifecycleLock() {
+        if (lifecycleLock.getHoldCount() == 1) {
+            lifecycleLockOwner = null;
+            lifecycleLockOperation = null;
+        }
+        lifecycleLock.unlock();
+    }
+
+    /**
+     * Start's guard against a halt forced underneath it: the plain interrupt check, plus a check that no
+     * forced halt has run since the start began, because a slow start can swallow that interrupt.
+     */
+    private void checkStartNotForcedHalted(long epoch) throws InterruptedException, ForcedHaltDuringStartException {
+        ThreadUtils.checkInterruptedStatus();
+        if (forcedHaltEpoch != epoch) {
+            throw new ForcedHaltDuringStartException("a halt was forced while the channel was starting");
+        }
+    }
+
+    /** Test hook: true while some lifecycle operation holds the lock. */
+    public boolean isLifecycleLocked() {
+        return lifecycleLock.isLocked();
+    }
+
+    /**
+     * Every thread whose name carries this channel's id and that is not the caller: the same rule the
+     * diagnostics endpoint uses. After a halt's grace period these are the threads that ignored
+     * cancellation.
+     */
+    private Set<Thread> collectSurvivingThreads() throws InterruptedException {
+        Set<Thread> survivors = new HashSet<Thread>();
+        Thread current = Thread.currentThread();
+        for (Thread thread : Thread.getAllStackTraces().keySet()) {
+            if (thread != current && thread.isAlive() && StringUtils.contains(thread.getName(), channelId)) {
+                // A hook thread whose task just completed is still alive for an instant; do not report it
+                thread.join(50);
+                if (thread.isAlive()) {
+                    survivors.add(thread);
+                }
+            }
+        }
+        return survivors;
     }
 
     /**
@@ -585,15 +693,31 @@ public class Channel implements Runnable {
         }
     }
 
-    public synchronized void deploy() throws DeployException {
+    public void deploy() throws DeployException {
         deploy(null);
     }
     
-    public synchronized void debugDeploy(DebugOptions debugOptions) throws DeployException {
+    public void debugDeploy(DebugOptions debugOptions) throws DeployException {
     	deploy(debugOptions);
     }
     
-    public synchronized void deploy(DebugOptions debugOptions) throws DeployException {
+    public void deploy(DebugOptions debugOptions) throws DeployException {
+        try {
+            acquireLifecycleLock("Deploy");
+        } catch (InterruptedException e) {
+            throw new DeployException("Deploy channel task for " + name + " (" + channelId + ") terminated by halt notification.", e);
+        } catch (LifecycleTimeoutException e) {
+            recordLifecycleTimeout(e);
+            throw new DeployException("Failed to deploy channel " + name + " (" + channelId + "): " + e.getMessage(), e);
+        }
+        try {
+            doDeploy(debugOptions);
+        } finally {
+            releaseLifecycleLock();
+        }
+    }
+
+    private void doDeploy(DebugOptions debugOptions) throws DeployException {
     	if (!isConfigurationValid()) {
             throw new DeployException("Failed to deploy channel. The channel configuration is incomplete.");
         }
@@ -715,21 +839,56 @@ public class Channel implements Runnable {
         eventDispatcher.dispatchEvent(new DeployedStateEvent(channelId, name, null, null, DeployedStateEventType.DEPLOYED, connectorStatistics));
     }
 
-    public synchronized void undeploy() throws UndeployException {
+    public void undeploy() throws UndeployException {
         /*
          * A channel that is STOPPING here is one whose stop gave up at the grace period (a stop in
-         * progress holds this monitor). Its dispatch threads or connector hooks are still running;
-         * undeploying underneath them and redeploying would let recovery send the in-flight message
-         * a second time. Stop never escalates to halt on its own, so undeploy does not either.
+         * progress holds the lifecycle lock, so it would be waited for below instead). Its dispatch
+         * threads or connector hooks are still running; undeploying underneath them and redeploying
+         * would let recovery send the in-flight message a second time. Stop never escalates to halt
+         * on its own, so undeploy does not either.
          */
         if (currentState == DeployedState.STOPPING) {
             ChannelLifecycleTimeout timeout = lastLifecycleTimeout;
             throw new UndeployException("Cannot undeploy channel " + name + " (" + channelId + "): it is still stopping" + (timeout != null ? " and its stop timed out (" + timeout.getMessage() + ")" : "") + ". Halt the channel first.");
         }
 
+        long deadline = ThreadUtils.deadline(stopGracePeriodMillis);
+        boolean locked;
+        try {
+            locked = tryAcquireLifecycleLock("Undeploy", deadline);
+        } catch (InterruptedException e) {
+            throw new UndeployException("Undeploy channel task for " + name + " (" + channelId + ") terminated by halt notification.", e);
+        }
+
+        if (!locked) {
+            /*
+             * Forced mode is only for the channel a forced halt already marked STOPPED while a wedged
+             * operation kept the lock. Any other state with the lock held means something is still
+             * running the channel; undeploying underneath it is refused.
+             */
+            if (currentState != DeployedState.STOPPED) {
+                throw new UndeployException("Cannot undeploy channel " + name + " (" + channelId + "): the channel is " + currentState + " and its lifecycle lock is held by " + StringUtils.defaultString(lifecycleLockOperation, "another operation") + ". Halt the channel first.");
+            }
+            LifecycleTimeoutException lockTimeout = new LifecycleTimeoutException("Undeploy", lifecycleLockOwner, "the channel lifecycle lock is still held by " + StringUtils.defaultString(lifecycleLockOperation, "another operation") + "; undeploying in forced mode without it");
+            recordLifecycleTimeout(lockTimeout);
+            logger.error("Undeploy of channel " + name + " (" + channelId + "): " + lockTimeout.getMessage());
+            deadline = ThreadUtils.deadline(stopGracePeriodMillis);
+        }
+
+        try {
+            doUndeploy(deadline);
+        } finally {
+            if (locked) {
+                releaseLifecycleLock();
+            }
+        }
+    }
+
+    private void doUndeploy(long deadline) throws UndeployException {
         updateCurrentState(DeployedState.UNDEPLOYING);
         // Call the connector onUndeploy() methods so they can run their onUndeploy logic
         Throwable firstCause = null;
+        int timedOut = 0;
 
         List<Integer> deployedMetaDataIds = new ArrayList<Integer>();
         deployedMetaDataIds.add(0);
@@ -743,7 +902,12 @@ public class Channel implements Runnable {
         // If an exception occurs, then still proceed by undeploying the rest of the connectors
         for (Integer metaDataId : deployedMetaDataIds) {
             try {
-                undeployConnector(metaDataId);
+                BoundedHook.run("Undeploy", hookThreadName("Undeploy", metaDataId), channelId, name, deadline, () -> undeployConnector(metaDataId));
+            } catch (LifecycleTimeoutException e) {
+                // The hook thread keeps running; it is reported, not waited for
+                timedOut++;
+                recordLifecycleTimeout(e);
+                logger.error("Undeploy of channel " + name + " (" + channelId + "): " + e.getMessage());
             } catch (Throwable t) {
                 if (firstCause == null) {
                     firstCause = t;
@@ -753,6 +917,10 @@ public class Channel implements Runnable {
 
         if (firstCause != null) {
             throw new UndeployException("Failed to undeploy channel " + name + " (" + channelId + "): One or more connectors failed to undeploy.", firstCause);
+        }
+
+        if (timedOut > 0) {
+            logger.error("Channel " + name + " (" + channelId + ") was undeployed with " + timedOut + " connector undeploy hook(s) still running after the grace period; see the channel's thread diagnostics.");
         }
 
         eventDispatcher.dispatchEvent(new DeployedStateEvent(channelId, name, null, null, DeployedStateEventType.UNDEPLOYED));
@@ -798,8 +966,9 @@ public class Channel implements Runnable {
                 for (int i = 1; i <= processingThreads; i++) {
                     Thread queueThread = new Thread(Channel.this);
                     queueThread.setName("Source Queue Thread " + i + " on " + name + " (" + channelId + ")");
-                    queueThread.start();
+                    // Registered before it runs: run() keeps going only while it is the registered thread for its id
                     queueThreads.put(queueThread.getId(), queueThread);
+                    queueThread.start();
                 }
             }
         }
@@ -844,9 +1013,26 @@ public class Channel implements Runnable {
     /**
      * Start the channel and all of the channel's connectors.
      */
-    public synchronized void start(Set<Integer> connectorsToStart) throws StartException {
+    public void start(Set<Integer> connectorsToStart) throws StartException {
+        try {
+            acquireLifecycleLock("Start");
+        } catch (InterruptedException e) {
+            throw new StartException("Start channel task for " + name + " (" + channelId + ") terminated by halt notification.", e);
+        } catch (LifecycleTimeoutException e) {
+            recordLifecycleTimeout(e);
+            throw new StartException("Failed to start channel " + name + " (" + channelId + ") within the grace period of " + stopGracePeriodMillis + " ms: " + e.getMessage(), e);
+        }
+        try {
+            doStart(connectorsToStart);
+        } finally {
+            releaseLifecycleLock();
+        }
+    }
+
+    private void doStart(Set<Integer> connectorsToStart) throws StartException {
         if (currentState == DeployedState.DEPLOYING || currentState == DeployedState.STOPPED) {
             List<Integer> startedMetaDataIds = new ArrayList<Integer>();
+            final long epoch = forcedHaltEpoch;
 
             try {
                 ThreadUtils.checkInterruptedStatus();
@@ -860,6 +1046,7 @@ public class Channel implements Runnable {
                  * halted, so we just reset it.
                  */
                 processLock.reset();
+                processLockGeneration.incrementAndGet();
                 removeContentLock = new ReentrantLock(true);
                 dispatchThreads.clear();
                 shuttingDown = false;
@@ -887,7 +1074,7 @@ public class Channel implements Runnable {
                     }
                 }
 
-                ThreadUtils.checkInterruptedStatus();
+                checkStartNotForcedHalted(epoch);
                 try {
                     processUnfinishedMessages();
                 } catch (InterruptedException e) {
@@ -904,7 +1091,7 @@ public class Channel implements Runnable {
                     logger.error("Startup recovery failed for channel " + name + " (" + channelId + "): " + cause.getMessage(), cause);
                 }
 
-                ThreadUtils.checkInterruptedStatus();
+                checkStartNotForcedHalted(epoch);
 
                 // start the destination queues
                 for (Integer metaDataId : startedMetaDataIds) {
@@ -914,20 +1101,33 @@ public class Channel implements Runnable {
                 startSourceQueue();
 
                 if (connectorsToStart == null || connectorsToStart.contains(0)) {
-                    ThreadUtils.checkInterruptedStatus();
+                    checkStartNotForcedHalted(epoch);
                     // start up the source connector
                     if (sourceConnector.getCurrentState() == DeployedState.STOPPED) {
                         startedMetaDataIds.add(0);
                         sourceConnector.start();
                     }
 
+                    checkStartNotForcedHalted(epoch);
                     updateCurrentState(DeployedState.STARTED);
                 } else {
+                    checkStartNotForcedHalted(epoch);
                     updateCurrentState(DeployedState.PAUSED);
                 }
             } catch (Throwable t) {
-                if (t instanceof InterruptedException) {
+                boolean haltForcedUnderneath = forcedHaltEpoch != epoch;
+                if (t instanceof InterruptedException && !haltForcedUnderneath) {
+                    // The halt that interrupted us holds the lock next and halts every connector itself
                     throw new StartException("Start channel task for " + name + " (" + channelId + ") terminated by halt notification.", t);
+                }
+                if (haltForcedUnderneath) {
+                    /*
+                     * The forced halt already ran its connector pass without the lock; whatever this start
+                     * brought up since then is ours to take down. Clear the interrupt so the bounded rollback
+                     * can run, and re-assert it afterwards for the task that owns this thread.
+                     */
+                    Thread.interrupted();
+                    logger.error("Start of channel " + name + " (" + channelId + ") is rolling back: a halt was forced while the channel was starting.");
                 }
                 // If an exception occurred, then attempt to rollback by stopping all the connectors that were started
                 try {
@@ -949,6 +1149,10 @@ public class Channel implements Runnable {
                     updateCurrentState(DeployedState.STOPPED);
                 }
 
+                if (haltForcedUnderneath) {
+                    Thread.currentThread().interrupt();
+                    throw new StartException("Start of channel " + name + " (" + channelId + ") was rolled back because a halt was forced while it was starting.", t);
+                }
                 throw new StartException("Failed to start channel " + name + " (" + channelId + ").", t);
             }
         } else {
@@ -956,7 +1160,24 @@ public class Channel implements Runnable {
         }
     }
 
-    public synchronized void stop() throws StopException {
+    public void stop() throws StopException {
+        try {
+            acquireLifecycleLock("Stop");
+        } catch (InterruptedException e) {
+            throw new StopException("Stop channel task for " + name + " (" + channelId + ") terminated by halt notification.", e);
+        } catch (LifecycleTimeoutException e) {
+            recordLifecycleTimeout(e);
+            logger.error("Failed to stop channel " + name + " (" + channelId + ") within the grace period of " + stopGracePeriodMillis + " ms: " + e.getMessage());
+            throw new StopException("Failed to stop channel " + name + " (" + channelId + ") within the grace period of " + stopGracePeriodMillis + " ms; use Halt to force it to Stopped. " + e.getMessage(), e);
+        }
+        try {
+            doStop();
+        } finally {
+            releaseLifecycleLock();
+        }
+    }
+
+    private void doStop() throws StopException {
         if (currentState != DeployedState.STOPPED) {
             try {
                 updateCurrentState(DeployedState.STOPPING);
@@ -996,11 +1217,12 @@ public class Channel implements Runnable {
     public void halt() throws HaltException {
         /*
          * These executors must be shutdown here in order to terminate any other current task that
-         * may be stuck. They will be terminated again after the synchronization lock is obtained.
+         * may be stuck. They will be terminated again after the lifecycle lock is obtained.
          */
 
-        if (channelExecutor != null) {
-            List<Runnable> tasks = channelExecutor.shutdownNow();
+        ExecutorService executor = channelExecutor;
+        if (executor != null) {
+            List<Runnable> tasks = executor.shutdownNow();
             // If any tasks had not started yet, they need to be cancaelled, otherwise they will be stuck at future.get().
             for (Runnable task : tasks) {
                 if (task instanceof Future) {
@@ -1033,23 +1255,64 @@ public class Channel implements Runnable {
             }
         }
 
+        /*
+         * The first pass at the connector halt hooks runs before the lock, so a stop wedged inside a
+         * hook that halt can unblock (a socket close, a scheduler interrupt) is unblocked now. Bounded
+         * like everything else in halt; a hook that does not return is reported at the end.
+         */
+        final long preLockDeadline = ThreadUtils.deadline(stopGracePeriodMillis);
         for (Integer metaDataId : deployedMetaDataIds) {
             try {
-                haltConnector(metaDataId);
+                BoundedHook.run("Halt", hookThreadName("Halt", metaDataId), channelId, name, preLockDeadline, () -> haltConnector(metaDataId, preLockDeadline));
             } catch (Throwable t) {
             }
         }
 
-        synchronized (this) {
+        /*
+         * IRT-2107: a timed lock instead of synchronized. If a stop or start still holds the lock after
+         * the grace period (blocked inside a call that ignores interrupts), halt proceeds without it in
+         * forced mode, interrupts the holder and reports it. Halt must always reach STOPPED.
+         */
+        boolean locked;
+        try {
+            locked = tryAcquireLifecycleLock("Halt", preLockDeadline);
+        } catch (InterruptedException e) {
+            throw new HaltException("Halt channel task for " + name + " (" + channelId + ") terminated by another halt notification.", e);
+        }
+        if (!locked && lifecycleLockOwner == null) {
+            // The holder let go between the timeout and here; take the lock rather than force
+            locked = lifecycleLock.tryLock();
+            if (locked && lifecycleLock.getHoldCount() == 1) {
+                lifecycleLockOwner = Thread.currentThread();
+                lifecycleLockOperation = "Halt";
+            }
+        }
+        boolean forced = !locked;
+
+        if (forced) {
+            Thread owner = lifecycleLockOwner;
+            LifecycleTimeoutException lockTimeout = new LifecycleTimeoutException("Halt", owner, "the channel lifecycle lock is still held by " + StringUtils.defaultString(lifecycleLockOperation, "another operation") + "; halting in forced mode without it");
+            recordLifecycleTimeout(lockTimeout);
+            logger.error("Halt of channel " + name + " (" + channelId + "): " + lockTimeout.getMessage());
+            forcedHaltEpoch++;
+            if (owner != null && owner != Thread.currentThread()) {
+                owner.interrupt();
+            }
+        }
+
+        // A fresh budget for the halt itself, whether or not the lock wait used up the first one
+        final long deadline = ThreadUtils.deadline(stopGracePeriodMillis);
+
+        try {
             /*
              * The channel could have been started again before after the previous interrupts, so
              * now that we have this lock we halt everything again to just in case.
              */
-            if (currentState != DeployedState.STOPPED) {
+            if (currentState != DeployedState.STOPPED || forced) {
                 try {
                     updateCurrentState(DeployedState.STOPPING);
 
-                    halt(deployedMetaDataIds);
+                    halt(deployedMetaDataIds, deadline);
                     updateCurrentState(DeployedState.STOPPED);
                 } catch (Throwable t) {
                     if (t instanceof InterruptedException) {
@@ -1060,10 +1323,30 @@ public class Channel implements Runnable {
             } else {
                 logger.warn("Failed to stop channel " + name + " (" + channelId + "): The channel is already stopped.");
             }
+        } finally {
+            if (locked) {
+                releaseLifecycleLock();
+            }
         }
     }
 
-    public synchronized void pause() throws PauseException {
+    public void pause() throws PauseException {
+        try {
+            acquireLifecycleLock("Pause");
+        } catch (InterruptedException e) {
+            throw new PauseException("Pause channel task for " + name + " (" + channelId + ") terminated by halt notification.", e);
+        } catch (LifecycleTimeoutException e) {
+            recordLifecycleTimeout(e);
+            throw new PauseException("Failed to pause channel " + name + " (" + channelId + "): " + e.getMessage(), e);
+        }
+        try {
+            doPause();
+        } finally {
+            releaseLifecycleLock();
+        }
+    }
+
+    private void doPause() throws PauseException {
         if (currentState == DeployedState.STARTED) {
             try {
                 updateCurrentState(DeployedState.PAUSING);
@@ -1085,7 +1368,23 @@ public class Channel implements Runnable {
         }
     }
 
-    public synchronized void resume() throws ResumeException {
+    public void resume() throws ResumeException {
+        try {
+            acquireLifecycleLock("Resume");
+        } catch (InterruptedException e) {
+            throw new ResumeException("Resume channel task for " + name + " (" + channelId + ") terminated by halt notification.", e);
+        } catch (LifecycleTimeoutException e) {
+            recordLifecycleTimeout(e);
+            throw new ResumeException("Failed to resume channel " + name + " (" + channelId + "): " + e.getMessage(), e);
+        }
+        try {
+            doResume();
+        } finally {
+            releaseLifecycleLock();
+        }
+    }
+
+    private void doResume() throws ResumeException {
         if (currentState == DeployedState.PAUSED) {
             try {
                 updateCurrentState(DeployedState.STARTING);
@@ -1110,7 +1409,22 @@ public class Channel implements Runnable {
         }
     }
 
-    public synchronized void removeAllMessages(boolean force, boolean clearStatistics) throws InterruptedException {
+    public void removeAllMessages(boolean force, boolean clearStatistics) throws InterruptedException {
+        try {
+            acquireLifecycleLock("Remove all messages");
+        } catch (LifecycleTimeoutException e) {
+            recordLifecycleTimeout(e);
+            logger.error("Failed to remove all messages for channel " + name + " (" + channelId + "): " + e.getMessage());
+            return;
+        }
+        try {
+            doRemoveAllMessages(force, clearStatistics);
+        } finally {
+            releaseLifecycleLock();
+        }
+    }
+
+    private void doRemoveAllMessages(boolean force, boolean clearStatistics) throws InterruptedException {
         boolean startChannelAfter = false;
         Set<Integer> startMetaDataIds = new HashSet<Integer>();
 
@@ -1314,20 +1628,30 @@ public class Channel implements Runnable {
          * Once the thread count reaches zero, we want to make sure that any calls to finishDispatch
          * complete (which should release the channel's process lock and allow us to acquire it here).
          */
-        if (!processLock.tryAcquireAll(ThreadUtils.remaining(deadline), TimeUnit.MILLISECONDS)) {
+        if (!tryObtainAllProcessLockPermits(ThreadUtils.remaining(deadline))) {
             throw new LifecycleTimeoutException(phase, null, "process lock permits were not released; a source connector is still inside finishDispatch");
         }
         releaseAllProcessLockPermits();
     }
 
-    private void halt(List<Integer> metaDataIds) throws Throwable {
+    /**
+     * The halt body. Every wait honours the deadline; whatever is still running when it passes is
+     * logged with its frames, recorded as abandoned, and left behind, and the channel is marked
+     * STOPPED regardless. Invariants: no message is lost (an interrupted dispatch tells its source
+     * "not persisted" and recovery reconciles what did commit) and a duplicate remains possible,
+     * exactly as for a halt before IRT-2107; abandonment changes neither.
+     */
+    private void halt(List<Integer> metaDataIds, long deadline) throws Throwable {
         stopSourceQueue = true;
 
-        List<Runnable> tasks = channelExecutor.shutdownNow();
-        // If any tasks had not started yet, they need to be cancaelled, otherwise they will be stuck at future.get().
-        for (Runnable task : tasks) {
-            if (task instanceof Future) {
-                ((Future<?>) task).cancel(true);
+        ExecutorService executor = channelExecutor;
+        if (executor != null) {
+            List<Runnable> tasks = executor.shutdownNow();
+            // If any tasks had not started yet, they need to be cancaelled, otherwise they will be stuck at future.get().
+            for (Runnable task : tasks) {
+                if (task instanceof Future) {
+                    ((Future<?>) task).cancel(true);
+                }
             }
         }
 
@@ -1346,9 +1670,12 @@ public class Channel implements Runnable {
         // If an exception occurs, then still proceed by stopping the rest of the connectors
         for (Integer metaDataId : metaDataIds) {
             try {
-                haltConnector(metaDataId);
+                BoundedHook.run("Halt", hookThreadName("Halt", metaDataId), channelId, name, deadline, () -> haltConnector(metaDataId, deadline));
             } catch (InterruptedException e) {
                 throw e;
+            } catch (LifecycleTimeoutException e) {
+                recordLifecycleTimeout(e);
+                logger.error("Halt of channel " + name + " (" + channelId + "): " + e.getMessage());
             } catch (Throwable t) {
                 if (t.getCause() instanceof InterruptedException) {
                     throw (InterruptedException) t.getCause();
@@ -1366,21 +1693,46 @@ public class Channel implements Runnable {
             synchronized (dispatchThreads) {
                 if (dispatchThreads.size() == 0) {
                     shuttingDown = true;
-                    /*
-                     * Once the thread count reaches zero, we want to make sure that any calls to
-                     * finishDispatch complete (which should release the channel's process lock and
-                     * allow us to acquire it here).
-                     */
-                    obtainAllProcessLockPermits();
-                    releaseAllProcessLockPermits();
+                    break;
+                }
+                if (ThreadUtils.isExpired(deadline)) {
+                    shuttingDown = true;
+                    for (Thread thread : dispatchThreads) {
+                        abandonThread(thread);
+                    }
+                    logger.error("Halt of channel " + name + " (" + channelId + "): " + dispatchThreads.size() + " dispatch thread(s) ignored the interrupt past the grace period and were abandoned.");
                     break;
                 }
             }
             Thread.sleep(timeout);
         }
 
-        while (!channelExecutor.awaitTermination(timeout, TimeUnit.MILLISECONDS))
-            ;
+        /*
+         * Once the thread count reaches zero, we want to make sure that any calls to finishDispatch
+         * complete (which should release the channel's process lock and allow us to acquire it here).
+         * If they do not by the deadline, start() resets the permits anyway and the generation check
+         * makes the late release a no-op.
+         */
+        if (tryObtainAllProcessLockPermits(ThreadUtils.remaining(deadline))) {
+            releaseAllProcessLockPermits();
+        } else {
+            logger.error("Halt of channel " + name + " (" + channelId + "): process lock permits were not released within the grace period; a finishDispatch is still running.");
+        }
+
+        if (executor != null && !executor.awaitTermination(ThreadUtils.remaining(deadline), TimeUnit.MILLISECONDS)) {
+            logger.error("Halt of channel " + name + " (" + channelId + "): the channel executor did not terminate within the grace period.");
+        }
+
+        Set<Thread> survivors = collectSurvivingThreads();
+        if (!survivors.isEmpty()) {
+            StringBuilder report = new StringBuilder("Halt of channel " + name + " (" + channelId + ") marked the channel STOPPED with " + survivors.size() + " thread(s) still running; they were abandoned and remain visible in the channel's thread diagnostics:");
+            for (Thread thread : survivors) {
+                abandonThread(thread);
+                report.append("\n").append(ThreadUtils.describe(thread, Constants.LIFECYCLE_TIMEOUT_STACK_FRAMES));
+            }
+            logger.error(report.toString());
+            recordLifecycleTimeout(new LifecycleTimeoutException("Halt", survivors.iterator().next(), survivors.size() + " thread(s) still running after the grace period were abandoned"));
+        }
 
         if (firstCause != null) {
             updateCurrentState(DeployedState.STOPPED);
@@ -1445,12 +1797,15 @@ public class Channel implements Runnable {
         }
     }
 
-    private void haltConnector(Integer metaDataId) throws ConnectorTaskException, InterruptedException {
+    private void haltConnector(Integer metaDataId, long deadline) throws ConnectorTaskException, InterruptedException {
         try {
             if (metaDataId == 0) {
                 sourceConnector.halt();
             } else {
-                getDestinationConnector(metaDataId).halt();
+                // Queue threads still alive at the deadline are the connector's orphans; record them
+                for (Thread survivor : getDestinationConnector(metaDataId).halt(deadline)) {
+                    abandonThread(survivor);
+                }
             }
         } catch (ConnectorTaskException e) {
             if (metaDataId == 0) {
@@ -1889,18 +2244,56 @@ public class Channel implements Runnable {
 
     public void obtainProcessLock() throws InterruptedException {
         processLock.acquire();
+        heldProcessLockGeneration.set(processLockGeneration.get());
     }
 
     public void releaseProcessLock() {
-        processLock.release();
+        if (consumeHeldProcessLockGeneration()) {
+            processLock.release();
+        }
     }
 
     public void obtainAllProcessLockPermits() throws InterruptedException {
         processLock.acquireAll();
+        heldProcessLockGeneration.set(processLockGeneration.get());
     }
 
     public void releaseAllProcessLockPermits() {
-        processLock.releaseAll();
+        if (consumeHeldProcessLockGeneration()) {
+            processLock.releaseAll();
+        }
+    }
+
+    private boolean tryObtainAllProcessLockPermits(long timeoutMillis) throws InterruptedException {
+        boolean acquired = processLock.tryAcquireAll(timeoutMillis, TimeUnit.MILLISECONDS);
+        if (acquired) {
+            heldProcessLockGeneration.set(processLockGeneration.get());
+        }
+        return acquired;
+    }
+
+    /**
+     * Clears the generation this thread acquired under and says whether a release should go ahead. A
+     * release without a recorded acquire keeps the pre-IRT-2107 behaviour; a release from a stale
+     * generation (the channel was restarted while this thread was abandoned) is dropped, because the
+     * permits it belonged to were discarded by reset().
+     */
+    private boolean consumeHeldProcessLockGeneration() {
+        Long held = heldProcessLockGeneration.get();
+        heldProcessLockGeneration.remove();
+        if (held == null) {
+            return true;
+        }
+        if (held.longValue() != processLockGeneration.get()) {
+            logger.warn("Ignoring a stale process lock release on channel " + name + " (" + channelId + ") from a thread abandoned before the channel was restarted: " + Thread.currentThread().getName());
+            return false;
+        }
+        return true;
+    }
+
+    /** Test hook: the current process lock generation, incremented by every start. */
+    public long getProcessLockGeneration() {
+        return processLockGeneration.get();
     }
 
     public void obtainRemoveContentLock() throws InterruptedException {
@@ -2253,7 +2646,11 @@ public class Channel implements Runnable {
             try {
                 do {
                     processSourceQueue(Constants.SOURCE_QUEUE_POLL_TIMEOUT_MILLIS);
-                } while (isActive() && !stopSourceQueue);
+                    /*
+                     * A source queue thread a halt gave up on is no longer registered once the channel
+                     * restarts; it must exit rather than poll alongside the new thread (IRT-2107).
+                     */
+                } while (isActive() && !stopSourceQueue && queueThreads.get(Thread.currentThread().getId()) == Thread.currentThread());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }

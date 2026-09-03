@@ -35,6 +35,8 @@ public class TestSourceConnector extends SourceConnector {
     private volatile CountDownLatch onHaltGate;
     private volatile CountDownLatch onUndeployGate;
     private volatile boolean onStopInterruptible;
+    private volatile CountDownLatch onStartGate;
+    private final CountDownLatch onStartEntered = new CountDownLatch(1);
     private final CountDownLatch onStopEntered = new CountDownLatch(1);
     private final CountDownLatch onHaltEntered = new CountDownLatch(1);
 
@@ -46,6 +48,15 @@ public class TestSourceConnector extends SourceConnector {
     /** Makes the next onHalt block, ignoring interrupts, until the gate is counted down. */
     public void blockOnHalt(CountDownLatch gate) {
         this.onHaltGate = gate;
+    }
+
+    /** Makes the next onStart block, ignoring interrupts, until the gate is counted down (a slow connector start). */
+    public void blockOnStart(CountDownLatch gate) {
+        this.onStartGate = gate;
+    }
+
+    public CountDownLatch getOnStartEntered() {
+        return onStartEntered;
     }
 
     /** Like {@link #blockOnStop} but the block honours interrupts, the way a socket accept or a join does. */
@@ -116,7 +127,13 @@ public class TestSourceConnector extends SourceConnector {
     }
 
     @Override
-    public void onStart() throws ConnectorTaskException {}
+    public void onStart() throws ConnectorTaskException {
+        onStartEntered.countDown();
+        CountDownLatch gate = onStartGate;
+        if (gate != null) {
+            awaitUninterruptibly(gate);
+        }
+    }
 
     @Override
     public void onStop() throws ConnectorTaskException {

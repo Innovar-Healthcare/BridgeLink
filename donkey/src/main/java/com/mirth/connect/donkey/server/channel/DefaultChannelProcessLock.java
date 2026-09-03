@@ -53,4 +53,13 @@ public class DefaultChannelProcessLock implements ChannelProcessLock {
     public void reset() {
         lock = new Semaphore(permits, true);
     }
+
+    /** Permits currently available; equals the configured count when nothing is dispatching. For tests and diagnostics. */
+    public int availablePermits() {
+        return lock.availablePermits();
+    }
+
+    public int getPermits() {
+        return permits;
+    }
 }

@@ -70,7 +70,8 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
      * StopException naming the stuck thread. Null means "not set here": the engine default (120 s) on a
      * server that never saved a value, otherwise the stored value is left as it is, because the
      * configuration controller only upserts the keys present. Zero means wait without bound, which is
-     * how stop behaved before the grace period existed.
+     * how stop behaved before the grace period existed. Values of a few seconds or less will trip on a
+     * healthy stop, because a source queue thread polls in one-second slices.
      */
     private Integer channelStopGracePeriod;
     private List<MetaDataColumn> defaultMetaDataColumns;

@@ -38,9 +38,15 @@ public class TestDestinationConnector extends DestinationConnector {
     private volatile CountDownLatch onUndeployGate;
     private final CountDownLatch sendEntered = new CountDownLatch(1);
     private final CountDownLatch onHaltEntered = new CountDownLatch(1);
+    private final java.util.concurrent.atomic.AtomicBoolean sendBlockConsumed = new java.util.concurrent.atomic.AtomicBoolean();
 
-    /** Makes every send block, ignoring interrupts, until the gate is counted down. */
+    /**
+     * Makes the next send block, ignoring interrupts, until the gate is counted down. One-shot: the
+     * send after that goes through, so a restart's recovery re-send of the wedged message (the
+     * documented possible duplicate after a halt) completes instead of wedging recovery too.
+     */
     public void blockSend(CountDownLatch gate) {
+        sendBlockConsumed.set(false);
         this.sendGate = gate;
     }
 
@@ -80,7 +86,7 @@ public class TestDestinationConnector extends DestinationConnector {
     @Override
     public Response send(ConnectorProperties connectorProperties, ConnectorMessage message) {
         CountDownLatch gate = sendGate;
-        if (gate != null) {
+        if (gate != null && sendBlockConsumed.compareAndSet(false, true)) {
             sendEntered.countDown();
             TestSourceConnector.awaitUninterruptibly(gate);
         }
