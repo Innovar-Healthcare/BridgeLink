@@ -89,7 +89,13 @@ public class JavaScriptUtil {
                 }
             }
 
-            // TODO wait for the task thread to complete before exiting?
+            /*
+             * setRunning(false) kills a looping script at its next instruction count, but a script
+             * blocked inside a Java call is out of reach and its thread keeps running. Nobody waits
+             * for it; record it so GET /channels/{id}/_threads can show it (IRT-2107).
+             */
+            CancelledScriptThreads.register(task);
+
             Thread.currentThread().interrupt();
             throw e;
         }

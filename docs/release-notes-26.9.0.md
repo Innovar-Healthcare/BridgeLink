@@ -87,3 +87,33 @@ entirely.
   **[`docs/mssql-jdbc-encryption-compatibility.md`](./mssql-jdbc-encryption-compatibility.md)**.
 
 ---
+
+## Stuck-channel diagnostics and bounded stop (IRT-2107, part 1)
+
+A channel that will not stop no longer sits in Stopping with nothing to look at.
+
+- **Stop has a grace period.** A stop now waits at most `server.channelstopgraceperiod`
+  seconds (Settings > Server > "Channel Stop Grace Period", default 120) for its dispatch
+  threads, queue threads and connector stop hooks. When the period runs out the stop fails
+  with an error that names the stuck thread and its top stack frames, and the channel stays
+  Stopping so the operator can decide between waiting and halting. Nothing escalates to halt
+  on its own, and an undeploy or redeploy of a channel in that state is refused with the same
+  advice, because tearing it down under a live dispatch thread could deliver a message twice.
+  Halt interrupts the threads the stop gave up on; a later start waits one more grace period
+  for them. Setting the period to 0 restores the previous wait-forever behaviour.
+- **New endpoint `GET /channels/{channelId}/_threads`.** Returns every live thread that
+  belongs to the channel (dispatch, source and destination queues, chains, recovery, connector
+  receivers, lifecycle hooks and channel scripts) with its state, the lock it is blocked on and
+  its top stack frames, plus what the most recent stop timed out waiting on. Plain JSON, stack
+  frames only: never message content or connector settings. Requires the dashboard view
+  permission.
+- **Dashboard status carries `stateSince` and `lifecycleOverdue`.** The flag is set when a
+  channel has been Stopping or Starting longer than the grace period, so the Web UI can offer
+  the diagnostics and the halt.
+- **Cancelled channel scripts are visible.** A script whose caller gave up on it but whose
+  thread is still blocked inside a Java call now appears in the threads endpoint flagged as a
+  cancelled script.
+
+Part 2 (bounded halt and forced undeploy) follows in a separate change.
+
+---

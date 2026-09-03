@@ -10,8 +10,11 @@
 package com.mirth.connect.server.api.servlets;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
@@ -36,10 +39,16 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Sets;
+import com.mirth.connect.client.core.api.MirthApiException;
+import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.client.core.api.servlets.ChannelStatusServletInterface;
 import com.mirth.connect.donkey.model.channel.DeployedState;
 import com.mirth.connect.model.ChannelTag;
+import com.mirth.connect.model.ChannelThreadInfo;
+import com.mirth.connect.model.ChannelThreadReport;
 import com.mirth.connect.model.DashboardChannelInfo;
 import com.mirth.connect.model.DashboardStatus;
 import com.mirth.connect.server.api.ServletTestBase;
@@ -72,6 +81,24 @@ public class ChannelStatusServletTest extends ServletTestBase {
             deployed.add("4");
             deployed.add("5");
             return deployed;
+        });
+        when(engineController.getChannelThreads(anyString(), anyInt())).thenAnswer((InvocationOnMock invocation) -> {
+            String channelId = invocation.getArgument(0);
+            if (!"deployed".equals(channelId)) {
+                return null;
+            }
+            ChannelThreadReport report = new ChannelThreadReport();
+            report.setChannelId(channelId);
+            report.setChannelName("Deployed");
+            report.setState(DeployedState.STOPPING);
+            report.setLifecycleOverdue(true);
+            ChannelThreadInfo thread = new ChannelThreadInfo();
+            thread.setId(42L);
+            thread.setName("Channel Dispatch Thread on Deployed (deployed)");
+            thread.setState("WAITING");
+            thread.getStackTrace().add("at java.net.SocketInputStream.socketRead0(Native Method)");
+            report.getThreads().add(thread);
+            return report;
         });
         when(controllerFactory.createEngineController()).thenReturn(engineController);
 
@@ -347,5 +374,72 @@ public class ChannelStatusServletTest extends ServletTestBase {
         assertEquals(3, info.getDeployedChannelCount());
         // With fetchSize of 1, we should have remaining channel IDs
         assertEquals(2, info.getRemainingChannelIds().size());
+    }
+
+    // ========== IRT-2107: GET /channels/{channelId}/_threads ==========
+
+    /**
+     * Pins the content negotiation the endpoint depends on: the interface must declare both JSON and
+     * XML so a client that accepts only one of them is not rejected with 406 before the method runs,
+     * and the response must pin its Content-Type to JSON because that is the only form the payload
+     * has. Both halves have regressed before on other raw endpoints (public PR #173).
+     */
+    @Test
+    public void testGetChannelThreadsDeclaresJsonAndXmlAndPinsJson() throws Exception {
+        java.lang.reflect.Method method = ChannelStatusServletInterface.class.getMethod("getChannelThreads", String.class, Integer.class);
+        javax.ws.rs.Produces produces = method.getAnnotation(javax.ws.rs.Produces.class);
+        assertNotNull("@Produces must be declared on the method itself", produces);
+        List<String> mediaTypes = java.util.Arrays.asList(produces.value());
+        assertTrue(mediaTypes.contains(javax.ws.rs.core.MediaType.APPLICATION_JSON));
+        assertTrue(mediaTypes.contains(javax.ws.rs.core.MediaType.APPLICATION_XML));
+        assertNotNull("path must be /{channelId}/_threads", method.getAnnotation(javax.ws.rs.Path.class));
+        assertEquals("/{channelId}/_threads", method.getAnnotation(javax.ws.rs.Path.class).value());
+        assertNotNull(method.getAnnotation(javax.ws.rs.GET.class));
+
+        // Every parameter carries @Param, or the server answers with an empty 500
+        for (java.lang.annotation.Annotation[] annotations : method.getParameterAnnotations()) {
+            boolean hasParam = false;
+            for (java.lang.annotation.Annotation annotation : annotations) {
+                if (annotation instanceof com.mirth.connect.client.core.api.Param) {
+                    hasParam = true;
+                }
+            }
+            assertTrue("every servlet parameter needs @Param", hasParam);
+        }
+
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        javax.ws.rs.core.Response response = servlet.getChannelThreads("deployed", null);
+
+        assertEquals(200, response.getStatus());
+        assertEquals(javax.ws.rs.core.MediaType.APPLICATION_JSON_TYPE, response.getMediaType());
+        assertTrue("the entity must be RawContent so it bypasses the envelope writers", response.getEntity() instanceof RawContent);
+
+        JsonNode json = new ObjectMapper().readTree(((RawContent) response.getEntity()).getContent());
+        assertEquals("deployed", json.get("channelId").asText());
+        assertEquals("STOPPING", json.get("state").asText());
+        assertTrue(json.get("lifecycleOverdue").asBoolean());
+        assertEquals(1, json.get("threads").size());
+        assertEquals(42L, json.get("threads").get(0).get("id").asLong());
+        assertEquals("WAITING", json.get("threads").get(0).get("state").asText());
+        assertEquals(1, json.get("threads").get(0).get("stackTrace").size());
+        verify(engineController).getChannelThreads("deployed", 0);
+    }
+
+    @Test
+    public void testGetChannelThreadsPassesMaxFrames() throws Exception {
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        servlet.getChannelThreads("deployed", 7);
+        verify(engineController).getChannelThreads("deployed", 7);
+    }
+
+    @Test
+    public void testGetChannelThreadsNotDeployedIs404() throws Exception {
+        ChannelStatusServlet servlet = new ChannelStatusServlet(request, sc, controllerFactory);
+        try {
+            servlet.getChannelThreads("notdeployed", null);
+            org.junit.Assert.fail("expected 404");
+        } catch (MirthApiException e) {
+            assertEquals(404, e.getResponse().getStatus());
+        }
     }
 }

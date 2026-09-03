@@ -36,6 +36,13 @@ public class DashboardStatus implements Serializable {
     private String channelId;
     private String name;
     private DeployedState state;
+    /*
+     * IRT-2107: when the channel entered its current state, and whether it has been STOPPING or
+     * STARTING for longer than the stop grace period. The Web UI uses the flag to offer the thread
+     * diagnostics and the halt. Both are null/false for connector-level and undeployed statuses.
+     */
+    private Calendar stateSince;
+    private boolean lifecycleOverdue;
     private Integer deployedRevisionDelta;
     private Calendar deployedDate;
     private Boolean codeTemplatesChanged;
@@ -74,6 +81,22 @@ public class DashboardStatus implements Serializable {
 
     public void setDeployedDate(Calendar deployedDate) {
         this.deployedDate = deployedDate;
+    }
+
+    public Calendar getStateSince() {
+        return stateSince;
+    }
+
+    public void setStateSince(Calendar stateSince) {
+        this.stateSince = stateSince;
+    }
+
+    public boolean isLifecycleOverdue() {
+        return lifecycleOverdue;
+    }
+
+    public void setLifecycleOverdue(boolean lifecycleOverdue) {
+        this.lifecycleOverdue = lifecycleOverdue;
     }
 
     public Calendar getDeployedDate() {

@@ -10,6 +10,7 @@
 package com.mirth.connect.donkey.server.channel;
 
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 public class DefaultChannelProcessLock implements ChannelProcessLock {
     private int permits;
@@ -31,6 +32,11 @@ public class DefaultChannelProcessLock implements ChannelProcessLock {
     @Override
     public void acquireAll() throws InterruptedException {
         lock.acquire(permits);
+    }
+
+    @Override
+    public boolean tryAcquireAll(long timeout, TimeUnit unit) throws InterruptedException {
+        return lock.tryAcquire(permits, timeout, unit);
     }
 
     @Override

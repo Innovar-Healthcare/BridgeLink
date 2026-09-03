@@ -102,6 +102,7 @@ import com.mirth.connect.donkey.util.SerializerProvider;
 import com.mirth.connect.model.ChannelMetadata;
 import com.mirth.connect.model.ChannelProperties;
 import com.mirth.connect.model.ChannelStatistics;
+import com.mirth.connect.model.ChannelThreadReport;
 import com.mirth.connect.model.ConnectorMetaData;
 import com.mirth.connect.model.DashboardStatus;
 import com.mirth.connect.model.DashboardStatus.StatusType;
@@ -141,6 +142,7 @@ import com.mirth.connect.server.transformers.JavaScriptInitializationException;
 import com.mirth.connect.server.transformers.JavaScriptPostprocessor;
 import com.mirth.connect.server.transformers.JavaScriptPreprocessor;
 import com.mirth.connect.server.transformers.JavaScriptResponseTransformer;
+import com.mirth.connect.server.util.ChannelThreadDiagnostics;
 import com.mirth.connect.server.util.ChannelDependencyServerUtil;
 import com.mirth.connect.server.util.GlobalChannelVariableStoreFactory;
 import com.mirth.connect.server.util.GlobalVariableStore;
@@ -892,6 +894,10 @@ public class DonkeyEngineController implements EngineController {
                 status.setName(channel.getName());
                 status.setState(channel.getCurrentState());
                 status.setDeployedDate(channel.getDeployDate());
+                Calendar stateSince = Calendar.getInstance();
+                stateSince.setTimeInMillis(channel.getCurrentStateSince());
+                status.setStateSince(stateSince);
+                status.setLifecycleOverdue(channel.isLifecycleOverdue());
 
                 int channelRevision = 0;
                 // Just in case the channel no longer exists
@@ -1127,6 +1133,45 @@ public class DonkeyEngineController implements EngineController {
     }
 
     @Override
+    public ChannelThreadReport getChannelThreads(String channelId, int maxFrames) {
+        if (StringUtils.isBlank(channelId)) {
+            return null;
+        }
+        /*
+         * Look past deployedChannels: a channel being undeployed is removed from that map before its
+         * connectors' onUndeploy hooks run, and a channel stuck there is exactly the one an operator
+         * wants to inspect.
+         */
+        Channel channel = getDashboardChannels(Collections.singleton(channelId)).get(channelId);
+        if (channel == null) {
+            return null;
+        }
+        return ChannelThreadDiagnostics.collect(channel, channel.getAbandonedLifecycleThreads(), maxFrames);
+    }
+
+    /**
+     * The stop grace period from server settings, in milliseconds: the engine default when unset,
+     * zero (unbounded) when the setting is zero. Read on every use so a settings change applies to
+     * the next stop without a redeploy.
+     */
+    protected long getStopGracePeriodMillis() {
+        try {
+            Integer seconds = configurationController.getServerSettings().getChannelStopGracePeriod();
+            if (seconds == null) {
+                return Constants.DEFAULT_STOP_GRACE_PERIOD_MILLIS;
+            }
+            return Math.max(0, seconds.longValue()) * 1000L;
+        } catch (Exception e) {
+            logger.warn("Unable to read the channel stop grace period from server settings; using the default.", e);
+            return Constants.DEFAULT_STOP_GRACE_PERIOD_MILLIS;
+        }
+    }
+
+    private void refreshStopGracePeriod(Channel channel) {
+        channel.setStopGracePeriodMillis(getStopGracePeriodMillis());
+    }
+
+    @Override
     public DispatchResult dispatchRawMessage(String channelId, RawMessage rawMessage, boolean force, boolean canBatch) throws ChannelException, BatchMessageException {
         if (!isDeployed(channelId)) {
             ChannelException e = new ChannelException(true);
@@ -1182,6 +1227,7 @@ public class DonkeyEngineController implements EngineController {
         channel.setInitialState(channelProperties.getInitialState());
         channel.setDebugOptions(debugOptions);
         channel.setStorageSettings(storageSettings);
+        channel.setStopGracePeriodMillis(getStopGracePeriodMillis());
         channel.setMetaDataColumns(channelProperties.getMetaDataColumns());
         channel.setAttachmentHandlerProvider(createAttachmentHandlerProvider(channel, contextFactory, channelProperties.getAttachmentProperties()));
         channel.setPreProcessor(createPreProcessor(channel, channelModel.getPreprocessingScript(), debugOptions));
@@ -2086,6 +2132,7 @@ public class DonkeyEngineController implements EngineController {
         public void doUndeploy(Channel channel) throws Exception {
 
             if (channel.isActive()) {
+                refreshStopGracePeriod(channel);
                 channel.stop();
             }
 
@@ -2187,6 +2234,7 @@ public class DonkeyEngineController implements EngineController {
                 if (task == StatusTask.START) {
                     channel.start(null);
                 } else if (task == StatusTask.STOP) {
+                    refreshStopGracePeriod(channel);
                     channel.stop();
                 } else if (task == StatusTask.PAUSE) {
                     channel.pause();

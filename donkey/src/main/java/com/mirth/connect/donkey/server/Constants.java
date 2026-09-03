@@ -58,6 +58,20 @@ public class Constants {
     public static final int DESTINATION_QUEUE_EMPTY_SLEEP_TIME = 200;
 
     /**
+     * Default number of milliseconds a channel stop waits for its dispatch threads, queue threads
+     * and connector stop hooks before failing with a StopException that names the stuck thread
+     * (IRT-2107). The server overrides it from the "server.channelstopgraceperiod" setting; zero
+     * means wait without bound, which was the behaviour before the grace period existed.
+     */
+    public static final long DEFAULT_STOP_GRACE_PERIOD_MILLIS = 120000L;
+
+    /**
+     * Number of stack frames a lifecycle timeout records for the stuck thread. Enough to see the
+     * blocking call and the connector that made it; frames carry no message content.
+     */
+    public static final int LIFECYCLE_TIMEOUT_STACK_FRAMES = 12;
+
+    /**
      * The number of milliseconds an overwriting dispatch will wait for an in-flight copy of the
      * message it is replacing to leave the source queue, before giving up and failing the dispatch.
      *

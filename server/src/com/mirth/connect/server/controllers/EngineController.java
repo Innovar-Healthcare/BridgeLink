@@ -23,6 +23,7 @@ import com.mirth.connect.donkey.model.channel.DebugOptions;
 import com.mirth.connect.donkey.server.channel.DispatchResult;
 import com.mirth.connect.donkey.server.message.batch.BatchMessageException;
 import com.mirth.connect.model.ChannelStatistics;
+import com.mirth.connect.model.ChannelThreadReport;
 import com.mirth.connect.model.DashboardStatus;
 import com.mirth.connect.model.ServerEventContext;
 import com.mirth.connect.server.channel.ChannelFuture;
@@ -70,6 +71,15 @@ public interface EngineController {
     public boolean isDeployed(String channelId);
 
     public Channel getDeployedChannel(String channelId);
+
+    /**
+     * The live threads belonging to a channel that is deployed, deploying or undeploying, with state,
+     * lock and stack frames (IRT-2107). Returns null when the channel is not known to the engine.
+     *
+     * @param maxFrames
+     *            stack frames per thread; non-positive selects the default
+     */
+    public ChannelThreadReport getChannelThreads(String channelId, int maxFrames);
 
     public DispatchResult dispatchRawMessage(String channelId, RawMessage rawMessage, boolean force, boolean canBatch) throws ChannelException, BatchMessageException;
 
