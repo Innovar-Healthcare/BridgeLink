@@ -50,12 +50,29 @@ import com.mirth.connect.server.util.UserSessionCache;
 public class UserServlet extends MirthServlet implements UserServletInterface {
 
     private static final Logger logger = LogManager.getLogger(UserServlet.class);
-    private static final UserController userController = ControllerFactory.getFactory().createUserController();
-    private static final EventController eventController = ControllerFactory.getFactory().createEventController();
-    private static final ConfigurationController configurationController = ControllerFactory.getFactory().createConfigurationController();
+    private static UserController userController;
+    private static EventController eventController;
+    private static ConfigurationController configurationController;
 
     public UserServlet(@Context HttpServletRequest request, @Context SecurityContext sc) {
         super(request, sc, false);
+    }
+
+    /*
+     * Lets a test supply mock controllers, the same way EngineServlet and the other servlets take
+     * one. Without it nothing can drive this servlet through the real invocation handler, which is
+     * where the grace-period scoping actually resolves its target user (IRT-1798).
+     */
+    public UserServlet(@Context HttpServletRequest request, @Context SecurityContext sc, ControllerFactory controllerFactory) {
+        super(request, null, sc, false, controllerFactory);
+    }
+
+    @Override
+    protected void initializeControllers() {
+        super.initializeControllers();
+        userController = controllerFactory.createUserController();
+        eventController = controllerFactory.createEventController();
+        configurationController = controllerFactory.createConfigurationController();
     }
 
     @Override
