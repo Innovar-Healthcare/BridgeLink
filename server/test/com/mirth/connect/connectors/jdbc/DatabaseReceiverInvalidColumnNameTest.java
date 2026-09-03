@@ -199,7 +199,14 @@ public class DatabaseReceiverInvalidColumnNameTest {
         connector.onDeploy();
         connector.start();
 
-        Thread.sleep(1000);
+        // The poll connector dispatches asynchronously, so wait for the first message rather than
+        // sleeping a fixed interval and hoping the poll completed: under parallel forked-JVM CI load
+        // a fixed 1s window races the poll thread and fails intermittently (observed on the JDK 17
+        // shard). Poll the condition up to a generous timeout instead.
+        long deadline = System.currentTimeMillis() + 15000;
+        while (testChannel.messages.size() == 0 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50);
+        }
 
         connector.stop();
         connector.onUndeploy();
