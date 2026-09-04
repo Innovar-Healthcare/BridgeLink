@@ -655,26 +655,6 @@ public class Channel implements Runnable {
     }
 
     /**
-     * Gives threads an earlier stop gave up on one more grace period to finish before the channel
-     * starts again, because a connector hook that completes after a restart would update connector
-     * state underneath the running channel. Threads still alive afterwards are logged with their
-     * frames and left to the diagnostics endpoint; refusing to start would make a restart of
-     * BridgeLink the only remedy, which is what IRT-2107 exists to avoid.
-     */
-    private void awaitAbandonedLifecycleThreads() throws InterruptedException {
-        Set<Thread> alive = getAbandonedLifecycleThreads();
-        if (alive.isEmpty()) {
-            return;
-        }
-        long deadline = ThreadUtils.deadline(stopGracePeriodMillis);
-        for (Thread thread : alive) {
-            if (!ThreadUtils.joinUntil(thread, deadline)) {
-                logger.error("Channel " + name + " (" + channelId + ") is starting while a thread abandoned by an earlier stop is still running; its connector may report a stale state when that thread finishes. " + ThreadUtils.describe(thread, Constants.LIFECYCLE_TIMEOUT_STACK_FRAMES));
-            }
-        }
-    }
-
-    /**
      * True when the channel has been STOPPING or STARTING for longer than the stop grace period, which
      * is the dashboard's cue to offer the thread diagnostics and the halt (IRT-2107). Always false
      * when the grace period is disabled, because then nothing is overdue by definition.
@@ -1134,7 +1114,16 @@ public class Channel implements Runnable {
 
                 updateCurrentState(DeployedState.STARTING);
 
-                awaitAbandonedLifecycleThreads();
+                /*
+                 * Deliberately no wait for threads an earlier stop or halt abandoned. They exist only
+                 * because they could not be stopped, so they must not be given the power to delay a
+                 * later operation: one blocked in a socket read for an hour is not closer to finishing
+                 * than it was at the start, and the deadline would be measured from now rather than
+                 * from when it was abandoned. The stale write they were being waited out for is
+                 * blocked at the source instead -- Source/DestinationConnector.updateCurrentState
+                 * drops a write from an abandoned thread -- which closes the race rather than
+                 * narrowing it, and matches how processLockGeneration below handles a late release.
+                 */
 
                 /*
                  * We can't guarantee the state of the process lock when the channel was stopped or
@@ -1781,6 +1770,7 @@ public class Channel implements Runnable {
             } catch (LifecycleTimeoutException e) {
                 recordLifecycleTimeout(e);
                 logger.error("Halt of channel " + name + " (" + channelId + "): " + e.getMessage());
+                forceConnectorStopped(metaDataId);
             } catch (Throwable t) {
                 if (t.getCause() instanceof InterruptedException) {
                     throw (InterruptedException) t.getCause();
@@ -1899,6 +1889,30 @@ public class Channel implements Runnable {
             } else {
                 logger.error("Failed to stop connector " + destinationConnector.getDestinationName() + " for channel " + name + " (" + channelId + "): The channel is not started or paused.");
             }
+        }
+    }
+
+    /**
+     * Marks a connector STOPPED after a halt gave up on its hook (IRT-2107).
+     *
+     * <p>
+     * Halt marks the channel STOPPED regardless of what survived, and the connectors have to follow,
+     * because {@link #doStart} starts only a connector that is exactly STOPPED. A connector left at
+     * STOPPING is therefore skipped in silence by the next start: the channel reads STARTED while its
+     * source never listens or its destination never drains. The abandoned hook cannot be relied on to
+     * write it -- that is the write that arrives late underneath a restarted channel, and the one the
+     * connectors now drop -- so the halt owns the terminal state instead. This runs on the halt thread,
+     * which is never itself abandoned.
+     */
+    private void forceConnectorStopped(Integer metaDataId) {
+        try {
+            if (metaDataId == 0) {
+                sourceConnector.updateCurrentState(DeployedState.STOPPED);
+            } else {
+                getDestinationConnector(metaDataId).updateCurrentState(DeployedState.STOPPED);
+            }
+        } catch (Throwable t) {
+            logger.error("Halt of channel " + name + " (" + channelId + "): could not mark connector " + metaDataId + " stopped after its hook was abandoned; the next start will skip it.", t);
         }
     }
 

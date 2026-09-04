@@ -86,6 +86,17 @@ public abstract class SourceConnector extends Connector {
     }
 
     public void updateCurrentState(DeployedState currentState) {
+        /*
+         * IRT-2107: a thread an earlier stop or halt abandoned must not write connector state. Its hook runs to
+         * completion on its own thread whatever the channel does in the meantime, so a stop abandoned
+         * an hour ago still reaches its terminal updateCurrentState when the blocked call finally
+         * returns -- reporting the connector stopped underneath a channel that has since restarted.
+         * The abandoned thread has no standing to describe the channel any more, so drop the write.
+         */
+        if (AbandonedThreadRegistry.isAbandoned(getChannelId(), Thread.currentThread())) {
+            logger.error("Ignoring a " + currentState + " state update for " + getClass().getSimpleName() + " on channel " + channel.getName() + " (" + getChannelId() + ") from a thread an earlier stop or halt abandoned; the channel has moved on since.");
+            return;
+        }
         setCurrentState(currentState);
         channel.getEventDispatcher().dispatchEvent(new DeployedStateEvent(getChannelId(), channel.getName(), getMetaDataId(), sourceName, DeployedStateEventType.getTypeFromDeployedState(currentState)));
     }

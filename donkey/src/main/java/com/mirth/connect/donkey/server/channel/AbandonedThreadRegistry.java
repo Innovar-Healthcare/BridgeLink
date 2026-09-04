@@ -9,7 +9,6 @@
 
 package com.mirth.connect.donkey.server.channel;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
@@ -96,7 +95,7 @@ public final class AbandonedThreadRegistry {
          */
         THREADS.compute(channelId, (id, threads) -> {
             if (threads == null) {
-                threads = new HashMap<Thread, Entry>();
+                threads = new ConcurrentHashMap<Thread, Entry>();
             }
             String name = thread.getName();
             Entry existing = threads.get(thread);
@@ -152,6 +151,29 @@ public final class AbandonedThreadRegistry {
             return threads.isEmpty() ? null : threads;
         });
         return result;
+    }
+
+    /**
+     * Whether this thread was abandoned by a lifecycle operation on this channel and is still inside
+     * it. A cheap membership test for the hot path: no pruning, no allocation, and it costs one map
+     * lookup when the channel has no abandoned threads at all, which is the normal case.
+     *
+     * <p>
+     * Used to stop an abandoned thread writing state after the fact. A connector hook runs to
+     * completion on its own thread, so a stop whose hook was abandoned an hour ago still executes
+     * {@code updateCurrentState(STOPPED)} when that hook finally returns -- underneath a channel that
+     * has since been restarted.
+     */
+    public static boolean isAbandoned(String channelId, Thread thread) {
+        if (channelId == null || thread == null) {
+            return false;
+        }
+        Map<Thread, Entry> threads = THREADS.get(channelId);
+        if (threads == null) {
+            return false;
+        }
+        Entry tracked = threads.get(thread);
+        return tracked != null && tracked.name.equals(thread.getName());
     }
 
     /** Forgets every thread recorded for the channel. For tests. */

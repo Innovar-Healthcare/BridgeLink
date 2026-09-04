@@ -101,9 +101,17 @@ A channel that will not stop no longer sits in Stopping with nothing to look at.
   advice, because tearing it down under a live dispatch thread could deliver a message twice.
   Keep the period at ten seconds or more: a source queue thread polls in one-second slices, so a
   very short period trips on healthy stops.
-  Halt interrupts the threads the stop gave up on; a later start waits one more grace period
-  for them. Setting the period to 0 restores the previous wait-forever behaviour **for stop**;
-  it does not affect halt, which has its own fixed interval.
+  Halt interrupts the threads the stop gave up on. A later start does **not** wait for them: a
+  thread that ignored an interrupt is not closer to finishing than when it was abandoned, and
+  making a start queue behind it would hand the stuck thread control of the next operation too.
+  Instead the write it would have made is dropped -- a connector state update from an abandoned
+  thread is ignored, so a hook that finishes an hour later cannot report the connector stopped
+  underneath a channel that has since restarted. A halt that gives up on a connector's hook also
+  marks that connector Stopped itself, so the next start does not skip it. One consequence to know:
+  because a start no longer waits, restarting a channel while an abandoned send is still in flight
+  can deliver that message a second time -- the same duplicate a halt has always risked, now
+  reachable sooner. A message is still never lost. Setting the period to 0 restores the previous
+  wait-forever behaviour **for stop**; it does not affect halt, which has its own fixed interval.
 - **New endpoint `GET /channels/{channelId}/_threads`.** Returns every live thread that
   belongs to the channel (dispatch, source and destination queues, chains, recovery, connector
   receivers, lifecycle hooks and channel scripts) with its state, the lock it is blocked on and

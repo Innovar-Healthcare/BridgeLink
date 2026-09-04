@@ -159,4 +159,29 @@ public class AbandonedThreadRegistryTest {
         pooled.setName("qtp-21");
         assertTrue(AbandonedThreadRegistry.abandonedByHalt(CHANNEL_ID).isEmpty());
     }
+
+    /**
+     * The membership test that stops an abandoned thread writing connector state after the fact
+     * (IRT-2107). It has to be exact about the thread and its name, because the whole point is that a
+     * pooled thread which has left the channel is no longer abandoned and its writes are legitimate.
+     */
+    @Test
+    public void isAbandonedIdentifiesTheThreadAndHonoursTheNameTest() throws Exception {
+        Thread hook = parked("Channel Stop Hook Thread on X (" + CHANNEL_ID + "), Source (0)");
+        Thread other = parked("Channel Stop Hook Thread on Y (someone-else), Source (0)");
+
+        assertFalse("nothing is abandoned yet", AbandonedThreadRegistry.isAbandoned(CHANNEL_ID, hook));
+
+        AbandonedThreadRegistry.add(CHANNEL_ID, hook, AbandonedThreadRegistry.Source.HALT);
+        assertTrue(AbandonedThreadRegistry.isAbandoned(CHANNEL_ID, hook));
+
+        assertFalse("a different thread is not abandoned", AbandonedThreadRegistry.isAbandoned(CHANNEL_ID, other));
+        assertFalse("another channel's view is separate", AbandonedThreadRegistry.isAbandoned("some-other-channel", hook));
+        assertFalse("a null channel id is not a match", AbandonedThreadRegistry.isAbandoned(null, hook));
+        assertFalse("a null thread is not a match", AbandonedThreadRegistry.isAbandoned(CHANNEL_ID, null));
+
+        // Renamed means it left the channel, so its writes are its own business again
+        hook.setName("qtp-88");
+        assertFalse("a renamed thread is no longer abandoned here", AbandonedThreadRegistry.isAbandoned(CHANNEL_ID, hook));
+    }
 }

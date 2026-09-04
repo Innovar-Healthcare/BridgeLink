@@ -13,6 +13,7 @@ import java.util.Calendar;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -273,6 +274,17 @@ public abstract class DestinationConnector extends Connector implements Runnable
     }
 
     public void updateCurrentState(DeployedState currentState) {
+        /*
+         * IRT-2107: a thread an earlier stop or halt abandoned must not write connector state. Its hook runs to
+         * completion on its own thread whatever the channel does in the meantime, so a stop abandoned
+         * an hour ago still reaches its terminal updateCurrentState when the blocked call finally
+         * returns -- reporting the connector stopped underneath a channel that has since restarted.
+         * The abandoned thread has no standing to describe the channel any more, so drop the write.
+         */
+        if (AbandonedThreadRegistry.isAbandoned(getChannelId(), Thread.currentThread())) {
+            logger.error("Ignoring a " + currentState + " state update for " + getClass().getSimpleName() + " on channel " + channel.getName() + " (" + getChannelId() + ") from a thread an earlier stop or halt abandoned; the channel has moved on since.");
+            return;
+        }
         setCurrentState(currentState);
         channel.getEventDispatcher().dispatchEvent(new DeployedStateEvent(getChannelId(), channel.getName(), getMetaDataId(), destinationName, DeployedStateEventType.getTypeFromDeployedState(currentState)));
     }
@@ -387,10 +399,18 @@ public abstract class DestinationConnector extends Connector implements Runnable
         updateCurrentState(DeployedState.STOPPING);
         stopQueue.set(true);
 
-        if (MapUtils.isNotEmpty(queueThreads)) {
-            for (Thread thread : queueThreads.values()) {
-                thread.interrupt();
-            }
+        /*
+         * IRT-2107: snapshot the threads this halt is responsible for, taken where they are
+         * interrupted. onHalt() below can block past the deadline and be abandoned, and the channel can
+         * then be restarted while it is still running -- at which point the live queueThreads field
+         * holds the RESTARTED connector's threads. Re-reading the field in the finally would mark those
+         * abandoned and clear the map, leaving a destination that reports Started with no queue threads
+         * and messages piling up QUEUED with nothing to drain them.
+         */
+        Map<Long, DestinationQueueThread> haltedThreads = new HashMap<Long, DestinationQueueThread>(queueThreads);
+
+        for (Thread thread : haltedThreads.values()) {
+            thread.interrupt();
         }
 
         Set<Thread> survivors = new HashSet<Thread>();
@@ -398,9 +418,10 @@ public abstract class DestinationConnector extends Connector implements Runnable
         try {
             onHalt();
         } finally {
-            if (MapUtils.isNotEmpty(queueThreads)) {
+            if (!haltedThreads.isEmpty()) {
                 try {
-                    for (DestinationQueueThread thread : queueThreads.values()) {
+                    for (Map.Entry<Long, DestinationQueueThread> entry : haltedThreads.entrySet()) {
+                        DestinationQueueThread thread = entry.getValue();
                         if (!ThreadUtils.joinUntil(thread, deadlineMillis)) {
                             /*
                              * Removed from the connector below, so a restart does not join it; flagged so
@@ -411,9 +432,9 @@ public abstract class DestinationConnector extends Connector implements Runnable
                             thread.markAbandoned();
                             survivors.add(thread);
                         }
+                        // Remove only this halt's own threads, never a restarted connector's
+                        queueThreads.remove(entry.getKey(), thread);
                     }
-
-                    queueThreads.clear();
                 } finally {
                     // Invalidate the queue's buffer when the queue is stopped to prevent the buffer becoming 
                     // unsynchronized with the data store.

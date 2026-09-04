@@ -965,4 +965,87 @@ public class ChannelLifecycleTests {
             AbandonedThreadRegistry.clear(channelId);
         }
     }
+
+    /**
+     * IRT-2107, and the reason a halt has to write the connector's terminal state itself: doStart only
+     * starts a connector that is exactly STOPPED. A halt that abandoned the connector's hook used to
+     * leave it at STOPPING, so the next start skipped it in silence -- the channel read STARTED while
+     * its source never listened. Nothing forced the hook to reach STOPPED either, once an abandoned
+     * thread's state writes were dropped, so the skip was permanent for that channel instance.
+     */
+    @Test(timeout = 60000)
+    public final void testStartAfterAHaltAbandonedTheSourceHookStillStartsTheSource() throws Exception {
+        String channelId = "lifecyclehaltthenstart";
+        TestChannel channel = TestUtils.createDefaultChannel(channelId, serverId, true, 1, 1);
+        channel.setName(channelId);
+        channel.setStopGracePeriodMillis(GRACE_MILLIS);
+        TestSourceConnector sourceConnector = (TestSourceConnector) channel.getSourceConnector();
+        CountDownLatch gate = new CountDownLatch(1);
+
+        try {
+            channel.deploy();
+            channel.start(null);
+
+            // onHalt ignores the interrupt, so halt gives up on its hook thread and abandons it
+            sourceConnector.blockOnHalt(gate);
+            channel.halt();
+            assertEquals(DeployedState.STOPPED, channel.getCurrentState());
+
+            // The halt owns the connector's terminal state; the abandoned hook cannot be relied on
+            assertEquals("halt must mark a connector whose hook it abandoned STOPPED, or the next start skips it", DeployedState.STOPPED, sourceConnector.getCurrentState());
+
+            // And the start must actually reach the source rather than skipping it
+            channel.start(null);
+            assertEquals(DeployedState.STARTED, channel.getCurrentState());
+            assertEquals("the source must be started, not silently skipped", DeployedState.STARTED, sourceConnector.getCurrentState());
+        } finally {
+            gate.countDown();
+            try {
+                channel.halt();
+            } catch (Throwable ignored) {
+            }
+            channel.undeploy();
+            AbandonedThreadRegistry.clear(channelId);
+        }
+    }
+
+    /**
+     * The other half of the same contract: once the abandoned hook finally returns, its own terminal
+     * state write must not land on the channel that has since restarted. Without the drop, the hook's
+     * "STOPPED" would report the source stopped while it is running.
+     */
+    @Test(timeout = 60000)
+    public final void testAnAbandonedHookCannotReportStoppedOnARestartedChannel() throws Exception {
+        String channelId = "lifecyclelatewrite";
+        TestChannel channel = TestUtils.createDefaultChannel(channelId, serverId, true, 1, 1);
+        channel.setName(channelId);
+        channel.setStopGracePeriodMillis(GRACE_MILLIS);
+        TestSourceConnector sourceConnector = (TestSourceConnector) channel.getSourceConnector();
+        CountDownLatch gate = new CountDownLatch(1);
+
+        try {
+            channel.deploy();
+            channel.start(null);
+            sourceConnector.blockOnHalt(gate);
+            channel.halt();
+            channel.start(null);
+            assertEquals(DeployedState.STARTED, sourceConnector.getCurrentState());
+
+            // Release the abandoned hook: its trailing state write must be ignored
+            gate.countDown();
+            for (int i = 0; i < 300 && sourceConnector.getCurrentState() == DeployedState.STARTED; i++) {
+                Thread.sleep(10);
+            }
+            assertEquals("an abandoned hook must not report the source stopped underneath a running channel", DeployedState.STARTED, sourceConnector.getCurrentState());
+            assertEquals(DeployedState.STARTED, channel.getCurrentState());
+        } finally {
+            gate.countDown();
+            try {
+                channel.halt();
+            } catch (Throwable ignored) {
+            }
+            channel.undeploy();
+            AbandonedThreadRegistry.clear(channelId);
+        }
+    }
 }
