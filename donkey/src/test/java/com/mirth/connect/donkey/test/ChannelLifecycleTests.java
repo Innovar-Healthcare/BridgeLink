@@ -346,6 +346,10 @@ public class ChannelLifecycleTests {
             }
             assertEquals(DeployedState.STOPPING, channel.getCurrentState());
             assertEquals("the dispatch thread the stop gave up on must be tracked", 1, channel.getAbandonedLifecycleThreads().size());
+            // Calvin's case (IRT-2107): a stop that timed out has abandoned nothing. The channel is
+            // still STOPPING and the stop still owns that thread, so the operator must not be told it
+            // was left running loose -- that is what a halt does, and it is how they tell the two apart.
+            assertTrue("a stop timeout must not report the thread as abandoned by a halt", channel.getHaltAbandonedThreads().isEmpty());
 
             try {
                 channel.undeploy();
@@ -627,6 +631,10 @@ public class ChannelLifecycleTests {
             channel.halt();
             assertEquals(DeployedState.STOPPED, channel.getCurrentState());
             assertTrue(channel.getAbandonedLifecycleThreads().contains(dispatcher));
+            // A halt really did abandon it, so this is the case the flag exists for. This also pins the
+            // stickiness end to end: halt records the survivor and then records the timeout naming it,
+            // which arrives as an ordinary lifecycle timeout and must not downgrade the halt outcome.
+            assertTrue("a halt survivor must be reported as abandoned", channel.getHaltAbandonedThreads().contains(dispatcher));
 
             /*
              * Recovery re-sends the wedged message on restart (the send gate is one-shot, so that copy

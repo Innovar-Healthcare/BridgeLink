@@ -468,16 +468,27 @@ public class Channel implements Runnable {
     }
 
     /**
-     * Threads a stop or halt gave up waiting on that are still alive. A snapshot; dead threads are
-     * dropped from the underlying set as a side effect.
+     * Threads a stop or halt gave up waiting on that are still alive, whichever operation gave up. A
+     * snapshot; dead threads are dropped from the underlying set as a side effect. This is the set
+     * halt interrupts and start waits for, so it deliberately does not distinguish how a thread got
+     * here — see {@link #getHaltAbandonedThreads()} for the one an operator is shown.
      */
     public Set<Thread> getAbandonedLifecycleThreads() {
         return AbandonedThreadRegistry.alive(channelId);
     }
 
-    private void abandonThread(Thread thread) {
+    /**
+     * The subset a halt actually abandoned: the channel was marked STOPPED with these still running.
+     * A plain lifecycle timeout is not in here, because it leaves the operation still owning the
+     * thread and the channel in its current state (IRT-2107).
+     */
+    public Set<Thread> getHaltAbandonedThreads() {
+        return AbandonedThreadRegistry.abandonedByHalt(channelId);
+    }
+
+    private void abandonThread(Thread thread, AbandonedThreadRegistry.Source source) {
         if (thread != null && thread != Thread.currentThread()) {
-            AbandonedThreadRegistry.add(channelId, thread);
+            AbandonedThreadRegistry.add(channelId, thread, source);
         }
     }
 
@@ -487,7 +498,7 @@ public class Channel implements Runnable {
      */
     private void recordLifecycleTimeout(LifecycleTimeoutException timeout) {
         lastLifecycleTimeout = new ChannelLifecycleTimeout(timeout);
-        abandonThread(timeout.getThread());
+        abandonThread(timeout.getThread(), AbandonedThreadRegistry.Source.LIFECYCLE_TIMEOUT);
     }
 
     /**
@@ -1290,6 +1301,13 @@ public class Channel implements Runnable {
         boolean forced = !locked;
 
         if (forced) {
+            /*
+             * recordLifecycleTimeout files the lock owner as an ordinary lifecycle timeout, not as
+             * abandoned-by-halt. That is not an oversight: if the owner is still running when this
+             * halt finishes, collectSurvivingThreads picks it up below and records it as HALT (its
+             * thread carries the channel id, as ChannelTask names it that way), and if it has gone by
+             * then nothing was abandoned and the flag would be wrong.
+             */
             Thread owner = lifecycleLockOwner;
             LifecycleTimeoutException lockTimeout = new LifecycleTimeoutException("Halt", owner, "the channel lifecycle lock is still held by " + StringUtils.defaultString(lifecycleLockOperation, "another operation") + "; halting in forced mode without it");
             recordLifecycleTimeout(lockTimeout);
@@ -1698,7 +1716,7 @@ public class Channel implements Runnable {
                 if (ThreadUtils.isExpired(deadline)) {
                     shuttingDown = true;
                     for (Thread thread : dispatchThreads) {
-                        abandonThread(thread);
+                        abandonThread(thread, AbandonedThreadRegistry.Source.HALT);
                     }
                     logger.error("Halt of channel " + name + " (" + channelId + "): " + dispatchThreads.size() + " dispatch thread(s) ignored the interrupt past the grace period and were abandoned.");
                     break;
@@ -1727,7 +1745,7 @@ public class Channel implements Runnable {
         if (!survivors.isEmpty()) {
             StringBuilder report = new StringBuilder("Halt of channel " + name + " (" + channelId + ") marked the channel STOPPED with " + survivors.size() + " thread(s) still running; they were abandoned and remain visible in the channel's thread diagnostics:");
             for (Thread thread : survivors) {
-                abandonThread(thread);
+                abandonThread(thread, AbandonedThreadRegistry.Source.HALT);
                 report.append("\n").append(ThreadUtils.describe(thread, Constants.LIFECYCLE_TIMEOUT_STACK_FRAMES));
             }
             logger.error(report.toString());
@@ -1804,7 +1822,7 @@ public class Channel implements Runnable {
             } else {
                 // Queue threads still alive at the deadline are the connector's orphans; record them
                 for (Thread survivor : getDestinationConnector(metaDataId).halt(deadline)) {
-                    abandonThread(survivor);
+                    abandonThread(survivor, AbandonedThreadRegistry.Source.HALT);
                 }
             }
         } catch (ConnectorTaskException e) {

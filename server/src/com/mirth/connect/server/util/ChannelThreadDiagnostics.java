@@ -56,12 +56,16 @@ public final class ChannelThreadDiagnostics {
      * @param channel
      *            the deployed channel
      * @param extraThreads
-     *            threads to report even if their name does not carry the channel id, flagged as
-     *            abandoned; may be null
+     *            threads to report even if their name does not carry the channel id; may be null
+     * @param haltAbandonedThreads
+     *            the subset of those a halt actually abandoned, flagged as abandoned; may be null.
+     *            A thread an ordinary lifecycle timeout gave up on is reported but not flagged: the
+     *            channel keeps its state and the operation still owns the thread, so calling it
+     *            abandoned told the operator the channel had already been marked Stopped (IRT-2107).
      * @param maxFrames
      *            stack frames per thread, clamped to [1, {@value #MAX_FRAMES_LIMIT}]
      */
-    public static ChannelThreadReport collect(Channel channel, Collection<Thread> extraThreads, int maxFrames) {
+    public static ChannelThreadReport collect(Channel channel, Collection<Thread> extraThreads, Collection<Thread> haltAbandonedThreads, int maxFrames) {
         int frames = Math.max(1, Math.min(maxFrames <= 0 ? DEFAULT_MAX_FRAMES : maxFrames, MAX_FRAMES_LIMIT));
         String channelId = channel.getChannelId();
 
@@ -94,6 +98,14 @@ public final class ChannelThreadDiagnostics {
 
         if (extraThreads != null) {
             for (Thread thread : extraThreads) {
+                if (thread != null && thread.isAlive()) {
+                    candidates.put(thread.getId(), thread);
+                }
+            }
+        }
+
+        if (haltAbandonedThreads != null) {
+            for (Thread thread : haltAbandonedThreads) {
                 if (thread != null && thread.isAlive()) {
                     candidates.put(thread.getId(), thread);
                     abandonedIds.add(thread.getId());

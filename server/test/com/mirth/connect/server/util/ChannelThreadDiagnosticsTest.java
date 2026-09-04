@@ -15,6 +15,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -86,7 +87,7 @@ public class ChannelThreadDiagnosticsTest {
         Thread chain = park("Destination Chain Thread on " + CHANNEL_ID + " < pool-3-thread-2");
         Thread other = park("Source Queue Thread 1 on Other (" + OTHER_CHANNEL_ID + ")");
 
-        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), null, 10);
+        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), null, null, 10);
 
         assertEquals(CHANNEL_ID, report.getChannelId());
         assertEquals("Diagnostics Channel", report.getChannelName());
@@ -149,7 +150,7 @@ public class ChannelThreadDiagnosticsTest {
         }
         assertEquals(Thread.State.BLOCKED, blocked.getState());
 
-        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), null, 5);
+        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), null, null, 5);
 
         ChannelThreadInfo blockedInfo = null;
         for (ChannelThreadInfo info : report.getThreads()) {
@@ -166,15 +167,51 @@ public class ChannelThreadDiagnosticsTest {
     }
 
     @Test
-    public void extraThreadsAreReportedAsAbandonedEvenWithoutTheChannelIdInTheirName() throws Exception {
+    public void haltAbandonedThreadsAreReportedAsAbandonedEvenWithoutTheChannelIdInTheirName() throws Exception {
         Thread orphan = park("pool-9-thread-4");
 
-        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), Collections.singleton(orphan), 10);
+        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), Collections.singleton(orphan), Collections.singleton(orphan), 10);
 
         assertEquals(1, report.getThreads().size());
         ChannelThreadInfo info = report.getThreads().get(0);
         assertEquals(orphan.getId(), info.getId());
         assertTrue(info.isAbandoned());
+    }
+
+    /**
+     * The distinction the flag exists to carry (IRT-2107). A stop that ran past its grace period
+     * tracks the thread it gave up on, and the endpoint must still show it, but the channel is still
+     * STOPPING and the stop still owns that thread. Flagging it abandoned told the operator the
+     * channel had already been marked Stopped, at the exact moment they were deciding whether to halt.
+     */
+    @Test
+    public void aThreadTrackedByALifecycleTimeoutIsReportedButNotAbandoned() throws Exception {
+        Thread orphan = park("pool-9-thread-5");
+
+        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), Collections.singleton(orphan), null, 10);
+
+        assertEquals(1, report.getThreads().size());
+        ChannelThreadInfo info = report.getThreads().get(0);
+        assertEquals(orphan.getId(), info.getId());
+        assertFalse("a stop timeout must not claim the thread was abandoned", info.isAbandoned());
+    }
+
+    /** Only the halt-abandoned thread carries the flag when both kinds are tracked at once. */
+    @Test
+    public void onlyHaltAbandonedThreadsCarryTheFlagWhenBothAreTracked() throws Exception {
+        Thread abandoned = park("pool-9-thread-6");
+        Thread waitedOn = park("pool-9-thread-7");
+
+        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), Arrays.asList(abandoned, waitedOn), Collections.singleton(abandoned), 10);
+
+        assertEquals(2, report.getThreads().size());
+        for (ChannelThreadInfo info : report.getThreads()) {
+            if (info.getId() == abandoned.getId()) {
+                assertTrue(info.isAbandoned());
+            } else {
+                assertFalse(info.isAbandoned());
+            }
+        }
     }
 
     @Test
@@ -184,18 +221,18 @@ public class ChannelThreadDiagnosticsTest {
         finished.join(10000);
         assertFalse(finished.isAlive());
 
-        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), Collections.singleton(finished), 10);
+        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), Collections.singleton(finished), Collections.singleton(finished), 10);
         assertTrue(report.getThreads().isEmpty());
     }
 
     @Test
     public void frameCountIsClampedToTheLimit() throws Exception {
         park("Channel Dispatch Thread on Diagnostics Channel (" + CHANNEL_ID + ")");
-        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), null, Integer.MAX_VALUE);
+        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), null, null, Integer.MAX_VALUE);
         assertEquals(1, report.getThreads().size());
         assertTrue(report.getThreads().get(0).getStackTrace().size() <= ChannelThreadDiagnostics.MAX_FRAMES_LIMIT);
 
-        report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), null, 0);
+        report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), null, null, 0);
         assertTrue(report.getThreads().get(0).getStackTrace().size() <= ChannelThreadDiagnostics.DEFAULT_MAX_FRAMES);
     }
 
@@ -206,7 +243,7 @@ public class ChannelThreadDiagnosticsTest {
     @Test
     public void reportSerializesAsPlainJson() throws Exception {
         park("Channel Dispatch Thread on Diagnostics Channel (" + CHANNEL_ID + ")");
-        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), null, 3);
+        ChannelThreadReport report = ChannelThreadDiagnostics.collect(channel(CHANNEL_ID), null, null, 3);
 
         JsonNode json = new ObjectMapper().readTree(new ObjectMapper().writeValueAsString(report));
         assertEquals(CHANNEL_ID, json.get("channelId").asText());

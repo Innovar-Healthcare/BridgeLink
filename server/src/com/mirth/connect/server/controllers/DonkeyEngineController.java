@@ -1156,7 +1156,7 @@ public class DonkeyEngineController implements EngineController {
         if (channel == null) {
             return null;
         }
-        return ChannelThreadDiagnostics.collect(channel, channel.getAbandonedLifecycleThreads(), maxFrames);
+        return ChannelThreadDiagnostics.collect(channel, channel.getAbandonedLifecycleThreads(), channel.getHaltAbandonedThreads(), maxFrames);
     }
 
     /**
