@@ -102,7 +102,8 @@ A channel that will not stop no longer sits in Stopping with nothing to look at.
   Keep the period at ten seconds or more: a source queue thread polls in one-second slices, so a
   very short period trips on healthy stops.
   Halt interrupts the threads the stop gave up on; a later start waits one more grace period
-  for them. Setting the period to 0 restores the previous wait-forever behaviour.
+  for them. Setting the period to 0 restores the previous wait-forever behaviour **for stop**;
+  it does not affect halt, which has its own fixed interval.
 - **New endpoint `GET /channels/{channelId}/_threads`.** Returns every live thread that
   belongs to the channel (dispatch, source and destination queues, chains, recovery, connector
   receivers, lifecycle hooks and channel scripts) with its state, the lock it is blocked on and
@@ -120,26 +121,48 @@ A channel that will not stop no longer sits in Stopping with nothing to look at.
 
 Halt now reaches Stopped in bounded time no matter what a connector or script is doing.
 
-- **Halt is bounded by the same grace period.** Every wait inside halt (the lifecycle lock, each
-  connector's halt hook, the dispatch-thread drain, the destination queue-thread joins, the
-  channel executor) gives up at the deadline. Whatever is still running is logged with its
-  stack frames, recorded as abandoned, and the channel is marked Stopped anyway. Abandoned
-  threads stay visible in `GET /channels/{channelId}/_threads` (flagged `abandoned`) across a
-  redeploy, and the next halt interrupts them again.
-- **Forced mode.** If a wedged stop or start still holds the channel's lifecycle lock after the
-  grace period, halt proceeds without it, interrupts the holder, and reports it. The same applies
-  to undeploy after a forced halt, so a redeploy always builds a fresh channel instance.
-- **The lifecycle lock is timed everywhere.** Deploy, start, stop, pause, resume and remove-all
-  wait at most the grace period for the lock and fail naming the operation holding it. Note the
-  engine still runs one task at a time per channel, so a task queued behind a wedged one does
-  not run until a halt replaces that queue; after the halt, the next start fails quickly naming
-  the wedged operation instead of hanging, and a redeploy builds a fresh channel.
+- **Halt still reacts immediately, and now it also finishes.** As before, halt shuts down the
+  channel executor, stops the source queue, interrupts every busy dispatch thread and tells each
+  connector to shut down, all without waiting. What is new is the ending: instead of blocking
+  forever on the channel lock, halt gives the threads it interrupted a short fixed interval
+  (two seconds) to wind down, then marks the channel Stopped regardless. Whatever is still
+  running is logged with its stack frames and recorded as abandoned. Abandoned threads stay
+  visible in `GET /channels/{channelId}/_threads` (flagged `abandoned`) across a redeploy, and
+  the next halt interrupts them again.
+- **A grace period of 0 no longer disables halt's bound.** Zero still means "wait forever" for
+  stop, as before, but halt always finishes within its own fixed interval. An earlier build of
+  this work let zero make halt unbounded, which meant the emergency action could be switched off
+  by a setting named for something else.
+- **Halt does not use the stop grace period.** Its wind-down interval is fixed and deliberately
+  short, because halt is the emergency action: an operator who shortens the grace period to see
+  stop diagnostics is not asking halt to take longer, and one who lengthens it is not asking
+  halt to take minutes. The two-second wait exists only so a thread that is milliseconds from a
+  clean exit is not reported as abandoned.
+- **Forced mode.** If a wedged stop or start still holds the channel's lifecycle lock when that
+  interval expires, halt proceeds without it, interrupts the holder, and reports it. The same
+  applies to undeploy after a forced halt, so a redeploy always builds a fresh channel instance.
+- **Only stop is bounded; every other operation waits as it always did.** Deploy, start, pause,
+  resume, remove-all-messages and an ordinary undeploy wait without limit, exactly as they did
+  before this release. An earlier build of this work timed all of them on the stop grace period,
+  which meant shortening that setting could make a deploy or a pause fail, and could abandon a
+  connector's undeploy hook mid-flush on a channel with a large queue. Only stop fails on a
+  timeout, because stop is what the setting is named for and the only operation an operator is
+  told to halt out of.
+- **The one exception: a lock held by a thread a halt already abandoned.** That holder will never
+  let go, so start, pause, resume and remove-all-messages fail at once, naming the operation that
+  is stuck and telling you to undeploy the channel and deploy it again to rebuild it. Waiting there
+  would block for the life of the server and queue every later action for that channel behind it.
+  No timer is involved: what makes the holder hopeless is that a halt abandoned it, not the clock.
+- **A halt during a deploy is no longer overtaken.** A deploy that goes on to start the channel
+  releases the channel's lock in between, and a halt could land in that gap, mark the channel
+  Stopped, and then be undone by the start that followed. The channel is now left deployed and
+  Stopped with an error in the log, and you start it explicitly if that is what you wanted.
 - **Abandoned queue threads stay retired.** A destination or source queue thread a halt gave up
   on exits when its blocked call finally returns, instead of resuming next to the restarted
   queue thread as a second sender.
 - **Stale permit protection.** A dispatch thread abandoned by a halt that completes after a
   restart no longer releases a permit into the restarted channel's process lock.
-- **The REST halt call returns within a bounded time** (twice the grace period plus 30 seconds)
+- **The REST halt call returns within a bounded time** (about 34 seconds: twice the wind-down interval plus a 30-second margin for a task that never started)
   and reports a timeout error if the task is still running; the task itself continues.
 - **Halt still trades a possible duplicate for never losing a message**, exactly as before; the
   Web UI's halt confirmation should say so and mention that threads may be abandoned.

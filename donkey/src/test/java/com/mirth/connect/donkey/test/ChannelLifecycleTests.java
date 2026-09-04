@@ -33,6 +33,7 @@ import com.mirth.connect.donkey.server.StartException;
 import com.mirth.connect.donkey.server.StopException;
 import com.mirth.connect.donkey.server.UndeployException;
 import com.mirth.connect.donkey.server.channel.AbandonedThreadRegistry;
+import com.mirth.connect.donkey.server.channel.Channel;
 import com.mirth.connect.donkey.server.channel.DefaultChannelProcessLock;
 import com.mirth.connect.donkey.server.channel.ChannelLifecycleTimeout;
 import com.mirth.connect.donkey.test.util.TestChannel;
@@ -535,13 +536,18 @@ public class ChannelLifecycleTests {
             assertTrue("the wedged stop must be holding the lifecycle lock", channel.isLifecycleLocked());
             assertEquals(DeployedState.STOPPING, channel.getCurrentState());
 
-            channel.setStopGracePeriodMillis(GRACE_MILLIS);
+            /*
+             * Zero disables the stop grace period, which is exactly why it is used here: halt must not
+             * consult that setting at all. Before halt got its own wind-down interval, zero meant halt
+             * waited without bound and this forced path could never be reached.
+             */
+            channel.setStopGracePeriodMillis(0);
             long started = System.currentTimeMillis();
             channel.halt();
             long elapsed = System.currentTimeMillis() - started;
 
             assertTrue("forced halt took " + elapsed + " ms, which is not bounded", elapsed < BOUND_MILLIS);
-            assertTrue("halt must have waited the grace period for the lock", elapsed >= GRACE_MILLIS);
+            assertTrue("halt must not wait on the stop grace period; it has its own interval", elapsed >= Channel.HALT_WIND_DOWN_MILLIS);
             assertEquals(DeployedState.STOPPED, channel.getCurrentState());
             assertTrue("the wedged stop still holds the lock; halt ran without it", channel.isLifecycleLocked());
 
@@ -784,6 +790,177 @@ public class ChannelLifecycleTests {
             if (channel.getCurrentState() != DeployedState.STOPPED) {
                 channel.halt();
             }
+            channel.undeploy();
+            AbandonedThreadRegistry.clear(channelId);
+        }
+    }
+
+    /**
+     * IRT-2107 regression: an earlier build of this work timed every lifecycle operation's lock wait
+     * on the stop grace period, so shortening that setting to read stop diagnostics could make an
+     * unrelated start fail. Only stop is bounded now. A holder that is merely slow -- not abandoned --
+     * must be waited for, however short the setting is.
+     */
+    @Test(timeout = 60000)
+    public final void testASlowLockHolderDoesNotMakeStartFailWhenTheGracePeriodIsShort() throws Exception {
+        String channelId = "lifecycleslowholder";
+        TestChannel channel = TestUtils.createDefaultChannel(channelId, serverId, true, 1, 1);
+        channel.setName(channelId);
+        TestSourceConnector sourceConnector = (TestSourceConnector) channel.getSourceConnector();
+        Thread stopper = null;
+
+        try {
+            channel.deploy();
+            channel.start(null);
+
+            /*
+             * The holder has to outlive the short grace period set below, so the stop that holds the
+             * lock is started while the period is disabled -- a stop started with it short would bail
+             * out at its own deadline and release the lock, which proves nothing. Its hook honours the
+             * interrupt, so this is a slow holder, not a wedged one: nothing abandons it.
+             */
+            CountDownLatch gate = new CountDownLatch(1);
+            channel.setStopGracePeriodMillis(0);
+            sourceConnector.blockOnStopInterruptibly(gate);
+            stopper = new Thread(() -> {
+                try {
+                    channel.stop();
+                } catch (Throwable ignored) {
+                }
+            }, "IRT-2107 slow holder on " + channelId);
+            stopper.start();
+            assertTrue(sourceConnector.getOnStopEntered().await(30, TimeUnit.SECONDS));
+            for (int i = 0; i < 300 && !channel.isLifecycleLocked(); i++) {
+                Thread.sleep(10);
+            }
+            assertTrue("the slow stop must be holding the lifecycle lock", channel.isLifecycleLocked());
+
+            // Now make the setting short. Start must still wait for the holder rather than fail.
+            channel.setStopGracePeriodMillis(GRACE_MILLIS);
+            final AtomicReference<Throwable> startError = new AtomicReference<Throwable>();
+            Thread starter = new Thread(() -> {
+                try {
+                    channel.start(null);
+                } catch (Throwable t) {
+                    startError.set(t);
+                }
+            }, "IRT-2107 waiting starter on " + channelId);
+            starter.start();
+
+            // Well past the grace period: the old behaviour would already have failed the start
+            Thread.sleep(GRACE_MILLIS * 3);
+            assertTrue("start must still be waiting for the slow holder, not failed", starter.isAlive());
+            assertNull("start must not fail because the grace period elapsed", startError.get());
+
+            gate.countDown();
+            starter.join(30000);
+            assertFalse(starter.isAlive());
+            assertNull("start must succeed once the holder releases the lock: " + startError.get(), startError.get());
+            assertEquals(DeployedState.STARTED, channel.getCurrentState());
+        } finally {
+            sourceConnector.blockOnStopInterruptibly(null);
+            if (stopper != null) {
+                stopper.join(10000);
+            }
+            try {
+                channel.halt();
+            } catch (Throwable ignored) {
+            }
+            channel.undeploy();
+            AbandonedThreadRegistry.clear(channelId);
+        }
+    }
+
+    /**
+     * IRT-2107: the one case where waiting without bound is hopeless. A forced halt leaves the wedged
+     * holder owning the lock forever, so a later start must say so rather than block for the life of
+     * the JVM and pin the channel's engine executor behind it. No deadline is involved -- being in the
+     * abandoned registry is what makes the holder hopeless.
+     */
+    @Test(timeout = 60000)
+    public final void testStartFailsFastWhenAHaltAbandonedTheLockHolder() throws Exception {
+        String channelId = "lifecycleabandonedholder";
+        TestChannel channel = TestUtils.createDefaultChannel(channelId, serverId, true, 1, 1);
+        channel.setName(channelId);
+        TestSourceConnector sourceConnector = (TestSourceConnector) channel.getSourceConnector();
+        CountDownLatch gate = new CountDownLatch(1);
+        Thread stopper = null;
+
+        try {
+            channel.deploy();
+            channel.start(null);
+
+            // A stop wedged in a hook that ignores the interrupt, unbounded so it never releases
+            channel.setStopGracePeriodMillis(0);
+            sourceConnector.blockOnStop(gate);
+            stopper = new Thread(() -> {
+                try {
+                    channel.stop();
+                } catch (Throwable ignored) {
+                }
+            }, "IRT-2107 wedged holder on " + channelId);
+            stopper.start();
+            assertTrue(sourceConnector.getOnStopEntered().await(30, TimeUnit.SECONDS));
+            for (int i = 0; i < 300 && !channel.isLifecycleLocked(); i++) {
+                Thread.sleep(10);
+            }
+            assertTrue(channel.isLifecycleLocked());
+
+            channel.halt();
+            assertEquals(DeployedState.STOPPED, channel.getCurrentState());
+            assertTrue("the wedged stop still holds the lock", channel.isLifecycleLocked());
+
+            long started = System.currentTimeMillis();
+            try {
+                channel.start(null);
+                fail("start must not block forever on a holder a halt abandoned");
+            } catch (StartException expected) {
+                assertTrue("the error must point at the recovery: " + expected.getMessage(), expected.getMessage().contains("undeploy"));
+            }
+            long elapsed = System.currentTimeMillis() - started;
+            assertTrue("start must fail promptly, took " + elapsed + " ms", elapsed < BOUND_MILLIS);
+            assertEquals(DeployedState.STOPPED, channel.getCurrentState());
+        } finally {
+            gate.countDown();
+            if (stopper != null) {
+                stopper.join(10000);
+            }
+            channel.undeploy();
+            AbandonedThreadRegistry.clear(channelId);
+        }
+    }
+
+    /**
+     * IRT-2107: the halt epoch has to move for every halt, not only a forced one, because the caller it
+     * exists for (DeployTask, which deploys and then starts) releases the lifecycle lock in between its
+     * two calls. A halt that lands in that gap takes the lock cleanly and so never sets forced mode,
+     * yet it is exactly the halt that must not be overtaken by the start that follows.
+     */
+    @Test(timeout = 60000)
+    public final void testHaltEpochMovesForACleanHaltNotJustAForcedOne() throws Exception {
+        String channelId = "lifecyclehaltepoch";
+        TestChannel channel = TestUtils.createDefaultChannel(channelId, serverId, true, 1, 1);
+        channel.setName(channelId);
+        channel.setStopGracePeriodMillis(GRACE_MILLIS);
+
+        try {
+            channel.deploy();
+            channel.start(null);
+
+            long before = channel.getHaltEpoch();
+
+            // A perfectly ordinary halt: nothing is wedged, so it takes the lock and never forces
+            channel.halt();
+            assertEquals(DeployedState.STOPPED, channel.getCurrentState());
+            assertFalse("this halt must not have needed forced mode", channel.isLifecycleLocked());
+
+            assertTrue("a clean halt must still move the halt epoch, or a deploy in flight cannot see it", channel.getHaltEpoch() > before);
+
+            // And it keeps moving, so two halts in a row are distinguishable
+            long afterFirst = channel.getHaltEpoch();
+            channel.halt();
+            assertTrue(channel.getHaltEpoch() > afterFirst);
+        } finally {
             channel.undeploy();
             AbandonedThreadRegistry.clear(channelId);
         }

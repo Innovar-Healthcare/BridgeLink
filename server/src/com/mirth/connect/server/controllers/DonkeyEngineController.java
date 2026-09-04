@@ -187,7 +187,7 @@ public class DonkeyEngineController implements EngineController {
 
     protected AtomicInteger queueBufferSize = new AtomicInteger(Constants.DEFAULT_QUEUE_BUFFER_SIZE);
 
-    /** Added to twice the grace period to bound the REST wait for a halt (IRT-2107). */
+    /** Added to twice halt's wind-down interval to bound the REST wait for a halt (IRT-2107). */
     protected static final long HALT_WAIT_MARGIN_MILLIS = 30000L;
 
     private enum StatusTask {
@@ -672,13 +672,13 @@ public class DonkeyEngineController implements EngineController {
     @Override
     public void haltChannels(Set<String> channelIds, ChannelTaskHandler handler) {
         /*
-         * IRT-2107: the REST thread waits a bounded time. A halt itself is bounded by two grace
-         * periods (the lock wait and the halt body), so anything past that plus a margin means the
-         * task is wedged before it even reached the channel; the caller is told and the task is left
-         * to finish on its own. Unbounded when the grace period is disabled.
+         * IRT-2107: the REST thread waits a bounded time. A halt is bounded by two of its own
+         * wind-down intervals (the lock wait and the halt body) and does not consult the stop grace
+         * period, so anything past that plus a margin means the task is wedged before it even reached
+         * the channel; the caller is told and the task is left to finish on its own. Always bounded,
+         * because halt's interval is a constant rather than a setting an operator can disable.
          */
-        long gracePeriod = getStopGracePeriodMillis();
-        waitForTasks(submitHaltTasks(channelIds, handler), gracePeriod > 0 ? gracePeriod * 2 + HALT_WAIT_MARGIN_MILLIS : 0);
+        waitForTasks(submitHaltTasks(channelIds, handler), Channel.HALT_WIND_DOWN_MILLIS * 2 + HALT_WAIT_MARGIN_MILLIS);
     }
 
     @Override
@@ -1943,6 +1943,21 @@ public class DonkeyEngineController implements EngineController {
                 throw new DeployException(e.getMessage(), e);
             }
 
+            /*
+             * IRT-2107: this task makes two lifecycle calls and releases the channel's lifecycle lock
+             * between them. A halt aimed at a deploying channel (DEPLOYING is haltable in both clients,
+             * and a redeploy also passes through STOPPING) can land in that gap, mark the channel
+             * STOPPED, and then be overtaken by the start below -- leaving it STARTED seconds after the
+             * operator halted it. Comparing the halt epoch before the start closes that. Channel's own
+             * forced-halt epoch cannot: it is captured inside start(), too late, and it only moves for a
+             * forced halt, whereas a halt landing in this gap takes the lock cleanly.
+             *
+             * Read before the channel goes into deployedChannels below, because that map is what
+             * HaltTask resolves against: taken any later, a halt in between would be counted into the
+             * baseline and the comparison would report no change.
+             */
+            long haltEpochBeforeDeploy = channel.getHaltEpoch();
+
             try {
                 channel.updateCurrentState(DeployedState.DEPLOYING);
                 deployingChannels.add(channel);
@@ -2113,6 +2128,9 @@ public class DonkeyEngineController implements EngineController {
                 if (initialState == DeployedState.STOPPED) {
                     // If the initial state is stopped, update the channel's state to dispatch its event
                     channel.updateCurrentState(DeployedState.STOPPED);
+                } else if (channel.getHaltEpoch() != haltEpochBeforeDeploy) {
+                    // A halt ran while this channel was deploying; starting it now would undo the halt
+                    logger.error("Channel " + channel.getName() + " (" + channelId + ") was deployed but will not be started: a halt ran while it was deploying. Start it explicitly if that is what you want.");
                 } else {
                     // Unless the initial state is stopped, always start the channel
                     channel.start(connectorsToStart);
