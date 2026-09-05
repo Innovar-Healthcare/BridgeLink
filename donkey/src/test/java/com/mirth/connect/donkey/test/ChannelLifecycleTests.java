@@ -356,7 +356,10 @@ public class ChannelLifecycleTests {
                 channel.undeploy();
                 fail("undeploy must refuse while the stop has timed out");
             } catch (UndeployException e) {
-                assertTrue(e.getMessage(), e.getMessage().contains("Halt the channel first"));
+                // Waiting is a real option now that a timed-out stop completes itself, so the
+                // refusal offers both rather than sending the operator straight to halt
+                assertTrue(e.getMessage(), e.getMessage().contains("Wait for it to finish stopping"));
+                assertTrue(e.getMessage(), e.getMessage().contains("halt"));
                 assertTrue(e.getMessage(), e.getMessage().contains("timed out"));
             }
             assertEquals("a refused undeploy must not change the state", DeployedState.STOPPING, channel.getCurrentState());
@@ -1040,6 +1043,145 @@ public class ChannelLifecycleTests {
             assertEquals(DeployedState.STARTED, channel.getCurrentState());
         } finally {
             gate.countDown();
+            try {
+                channel.halt();
+            } catch (Throwable ignored) {
+            }
+            channel.undeploy();
+            AbandonedThreadRegistry.clear(channelId);
+        }
+    }
+
+    /**
+     * IRT-2107, found in QA re-test: a stop that ran out of time left the channel in STOPPING for good.
+     * The design says the operator chooses between waiting and halting, but waiting never resolved --
+     * nothing moved the channel on when its work finished, both clients grey out Stop while a channel
+     * is Stopping, and undeploy refuses. So the only reachable action on a channel that had finished
+     * cleanly was Halt, which risks a duplicate delivery. The stop now completes itself once the
+     * threads it gave up on end.
+     */
+    @Test(timeout = 60000)
+    public final void testATimedOutStopCompletesItselfOnceItsThreadsFinish() throws Exception {
+        String channelId = "lifecyclestopcompletes";
+        TestChannel channel = TestUtils.createDefaultChannel(channelId, serverId, true, 1, 1);
+        channel.setName(channelId);
+        channel.setStopGracePeriodMillis(GRACE_MILLIS);
+        TestSourceConnector sourceConnector = (TestSourceConnector) channel.getSourceConnector();
+        CountDownLatch gate = new CountDownLatch(1);
+
+        try {
+            channel.deploy();
+            channel.start(null);
+
+            // A stop hook that outlives the grace period but is otherwise perfectly healthy
+            sourceConnector.blockOnStopInterruptibly(gate);
+            try {
+                channel.stop();
+                fail("the stop must give up at the grace period");
+            } catch (StopException expected) {
+            }
+            assertEquals(DeployedState.STOPPING, channel.getCurrentState());
+
+            // The work now finishes on its own, exactly as a slow-but-healthy send would
+            gate.countDown();
+
+            for (int i = 0; i < 600 && channel.getCurrentState() != DeployedState.STOPPED; i++) {
+                Thread.sleep(50);
+            }
+            assertEquals("the channel must reach Stopped on its own once its threads finish", DeployedState.STOPPED, channel.getCurrentState());
+
+            // And it must be genuinely stopped, not merely relabelled: a start has to work afterwards
+            sourceConnector.blockOnStopInterruptibly(null);
+            channel.start(null);
+            assertEquals(DeployedState.STARTED, channel.getCurrentState());
+            assertEquals("the source must be started, so the completed stop really stopped it", DeployedState.STARTED, sourceConnector.getCurrentState());
+        } finally {
+            gate.countDown();
+            sourceConnector.blockOnStopInterruptibly(null);
+            try {
+                channel.halt();
+            } catch (Throwable ignored) {
+            }
+            channel.undeploy();
+            AbandonedThreadRegistry.clear(channelId);
+        }
+    }
+
+    /**
+     * IRT-2107: the completion loop has to ask the registry whether a thread has LEFT the channel, not
+     * wait for it to die. A dispatch thread is often not the channel's own -- a Jetty pool thread, a
+     * JMS session thread, a TCP Listener's per-client reader -- and it leaves by restoring its original
+     * name while staying alive for the life of the pool. The first version of this fix joined those
+     * threads, so it never returned and the channel sat in Stopping exactly as before, for the most
+     * common source connectors.
+     *
+     * <p>
+     * The stop has to genuinely time out for this to prove anything: an earlier version of this test
+     * stopped the channel cleanly first, so the completer never ran and a single join would have
+     * passed it.
+     */
+    @Test(timeout = 60000)
+    public final void testStopCompletesWhenAPooledThreadLeavesTheChannelWithoutDying() throws Exception {
+        String channelId = "lifecyclepooledleaves";
+        TestChannel channel = TestUtils.createDefaultChannel(channelId, serverId, true, 1, 1);
+        channel.setName(channelId);
+        channel.setStopGracePeriodMillis(GRACE_MILLIS);
+        TestSourceConnector sourceConnector = (TestSourceConnector) channel.getSourceConnector();
+        CountDownLatch hookGate = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch entered = new CountDownLatch(1);
+
+        // A pool thread that has borrowed the channel's name, as a dispatch thread does
+        String borrowedName = "Channel Dispatch Thread on " + channelId + " (" + channelId + ") < qtp-77";
+        Thread pooled = new Thread(() -> {
+            entered.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            // Its work is done: it hands the name back and stays alive in the pool, as a real one does
+            Thread.currentThread().setName("qtp-77");
+            try {
+                Thread.sleep(60000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, borrowedName);
+        pooled.setDaemon(true);
+        pooled.start();
+        assertTrue(entered.await(30, TimeUnit.SECONDS));
+
+        try {
+            channel.deploy();
+            channel.start(null);
+
+            // The pooled thread is one the stop will have given up on, alongside the hook below
+            AbandonedThreadRegistry.add(channelId, pooled, AbandonedThreadRegistry.Source.LIFECYCLE_TIMEOUT);
+
+            sourceConnector.blockOnStopInterruptibly(hookGate);
+            try {
+                channel.stop();
+                fail("the stop must give up at the grace period");
+            } catch (StopException expected) {
+            }
+            assertEquals(DeployedState.STOPPING, channel.getCurrentState());
+
+            // The hook thread ends the ordinary way; the pooled one never will
+            hookGate.countDown();
+            // And the pooled thread leaves the channel by renaming, while staying alive
+            release.countDown();
+
+            for (int i = 0; i < 600 && channel.getCurrentState() != DeployedState.STOPPED; i++) {
+                Thread.sleep(50);
+            }
+            assertEquals("a thread that leaves by renaming must not hold the completion open", DeployedState.STOPPED, channel.getCurrentState());
+            assertTrue("and it really is still alive, which is the whole point", pooled.isAlive());
+        } finally {
+            hookGate.countDown();
+            release.countDown();
+            sourceConnector.blockOnStopInterruptibly(null);
+            pooled.interrupt();
             try {
                 channel.halt();
             } catch (Throwable ignored) {

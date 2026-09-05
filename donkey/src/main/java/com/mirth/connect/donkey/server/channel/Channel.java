@@ -31,6 +31,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -112,12 +113,6 @@ public class Channel implements Runnable {
      */
     private volatile long stopGracePeriodMillis = Constants.DEFAULT_STOP_GRACE_PERIOD_MILLIS;
     private volatile ChannelLifecycleTimeout lastLifecycleTimeout;
-    /*
-     * Threads a lifecycle operation gave up waiting on (a connector hook, a dispatch thread or a queue
-     * thread that outlived the grace period) live in AbandonedThreadRegistry, keyed by channel id, so
-     * they survive the redeploy that replaces this instance. Halt interrupts them, start joins them for
-     * one more grace period, and the diagnostics endpoint reports them as abandoned.
-     */
 
     private StorageSettings storageSettings = new StorageSettings();
     private DonkeyDaoFactory daoFactory;
@@ -201,6 +196,18 @@ public class Channel implements Runnable {
      * A caller reads this before its first call and compares before its last.
      */
     private final AtomicLong haltEpoch = new AtomicLong();
+
+    /** One stop-completion thread per channel at a time; see {@link #scheduleStopCompletion()}. */
+    private final AtomicBoolean stopCompletionPending = new AtomicBoolean();
+
+    /** The live stop-completion thread, so halt can retire it and the survivor scan can skip it. */
+    private volatile Thread stopCompleter;
+
+    /** How long the stop-completion loop waits per pass before re-reading the registry. */
+    private static final long STOP_COMPLETION_POLL_MILLIS = 500L;
+
+    /** Gives up after this many completion attempts rather than logging a failure every grace period forever. */
+    private static final int STOP_COMPLETION_MAX_ATTEMPTS = 10;
 
     /** Thrown inside start when a forced halt ran underneath it; routed through the rollback branch. */
     private static class ForcedHaltDuringStartException extends Exception {
@@ -556,7 +563,7 @@ public class Channel implements Runnable {
          * registry is what makes the holder hopeless, not the clock.
          */
         Thread owner = lifecycleLockOwner;
-        if (owner != null && getAbandonedLifecycleThreads().contains(owner)) {
+        if (owner != null && getHaltAbandonedThreads().contains(owner)) {
             throw new LifecycleTimeoutException(operation, owner, "the channel lifecycle lock is held by " + StringUtils.defaultString(lifecycleLockOperation, "an operation") + " that a halt abandoned and which will not release it; undeploy the channel and deploy it again to rebuild it");
         }
         tryAcquireLifecycleLock(operation, Long.MAX_VALUE);
@@ -643,7 +650,13 @@ public class Channel implements Runnable {
         Set<Thread> survivors = new HashSet<Thread>();
         Thread current = Thread.currentThread();
         for (Thread thread : Thread.getAllStackTraces().keySet()) {
-            if (thread != current && thread.isAlive() && StringUtils.contains(thread.getName(), channelId)) {
+            // The stop completer carries the channel id in its name but is this engine's own daemon,
+            // not a thread anything abandoned; reporting it would warn of a duplicate that cannot happen
+            // Skip this engine's own stop-completion daemon -- unless it is holding the lifecycle
+            // lock, in which case a later operation does need to be told about it (it is the one
+            // thread the halt could not free)
+            boolean ownCompleter = thread == stopCompleter && thread != lifecycleLockOwner;
+            if (thread != current && !ownCompleter && thread.isAlive() && StringUtils.contains(thread.getName(), channelId)) {
                 // A hook thread whose task just completed is still alive for an instant; do not report it
                 thread.join(50);
                 if (thread.isAlive()) {
@@ -910,15 +923,19 @@ public class Channel implements Runnable {
 
     public void undeploy() throws UndeployException {
         /*
-         * A channel that is STOPPING here is one whose stop gave up at the grace period (a stop in
-         * progress holds the lifecycle lock, so it would be waited for below instead). Its dispatch
-         * threads or connector hooks are still running; undeploying underneath them and redeploying
-         * would let recovery send the in-flight message a second time. Stop never escalates to halt
-         * on its own, so undeploy does not either.
+         * A channel that is STOPPING here is one whose stop gave up at the grace period. Its dispatch
+         * threads or connector hooks may still be running; undeploying underneath them and redeploying
+         * would let recovery send the in-flight message a second time. Stop never escalates to halt on
+         * its own, so undeploy does not either.
+         *
+         * Nothing below waits for that stop: the lock is taken without waiting. So this refusal can
+         * also land while the stop-completion thread is finishing the stop, seconds before the channel
+         * would have reached STOPPED on its own. Retrying the undeploy then succeeds, which is why the
+         * message says to halt rather than making the operator wait on a state they cannot see.
          */
         if (currentState == DeployedState.STOPPING) {
             ChannelLifecycleTimeout timeout = lastLifecycleTimeout;
-            throw new UndeployException("Cannot undeploy channel " + name + " (" + channelId + "): it is still stopping" + (timeout != null ? " and its stop timed out (" + timeout.getMessage() + ")" : "") + ". Halt the channel first.");
+            throw new UndeployException("Cannot undeploy channel " + name + " (" + channelId + "): it is still stopping" + (timeout != null ? " and its stop timed out (" + timeout.getMessage() + ")" : "") + ". Wait for it to finish stopping, or halt it to force it.");
         }
 
         /*
@@ -934,6 +951,23 @@ public class Channel implements Runnable {
          */
         long deadline = Long.MAX_VALUE;
         boolean locked = tryAcquireLifecycleLockWithoutWaiting("Undeploy");
+
+        if (!locked && lifecycleLockOwner == stopCompleter && stopCompleter != null) {
+            /*
+             * The stop-completion thread is finishing a stop and is about to release. It is this
+             * engine's own daemon, not a wedged holder, so wait for it rather than treating a held
+             * lock as the forced-halt signature below -- which would bound the connector undeploy
+             * hooks by halt's short interval and abandon a slow queue flush for no reason.
+             */
+            try {
+                acquireLifecycleLock("Undeploy");
+                locked = true;
+            } catch (InterruptedException e) {
+                throw new UndeployException("Undeploy channel task for " + name + " (" + channelId + ") terminated by halt notification.", e);
+            } catch (LifecycleTimeoutException e) {
+                // Fell through to a genuinely hopeless holder; the forced branch below is right after all
+            }
+        }
 
         if (!locked) {
             /*
@@ -1226,6 +1260,7 @@ public class Channel implements Runnable {
                     if (t2 instanceof LifecycleTimeoutException) {
                         // Same rule as stop(): the channel stays STOPPING with its threads reported, not STOPPED with them hidden
                         recordLifecycleTimeout((LifecycleTimeoutException) t2);
+                        scheduleStopCompletion();
                         logger.error("Rollback after a failed start of channel " + name + " (" + channelId + ") exceeded the grace period; the channel remains STOPPING. " + t2.getMessage());
                         throw new StartException("Failed to start channel " + name + " (" + channelId + "), and stopping it again exceeded the grace period of " + stopGracePeriodMillis + " ms. The channel remains Stopping; use Halt to force it to Stopped. " + t2.getMessage(), t);
                     }
@@ -1261,6 +1296,122 @@ public class Channel implements Runnable {
         }
     }
 
+    /**
+     * Finishes a stop that ran out of time, once the threads it gave up on have ended (IRT-2107).
+     *
+     * <p>
+     * "The operator chooses between waiting and halting" only works if waiting actually resolves.
+     * It did not: nothing moved the channel out of STOPPING when its work finished, both clients
+     * offer Stop on a STARTED or PAUSED channel only, and undeploy refuses while STOPPING -- so the
+     * one reachable action on a channel that had finished cleanly was Halt, which risks a duplicate
+     * delivery. Found in QA re-test of this ticket.
+     *
+     * <p>
+     * The state cannot simply be relabelled STOPPED: a timed-out stop throws part-way through, so
+     * the destination connectors and the source queue may never have been stopped, and the badge
+     * would then say Stopped over a running destination. The stop is re-run instead.
+     *
+     * <p>
+     * A connector's {@code onStop} can therefore run twice: once on the hook thread the first stop
+     * gave up on, and again when this re-runs the stop. Neither connector base class guards on state,
+     * and no path before this one ever called it twice, so an {@code onStop} that is not idempotent
+     * will throw here -- the channel still reaches STOPPED, with the error logged.
+     *
+     * <p>
+     * This waits on abandoned threads, which everything else in this ticket refuses to do -- the
+     * difference is that nothing waits on <em>this</em>. It is a background daemon and no operator
+     * action queues behind it, so a thread that never ends costs one parked thread and changes
+     * nothing else. A halt in the meantime moves the channel to STOPPED and this exits without
+     * touching it.
+     */
+    private void scheduleStopCompletion() {
+        if (!stopCompletionPending.compareAndSet(false, true)) {
+            return;
+        }
+        final long haltEpochAtSchedule = haltEpoch.get();
+        Thread completer = new Thread(() -> {
+            try {
+                int attempts = 0;
+                while (standDownCheck(haltEpochAtSchedule)) {
+                    /*
+                     * Re-read the registry each pass rather than joining once. A join waits for the
+                     * thread to DIE, but a dispatch thread is often not the channel's own -- a Jetty
+                     * pool thread, a JMS session thread, a TCP Listener's per-client reader -- and it
+                     * leaves the channel by restoring its original name while staying alive for the
+                     * life of the pool. Joining one of those never returns, and the channel would sit
+                     * in Stopping exactly as it did before this fix. The registry's own read prunes
+                     * both the dead and the renamed, so it is the thing that answers "has it left".
+                     */
+                    Set<Thread> alive = getAbandonedLifecycleThreads();
+                    if (alive.isEmpty()) {
+                        if (++attempts > STOP_COMPLETION_MAX_ATTEMPTS) {
+                            logger.error("Channel " + name + " (" + channelId + "): giving up on completing the stop that ran out of time after " + STOP_COMPLETION_MAX_ATTEMPTS + " attempts. The channel remains Stopping; halt it to force it to Stopped.");
+                            return;
+                        }
+                        if (completeStop(haltEpochAtSchedule)) {
+                            return;
+                        }
+                        // Timed out again on something new; the registry now names it, so go round
+                        Thread.sleep(STOP_COMPLETION_POLL_MILLIS);
+                    } else {
+                        for (Thread stuck : alive) {
+                            stuck.join(STOP_COMPLETION_POLL_MILLIS);
+                        }
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Throwable t) {
+                logger.error("Channel " + name + " (" + channelId + "): could not complete the stop that ran out of time; it remains Stopping and a halt will still force it.", t);
+            } finally {
+                /*
+                 * Order matters: clearing the flag first lets the next completer be scheduled and
+                 * register itself, and this line would then null out ITS reference, leaving it
+                 * unregistered -- reported as an abandoned survivor by the next halt.
+                 */
+                stopCompleter = null;
+                stopCompletionPending.set(false);
+            }
+        }, "Channel Stop Completion Thread on " + name + " (" + channelId + ")");
+        stopCompleter = completer;
+        completer.setDaemon(true);
+        completer.start();
+    }
+
+    /**
+     * Whether the completion loop should keep going. A halt since it was scheduled means the operator
+     * said "stop waiting and force it", and halt reaches STOPPED on its own -- re-running the stop
+     * underneath it would be a second lifecycle operation on the same channel.
+     */
+    private boolean standDownCheck(long haltEpochAtSchedule) {
+        return haltEpoch.get() == haltEpochAtSchedule && currentState == DeployedState.STOPPING;
+    }
+
+    /** One attempt at finishing the stop. True when the channel reached STOPPED. */
+    private boolean completeStop(long haltEpochAtSchedule) throws InterruptedException {
+        logger.error("Channel " + name + " (" + channelId + "): the threads its stop gave up on have finished; completing the stop.");
+        try {
+            acquireLifecycleLock("Stop");
+        } catch (LifecycleTimeoutException e) {
+            return false;
+        }
+        try {
+            // Re-checked under the lock: a forced halt runs without it
+            if (!standDownCheck(haltEpochAtSchedule)) {
+                return true;
+            }
+            doStop();
+            // The stop finished, so its timeout no longer describes the channel; otherwise _threads
+            // shows "last stop timed out waiting on ..." under a Stopped badge
+            lastLifecycleTimeout = null;
+            return true;
+        } catch (StopException e) {
+            return false;
+        } finally {
+            releaseLifecycleLock();
+        }
+    }
+
     private void doStop() throws StopException {
         if (currentState != DeployedState.STOPPED) {
             try {
@@ -1288,6 +1439,7 @@ public class Channel implements Runnable {
                      */
                     LifecycleTimeoutException timeout = (LifecycleTimeoutException) t;
                     recordLifecycleTimeout(timeout);
+                    scheduleStopCompletion();
                     logger.error("Failed to stop channel " + name + " (" + channelId + ") within the grace period of " + stopGracePeriodMillis + " ms. The channel remains STOPPING; halt it to force it to STOPPED. " + timeout.getMessage());
                     throw new StopException("Failed to stop channel " + name + " (" + channelId + ") within the grace period of " + stopGracePeriodMillis + " ms. The channel remains Stopping; use Halt to force it to Stopped. " + timeout.getMessage(), t);
                 }

@@ -38,8 +38,13 @@ public class LifecycleTimeoutException extends Exception {
         this.stackFrames = Collections.unmodifiableList(ThreadUtils.stackFrames(thread, Constants.LIFECYCLE_TIMEOUT_STACK_FRAMES));
     }
 
+    /*
+     * "gave up waiting" rather than "exceeded its grace period": only stop has a grace period. Halt
+     * uses its own short wind-down interval, and an operation that finds the lock held by a thread a
+     * halt abandoned gives up at once with no timer at all (IRT-2107).
+     */
     private static String buildMessage(String phase, Thread thread, String detail) {
-        StringBuilder builder = new StringBuilder(phase).append(" exceeded its grace period");
+        StringBuilder builder = new StringBuilder(phase).append(" gave up waiting");
         if (detail != null) {
             builder.append(": ").append(detail);
         }

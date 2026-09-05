@@ -86,7 +86,7 @@ public class AbandonedThreadRegistryTest {
     }
 
     /**
-     * Every tracked thread is interrupted by the next halt and waited for by the next start, whatever
+     * Every tracked thread is interrupted by the next halt, whatever
      * recorded it, but only a halt-abandoned one is reported to an operator as abandoned (IRT-2107).
      */
     @Test

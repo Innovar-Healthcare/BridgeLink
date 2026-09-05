@@ -40,7 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>
  * Each entry records <em>which kind of operation</em> gave up on it. Every tracked thread is
- * interrupted by the next halt and waited for by the next start, whatever put it here, but only a
+ * interrupted by the next halt, whatever put it here, but only a
  * thread a halt actually abandoned is reported as {@code abandoned} to an operator: a halt leaves the
  * channel STOPPED with the thread running loose, and a stop timeout does not. Conflating the two told
  * the operator the channel had been marked Stopped at the exact moment they were deciding whether to
@@ -51,8 +51,10 @@ public final class AbandonedThreadRegistry {
     /** Which kind of lifecycle operation gave up on a thread. */
     public enum Source {
         /**
-         * A stop, start, deploy, undeploy, pause, resume or lock acquisition exceeded its grace
-         * period. The channel keeps its current state and the operation is still the thread's owner.
+         * A lifecycle operation gave up waiting on this thread: a stop that ran out of its grace
+         * period, or an operation that found the thread holding the channel's lifecycle lock. The
+         * channel keeps its current state and the operation is still the thread's owner, which is why
+         * it is not reported as abandoned. Only stop has a grace period; nothing else is timed.
          */
         LIFECYCLE_TIMEOUT,
 
@@ -91,7 +93,7 @@ public final class AbandonedThreadRegistry {
          * monitor on the inner map. Guarding the inner map instead loses entries: a reader that prunes
          * the last entry drops the whole inner map from THREADS, and a writer that already held a
          * reference to it then writes into a map nothing can reach -- so a genuinely abandoned thread
-         * is never reported, never interrupted by the next halt and never waited for by the next start.
+         * is never reported and never interrupted by the next halt.
          */
         THREADS.compute(channelId, (id, threads) -> {
             if (threads == null) {

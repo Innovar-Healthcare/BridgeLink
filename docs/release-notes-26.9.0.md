@@ -135,7 +135,9 @@ Halt now reaches Stopped in bounded time no matter what a connector or script is
   forever on the channel lock, halt gives the threads it interrupted a short fixed interval
   (two seconds) to wind down, then marks the channel Stopped regardless. Whatever is still
   running is logged with its stack frames and recorded as abandoned. Abandoned threads stay
-  visible in `GET /channels/{channelId}/_threads` (flagged `abandoned`) across a redeploy, and
+  visible in `GET /channels/{channelId}/_threads` (flagged `abandoned`) once the channel is
+  redeployed -- the endpoint answers only for a deployed channel, so there is a gap between
+  undeploy and deploy where it returns 404 -- and
   the next halt interrupts them again.
 - **A grace period of 0 no longer disables halt's bound.** Zero still means "wait forever" for
   stop, as before, but halt always finishes within its own fixed interval. An earlier build of
@@ -150,12 +152,28 @@ Halt now reaches Stopped in bounded time no matter what a connector or script is
   interval expires, halt proceeds without it, interrupts the holder, and reports it. The same
   applies to undeploy after a forced halt, so a redeploy always builds a fresh channel instance.
 - **Only stop is bounded; every other operation waits as it always did.** Deploy, start, pause,
-  resume, remove-all-messages and an ordinary undeploy wait without limit, exactly as they did
-  before this release. An earlier build of this work timed all of them on the stop grace period,
-  which meant shortening that setting could make a deploy or a pause fail, and could abandon a
-  connector's undeploy hook mid-flush on a channel with a large queue. Only stop fails on a
-  timeout, because stop is what the setting is named for and the only operation an operator is
-  told to halt out of.
+  resume and remove-all-messages wait without limit, exactly as they did before this release. An
+  earlier build of this work timed all of them on the stop grace period, which meant shortening
+  that setting could make a deploy or a pause fail. Only stop fails on a timeout, because stop is
+  what the setting is named for and the only operation an operator is told to halt out of.
+- **Undeploying a running channel stops it first, so it inherits the stop grace period.** That has
+  always been the order; what is new is that the stop can now give up. Undeploy's own connector
+  hooks are unbounded and a slow queue flush is never abandoned by an ordinary undeploy -- except after a forced halt,
+  where undeploy runs them on halt's own short interval so a redeploy is never blocked by the old
+  channel. If the channel does not stop within the grace period the undeploy stops there and the
+  channel is left Stopping; when the stop later completes on its own the undeploy is not resumed,
+  so issue it again. Raise the
+  grace period if your channels legitimately take longer than it to stop.
+- **A stop that ran out of time now finishes on its own once its work does.** The channel stays
+  Stopping while something is still running, as before, and halt still forces it. But when the
+  threads the stop gave up on finish -- or, for a pooled thread such as a web server's, once it
+  leaves the channel -- the stop completes and the channel reaches Stopped without an operator
+  touching it. A channel whose threads never finish still needs a halt, and so does one where
+  repeated attempts to finish the stop keep running out of time -- after ten it stops trying and
+  logs that it has, rather than retrying forever. Previously it stayed Stopping for good: nothing moved
+  it on, both admin clients offer Stop only on a started or paused channel, and undeploy is
+  refused while Stopping -- so the only action left was a halt, which risks a duplicate delivery,
+  on a channel where nothing was wrong any more.
 - **The one exception: a lock held by a thread a halt already abandoned.** That holder will never
   let go, so start, pause, resume and remove-all-messages fail at once, naming the operation that
   is stuck and telling you to undeploy the channel and deploy it again to rebuild it. Waiting there
