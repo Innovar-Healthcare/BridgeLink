@@ -24,17 +24,19 @@ jobs:
     # (this plan's automated verify, gh run view --json jobs) keys on job names containing
     # 17/21 to confirm which legs went green.
     name: smoke (${{ matrix.java }})
-    # HISTORY (plans 18-01/18-07/18-08/18-09): this job used to wrap the JDK 17 leg in an
-    # expected-failure-signature assert, because Phase 16's JAVA-04 Derby/Java-21 preflight
-    # (Mirth.derbyPreflightBlocks) unconditionally aborted embedded-Derby boot below Java 21.
-    # That preflight was REVERTED on 2026-08-13 ("revert(JAVA-04): remove Derby Java-21
-    # startup preflight guard"; 9ed03fab7 internal / ec26a5c5a public) after 26.9 dropped
-    # back to a Java-17 floor on 2026-07-30. The shipped Derby jar has been 10.16.1.1
-    # (Java-17-compatible) since IRT-947; only the preflight blocked JDK 17 boot. With it
-    # gone, embedded Derby boots on JDK 17 again and the wrapper's "unexpectedly PASSED"
-    # tripwire fired on the 2026-08-27 nightly, exactly as designed. The wrapper is now
-    # removed (IRT-1491): all three JDK legs run the harness plainly and each expects exit 0.
-    # Reinstate the wrapper only if JAVA-04 (Derby 10.17 on a real Java-21 floor) ships again.
+    # HISTORY (plans 18-01/18-07/18-08/18-09, then IRT-1491, then Phase 24/IRT-1489): this
+    # job wrapped the JDK 17 leg in an expected-failure-signature assert because Phase 16's
+    # JAVA-04 Derby/Java-21 preflight (Mirth.derbyPreflightBlocks) unconditionally aborted
+    # embedded-Derby boot below Java 21. That preflight was REVERTED on 2026-08-13
+    # (9ed03fab7) after 26.9 dropped back to a Java-17 floor, so the wrapper's
+    # "unexpectedly PASSED" tripwire fired on the 2026-08-27 nightly and the wrapper was
+    # removed (IRT-1491, 2026-08-28): all three JDK legs ran the harness plainly and each
+    # expected exit 0.
+    # Phase 24 (IRT-1489, D-02/D-03) bumped Derby to 10.17.1.0 (v63 classfiles, CVE-2022-46337)
+    # and reinstated JAVA-04 (embedded Derby now requires Java 21+ again, verbatim message in
+    # Mirth.DERBY_JAVA_ERROR_MSG), exactly the condition the original comment named as the
+    # reinstatement trigger. The JDK 17 leg below is wrapped again to expect that abort; the
+    # JDK 21/25 legs are unaffected and still expect plain exit 0.
     steps:
       - uses: actions/checkout@v4
 
@@ -51,9 +53,40 @@ jobs:
 
       # Own, separate, timed step -- the script's own "HARNESS DURATION: <n>s" line (boot
       # through teardown) is the D-04 <=10-minute-per-leg measurement, distinct from the
-      # build step above (Pitfall 11).
+      # build step above (Pitfall 11). Runs on 21/25 only -- the JDK 17 leg uses the
+      # expected-failure-signature step below instead (Phase 24, D-03 knock-on).
       - name: Run smoke harness
+        if: matrix.java != '17'
         run: bash smoke-tests/run-smoke-test.sh
+
+      # JDK 17 leg (Phase 24, IRT-1489): the harness is EXPECTED to fail at the reinstated
+      # JAVA-04 preflight (embedded Derby requires Java 21+). Three outcomes:
+      #   (a) harness unexpectedly PASSES -> the preflight or the Derby version tier may have
+      #       changed; fail loudly rather than silently accept a result nobody re-verified.
+      #   (b) harness fails AND smoke-tests/out/ contains the known preflight signature ->
+      #       exactly the expected, ratified gap; emit a ::notice and exit 0 (green).
+      #   (c) harness fails WITHOUT the signature -> an unknown JDK-17 failure; fail loudly,
+      #       do not let it hide behind the known gap.
+      - name: Run smoke harness (expect Derby preflight abort)
+        if: matrix.java == '17'
+        run: |
+          set +e
+          bash smoke-tests/run-smoke-test.sh
+          HARNESS_EXIT=$?
+          set -e
+
+          if [[ ${HARNESS_EXIT} -eq 0 ]]; then
+            echo "::error::JDK 17 leg unexpectedly PASSED - the Derby/Java-21 preflight tier (Phase 16 JAVA-04, Phase 24 reinstatement) may have changed; remove this expected-failure wrapper deliberately, do not let it rot"
+            exit 1
+          fi
+
+          if grep -rq "embedded Derby requires Java 21" smoke-tests/out/; then
+            echo "::notice title=Known JDK 17 gap::embedded Derby requires Java 21+ (Phase 16 JAVA-04 preflight, reinstated in Phase 24 alongside the Derby 10.17 CVE bump). This leg is EXPECTED to fail at boot at exactly this seam - see 24-03-SUMMARY.md for full history."
+            exit 0
+          fi
+
+          echo "::error::JDK 17 leg failed, but NOT at the known Derby preflight seam - investigate before trusting this matrix"
+          exit 1
 
       - name: Upload artifacts
         if: always()
