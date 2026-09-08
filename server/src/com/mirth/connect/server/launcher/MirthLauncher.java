@@ -51,7 +51,19 @@ public class MirthLauncher {
 
     private static String appDataDir = null;
 
-    private static final String ROOT_CHECK_ERROR_MSG =
+    private static LoggerWrapper logger;
+
+    public enum RootCheckResult {
+        BLOCK, WARN, OK
+    }
+
+    /**
+     * The root/Administrator startup-guard remediation message.
+     *
+     * NOTE: a byte-identical twin of this constant lives in Mirth.java (package-private there).
+     * The launcher cannot depend on mirth-server.jar, so the two copies must be kept in sync.
+     */
+    public static final String ROOT_CHECK_ERROR_MSG =
         "================================================================\n" +
         "ERROR: BridgeLink is running as root/Administrator.\n" +
         "\n" +
@@ -60,19 +72,15 @@ public class MirthLauncher {
         "\n" +
         "To fix: create a dedicated service account and run BridgeLink as\n" +
         "that user:\n" +
-        "  Linux/macOS:  useradd -r -s /sbin/nologin bridgelink\n" +
-        "  Windows:      create a non-administrator local or domain account\n" +
+        "  Linux:    useradd -r -s /bin/false bridgelink\n" +
+        "  macOS:    sudo sysadminctl -addUser _bridgelink -roleAccount -UID 450 -shell /usr/bin/false\n" +
+        "  Windows:  create a non-administrator local or domain account and run the\n" +
+        "            BridgeLink service as that account\n" +
         "\n" +
         "To override (not recommended):\n" +
         "  Set server.allowRoot = true in conf/mirth.properties\n" +
         "  or use JVM flag: -Dserver.allowRoot=true\n" +
         "================================================================";
-
-    private static LoggerWrapper logger;
-
-    public enum RootCheckResult {
-        BLOCK, WARN, OK
-    }
 
     public static RootCheckResult evaluateRootCheck(String osName, String userName, boolean isWindowsAdmin, boolean allowRoot) {
         boolean isPrivileged;
