@@ -6,14 +6,18 @@
 
 package com.mirth.connect.server.migration;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
 
+import org.apache.commons.configuration2.PropertiesConfiguration;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.mirth.connect.client.core.ControllerException;
+import com.mirth.connect.client.core.Version;
 import com.mirth.connect.model.DriverInfo;
 import com.mirth.connect.model.util.MigrationException;
 import com.mirth.connect.server.controllers.ConfigurationController;
@@ -33,13 +37,54 @@ import com.mirth.connect.server.controllers.ControllerFactory;
  * This migrator touches ONLY the DB-resident persisted driver list via
  * getDatabaseDrivers()/setDatabaseDrivers() — it never touches the on-disk mcserver connection
  * URL or any customer channel-stored driver string, both of which are docs-only (see 25-04).
+ *
+ * This class ALSO implements {@link ConfigurationMigrator} (IRT-2217, criterion 2): on a
+ * pre-26.9 upgrade whose host is not UTF-8 and whose mirth.properties lacks
+ * server.defaultencoding, updateConfiguration() pins that property to the host encoding so a
+ * connector left on "Default" keeps its pre-JEP-400 behavior instead of silently switching to
+ * UTF-8 on the Java 21 move. That config path is independent of the driver-list work above --
+ * updateConfiguration() is invoked by ServerMigrator.migrateConfiguration(), a different
+ * framework path than migrate(), so the two do not interact.
  */
-public class Migrate26_9_0 extends Migrator {
+public class Migrate26_9_0 extends Migrator implements ConfigurationMigrator {
 
     private static final String JTDS_CLASS = "net.sourceforge.jtds.jdbc.Driver";
     private static final String MSSQL_CLASS = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
 
     private Logger logger = LogManager.getLogger(getClass());
+
+    @Override
+    public Map<String, Object> getConfigurationPropertiesToAdd() {
+        return null;
+    }
+
+    @Override
+    public String[] getConfigurationPropertiesToRemove() {
+        return null;
+    }
+
+    @Override
+    public void updateConfiguration(PropertiesConfiguration configuration) {
+        if (getStartingVersion() == null || getStartingVersion().ordinal() < Version.v26_9_0.ordinal()) {
+            if (!configuration.containsKey("server.defaultencoding")) {
+                String hostEncoding = getHostEncoding();
+                if (StringUtils.isNotBlank(hostEncoding) && !StringUtils.equals(hostEncoding, StandardCharsets.UTF_8.name())) {
+                    configuration.setProperty("server.defaultencoding", hostEncoding);
+                    configuration.getLayout().setBlancLinesBefore("server.defaultencoding", 1);
+                    configuration.getLayout().setComment("server.defaultencoding",
+                            "Set on upgrade so DEFAULT_ENCODING connectors keep the pre-Java-18 host encoding after the JEP 400 UTF-8 change. Remove this property to follow the JVM default (UTF-8).");
+                }
+            }
+        }
+    }
+
+    // Making class mockable (IRT-2217). Reads native.encoding, NOT Charset.defaultCharset() --
+    // under JEP 400 (JDK 18+) Charset.defaultCharset() always returns UTF-8 regardless of host,
+    // so it would never detect a non-UTF-8 Windows host on the Java 21 target this migration
+    // exists to protect. native.encoding (JDK 17+) reports the true pre-JEP-400 host encoding.
+    String getHostEncoding() {
+        return System.getProperty("native.encoding");
+    }
 
     @Override
     public void migrate() throws MigrationException {
