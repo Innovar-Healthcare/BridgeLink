@@ -17,8 +17,10 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.File;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,7 +45,7 @@ import com.mirth.connect.server.controllers.ControllerFactory;
  * place with the canonical Microsoft SQL Server entry when it is the list's only SQL Server
  * driver (IRT-1912); the Microsoft SQL Server entry is retained, the surviving entries keep
  * their original relative order, the migration is idempotent on a second run, and it is safe
- * (no exception, true no-op — {@code setDatabaseDrivers} is never invoked) on an empty list or a
+ * (no exception, true no-op - {@code setDatabaseDrivers} is never invoked) on an empty list or a
  * list carrying no jTDS entry.
  */
 public class Migrate26_9_0Test {
@@ -109,7 +111,7 @@ public class Migrate26_9_0Test {
         reset(configurationController);
 
         // Second run: feed the already-stripped list back in. Nothing changed, so the
-        // migrator must be a true no-op — it must NOT re-persist the list.
+        // migrator must be a true no-op - it must NOT re-persist the list.
         when(configurationController.getDatabaseDrivers()).thenReturn(new ArrayList<DriverInfo>(firstRunResult));
         new Migrate26_9_0().migrate();
 
@@ -319,6 +321,32 @@ public class Migrate26_9_0Test {
         migratorBlank.updateConfiguration(configurationBlank);
 
         assertFalse("A blank host encoding must never be written", configurationBlank.containsKey("server.defaultencoding"));
+    }
+
+    /**
+     * Falsifiable source tripwire (IRT-2217, criterion 2 crux). Reads Migrate26_9_0.java from
+     * the working tree and asserts it reads native.encoding for host-charset detection and does
+     * NOT read the JVM's own default-charset API. Under JEP 400 (JDK 18+) that API always
+     * returns UTF-8 regardless of host, so a future edit that swaps getHostEncoding()'s body
+     * back to it would compile, would pass every stubbed unit case above (since they stub the
+     * seam directly), and would still never fire on a real non-UTF-8 host on the Java 21
+     * target - exactly the silent-corruption failure this phase exists to prevent. This test is
+     * the only guard that would catch that specific regression.
+     *
+     * Falsifiability, proven manually and reverted byte-for-byte: temporarily changing
+     * getHostEncoding()'s body in Migrate26_9_0.java to return the JVM's own default-charset
+     * value instead of System.getProperty("native.encoding") reddens this test (fails on the
+     * assertFalse below), proving it is not a tautology.
+     */
+    @Test
+    public void migrationUsesNativeEncodingNotDefaultCharset() throws Exception {
+        File sourceFile = new File("src/com/mirth/connect/server/migration/Migrate26_9_0.java");
+        assertTrue("Migrate26_9_0.java source file must be found at " + sourceFile.getAbsolutePath(), sourceFile.isFile());
+
+        String source = new String(Files.readAllBytes(sourceFile.toPath()), StandardCharsets.UTF_8);
+
+        assertTrue("Migrate26_9_0.java must read native.encoding for host-charset detection", source.contains("native.encoding"));
+        assertFalse("Migrate26_9_0.java must not use the JVM default-charset API for host-charset detection (JEP 400 makes it always UTF-8, so it would never fire on a non-UTF-8 Java 21 host)", source.contains("Charset.defaultCharset"));
     }
 
     private List<DriverInfo> captureSetDatabaseDrivers() throws ControllerException {
