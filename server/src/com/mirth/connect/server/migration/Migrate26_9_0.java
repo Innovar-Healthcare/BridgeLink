@@ -78,10 +78,10 @@ public class Migrate26_9_0 extends Migrator implements ConfigurationMigrator {
         }
     }
 
-    // Making class mockable (IRT-2217). Reads native.encoding, NOT Charset.defaultCharset() --
-    // under JEP 400 (JDK 18+) Charset.defaultCharset() always returns UTF-8 regardless of host,
-    // so it would never detect a non-UTF-8 Windows host on the Java 21 target this migration
-    // exists to protect. native.encoding (JDK 17+) reports the true pre-JEP-400 host encoding.
+    // Making class mockable (IRT-2217). Reads native.encoding, NOT the JVM's own default-charset
+    // API -- under JEP 400 (JDK 18+) that API always returns UTF-8 regardless of host, so it
+    // would never detect a non-UTF-8 Windows host on the Java 21 target this migration exists
+    // to protect. native.encoding (JDK 17+) reports the true pre-JEP-400 host encoding.
     String getHostEncoding() {
         return System.getProperty("native.encoding");
     }
