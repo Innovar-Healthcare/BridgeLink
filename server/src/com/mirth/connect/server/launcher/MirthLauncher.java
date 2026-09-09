@@ -137,7 +137,7 @@ public class MirthLauncher {
             logger.error(ROOT_CHECK_ERROR_MSG);
             System.exit(1);
         } else if (result == RootCheckResult.WARN) {
-            logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set — proceeding.");
+            logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set - proceeding.");
         } else {
             logger.debug("Privilege check passed: running as user '" + userName + "' (not root/Administrator).");
         }
