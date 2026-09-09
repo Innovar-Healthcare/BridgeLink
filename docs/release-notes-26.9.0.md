@@ -11,13 +11,13 @@ previously bundled version and maximizing distance from future advisories.
 | jsch (com.github.mwiede) | 0.2.18 | 2.28.5 |
 
 - The File connector's SFTP scheme (`SftpConnection`, `SftpSchemeProperties`) is a
-  drop-in upgrade — no API changes, no channel reconfiguration required for
+  drop-in upgrade - no API changes, no channel reconfiguration required for
   existing SFTP channels connecting to modern servers.
 - jsch retains its **secure-by-default hardened algorithm set**, which excludes a
   handful of weak legacy algorithm families: `diffie-hellman-group14-sha1` key
   exchange, the plain `ssh-rsa` host-key/pubkey signature, the `3des-cbc`/`aes128-cbc`
   ciphers, and the non-ETM `hmac-sha1` MAC. **This hardened posture is unchanged by
-  the 2.28.5 upgrade** — these families were already excluded from jsch's defaults
+  the 2.28.5 upgrade** - these families were already excluded from jsch's defaults
   at 0.2.18 (inherited from the original JCraft-to-mwiede fork migration); the
   version bump itself only adds algorithms (post-quantum kex, OpenSSH certificate
   host keys) and reorders cipher preference (AES-GCM now preferred over AES-CTR).
@@ -25,7 +25,7 @@ previously bundled version and maximizing distance from future advisories.
 - **Legacy-server impact:** SFTP channels connecting to older or unpatched servers
   that offer *only* algorithms from the excluded families above may fail
   negotiation with `com.jcraft.jsch.JSchAlgoNegoFailException: Algorithm
-  negotiation fail`. This is expected — it is the same secure-by-default behavior
+  negotiation fail`. This is expected - it is the same secure-by-default behavior
   the connector has always had, not a new regression introduced by this upgrade.
 - **Workaround:** each affected channel's per-channel `configurationSettings`
   (the SFTP scheme's advanced Configuration Settings table, piped straight to
@@ -51,13 +51,13 @@ entirely.
   fully removed from every shipped location, and the "SQL Server/Sybase
   (jTDS)" driver entry is removed from both the driver dropdown
   (`DriverInfo`) and the runtime-authoritative `dbdrivers.xml`. **Sybase
-  support is dropped along with it** — jTDS was BridgeLink's only Sybase
+  support is dropped along with it** - jTDS was BridgeLink's only Sybase
   JDBC option, and mssql-jdbc does not speak the Sybase/TDS dialect. If any
   channel in your environment connects to Sybase, that connectivity does not
   survive this upgrade.
 - **`encrypt=true` default, unchanged since mssql-jdbc 10.2.** mssql-jdbc has
   validated the server's TLS certificate by default since driver version
-  10.2 — this is not new behavior introduced by the 12.10.2 upgrade. A
+  10.2 - this is not new behavior introduced by the 12.10.2 upgrade. A
   connection to a SQL Server presenting a self-signed or otherwise
   untrusted certificate will fail with a
   `could not establish a secure connection` / PKIX / server-name-validation
@@ -76,14 +76,53 @@ entirely.
   only).** Installs running BridgeLink's own internal backing store on SQL
   Server (`database = sqlserver` in `mirth.properties`) must manually update
   `database.url` (and any pinned `database.driver`) to the mssql-jdbc form
-  **before** starting the server on 26.9 — this is a manual pre-upgrade step,
+  **before** starting the server on 26.9 - this is a manual pre-upgrade step,
   not an automated migration. The persisted driver list is migrated
   automatically on first startup (a server-side migrator strips the retired
   jTDS entry), but that driver-list cleanup does not rewrite your
   `mirth.properties` connection settings.
-- For the full migration runbook — the exact escape-hatch key/value, the
+- For the full migration runbook - the exact escape-hatch key/value, the
   jTDS-to-mssql-jdbc URL grammar migration, and the internal database
-  migration steps — see:
+  migration steps - see:
   **[`docs/mssql-jdbc-encryption-compatibility.md`](./mssql-jdbc-encryption-compatibility.md)**.
+
+---
+
+## Windows / Default-Encoding Upgrade Safety (JEP 400, IRT-2217)
+
+BridgeLink now runs on Java 21. Starting with Java 18, JEP 400 changed the
+JVM's platform default charset from the host's locale-driven encoding to
+UTF-8, regardless of operating system. This affects any connector whose
+Encoding setting is left at "Default" (`DEFAULT_ENCODING`): on a pre-Java-18
+Windows server that default used to resolve to windows-1252, and on Java 18
+and later it now resolves to UTF-8.
+
+**Affected connectors:** TCP/MLLP, HTTP, File (text mode), Database (byte
+columns), and SMTP -- any connector where the Encoding field can be left at
+"Default".
+
+**What is unchanged.** `CharsetUtils`'s default-resolution logic itself is not
+modified by this release. A connector left on "Default" still resolves the
+same way it always has -- to `server.defaultencoding` when set, otherwise to
+the JVM platform default. Only the JVM's own platform default moved, per JEP
+400.
+
+**Remedy.** To keep the pre-Java-18 host encoding for `DEFAULT_ENCODING`
+connectors, set in `conf/mirth.properties`:
+
+```
+server.defaultencoding = windows-1252
+```
+
+The legacy alias `ca.uhn.hl7v2.llp.charset` is still honored, but
+`server.defaultencoding` takes precedence when both are set. As an
+alternative to a server-wide setting, pin the Encoding field on each affected
+connector individually instead of relying on "Default".
+
+**Automatic migration.** On upgrade from a pre-26.9 configuration on a
+non-UTF-8 host, BridgeLink writes `server.defaultencoding` automatically to
+the detected host encoding, so most upgraders need no manual step. The manual
+remedy above covers fresh installs, and hosts where the automatic detection
+could not determine a host encoding.
 
 ---
