@@ -220,9 +220,9 @@ already-built distribution elsewhere.
     <property name="PR177_PRESENT" value="" />
     <property name="SMTP_CCBCC_PORT" value="" />
     <property name="SMTP_JS_PORT" value="" />
-    <!-- IRT-2217 (Phase 26.12 plan 04, criterion 4): run-smoke-test.sh's --default-encoding
+    <!-- IRT-2217 (Phase 26.12 plan 04, criterion 4): run-smoke-test.sh's default-encoding
          knob forwards the charset here. Empty-string default means a bare `ant test-run`
-         (no harness running) leaves it unset -- the leg treats that as the UTF-8-default
+         (no harness running) leaves it unset; the leg treats that as the UTF-8-default
          branch, matching the empty-string idiom already used above. -->
     <property name="SERVER_DEFAULT_ENCODING" value="" />
 
