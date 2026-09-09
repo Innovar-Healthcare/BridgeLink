@@ -13,12 +13,16 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.commons.configuration2.PropertiesConfiguration;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -28,6 +32,7 @@ import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.mirth.connect.client.core.ControllerException;
+import com.mirth.connect.client.core.Version;
 import com.mirth.connect.model.DriverInfo;
 import com.mirth.connect.server.controllers.ConfigurationController;
 import com.mirth.connect.server.controllers.ControllerFactory;
@@ -237,6 +242,83 @@ public class Migrate26_9_0Test {
         expected.add(oracle);
 
         assertEquals("first jTDS substituted, additional jTDS rows removed, no duplicate Microsoft entry", expected, result);
+    }
+
+    /*
+     * Criterion 2 (IRT-2217): server.defaultencoding config-migration cases. These operate on a
+     * bare PropertiesConfiguration and need no ControllerFactory mock, mirroring
+     * Migrate4_3_0Test's spy + stub-accessor + assert pattern for updateSecurityConfiguration.
+     */
+
+    @Test
+    public void testCharsetMigrationWritesHostEncodingWhenNonUtf8AndAbsent() throws Exception {
+        Migrate26_9_0 migrator = spy(new Migrate26_9_0());
+        String hostEncoding = Charset.forName("windows-1252").name();
+        when(migrator.getHostEncoding()).thenReturn(hostEncoding);
+        migrator.setStartingVersion(Version.v26_6_0);
+
+        PropertiesConfiguration configuration = new PropertiesConfiguration();
+        migrator.updateConfiguration(configuration);
+
+        assertEquals(hostEncoding, configuration.getString("server.defaultencoding"));
+    }
+
+    @Test
+    public void testCharsetMigrationNoWriteWhenHostIsUtf8() throws Exception {
+        Migrate26_9_0 migrator = spy(new Migrate26_9_0());
+        when(migrator.getHostEncoding()).thenReturn(StandardCharsets.UTF_8.name());
+        migrator.setStartingVersion(Version.v26_6_0);
+
+        PropertiesConfiguration configuration = new PropertiesConfiguration();
+        migrator.updateConfiguration(configuration);
+
+        assertFalse(configuration.containsKey("server.defaultencoding"));
+    }
+
+    @Test
+    public void testCharsetMigrationDoesNotClobberExistingProperty() throws Exception {
+        Migrate26_9_0 migrator = spy(new Migrate26_9_0());
+        when(migrator.getHostEncoding()).thenReturn(Charset.forName("windows-1252").name());
+        migrator.setStartingVersion(Version.v26_6_0);
+
+        PropertiesConfiguration configuration = new PropertiesConfiguration();
+        configuration.setProperty("server.defaultencoding", "operator-pinned-value");
+        migrator.updateConfiguration(configuration);
+
+        assertEquals("An operator-set server.defaultencoding must never be clobbered", "operator-pinned-value", configuration.getString("server.defaultencoding"));
+    }
+
+    @Test
+    public void testCharsetMigrationNoWriteWhenStartingVersionIsLatest() throws Exception {
+        Migrate26_9_0 migrator = spy(new Migrate26_9_0());
+        when(migrator.getHostEncoding()).thenReturn(Charset.forName("windows-1252").name());
+        migrator.setStartingVersion(Version.getLatest());
+
+        PropertiesConfiguration configuration = new PropertiesConfiguration();
+        migrator.updateConfiguration(configuration);
+
+        assertFalse("Idempotency: a config already at the latest version must not be rewritten", configuration.containsKey("server.defaultencoding"));
+    }
+
+    @Test
+    public void testCharsetMigrationNoWriteWhenHostEncodingBlankOrNull() throws Exception {
+        Migrate26_9_0 migratorNull = spy(new Migrate26_9_0());
+        when(migratorNull.getHostEncoding()).thenReturn(null);
+        migratorNull.setStartingVersion(Version.v26_6_0);
+
+        PropertiesConfiguration configurationNull = new PropertiesConfiguration();
+        migratorNull.updateConfiguration(configurationNull);
+
+        assertFalse("A null host encoding must never be written", configurationNull.containsKey("server.defaultencoding"));
+
+        Migrate26_9_0 migratorBlank = spy(new Migrate26_9_0());
+        when(migratorBlank.getHostEncoding()).thenReturn("");
+        migratorBlank.setStartingVersion(Version.v26_6_0);
+
+        PropertiesConfiguration configurationBlank = new PropertiesConfiguration();
+        migratorBlank.updateConfiguration(configurationBlank);
+
+        assertFalse("A blank host encoding must never be written", configurationBlank.containsKey("server.defaultencoding"));
     }
 
     private List<DriverInfo> captureSetDatabaseDrivers() throws ControllerException {
