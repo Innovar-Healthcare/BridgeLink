@@ -47,6 +47,13 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
     private static final TemplateValueReplacer replacer = new TemplateValueReplacer();
     private static final ContextFactoryController contextFactoryController = ControllerFactory.getFactory().createContextFactoryController();
 
+    /**
+     * The charset a schema or table name identifier must be composed entirely of before it may
+     * be interpolated into a SQL statement string (CVE-2026-82583). See
+     * {@link #isSafeIdentifier(String)}.
+     */
+    private static final Pattern SAFE_IDENTIFIER_PATTERN = Pattern.compile("[A-Za-z0-9_.$]+");
+
     public DatabaseConnectorServlet(@Context HttpServletRequest request, @Context SecurityContext sc) {
         super(request, sc, PLUGIN_POINT);
     }
@@ -198,6 +205,13 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
                     rs.close();
                 }
             }
+        } else if (!isSafeIdentifier(schema) || !isSafeIdentifier(tableName) || !isSafeSelectLimit(selectLimit)) {
+            // The schema/table name identifier(s) or the selectLimit template failed validation
+            // (CVE-2026-82583) - do not interpolate any of them into a SQL statement string at
+            // all. Fall straight through to the same injection-free metadata path used when no
+            // selectLimit is defined.
+            logger.info("Select limit or table/schema identifier failed validation, using generic method to retrieve column information");
+            fallback = true;
         } else {
             logger.debug("Select limit is defined, using specific select query : '" + selectLimit + "'");
 
@@ -252,21 +266,57 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
     }
 
     /**
-     * TODO(CVE-2026-82583): placeholder pending the GREEN implementation - always permits, so
-     * this compiles against the test's direct helper assertions while the real identifier
-     * validation is not wired into {@link #retrieveColumns} yet.
+     * Returns whether the given SQL identifier (a schema or table name) is safe to interpolate
+     * directly into a SQL statement string: composed entirely of the safe identifier charset
+     * (letters, digits, underscore, dot, dollar sign), which excludes double quotes, semicolons,
+     * whitespace, backslashes, and both SQL comment token forms (CVE-2026-82583). Identifier
+     * escaping is dialect-specific and error-prone, so anything outside the charset is rejected
+     * outright rather than escaped.
+     * <p>
+     * A null/empty identifier is considered safe here - an absent schema is a legitimate case
+     * (see the schemaTableName construction above); callers that require a non-empty identifier
+     * check for that separately.
      */
     static boolean isSafeIdentifier(String identifier) {
-        return true;
+        if (StringUtils.isEmpty(identifier)) {
+            return true;
+        }
+        return SAFE_IDENTIFIER_PATTERN.matcher(identifier).matches();
     }
 
     /**
-     * TODO(CVE-2026-82583): placeholder pending the GREEN implementation - always permits, so
-     * this compiles against the test's direct helper assertions while the real selectLimit
-     * validation is not wired into {@link #retrieveColumns} yet.
+     * Returns whether the given selectLimit template is safe to interpolate directly into a SQL
+     * statement string: it must contain exactly one '?' placeholder (the schema/table name is
+     * substituted in for it), must not contain a statement separator other than a single
+     * optional trailing ';', and must not contain a SQL comment token (CVE-2026-82583). Classic
+     * PreparedStatement '?' bind parameters substitute values, not identifiers or arbitrary
+     * statement text, so they cannot be used here - validating the template shape is the
+     * available control.
      */
     static boolean isSafeSelectLimit(String selectLimit) {
-        return true;
+        if (StringUtils.isEmpty(selectLimit)) {
+            return false;
+        }
+
+        String trimmed = selectLimit.trim();
+        if (trimmed.endsWith(";")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1).trim();
+        }
+
+        if (trimmed.indexOf(';') >= 0) {
+            return false;
+        }
+        if (trimmed.contains("--") || trimmed.contains("/*") || trimmed.contains("*/")) {
+            return false;
+        }
+
+        int placeholderCount = 0;
+        for (int i = 0; i < trimmed.length(); i++) {
+            if (trimmed.charAt(i) == '?') {
+                placeholderCount++;
+            }
+        }
+        return placeholderCount == 1;
     }
 
     /**
