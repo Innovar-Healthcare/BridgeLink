@@ -180,8 +180,8 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
      * execute.
      * <p>
      * Package-private and static so DatabaseConnectorServletSqliTest (CVE-2026-82583) can drive
-     * it directly against a real embedded Derby connection without standing up the full
-     * servlet/JDBC stack.
+     * it directly against Mockito-mocked JDBC objects without standing up the full servlet/JDBC
+     * stack.
      *
      * @param schema
      *            may be null/empty - an absent schema is a legitimate case.
