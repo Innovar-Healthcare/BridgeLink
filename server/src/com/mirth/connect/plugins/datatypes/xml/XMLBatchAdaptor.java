@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
@@ -33,6 +34,7 @@ import org.apache.logging.log4j.Logger;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
+import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
@@ -127,7 +129,35 @@ public class XMLBatchAdaptor extends DebuggableBatchAdaptor  {
 
                 XPath xpath = xPathFactory.newXPath();
 
-                nodeList = (NodeList) xpath.evaluate(query.toString(), new InputSource(bufferedReader), XPathConstants.NODESET);
+                // CVE-2026-82578: parse the inbound batch through a hardened
+                // DocumentBuilderFactory before evaluating the XPath split query, instead of
+                // handing the raw stream to xpath.evaluate() (whose internal DocumentBuilder was
+                // unconfigurable and resolved external entities/DTDs). External resolution is
+                // blocked, but the DOCTYPE declaration itself is deliberately still permitted -
+                // BridgeLink routes clinical XML batches that may legitimately declare an
+                // internal DTD subset, and rejecting any DOCTYPE would over-shoot the CVE.
+                DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+                documentBuilderFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+                try {
+                    documentBuilderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                    documentBuilderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+                } catch (IllegalArgumentException e) {
+                    // The vendored xercesImpl DocumentBuilderFactory (server/lib) does not
+                    // recognize the JAXP ACCESS_EXTERNAL_DTD/ACCESS_EXTERNAL_SCHEMA attributes -
+                    // those are honored by the JDK's own built-in parser, not by standalone
+                    // xercesImpl. The SAX features below are what actually block external
+                    // resolution under this parser; the attributes above are attempted as
+                    // best-effort defense-in-depth for any other DocumentBuilderFactory
+                    // provider that does support them (same tolerance pattern as the emitted
+                    // try/catch in XsltStep.getTransformationScript()).
+                }
+                documentBuilderFactory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+                documentBuilderFactory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+                documentBuilderFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+
+                Document document = documentBuilderFactory.newDocumentBuilder().parse(new InputSource(bufferedReader));
+
+                nodeList = (NodeList) xpath.evaluate(query.toString(), document, XPathConstants.NODESET);
             }
 
             if (currentNode < nodeList.getLength()) {
