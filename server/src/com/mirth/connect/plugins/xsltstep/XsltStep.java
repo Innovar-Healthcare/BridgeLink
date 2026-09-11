@@ -62,8 +62,17 @@ public class XsltStep extends Step implements FilterTransformerIterable<Step> {
         StringBuilder script = new StringBuilder();
         if (useCustomFactory && StringUtils.isNotEmpty(customFactory)) {
             script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance(\"" + customFactory + "\", null);\n");
+            // A custom factory implementation (e.g. Saxon) may reject these attributes with an
+            // IllegalArgumentException; guard so channel deployment/runtime does not break
+            // (mirrors MirthXmlUtil's established "attribute may throw" pattern).
+            script.append("try {\n");
+            script.append("    tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, \"\");\n");
+            script.append("    tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");\n");
+            script.append("} catch (e) {}\n");
         } else {
             script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance();\n");
+            script.append("tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, \"\");\n");
+            script.append("tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");\n");
         }
 
         script.append("xsltTemplate = new Packages.java.io.StringReader(" + template + ");\n");
