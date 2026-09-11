@@ -141,4 +141,21 @@ connector individually instead of relying on "Default".
   batch that declares only an internal DTD subset (no external reference)
   still parses and splits normally.
 
+- **CVE-2026-82583 (Database Connector Get Tables API no longer accepts an
+  arbitrary SQL statement).** The Database Connector's Get Tables metadata
+  API (`POST /connectors/jdbc/_getTables`) now validates the table/schema
+  identifiers and the `selectLimit` query template before using them to
+  retrieve column metadata, and falls back to the existing injection-free
+  JDBC metadata path for anything that fails validation. An authenticated
+  user can no longer run arbitrary SQL through `selectLimit`.
+
+  **Observable behavior change.** A custom `selectLimit` that does not
+  conform to the safe single-statement template - exactly one `?`
+  placeholder, no statement separator beyond a single optional trailing
+  `;`, and no SQL comment tokens (`--`, `/*`, `*/`) - is no longer executed
+  as-is; column metadata for that table is retrieved through the generic
+  JDBC metadata path instead. The default `selectLimit`
+  (`SELECT * FROM ? LIMIT 1`) and any similarly-shaped custom template are
+  unaffected.
+
 ---
