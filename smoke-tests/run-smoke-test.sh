@@ -38,9 +38,13 @@ set -euo pipefail
 DB_TYPE="derby"   # default (D-03: only derby is functional in Phase 18)
 BOOT_ONLY=0
 DEPLOY_ONLY=0
+# IRT-2217 (Phase 26.12 plan 04, criterion 4): when supplied, patch_properties writes
+# server.defaultencoding = <charset> into the built mirth.properties (the pinned-encoding
+# leg). Left empty by default -- the UTF-8-default leg, no server.defaultencoding write.
+DEFAULT_ENCODING=""
 
 usage() {
-    echo "Usage: $0 [--db derby|mysql|postgres|mssql] [--boot-only] [--deploy-only] [--help]"
+    echo "Usage: $0 [--db derby|mysql|postgres|mssql] [--boot-only] [--deploy-only] [--default-encoding <charset>] [--help]"
     echo ""
     echo "  --db <backend>   Database backend (default: derby). Only 'derby' is functional"
     echo "                   in Phase 18 — other values are accepted but fail fast with a"
@@ -50,6 +54,10 @@ usage() {
     echo "  --deploy-only    Boot + import + deploy all 20 reference channels, then tear"
     echo "                   down (no message pump/assert driver — that's 18-06/18-07)."
     echo "                   Mutually exclusive with --boot-only."
+    echo "  --default-encoding <charset>   Patch server.defaultencoding = <charset> into the"
+    echo "                   built mirth.properties before boot (IRT-2217 criterion 4's"
+    echo "                   pinned-encoding leg, e.g. windows-1252). Omit for the"
+    echo "                   UTF-8-default leg (no write)."
     echo "  --help           Show this message and exit 0."
 }
 
@@ -70,6 +78,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --deploy-only)
             DEPLOY_ONLY=1
+            shift
+            ;;
+        --default-encoding)
+            shift
+            if [[ $# -eq 0 ]]; then
+                echo "Error: --default-encoding requires a value (e.g. windows-1252)" >&2
+                exit 1
+            fi
+            DEFAULT_ENCODING="$1"
             shift
             ;;
         --help)
@@ -748,11 +765,27 @@ patch_properties() {
         fi
     fi
 
+    # IRT-2217 (Phase 26.12 plan 04, criterion 4): only write server.defaultencoding when
+    # --default-encoding was supplied -- the flag omitted means the UTF-8-default leg, no
+    # write at all, byte-identical to today. The shipped key ships commented out
+    # (server/conf/mirth.properties:68, "#server.defaultencoding ="), so both an already-
+    # uncommented line and the shipped commented line need their own -e clause; only one
+    # ever matches a given line, sed processes both harmlessly.
+    if [[ -n "${DEFAULT_ENCODING}" ]]; then
+        sed_args+=(
+            -e "s|^#server.defaultencoding.*|server.defaultencoding = ${DEFAULT_ENCODING}|"
+            -e "s|^server.defaultencoding *=.*|server.defaultencoding = ${DEFAULT_ENCODING}|"
+        )
+    fi
+
     sed -i.smoke-bak "${sed_args[@]}" "${MIRTH_PROPS}"
 
     pass "mirth.properties patched: http.port=${HTTP_PORT} https.port=${HTTPS_PORT} dir.appdata=${APPDATA} http.host=127.0.0.1 https.host=127.0.0.1"
     if [[ "${DB_TYPE}" == "postgres" ]]; then
         pass "mirth.properties DB keys patched: database=postgres database.url=jdbc:postgresql://127.0.0.1:${PG_PORT}/mirthdb database.username=mirthdb"
+    fi
+    if [[ -n "${DEFAULT_ENCODING}" ]]; then
+        pass "mirth.properties server.defaultencoding patched: server.defaultencoding=${DEFAULT_ENCODING}"
     fi
 }
 
@@ -1671,6 +1704,7 @@ run_driver() {
         -DWEBDAV_TLS_KEYSTORE="${WEBDAV_TLS_KEYSTORE}" \
         -DWEBDAV_TLS_KEYSTORE_PW="${WEBDAV_TLS_KEYSTORE_PW}" \
         -DWEBDAV_ROOT_DIR="${WEBDAV_ROOT_DIR}" \
+        -DSERVER_DEFAULT_ENCODING="${DEFAULT_ENCODING}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else

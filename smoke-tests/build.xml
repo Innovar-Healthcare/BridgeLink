@@ -220,6 +220,11 @@ already-built distribution elsewhere.
     <property name="PR177_PRESENT" value="" />
     <property name="SMTP_CCBCC_PORT" value="" />
     <property name="SMTP_JS_PORT" value="" />
+    <!-- IRT-2217 (Phase 26.12 plan 04, criterion 4): run-smoke-test.sh's default-encoding
+         knob forwards the charset here. Empty-string default means a bare `ant test-run`
+         (no harness running) leaves it unset; the leg treats that as the UTF-8-default
+         branch, matching the empty-string idiom already used above. -->
+    <property name="SERVER_DEFAULT_ENCODING" value="" />
 
     <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
         <mkdir dir="${junit.reports}" />
@@ -335,6 +340,9 @@ already-built distribution elsewhere.
             <sysproperty key="PR177_PRESENT" value="${PR177_PRESENT}" />
             <sysproperty key="SMTP_CCBCC_PORT" value="${SMTP_CCBCC_PORT}" />
             <sysproperty key="SMTP_JS_PORT" value="${SMTP_JS_PORT}" />
+            <!-- IRT-2217 (Phase 26.12 plan 04, criterion 4): non-ASCII MLLP smoke leg reads
+                 this to pick the windows-1252-vs-UTF-8-default assertion branch. -->
+            <sysproperty key="SERVER_DEFAULT_ENCODING" value="${SERVER_DEFAULT_ENCODING}" />
             <!-- 22-05 (CVE-06/D-07): webdavsSecureSchemeMapping() directly instantiates
                  WebDavConnection against WebDavServerStub's self-signed HTTPS listener, in
                  THIS forked driver JVM only (forkmode="once" — never the deployed Mirth

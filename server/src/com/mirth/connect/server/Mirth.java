@@ -139,7 +139,7 @@ public class Mirth extends Thread {
         "A malicious or compromised BridgeLink channel could attempt to\n" +
         "escalate privileges via sudo, SUID binaries, or capabilities.\n" +
         "\n" +
-        "Recommended hardening — set one of:\n" +
+        "Recommended hardening - set one of:\n" +
         "\n" +
         "  systemd unit file:\n" +
         "    [Service]\n" +
@@ -240,7 +240,7 @@ public class Mirth extends Thread {
             logger.error(ROOT_CHECK_ERROR_MSG);
             System.exit(1);
         } else if (result == RootCheckResult.WARN) {
-            logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set — proceeding.");
+            logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set - proceeding.");
         }
     }
 
@@ -764,7 +764,7 @@ public class Mirth extends Thread {
         // The operator has explicitly pinned a default encoding (IRT-1913 server.defaultencoding or
         // the legacy ca.uhn.hl7v2.llp.charset, exported to this system property before startup). That
         // pinned charset overrides Charset.defaultCharset() for DEFAULT_ENCODING connectors, so there
-        // is nothing to warn about — and warning would misstate what those connectors actually use.
+        // is nothing to warn about - and warning would misstate what those connectors actually use.
         if (StringUtils.isNotBlank(configuredEncoding)) {
             return null;
         }
