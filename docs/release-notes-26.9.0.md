@@ -119,10 +119,4 @@ The legacy alias `ca.uhn.hl7v2.llp.charset` is still honored, but
 alternative to a server-wide setting, pin the Encoding field on each affected
 connector individually instead of relying on "Default".
 
-**Automatic migration.** On upgrade from a pre-26.9 configuration on a
-non-UTF-8 host, BridgeLink writes `server.defaultencoding` automatically to
-the detected host encoding, so most upgraders need no manual step. The manual
-remedy above covers fresh installs, and hosts where the automatic detection
-could not determine a host encoding.
-
 ---
