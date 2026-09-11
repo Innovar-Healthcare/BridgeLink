@@ -13,18 +13,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.io.File;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.configuration2.PropertiesConfiguration;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -34,7 +28,6 @@ import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.mirth.connect.client.core.ControllerException;
-import com.mirth.connect.client.core.Version;
 import com.mirth.connect.model.DriverInfo;
 import com.mirth.connect.server.controllers.ConfigurationController;
 import com.mirth.connect.server.controllers.ControllerFactory;
@@ -246,107 +239,17 @@ public class Migrate26_9_0Test {
         assertEquals("first jTDS substituted, additional jTDS rows removed, no duplicate Microsoft entry", expected, result);
     }
 
-    /*
-     * Criterion 2 (IRT-2217): server.defaultencoding config-migration cases. These operate on a
-     * bare PropertiesConfiguration and need no ControllerFactory mock, mirroring
-     * Migrate4_3_0Test's spy + stub-accessor + assert pattern for updateSecurityConfiguration.
-     */
-
-    @Test
-    public void testCharsetMigrationWritesHostEncodingWhenNonUtf8AndAbsent() throws Exception {
-        Migrate26_9_0 migrator = spy(new Migrate26_9_0());
-        String hostEncoding = Charset.forName("windows-1252").name();
-        when(migrator.getHostEncoding()).thenReturn(hostEncoding);
-        migrator.setStartingVersion(Version.v26_6_0);
-
-        PropertiesConfiguration configuration = new PropertiesConfiguration();
-        migrator.updateConfiguration(configuration);
-
-        assertEquals(hostEncoding, configuration.getString("server.defaultencoding"));
-    }
-
-    @Test
-    public void testCharsetMigrationNoWriteWhenHostIsUtf8() throws Exception {
-        Migrate26_9_0 migrator = spy(new Migrate26_9_0());
-        when(migrator.getHostEncoding()).thenReturn(StandardCharsets.UTF_8.name());
-        migrator.setStartingVersion(Version.v26_6_0);
-
-        PropertiesConfiguration configuration = new PropertiesConfiguration();
-        migrator.updateConfiguration(configuration);
-
-        assertFalse(configuration.containsKey("server.defaultencoding"));
-    }
-
-    @Test
-    public void testCharsetMigrationDoesNotClobberExistingProperty() throws Exception {
-        Migrate26_9_0 migrator = spy(new Migrate26_9_0());
-        when(migrator.getHostEncoding()).thenReturn(Charset.forName("windows-1252").name());
-        migrator.setStartingVersion(Version.v26_6_0);
-
-        PropertiesConfiguration configuration = new PropertiesConfiguration();
-        configuration.setProperty("server.defaultencoding", "operator-pinned-value");
-        migrator.updateConfiguration(configuration);
-
-        assertEquals("An operator-set server.defaultencoding must never be clobbered", "operator-pinned-value", configuration.getString("server.defaultencoding"));
-    }
-
-    @Test
-    public void testCharsetMigrationNoWriteWhenStartingVersionIsLatest() throws Exception {
-        Migrate26_9_0 migrator = spy(new Migrate26_9_0());
-        when(migrator.getHostEncoding()).thenReturn(Charset.forName("windows-1252").name());
-        migrator.setStartingVersion(Version.getLatest());
-
-        PropertiesConfiguration configuration = new PropertiesConfiguration();
-        migrator.updateConfiguration(configuration);
-
-        assertFalse("Idempotency: a config already at the latest version must not be rewritten", configuration.containsKey("server.defaultencoding"));
-    }
-
-    @Test
-    public void testCharsetMigrationNoWriteWhenHostEncodingBlankOrNull() throws Exception {
-        Migrate26_9_0 migratorNull = spy(new Migrate26_9_0());
-        when(migratorNull.getHostEncoding()).thenReturn(null);
-        migratorNull.setStartingVersion(Version.v26_6_0);
-
-        PropertiesConfiguration configurationNull = new PropertiesConfiguration();
-        migratorNull.updateConfiguration(configurationNull);
-
-        assertFalse("A null host encoding must never be written", configurationNull.containsKey("server.defaultencoding"));
-
-        Migrate26_9_0 migratorBlank = spy(new Migrate26_9_0());
-        when(migratorBlank.getHostEncoding()).thenReturn("");
-        migratorBlank.setStartingVersion(Version.v26_6_0);
-
-        PropertiesConfiguration configurationBlank = new PropertiesConfiguration();
-        migratorBlank.updateConfiguration(configurationBlank);
-
-        assertFalse("A blank host encoding must never be written", configurationBlank.containsKey("server.defaultencoding"));
-    }
-
     /**
-     * Falsifiable source tripwire (IRT-2217, criterion 2 crux). Reads Migrate26_9_0.java from
-     * the working tree and asserts it reads native.encoding for host-charset detection and does
-     * NOT read the JVM's own default-charset API. Under JEP 400 (JDK 18+) that API always
-     * returns UTF-8 regardless of host, so a future edit that swaps getHostEncoding()'s body
-     * back to it would compile, would pass every stubbed unit case above (since they stub the
-     * seam directly), and would still never fire on a real non-UTF-8 host on the Java 21
-     * target - exactly the silent-corruption failure this phase exists to prevent. This test is
-     * the only guard that would catch that specific regression.
-     *
-     * Falsifiability, proven manually and reverted byte-for-byte: temporarily changing
-     * getHostEncoding()'s body in Migrate26_9_0.java to return the JVM's own default-charset
-     * value instead of System.getProperty("native.encoding") reddens this test (fails on the
-     * assertFalse below), proving it is not a tautology.
+     * Guard regression test (IRT-2217, revised SC-2 per the IRT-1780 warning-only decision,
+     * 2026-09-10): Migrate26_9_0 must NOT participate in ServerMigrator's
+     * instanceof-ConfigurationMigrator dispatch (ServerMigrator.java:109), because BridgeLink
+     * must not auto-write server.defaultencoding on upgrade. This is the tripwire against a
+     * future refactor silently re-introducing that auto-write path.
      */
     @Test
-    public void migrationUsesNativeEncodingNotDefaultCharset() throws Exception {
-        File sourceFile = new File("src/com/mirth/connect/server/migration/Migrate26_9_0.java");
-        assertTrue("Migrate26_9_0.java source file must be found at " + sourceFile.getAbsolutePath(), sourceFile.isFile());
-
-        String source = new String(Files.readAllBytes(sourceFile.toPath()), StandardCharsets.UTF_8);
-
-        assertTrue("Migrate26_9_0.java must read native.encoding for host-charset detection", source.contains("native.encoding"));
-        assertFalse("Migrate26_9_0.java must not use the JVM default-charset API for host-charset detection (JEP 400 makes it always UTF-8, so it would never fire on a non-UTF-8 Java 21 host)", source.contains("Charset.defaultCharset"));
+    public void migrate26_9_0IsNotAConfigurationMigrator() throws Exception {
+        assertFalse("Migrate26_9_0 must not implement ConfigurationMigrator (IRT-1780: no charset auto-write on upgrade)",
+                ConfigurationMigrator.class.isAssignableFrom(Migrate26_9_0.class));
     }
 
     private List<DriverInfo> captureSetDatabaseDrivers() throws ControllerException {
