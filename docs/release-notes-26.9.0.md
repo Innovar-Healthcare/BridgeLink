@@ -120,3 +120,17 @@ alternative to a server-wide setting, pin the Encoding field on each affected
 connector individually instead of relying on "Default".
 
 ---
+
+## Security - Inherited Mirth XXE and SQL Injection CVEs (IRT-2262, ICSMA-26-253-01)
+
+- **CVE-2026-78224 (XSLT Transformer Step no longer resolves external
+  entities/stylesheets).** The XSLT Transformer Step's generated transform
+  script now restricts the underlying `TransformerFactory` from resolving
+  external DTDs and external stylesheets. A channel whose XSLT template or
+  source XML previously relied on fetching an external DTD, an external
+  general entity, or a `document()` URL will no longer resolve it - the
+  transform proceeds without expanding that reference. Internal,
+  self-contained transforms (no external DTD/entity/stylesheet reference)
+  are unaffected.
+
+---
