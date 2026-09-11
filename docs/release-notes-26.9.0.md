@@ -133,4 +133,12 @@ connector individually instead of relying on "Default".
   self-contained transforms (no external DTD/entity/stylesheet reference)
   are unaffected.
 
+- **CVE-2026-82578 (XML batch processing with the XPath split option no
+  longer resolves external entities/DTDs).** Inbound batch XML is now parsed
+  through a hardened parser before the XPath split query runs. A batch whose
+  DOCTYPE previously pulled in an external entity or an external DTD will no
+  longer fetch it - the split proceeds without resolving that reference. A
+  batch that declares only an internal DTD subset (no external reference)
+  still parses and splits normally.
+
 ---
