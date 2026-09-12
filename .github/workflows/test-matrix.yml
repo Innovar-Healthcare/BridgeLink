@@ -25,6 +25,10 @@ jobs:
           java-package: 'jdk+fx'
           distribution: 'zulu'
 
+      - name: Build BridgeLink (unsigned)
+        working-directory: server
+        run: ant -f mirth-build.xml -DdisableSigning=true
+
       - name: Run unit tests (all modules)
         working-directory: server
         run: ant -f mirth-build.xml test-run
