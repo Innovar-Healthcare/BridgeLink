@@ -126,7 +126,9 @@ public class XsltStepXxeTest {
     /**
      * Cheap source-text supplement (not the whole proof): the generated script must emit the
      * ACCESS_EXTERNAL_DTD / ACCESS_EXTERNAL_STYLESHEET set-attribute calls after the newInstance
-     * line.
+     * line, plus FEATURE_SECURE_PROCESSING (G-26.13-3 / WR-03) to bound entity expansion and
+     * extension functions on attacker-influenceable stylesheet/source text, consistent with the
+     * sibling XMLBatchAdaptor fix.
      */
     @Test
     public void generatedScriptEmitsExternalAccessBlockingAttributes() throws Exception {
@@ -141,6 +143,40 @@ public class XsltStepXxeTest {
                 script.contains("ACCESS_EXTERNAL_DTD"));
         assertTrue("Generated script must set ACCESS_EXTERNAL_STYLESHEET to block external stylesheet resolution",
                 script.contains("ACCESS_EXTERNAL_STYLESHEET"));
+        assertTrue("Generated script must set FEATURE_SECURE_PROCESSING to bound entity expansion/extension functions",
+                script.contains("FEATURE_SECURE_PROCESSING"));
+    }
+
+    /**
+     * G-26.13-3 (WR-03/WR-04): the useCustomFactory=true branch must emit the same
+     * FEATURE_SECURE_PROCESSING hardening as the default-factory branch, plus a script-visible
+     * logger.warn if the custom TransformerFactory rejects the hardening attempts -- so a custom
+     * factory that rejects them never transforms fully unhardened and silent. This is a
+     * source-text assertion (not an execution): the bare Rhino test scope has no real custom
+     * factory implementation and no logger global, so the custom-factory script text is asserted
+     * rather than run.
+     */
+    @Test
+    public void customFactoryScriptEmitsSecureProcessingExternalAccessAndWarn() throws Exception {
+        XsltStep step = new XsltStep();
+        step.setUseCustomFactory(true);
+        step.setCustomFactory("com.example.CustomTransformerFactory");
+        step.setSourceXml("''");
+        step.setTemplate("''");
+        step.setResultVariable("resultVar_test");
+
+        String script = invokeTransformationScript(step);
+
+        assertTrue("Generated script must take the custom-factory branch (custom factory class name present)",
+                script.contains("com.example.CustomTransformerFactory"));
+        assertTrue("Custom-factory branch must set FEATURE_SECURE_PROCESSING to bound entity expansion/extension functions",
+                script.contains("FEATURE_SECURE_PROCESSING"));
+        assertTrue("Custom-factory branch must still set ACCESS_EXTERNAL_DTD",
+                script.contains("ACCESS_EXTERNAL_DTD"));
+        assertTrue("Custom-factory branch must still set ACCESS_EXTERNAL_STYLESHEET",
+                script.contains("ACCESS_EXTERNAL_STYLESHEET"));
+        assertTrue("Custom-factory catch must emit an observable logger.warn instead of a silent swallow",
+                script.contains("logger.warn"));
     }
 
     private static String invokeTransformationScript(XsltStep step) throws Exception {

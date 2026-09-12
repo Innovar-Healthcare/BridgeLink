@@ -64,13 +64,27 @@ public class XsltStep extends Step implements FilterTransformerIterable<Step> {
             script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance(\"" + customFactory + "\", null);\n");
             // A custom factory implementation (e.g. Saxon) may reject these attributes with an
             // IllegalArgumentException; guard so channel deployment/runtime does not break
-            // (mirrors MirthXmlUtil's established "attribute may throw" pattern).
+            // (mirrors MirthXmlUtil's established "attribute may throw" pattern). Also emit
+            // FEATURE_SECURE_PROCESSING (G-26.13-3 / WR-03) to bound entity expansion and
+            // extension functions on attacker-influenceable stylesheet/source text, consistent
+            // with the sibling XMLBatchAdaptor fix.
             script.append("try {\n");
+            script.append("    tFactory.setFeature(Packages.javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);\n");
             script.append("    tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, \"\");\n");
             script.append("    tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");\n");
-            script.append("} catch (e) {}\n");
+            // G-26.13-3 (WR-04): a bare swallow here would leave a custom factory that rejects
+            // the hardening transforming fully unhardened with no signal. The engine root
+            // logger sits at ERROR, so this must be a warn-level log to be observable at all.
+            script.append("} catch (e) {\n");
+            script.append("    logger.warn('XSLT Step: custom TransformerFactory " + customFactory + " rejected security hardening (FEATURE_SECURE_PROCESSING/ACCESS_EXTERNAL_DTD/ACCESS_EXTERNAL_STYLESHEET); transform may run unhardened: ' + e);\n");
+            script.append("}\n");
         } else {
             script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance();\n");
+            // Guarded like the custom-factory branch: a failed feature set must not break
+            // deployment, though the default JDK TransformerFactory is expected to honor it.
+            script.append("try {\n");
+            script.append("    tFactory.setFeature(Packages.javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);\n");
+            script.append("} catch (e) {}\n");
             script.append("tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, \"\");\n");
             script.append("tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");\n");
         }
