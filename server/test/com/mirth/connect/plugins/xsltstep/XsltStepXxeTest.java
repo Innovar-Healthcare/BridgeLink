@@ -13,6 +13,7 @@
 
 package com.mirth.connect.plugins.xsltstep;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -155,6 +156,11 @@ public class XsltStepXxeTest {
      * source-text assertion (not an execution): the bare Rhino test scope has no real custom
      * factory implementation and no logger global, so the custom-factory script text is asserted
      * rather than run.
+     * <p>
+     * The secure-processing feature and the external-access attributes must be guarded
+     * INDEPENDENTLY (two try/catch blocks, hence two logger.warn calls): a custom factory that
+     * rejects FEATURE_SECURE_PROCESSING must not also skip the external-access controls. A single
+     * shared guard reddens this test because it emits only one logger.warn.
      */
     @Test
     public void customFactoryScriptEmitsSecureProcessingExternalAccessAndWarn() throws Exception {
@@ -177,6 +183,21 @@ public class XsltStepXxeTest {
                 script.contains("ACCESS_EXTERNAL_STYLESHEET"));
         assertTrue("Custom-factory catch must emit an observable logger.warn instead of a silent swallow",
                 script.contains("logger.warn"));
+        assertEquals("Secure-processing and external-access hardening must be guarded independently "
+                + "(two try/catch blocks, so a factory rejecting one does not skip the other); "
+                + "expected two logger.warn calls in the custom-factory branch",
+                2, countOccurrences(script, "logger.warn"));
+    }
+
+    private static int countOccurrences(String haystack, String needle) {
+        int count = 0;
+        int from = 0;
+        int idx;
+        while ((idx = haystack.indexOf(needle, from)) != -1) {
+            count++;
+            from = idx + needle.length();
+        }
+        return count;
     }
 
     private static String invokeTransformationScript(XsltStep step) throws Exception {
