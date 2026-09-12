@@ -141,20 +141,26 @@ connector individually instead of relying on "Default".
   batch that declares only an internal DTD subset (no external reference)
   still parses and splits normally.
 
-- **CVE-2026-82583 (Database Connector Get Tables API no longer accepts an
-  arbitrary SQL statement).** The Database Connector's Get Tables metadata
-  API (`POST /connectors/jdbc/_getTables`) now validates the table/schema
+- **CVE-2026-82583 (Database Connector Get Tables API reduces the
+  `selectLimit` SQL injection vector to a single validated SELECT
+  statement).** The Database Connector's Get Tables metadata API
+  (`POST /connectors/jdbc/_getTables`) now validates the table/schema
   identifiers and the `selectLimit` query template before using them to
   retrieve column metadata, and falls back to the existing injection-free
-  JDBC metadata path for anything that fails validation. An authenticated
-  user can no longer run arbitrary SQL through `selectLimit`.
+  JDBC metadata path for anything that fails validation. This closes the
+  arbitrary and stacked-statement SQL execution vector: stacked statements,
+  comment injection, and multi-statement payloads are blocked. Blind or
+  time-based inference of data within a single, otherwise well-formed
+  SELECT statement remains possible and is an accepted, documented residual
+  for this authenticated-admin configuration field - `selectLimit`
+  legitimately varies by SQL dialect, so no stricter grammar is imposed.
 
   **Observable behavior change.** A custom `selectLimit` that does not
   conform to the safe single-statement template - exactly one `?`
   placeholder, no statement separator beyond a single optional trailing
-  `;`, and no SQL comment tokens (`--`, `/*`, `*/`) - is no longer executed
-  as-is; column metadata for that table is retrieved through the generic
-  JDBC metadata path instead. The default `selectLimit`
+  `;`, and no SQL comment tokens (`--`, `#`, `/*`, `*/`) - is no longer
+  executed as-is; column metadata for that table is retrieved through the
+  generic JDBC metadata path instead. The default `selectLimit`
   (`SELECT * FROM ? LIMIT 1`) and any similarly-shaped custom template are
   unaffected.
 
