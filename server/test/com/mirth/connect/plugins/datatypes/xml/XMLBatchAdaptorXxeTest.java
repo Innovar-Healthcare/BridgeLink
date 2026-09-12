@@ -11,6 +11,7 @@ package com.mirth.connect.plugins.datatypes.xml;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -96,6 +97,31 @@ public class XMLBatchAdaptorXxeTest {
 
         assertNotNull("a batch declaring only an internal DTD subset must still parse and split", firstMessage);
         assertTrue("the split message must contain the expected record content", firstMessage.contains("First"));
+    }
+
+    /**
+     * G-26.13-2 (WR-02): the pre-fix XPath_Query path evaluated the split query through JAXP's
+     * internal namespace-aware DocumentBuilder. The CVE-2026-82578 fix replaced that with an
+     * explicit DocumentBuilderFactory, which defaults to namespaceAware=false - a silent parity
+     * change for default-namespaced batch input that is out of the CVE's XXE-only scope. This
+     * test does not declare a DOCTYPE or any entity, only a default namespace, to avoid the
+     * documented JDK Xalan XPath DTM NullPointerException on childless EntityReference nodes
+     * (see 26.13-02-SUMMARY.md).
+     */
+    @Test
+    public void namespacedBatchSplitMatchesNamespaceAwareParity() throws Exception {
+        String batchXml = "<root xmlns=\"urn:bridgelink:test:xmlbatch\">"
+                + "<record>First</record><record>Second</record></root>";
+
+        String unprefixedSplit = splitFirstMessage(batchXml, "/root/record");
+        assertNull("an unprefixed XPath_Query location path must not match a default-namespaced "
+                + "element once namespace-aware parsing is restored - this is the parity behavior "
+                + "with the pre-fix JAXP parse, and this assertion reddens if setNamespaceAware(true) "
+                + "is reverted", unprefixedSplit);
+
+        String localNameSplit = splitFirstMessage(batchXml, "//*[local-name()='record']");
+        assertNotNull("a namespace-agnostic local-name() query must still reach the namespaced content", localNameSplit);
+        assertTrue("the local-name() split message must contain the expected record content", localNameSplit.contains("First"));
     }
 
     private String splitFirstMessage(String batchXml, String xpathQuery) throws Exception {
