@@ -288,10 +288,11 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
      * Returns whether the given selectLimit template is safe to interpolate directly into a SQL
      * statement string: it must contain exactly one '?' placeholder (the schema/table name is
      * substituted in for it), must not contain a statement separator other than a single
-     * optional trailing ';', and must not contain a SQL comment token (CVE-2026-82583). Classic
-     * PreparedStatement '?' bind parameters substitute values, not identifiers or arbitrary
-     * statement text, so they cannot be used here - validating the template shape is the
-     * available control.
+     * optional trailing ';', and must not contain a SQL comment token - the two-hyphen line
+     * comment ('--'), the MySQL '#' line comment, or the slash-star/star-slash block comment
+     * delimiters ('/*'/'*&#47;') (CVE-2026-82583). Classic PreparedStatement '?' bind parameters
+     * substitute values, not identifiers or arbitrary statement text, so they cannot be used
+     * here - validating the template shape is the available control.
      */
     static boolean isSafeSelectLimit(String selectLimit) {
         if (StringUtils.isEmpty(selectLimit)) {
@@ -306,7 +307,7 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
         if (trimmed.indexOf(';') >= 0) {
             return false;
         }
-        if (trimmed.contains("--") || trimmed.contains("/*") || trimmed.contains("*/")) {
+        if (trimmed.contains("--") || trimmed.contains("/*") || trimmed.contains("*/") || trimmed.contains("#")) {
             return false;
         }
 

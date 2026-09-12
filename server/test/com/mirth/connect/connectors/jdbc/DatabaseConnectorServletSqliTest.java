@@ -76,6 +76,7 @@ public class DatabaseConnectorServletSqliTest {
         assertFalse(DatabaseConnectorServlet.isSafeSelectLimit("SELECT 1 AS INJECTED FROM SYSIBM.SYSDUMMY1"));
         assertFalse(DatabaseConnectorServlet.isSafeSelectLimit("SELECT * FROM ? WHERE ? = 1"));
         assertFalse(DatabaseConnectorServlet.isSafeSelectLimit(null));
+        assertFalse(DatabaseConnectorServlet.isSafeSelectLimit("SELECT * FROM ? # inject"));
     }
 
     @Test
