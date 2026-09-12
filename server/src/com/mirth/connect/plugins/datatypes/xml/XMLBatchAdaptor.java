@@ -137,6 +137,14 @@ public class XMLBatchAdaptor extends DebuggableBatchAdaptor  {
                 // BridgeLink routes clinical XML batches that may legitimately declare an
                 // internal DTD subset, and rejecting any DOCTYPE would over-shoot the CVE.
                 DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+                // G-26.13-2 (WR-02): restore the namespace-aware parsing the replaced JAXP
+                // xpath.evaluate(InputSource) path had via its internal DocumentBuilder.
+                // DocumentBuilderFactory.newInstance() defaults to namespaceAware=false, which
+                // silently changed which nodes an unprefixed XPath_Query location path matches
+                // on a default-namespaced batch document - a message-splitting/routing change
+                // that is out of the CVE-2026-82578 XXE-only scope. This does not affect the
+                // XXE closure below (external entities/DTD stay blocked either way).
+                documentBuilderFactory.setNamespaceAware(true);
                 documentBuilderFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
                 try {
                     documentBuilderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
