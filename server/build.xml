@@ -1335,6 +1335,7 @@
 				<batchtest todir="${junit-reports}">
 					<fileset dir="${test_classes}">
 						<include name="**/*Test.class" />
+						<exclude name="**/*$*.class" />
 					</fileset>
 				</batchtest>
 			</junit>
