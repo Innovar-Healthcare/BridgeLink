@@ -126,10 +126,14 @@ connector individually instead of relying on "Default".
 - **CVE-2026-78224 (XSLT Transformer Step no longer resolves external
   entities/stylesheets).** The XSLT Transformer Step's generated transform
   script now restricts the underlying `TransformerFactory` from resolving
-  external DTDs and external stylesheets. A channel whose XSLT template or
-  source XML previously relied on fetching an external DTD, an external
-  general entity, or a `document()` URL will no longer resolve it - the
-  transform proceeds without expanding that reference. Internal,
+  external DTDs and external stylesheets. The runtime effect differs by
+  reference type: a source XML or XSLT template that declares an external
+  DTD or an external general entity (a `SYSTEM` DOCTYPE) now fails the XSLT step,
+  with the error logged at the ERROR level - older CDA/HL7v3 feeds
+  carrying a `<!DOCTYPE ... SYSTEM "http://...">` will now fail the step,
+  and operators should expect and investigate that failure rather than a
+  resolved reference. A stylesheet `document()` URL call instead degrades
+  silently, resolving to nothing rather than throwing. Internal,
   self-contained transforms (no external DTD/entity/stylesheet reference)
   are unaffected.
 
