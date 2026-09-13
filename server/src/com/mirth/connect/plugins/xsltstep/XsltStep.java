@@ -66,6 +66,17 @@ public class XsltStep extends Step implements FilterTransformerIterable<Step> {
             script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance();\n");
         }
 
+        /*
+         * Disallow external DTDs / entities in the source document and external stylesheet
+         * references, otherwise a message such as <!DOCTYPE d [<!ENTITY x SYSTEM "file:///...">]>
+         * can read server files or stall the channel (CVE-2026-78224). These attributes are
+         * required to be supported by JAXP 1.5+ implementations; setting them is best-effort for
+         * custom factories that predate it, matching how the rest of the server hardens
+         * TransformerFactory instances.
+         */
+        script.append("try { tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, ''); } catch (e) {}\n");
+        script.append("try { tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, ''); } catch (e) {}\n");
+
         script.append("xsltTemplate = new Packages.java.io.StringReader(" + template + ");\n");
         script.append("transformer = tFactory.newTransformer(new Packages.javax.xml.transform.stream.StreamSource(xsltTemplate));\n");
         script.append("sourceVar = new Packages.java.io.StringReader(" + sourceXml + ");\n");
