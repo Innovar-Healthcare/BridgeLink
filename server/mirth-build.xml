@@ -4,6 +4,21 @@
 		<property name="donkey.setup" value="${donkey}/setup" />
 		<property name="server.setup" value="${server}/setup" />
 		<property name="server.build" value="${server}/build" />
+
+		<!-- IRT-2271: embedded Derby 10.17 (v63 classfiles) cannot load on JDK 17 (max v61).
+		     value/else give exclude.derby.tests a definite true/false always, which the
+		     derived exclude-list condition below needs (istrue errors on a truly unset
+		     property). server.derby.test.excludes carries the two server test classes that
+		     load embedded Derby directly (MapUtilTest, DefaultUserControllerTest - both under
+		     com/mirth/connect/server/**), collected by the test-run target's server <ant>
+		     call below. If ant.java.version does not resolve to exactly "17" on a given
+		     runner, pass -Dexclude.derby.tests=true explicitly on that JDK-17 leg. -->
+		<condition property="exclude.derby.tests" value="true" else="false">
+			<equals arg1="${ant.java.version}" arg2="17" />
+		</condition>
+		<condition property="server.derby.test.excludes" value="**/MapUtilTest.class,**/DefaultUserControllerTest.class" else="">
+			<istrue value="${exclude.derby.tests}" />
+		</condition>
 	</target>
 	
 	<!-- Donkey -->
@@ -193,7 +208,9 @@
 
 	<target name="test-run" depends="init, test-extensions-init">
 		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run"/>
-		<ant antfile="${server}/build.xml" dir="${server}" target="test-run"/>
+		<ant antfile="${server}/build.xml" dir="${server}" target="test-run">
+			<property name="server.test.excludes" value="${server.derby.test.excludes}"/>
+		</ant>
 		<ant antfile="${client}/ant-build.xml" dir="${client}" target="test-run"/>
 		<ant antfile="${cli}/build.xml" dir="${cli}" target="test-run"/>
 		<ant antfile="build.xml" dir="${custom-extensions}/dynamic-lookup-gateway" target="test-run"/>
