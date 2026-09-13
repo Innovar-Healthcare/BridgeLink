@@ -146,22 +146,24 @@ connector individually instead of relying on "Default".
   statement).** The Database Connector's Get Tables metadata API
   (`POST /connectors/jdbc/_getTables`) now validates the table/schema
   identifiers and the `selectLimit` query template before using them to
-  retrieve column metadata, and falls back to the existing injection-free
-  JDBC metadata path for anything that fails validation. This closes the
-  arbitrary and stacked-statement SQL execution vector: stacked statements,
-  comment injection, and multi-statement payloads are blocked. Blind or
-  time-based inference of data within a single, otherwise well-formed
-  SELECT statement remains possible and is an accepted, documented residual
-  for this authenticated-admin configuration field - `selectLimit`
-  legitimately varies by SQL dialect, so no stricter grammar is imposed.
+  retrieve column metadata. The caller-supplied `selectLimit` is executed
+  only when it matches a recognized safe single-table SELECT metadata-
+  probe shape - the shipped `LIMIT`, `TOP`, `WHERE ROWNUM`, and
+  `FETCH FIRST` forms over `SELECT * FROM ?` - and a matching template
+  runs under a five-second query timeout and a one-row cap. Anything that
+  does not match a recognized safe shape falls back to the existing
+  injection-free JDBC metadata path instead of being executed. This closes
+  the arbitrary and stacked-statement SQL execution vector, including
+  single-statement side effects (file write, large-object export/import,
+  SSRF) and blind or time-based inference within an otherwise well-formed
+  SELECT statement.
 
   **Observable behavior change.** A custom `selectLimit` that does not
-  conform to the safe single-statement template - exactly one `?`
-  placeholder, no statement separator beyond a single optional trailing
-  `;`, and no SQL comment tokens (`--`, `#`, `/*`, `*/`) - is no longer
-  executed as-is; column metadata for that table is retrieved through the
-  generic JDBC metadata path instead. The default `selectLimit`
-  (`SELECT * FROM ? LIMIT 1`) and any similarly-shaped custom template are
-  unaffected.
+  match one of the recognized safe shapes is no longer executed as-is;
+  column metadata for that table is retrieved through the generic JDBC
+  metadata path instead. The default `selectLimit`
+  (`SELECT * FROM ? LIMIT 1`) and the other shipped per-dialect shapes are
+  unaffected, and now run bounded by a five-second query timeout and a
+  one-row cap.
 
 ---
