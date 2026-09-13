@@ -63,21 +63,19 @@ public class XsltStep extends Step implements FilterTransformerIterable<Step> {
         StringBuilder script = new StringBuilder();
         if (useCustomFactory && StringUtils.isNotEmpty(customFactory)) {
             script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance(\"" + StringEscapeUtils.escapeEcmaScript(customFactory) + "\", null);\n");
-            // A custom factory implementation (e.g. Saxon) may reject these settings with an
-            // IllegalArgumentException; guard so channel deployment/runtime does not break
-            // (mirrors MirthXmlUtil's established "attribute may throw" pattern). The two
-            // hardening concerns are guarded INDEPENDENTLY: a factory that rejects
-            // FEATURE_SECURE_PROCESSING (G-26.13-3 / WR-03) must not also skip the external-access
-            // controls below, and vice versa. A single shared try block would let one rejection
-            // silently drop the other protection (matches the default-factory branch's isolation).
-            script.append("try {\n");
-            script.append("    tFactory.setFeature(Packages.javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);\n");
-            // G-26.13-3 (WR-04): a bare swallow here would leave a custom factory that rejects the
-            // hardening transforming unhardened with no signal. The engine root logger sits at
-            // ERROR, so this must be a warn-level log to be observable at all.
-            script.append("} catch (e) {\n");
-            script.append("    logger.warn('XSLT Step: custom TransformerFactory " + StringEscapeUtils.escapeEcmaScript(customFactory) + " rejected FEATURE_SECURE_PROCESSING; transform may run without secure-processing bounds: ' + e);\n");
-            script.append("}\n");
+            // CVE-2026-78224: deny external DTD/entity and external stylesheet resolution on
+            // attacker-influenceable source/template text. A custom factory implementation (e.g.
+            // Saxon) may reject these attributes with an IllegalArgumentException; guard so channel
+            // deployment/runtime does not break (mirrors MirthXmlUtil's established "attribute may
+            // throw" pattern), and warn instead of swallowing so a factory that rejects them is
+            // observable (the engine root logger sits at ERROR).
+            //
+            // FEATURE_SECURE_PROCESSING is deliberately NOT set. On JDK 17 it disables Java
+            // extension functions in legitimate stylesheets with no property that restores them,
+            // and it adds nothing to this CVE's closure: the two ACCESS_EXTERNAL_* attributes
+            // already block the external entity and external DTD/stylesheet, and the
+            // entity-expansion (billion-laughs) cap is a JDK default enforced either way. Decision
+            // by Dan Svanstedt on IRT-2262 (2026-09-13), matching public PR #198.
             script.append("try {\n");
             script.append("    tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, \"\");\n");
             script.append("    tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");\n");
@@ -86,15 +84,12 @@ public class XsltStep extends Step implements FilterTransformerIterable<Step> {
             script.append("}\n");
         } else {
             script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance();\n");
-            // Guarded like the custom-factory branch: a failed feature set must not break
-            // deployment, though the default JDK TransformerFactory is expected to honor it.
-            // G-26.13-8: warn instead of silently swallowing, matching the custom-factory branch
-            // (the engine root logger sits at ERROR, so a silent swallow is invisible).
-            script.append("try {\n");
-            script.append("    tFactory.setFeature(Packages.javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);\n");
-            script.append("} catch (e) {\n");
-            script.append("    logger.warn('XSLT Step: default TransformerFactory rejected FEATURE_SECURE_PROCESSING; transform may run without secure-processing bounds: ' + e);\n");
-            script.append("}\n");
+            // CVE-2026-78224: deny external DTD/entity and external stylesheet resolution. The
+            // default JDK TransformerFactory is expected to honor these attributes, so they are not
+            // guarded here. FEATURE_SECURE_PROCESSING is deliberately NOT set, for the same reason
+            // as the custom-factory branch above (Dan Svanstedt's decision on IRT-2262,
+            // 2026-09-13): on JDK 17 it breaks legitimate extension-function stylesheets and adds
+            // nothing beyond the ACCESS_EXTERNAL_* attributes for this CVE.
             script.append("tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, \"\");\n");
             script.append("tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");\n");
         }

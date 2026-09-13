@@ -132,10 +132,13 @@ connector individually instead of relying on "Default".
   with the error logged at the ERROR level - older CDA/HL7v3 feeds
   carrying a `<!DOCTYPE ... SYSTEM "http://...">` will now fail the step,
   and operators should expect and investigate that failure rather than a
-  resolved reference. A stylesheet `document()` URL call instead degrades
-  silently, resolving to nothing rather than throwing. Internal,
-  self-contained transforms (no external DTD/entity/stylesheet reference)
-  are unaffected.
+  resolved reference. A stylesheet that reaches an external reference through
+  the stylesheet side - an `xsl:import`/`xsl:include` of an external href, or
+  a `document()` call with a `SYSTEM`/URL argument - likewise now fails the
+  step at the ERROR level rather than resolving the reference. A stylesheet
+  that legitimately loads a lookup table via `document()` will need that data
+  supplied another way. Internal, self-contained transforms (no external
+  DTD/entity/stylesheet reference) are unaffected.
 
 - **CVE-2026-82578 (XML batch processing with the XPath split option no
   longer resolves external entities/DTDs).** Inbound batch XML is now parsed
