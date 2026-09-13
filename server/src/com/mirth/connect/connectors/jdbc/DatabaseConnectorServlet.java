@@ -54,6 +54,17 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
      */
     private static final Pattern SAFE_IDENTIFIER_PATTERN = Pattern.compile("[A-Za-z0-9_.$]+");
 
+    /**
+     * The allowlist grammar a selectLimit template must match, in its entirety, to be safe to
+     * interpolate directly into a SQL statement string (CVE-2026-82583, G-26.13-4). Anchored,
+     * case-insensitive, and admits only a single-table {@code SELECT * FROM ?} probe with an
+     * optional TOP/ROWNUM/LIMIT/FETCH FIRST limiting clause and at most one trailing semicolon.
+     * See {@link #isSafeSelectLimit(String)}.
+     */
+    private static final Pattern SAFE_SELECT_LIMIT_PATTERN = Pattern.compile(
+            "^SELECT\\s+(TOP\\s+\\d+\\s+)?\\*\\s+FROM\\s+\\?(\\s+WHERE\\s+ROWNUM\\s*<=?\\s*\\d+|\\s+LIMIT\\s+\\d+|\\s+FETCH\\s+FIRST\\s+\\d+\\s+ROWS?\\s+ONLY)?\\s*;?$",
+            Pattern.CASE_INSENSITIVE);
+
     public DatabaseConnectorServlet(@Context HttpServletRequest request, @Context SecurityContext sc) {
         super(request, sc, PLUGIN_POINT);
     }
@@ -222,6 +233,10 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
             Statement statement = connection.createStatement();
             ResultSet rs = null;
             try {
+                // Bound a grammar-accepted probe against DoS and large-result execution
+                // (CVE-2026-82583, G-26.13-4).
+                statement.setQueryTimeout(5);
+                statement.setMaxRows(1);
                 rs = statement.executeQuery(queryString);
                 ResultSetMetaData rsmd = rs.getMetaData();
 
@@ -286,38 +301,25 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
 
     /**
      * Returns whether the given selectLimit template is safe to interpolate directly into a SQL
-     * statement string: it must contain exactly one '?' placeholder (the schema/table name is
-     * substituted in for it), must not contain a statement separator other than a single
-     * optional trailing ';', and must not contain a SQL comment token - the two-hyphen line
-     * comment ('--'), the MySQL '#' line comment, or the slash-star/star-slash block comment
-     * delimiters ('/*'/'*&#47;') (CVE-2026-82583). Classic PreparedStatement '?' bind parameters
-     * substitute values, not identifiers or arbitrary statement text, so they cannot be used
-     * here - validating the template shape is the available control.
+     * statement string: it must match, in its entirety, an anchored, case-insensitive allowlist
+     * grammar admitting only a single-table {@code SELECT * FROM ?} metadata probe with an
+     * optional limiting clause and at most one trailing semicolon (CVE-2026-82583, G-26.13-4).
+     * The four recognized safe shapes are the bare probe, {@code TOP <n> * FROM ?} (SQL Server),
+     * {@code FROM ? WHERE ROWNUM <= <n>} (Oracle), {@code FROM ? LIMIT <n>} (MySQL/Postgres), and
+     * {@code FROM ? FETCH FIRST <n> ROWS ONLY} (SQL:2008/DB2). Anything else - including single-
+     * statement side effects such as {@code INTO OUTFILE}, {@code lo_export}/{@code lo_import},
+     * {@code UTL_HTTP.REQUEST}, blind/time-based probes such as {@code pg_sleep}, a {@code UNION}
+     * or scalar-subquery read, or a stacked statement - is rejected and falls back to the
+     * injection-free {@link DatabaseMetaData#getColumns} metadata path. Classic PreparedStatement
+     * '?' bind parameters substitute values, not identifiers or arbitrary statement text, so they
+     * cannot be used here - validating the template shape is the available control.
      */
     static boolean isSafeSelectLimit(String selectLimit) {
         if (StringUtils.isEmpty(selectLimit)) {
             return false;
         }
 
-        String trimmed = selectLimit.trim();
-        if (trimmed.endsWith(";")) {
-            trimmed = trimmed.substring(0, trimmed.length() - 1).trim();
-        }
-
-        if (trimmed.indexOf(';') >= 0) {
-            return false;
-        }
-        if (trimmed.contains("--") || trimmed.contains("/*") || trimmed.contains("*/") || trimmed.contains("#")) {
-            return false;
-        }
-
-        int placeholderCount = 0;
-        for (int i = 0; i < trimmed.length(); i++) {
-            if (trimmed.charAt(i) == '?') {
-                placeholderCount++;
-            }
-        }
-        return placeholderCount == 1;
+        return SAFE_SELECT_LIMIT_PATTERN.matcher(selectLimit.trim()).matches();
     }
 
     /**
