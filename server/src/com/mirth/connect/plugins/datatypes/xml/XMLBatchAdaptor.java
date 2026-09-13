@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
@@ -33,6 +34,7 @@ import org.apache.logging.log4j.Logger;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
+import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
@@ -127,7 +129,13 @@ public class XMLBatchAdaptor extends DebuggableBatchAdaptor  {
 
                 XPath xpath = xPathFactory.newXPath();
 
-                nodeList = (NodeList) xpath.evaluate(query.toString(), new InputSource(bufferedReader), XPathConstants.NODESET);
+                /*
+                 * Parse the batch with an explicitly hardened parser rather than handing the raw
+                 * reader to XPath.evaluate(String, InputSource, QName), which builds a default
+                 * (DOCTYPE and external entity resolving) parser internally (CVE-2026-82578).
+                 */
+                Document document = newDocumentBuilderFactory().newDocumentBuilder().parse(new InputSource(bufferedReader));
+                nodeList = (NodeList) xpath.evaluate(query.toString(), document, XPathConstants.NODESET);
             }
 
             if (currentNode < nodeList.getLength()) {
@@ -185,6 +193,21 @@ public class XMLBatchAdaptor extends DebuggableBatchAdaptor  {
         }
 
         return null;
+    }
+
+    /**
+     * Namespace-aware like the parser JAXP's XPath implementation creates internally, so existing
+     * Element Name / Level / XPath Query splits behave as before, but with DOCTYPEs rejected so no
+     * external entity can be declared or resolved.
+     */
+    private DocumentBuilderFactory newDocumentBuilderFactory() throws Exception {
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        dbf.setNamespaceAware(true);
+        dbf.setValidating(false);
+        dbf.setXIncludeAware(false);
+        dbf.setExpandEntityReferences(false);
+        dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        return dbf;
     }
 
     private String toXML(Node node) throws Exception {
