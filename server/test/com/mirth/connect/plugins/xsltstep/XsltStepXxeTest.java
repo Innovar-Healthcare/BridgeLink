@@ -23,6 +23,7 @@ import java.io.FileWriter;
 import java.io.Writer;
 import java.lang.reflect.Method;
 
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.Test;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
@@ -84,8 +85,16 @@ public class XsltStepXxeTest {
             result = evaluate(script);
         } catch (RuntimeException e) {
             // Blocked external access surfacing as a thrown exception is an acceptable form of
-            // "the entity was not resolved" -- the important assertion is that the sentinel
-            // content never appears in a successful result.
+            // "the entity was not resolved" -- but it must be THIS specific restriction firing,
+            // not any RuntimeException (an emitted-script syntax error would otherwise also
+            // pass). Rhino wraps the underlying TransformerException/SAXParseException, so
+            // flatten the throwable and its full cause chain and look for the restriction's
+            // own signal (Dan's tokens, case-sensitive).
+            String flattened = ExceptionUtils.getStackTrace(e);
+            assertTrue("Expected the caught exception to be the blocked external-access "
+                    + "restriction (message containing 'External Entity' or 'accessExternalDTD'), "
+                    + "not an unrelated RuntimeException. Flattened exception was: " + flattened,
+                    flattened.contains("External Entity") || flattened.contains("accessExternalDTD"));
             return;
         }
 
