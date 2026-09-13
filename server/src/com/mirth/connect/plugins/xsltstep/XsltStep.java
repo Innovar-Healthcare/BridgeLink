@@ -13,6 +13,7 @@ import java.util.LinkedList;
 import java.util.Map;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.text.StringEscapeUtils;
 
 import com.mirth.connect.donkey.util.purge.PurgeUtil;
 import com.mirth.connect.model.FilterTransformerIterable;
@@ -61,7 +62,7 @@ public class XsltStep extends Step implements FilterTransformerIterable<Step> {
     private String getTransformationScript() {
         StringBuilder script = new StringBuilder();
         if (useCustomFactory && StringUtils.isNotEmpty(customFactory)) {
-            script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance(\"" + customFactory + "\", null);\n");
+            script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance(\"" + StringEscapeUtils.escapeEcmaScript(customFactory) + "\", null);\n");
             // A custom factory implementation (e.g. Saxon) may reject these settings with an
             // IllegalArgumentException; guard so channel deployment/runtime does not break
             // (mirrors MirthXmlUtil's established "attribute may throw" pattern). The two
@@ -75,21 +76,25 @@ public class XsltStep extends Step implements FilterTransformerIterable<Step> {
             // hardening transforming unhardened with no signal. The engine root logger sits at
             // ERROR, so this must be a warn-level log to be observable at all.
             script.append("} catch (e) {\n");
-            script.append("    logger.warn('XSLT Step: custom TransformerFactory " + customFactory + " rejected FEATURE_SECURE_PROCESSING; transform may run without secure-processing bounds: ' + e);\n");
+            script.append("    logger.warn('XSLT Step: custom TransformerFactory " + StringEscapeUtils.escapeEcmaScript(customFactory) + " rejected FEATURE_SECURE_PROCESSING; transform may run without secure-processing bounds: ' + e);\n");
             script.append("}\n");
             script.append("try {\n");
             script.append("    tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, \"\");\n");
             script.append("    tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");\n");
             script.append("} catch (e) {\n");
-            script.append("    logger.warn('XSLT Step: custom TransformerFactory " + customFactory + " rejected ACCESS_EXTERNAL_DTD/ACCESS_EXTERNAL_STYLESHEET; transform may resolve external DTDs/stylesheets: ' + e);\n");
+            script.append("    logger.warn('XSLT Step: custom TransformerFactory " + StringEscapeUtils.escapeEcmaScript(customFactory) + " rejected ACCESS_EXTERNAL_DTD/ACCESS_EXTERNAL_STYLESHEET; transform may resolve external DTDs/stylesheets: ' + e);\n");
             script.append("}\n");
         } else {
             script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance();\n");
             // Guarded like the custom-factory branch: a failed feature set must not break
             // deployment, though the default JDK TransformerFactory is expected to honor it.
+            // G-26.13-8: warn instead of silently swallowing, matching the custom-factory branch
+            // (the engine root logger sits at ERROR, so a silent swallow is invisible).
             script.append("try {\n");
             script.append("    tFactory.setFeature(Packages.javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true);\n");
-            script.append("} catch (e) {}\n");
+            script.append("} catch (e) {\n");
+            script.append("    logger.warn('XSLT Step: default TransformerFactory rejected FEATURE_SECURE_PROCESSING; transform may run without secure-processing bounds: ' + e);\n");
+            script.append("}\n");
             script.append("tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, \"\");\n");
             script.append("tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");\n");
         }

@@ -146,6 +146,10 @@ public class XsltStepXxeTest {
                 script.contains("ACCESS_EXTERNAL_STYLESHEET"));
         assertTrue("Generated script must set FEATURE_SECURE_PROCESSING to bound entity expansion/extension functions",
                 script.contains("FEATURE_SECURE_PROCESSING"));
+        assertTrue("G-26.13-8: default-factory branch must emit an observable logger.warn if it "
+                + "rejects FEATURE_SECURE_PROCESSING, instead of silently swallowing the rejection "
+                + "(the engine root logger sits at ERROR, so a silent swallow is invisible)",
+                script.contains("logger.warn"));
     }
 
     /**
@@ -187,6 +191,30 @@ public class XsltStepXxeTest {
                 + "(two try/catch blocks, so a factory rejecting one does not skip the other); "
                 + "expected two logger.warn calls in the custom-factory branch",
                 2, countOccurrences(script, "logger.warn"));
+    }
+
+    /**
+     * G-26.13-8: customFactory is interpolated into three emitted-script sites (the newInstance
+     * line and the two logger.warn lines). A quote/backslash/newline in the configured class
+     * name must not break or inject into the generated Rhino script. This is a source-text
+     * assertion (not an execution): the synthetic class name below is never loaded, it is only
+     * checked for its escaped form in the emitted script text.
+     */
+    @Test
+    public void customFactoryValueIsEscapedIntoTheGeneratedScript() throws Exception {
+        XsltStep step = new XsltStep();
+        step.setUseCustomFactory(true);
+        step.setCustomFactory("com.acme.Odd'Factory");
+        step.setSourceXml("''");
+        step.setTemplate("''");
+        step.setResultVariable("resultVar_test");
+
+        String script = invokeTransformationScript(step);
+
+        assertTrue("Generated script must contain the escaped customFactory token at every "
+                + "interpolation site", script.contains("Odd\\'Factory"));
+        assertFalse("Generated script must never contain the bare, unescaped customFactory token "
+                + "(it would terminate the JS string early)", script.contains("Odd'Factory"));
     }
 
     private static int countOccurrences(String haystack, String needle) {
