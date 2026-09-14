@@ -17,7 +17,11 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The mandatory "Build BridgeLink - unsigned" assemble step alone runs ~22-23 min on a cold
+    # ubuntu-latest runner (measured against test-matrix.yml's build step), so 15 min cancelled
+    # the build before the boot-only smoke steps ran. 40 min covers the assemble plus runner
+    # variance and the seconds-long boot, while still capping a genuinely hung boot (T-03-03).
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
