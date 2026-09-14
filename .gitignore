@@ -647,3 +647,8 @@ smoke-tests/out/
 
 # /webadmin/src/com/mirth/connect/webadmin/utils/
 
+
+
+# GSD local planning state (local-only, never committed on this branch)
+.planning/
+.gsd/
