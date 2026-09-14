@@ -17,6 +17,10 @@ donkey/donkey-test
 **/jacoco-html
 .DS_Store
 
+# smoke-tests/run-smoke-test.sh scratch output (IRT-2270) - runtime state, not a tracked
+# artifact.
+smoke-tests/out/
+
 # /client/
 /client/logs
 /client/classes
