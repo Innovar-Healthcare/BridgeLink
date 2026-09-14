@@ -13,6 +13,7 @@ import java.util.LinkedList;
 import java.util.Map;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.text.StringEscapeUtils;
 
 import com.mirth.connect.donkey.util.purge.PurgeUtil;
 import com.mirth.connect.model.FilterTransformerIterable;
@@ -61,9 +62,36 @@ public class XsltStep extends Step implements FilterTransformerIterable<Step> {
     private String getTransformationScript() {
         StringBuilder script = new StringBuilder();
         if (useCustomFactory && StringUtils.isNotEmpty(customFactory)) {
-            script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance(\"" + customFactory + "\", null);\n");
+            script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance(\"" + StringEscapeUtils.escapeEcmaScript(customFactory) + "\", null);\n");
+            // CVE-2026-78224: deny external DTD/entity and external stylesheet resolution on
+            // attacker-influenceable source/template text. A custom factory implementation (e.g.
+            // Saxon) may reject these attributes with an IllegalArgumentException; guard so channel
+            // deployment/runtime does not break (mirrors MirthXmlUtil's established "attribute may
+            // throw" pattern), and warn instead of swallowing so a factory that rejects them is
+            // observable (the engine root logger sits at ERROR).
+            //
+            // FEATURE_SECURE_PROCESSING is deliberately NOT set. On JDK 17 it disables Java
+            // extension functions in legitimate stylesheets with no property that restores them,
+            // and it adds nothing to this CVE's closure: the two ACCESS_EXTERNAL_* attributes
+            // already block the external entity and external DTD/stylesheet, and the
+            // entity-expansion (billion-laughs) cap is a JDK default enforced either way. Decision
+            // by Dan Svanstedt on IRT-2262 (2026-09-13), matching public PR #198.
+            script.append("try {\n");
+            script.append("    tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, \"\");\n");
+            script.append("    tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");\n");
+            script.append("} catch (e) {\n");
+            script.append("    logger.warn('XSLT Step: custom TransformerFactory " + StringEscapeUtils.escapeEcmaScript(customFactory) + " rejected ACCESS_EXTERNAL_DTD/ACCESS_EXTERNAL_STYLESHEET; transform may resolve external DTDs/stylesheets: ' + e);\n");
+            script.append("}\n");
         } else {
             script.append("tFactory = Packages.javax.xml.transform.TransformerFactory.newInstance();\n");
+            // CVE-2026-78224: deny external DTD/entity and external stylesheet resolution. The
+            // default JDK TransformerFactory is expected to honor these attributes, so they are not
+            // guarded here. FEATURE_SECURE_PROCESSING is deliberately NOT set, for the same reason
+            // as the custom-factory branch above (Dan Svanstedt's decision on IRT-2262,
+            // 2026-09-13): on JDK 17 it breaks legitimate extension-function stylesheets and adds
+            // nothing beyond the ACCESS_EXTERNAL_* attributes for this CVE.
+            script.append("tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, \"\");\n");
+            script.append("tFactory.setAttribute(Packages.javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");\n");
         }
 
         script.append("xsltTemplate = new Packages.java.io.StringReader(" + template + ");\n");

@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.core.Context;
@@ -45,6 +46,24 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
     private static final Logger logger = LogManager.getLogger(DatabaseConnectorServlet.class);
     private static final TemplateValueReplacer replacer = new TemplateValueReplacer();
     private static final ContextFactoryController contextFactoryController = ControllerFactory.getFactory().createContextFactoryController();
+
+    /**
+     * The charset a schema or table name identifier must be composed entirely of before it may
+     * be interpolated into a SQL statement string (CVE-2026-82583). See
+     * {@link #isSafeIdentifier(String)}.
+     */
+    private static final Pattern SAFE_IDENTIFIER_PATTERN = Pattern.compile("[A-Za-z0-9_.$]+");
+
+    /**
+     * The allowlist grammar a selectLimit template must match, in its entirety, to be safe to
+     * interpolate directly into a SQL statement string (CVE-2026-82583, G-26.13-4). Anchored,
+     * case-insensitive, and admits only a single-table {@code SELECT * FROM ?} probe with an
+     * optional TOP/ROWNUM/LIMIT/FETCH FIRST limiting clause and at most one trailing semicolon.
+     * See {@link #isSafeSelectLimit(String)}.
+     */
+    private static final Pattern SAFE_SELECT_LIMIT_PATTERN = Pattern.compile(
+            "^SELECT\\s+(TOP\\s+\\d+\\s+)?\\*\\s+FROM\\s+\\?(\\s+WHERE\\s+ROWNUM\\s*<=?\\s*\\d+|\\s+LIMIT\\s+\\d+|\\s+FETCH\\s+FIRST\\s+\\d+\\s+ROWS?\\s+ONLY)?\\s*;?$",
+            Pattern.CASE_INSENSITIVE);
 
     public DatabaseConnectorServlet(@Context HttpServletRequest request, @Context SecurityContext sc) {
         super(request, sc, PLUGIN_POINT);
@@ -139,81 +158,17 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
 
             // for each table, grab their column information
             for (String tableName : tableNameList) {
-                ResultSet rs = null;
-                ResultSet backupRs = null;
-                boolean fallback = false;
-                try {
-                    // apparently it's much more efficient to use ResultSetMetaData to retrieve
-                    // column information.  So each driver is defined with their own unique SELECT
-                    // statement to query the table columns and use ResultSetMetaData to retrieve
-                    // the column information.  If driver is not defined with the select statement
-                    // then we'll define to the generic method of getting column information, but
-                    // this could be extremely slow
-                    List<Column> columnList = new ArrayList<Column>();
-                    if (StringUtils.isEmpty(selectLimit)) {
-                        logger.debug("No select limit is defined, using generic method");
-                        rs = dbMetaData.getColumns(null, null, tableName, null);
+                // apparently it's much more efficient to use ResultSetMetaData to retrieve
+                // column information.  So each driver is defined with their own unique SELECT
+                // statement to query the table columns and use ResultSetMetaData to retrieve
+                // the column information.  If driver is not defined with the select statement
+                // then we'll define to the generic method of getting column information, but
+                // this could be extremely slow
+                List<Column> columnList = retrieveColumns(connection, dbMetaData, schema, tableName, selectLimit);
 
-                        // retrieve all relevant column information                         
-                        for (int i = 0; rs.next(); i++) {
-                            Column column = new Column(rs.getString("COLUMN_NAME"), rs.getString("TYPE_NAME"), rs.getInt("COLUMN_SIZE"));
-                            columnList.add(column);
-                        }
-                    } else {
-                        logger.debug("Select limit is defined, using specific select query : '" + selectLimit + "'");
-
-                        // replace the '?' with the appropriate schema.table name, and use ResultSetMetaData to 
-                        // retrieve column information 
-                        final String schemaTableName = StringUtils.isNotEmpty(schema) ? "\"" + schema + "\".\"" + tableName + "\"" : "\"" + tableName + "\"";
-                        final String queryString = selectLimit.trim().replaceAll("\\?", Matcher.quoteReplacement(schemaTableName));
-                        Statement statement = connection.createStatement();
-                        try {
-                            rs = statement.executeQuery(queryString);
-                            ResultSetMetaData rsmd = rs.getMetaData();
-
-                            // retrieve all relevant column information
-                            for (int i = 1; i < rsmd.getColumnCount() + 1; i++) {
-                                Column column = new Column(rsmd.getColumnName(i), rsmd.getColumnTypeName(i), rsmd.getPrecision(i));
-                                columnList.add(column);
-                            }
-                        } catch (SQLException sqle) {
-                            logger.info("Failed to execute '" + queryString + "', fall back to generic approach to retrieve column information");
-                            fallback = true;
-                        } finally {
-                            if (statement != null) {
-                                statement.close();
-                            }
-                        }
-
-                        // failed to use selectLimit method, so we need to fall back to generic
-                        // if this generic approach fails, then there's nothing we can do
-                        if (fallback) {
-                            // Re-initialize in case some columns were added before failing
-                            columnList = new ArrayList<Column>();
-
-                            logger.debug("Using fallback method for retrieving columns");
-                            backupRs = dbMetaData.getColumns(null, null, tableName.replace("/", "//"), null);
-
-                            // retrieve all relevant column information                         
-                            while (backupRs.next()) {
-                                Column column = new Column(backupRs.getString("COLUMN_NAME"), backupRs.getString("TYPE_NAME"), backupRs.getInt("COLUMN_SIZE"));
-                                columnList.add(column);
-                            }
-                        }
-                    }
-
-                    // create table object and add to the list of table definitions
-                    Table table = new Table(tableName, columnList);
-                    tableInfoList.add(table);
-                } finally {
-                    if (rs != null) {
-                        rs.close();
-                    }
-
-                    if (backupRs != null) {
-                        backupRs.close();
-                    }
-                }
+                // create table object and add to the list of table definitions
+                Table table = new Table(tableName, columnList);
+                tableInfoList.add(table);
             }
 
             return tableInfoList;
@@ -227,6 +182,144 @@ public class DatabaseConnectorServlet extends MirthServlet implements DatabaseCo
                 }
             }
         }
+    }
+
+    /**
+     * Retrieves the column metadata (name, SQL type, precision) for a single table, using the
+     * caller-supplied selectLimit query template when one is defined, and falling back to the
+     * {@link DatabaseMetaData#getColumns} metadata path when it is empty or when it fails to
+     * execute.
+     * <p>
+     * Package-private and static so DatabaseConnectorServletSqliTest (CVE-2026-82583) can drive
+     * it directly against Mockito-mocked JDBC objects without standing up the full servlet/JDBC
+     * stack.
+     *
+     * @param schema
+     *            may be null/empty - an absent schema is a legitimate case.
+     */
+    static List<Column> retrieveColumns(Connection connection, DatabaseMetaData dbMetaData, String schema, String tableName, String selectLimit) throws SQLException {
+        List<Column> columnList = new ArrayList<Column>();
+        boolean fallback = false;
+
+        if (StringUtils.isEmpty(selectLimit)) {
+            logger.debug("No select limit is defined, using generic method");
+            ResultSet rs = null;
+            try {
+                rs = dbMetaData.getColumns(null, null, tableName, null);
+
+                // retrieve all relevant column information
+                for (int i = 0; rs.next(); i++) {
+                    columnList.add(new Column(rs.getString("COLUMN_NAME"), rs.getString("TYPE_NAME"), rs.getInt("COLUMN_SIZE")));
+                }
+            } finally {
+                if (rs != null) {
+                    rs.close();
+                }
+            }
+        } else if (!isSafeIdentifier(schema) || !isSafeIdentifier(tableName) || !isSafeSelectLimit(selectLimit)) {
+            // The schema/table name identifier(s) or the selectLimit template failed validation
+            // (CVE-2026-82583) - do not interpolate any of them into a SQL statement string at
+            // all. Fall straight through to the same injection-free metadata path used when no
+            // selectLimit is defined.
+            logger.info("Select limit or table/schema identifier failed validation, using generic method to retrieve column information");
+            fallback = true;
+        } else {
+            logger.debug("Select limit is defined, using specific select query : '" + selectLimit + "'");
+
+            // replace the '?' with the appropriate schema.table name, and use ResultSetMetaData to
+            // retrieve column information
+            final String schemaTableName = StringUtils.isNotEmpty(schema) ? "\"" + schema + "\".\"" + tableName + "\"" : "\"" + tableName + "\"";
+            final String queryString = selectLimit.trim().replaceAll("\\?", Matcher.quoteReplacement(schemaTableName));
+            Statement statement = connection.createStatement();
+            ResultSet rs = null;
+            try {
+                // Bound a grammar-accepted probe against DoS and large-result execution
+                // (CVE-2026-82583, G-26.13-4).
+                statement.setQueryTimeout(5);
+                statement.setMaxRows(1);
+                rs = statement.executeQuery(queryString);
+                ResultSetMetaData rsmd = rs.getMetaData();
+
+                // retrieve all relevant column information
+                for (int i = 1; i < rsmd.getColumnCount() + 1; i++) {
+                    columnList.add(new Column(rsmd.getColumnName(i), rsmd.getColumnTypeName(i), rsmd.getPrecision(i)));
+                }
+            } catch (SQLException sqle) {
+                logger.info("Failed to execute '" + queryString + "', fall back to generic approach to retrieve column information");
+                fallback = true;
+            } finally {
+                if (rs != null) {
+                    rs.close();
+                }
+                statement.close();
+            }
+        }
+
+        // failed to use selectLimit method, so we need to fall back to generic
+        // if this generic approach fails, then there's nothing we can do
+        if (fallback) {
+            // Re-initialize in case some columns were added before failing
+            columnList = new ArrayList<Column>();
+
+            logger.debug("Using fallback method for retrieving columns");
+            ResultSet backupRs = null;
+            try {
+                backupRs = dbMetaData.getColumns(null, null, tableName.replace("/", "//"), null);
+
+                // retrieve all relevant column information
+                while (backupRs.next()) {
+                    columnList.add(new Column(backupRs.getString("COLUMN_NAME"), backupRs.getString("TYPE_NAME"), backupRs.getInt("COLUMN_SIZE")));
+                }
+            } finally {
+                if (backupRs != null) {
+                    backupRs.close();
+                }
+            }
+        }
+
+        return columnList;
+    }
+
+    /**
+     * Returns whether the given SQL identifier (a schema or table name) is safe to interpolate
+     * directly into a SQL statement string: composed entirely of the safe identifier charset
+     * (letters, digits, underscore, dot, dollar sign), which excludes double quotes, semicolons,
+     * whitespace, backslashes, and both SQL comment token forms (CVE-2026-82583). Identifier
+     * escaping is dialect-specific and error-prone, so anything outside the charset is rejected
+     * outright rather than escaped.
+     * <p>
+     * A null/empty identifier is considered safe here - an absent schema is a legitimate case
+     * (see the schemaTableName construction above); callers that require a non-empty identifier
+     * check for that separately.
+     */
+    static boolean isSafeIdentifier(String identifier) {
+        if (StringUtils.isEmpty(identifier)) {
+            return true;
+        }
+        return SAFE_IDENTIFIER_PATTERN.matcher(identifier).matches();
+    }
+
+    /**
+     * Returns whether the given selectLimit template is safe to interpolate directly into a SQL
+     * statement string: it must match, in its entirety, an anchored, case-insensitive allowlist
+     * grammar admitting only a single-table {@code SELECT * FROM ?} metadata probe with an
+     * optional limiting clause and at most one trailing semicolon (CVE-2026-82583, G-26.13-4).
+     * The four recognized safe shapes are the bare probe, {@code TOP <n> * FROM ?} (SQL Server),
+     * {@code FROM ? WHERE ROWNUM <= <n>} (Oracle), {@code FROM ? LIMIT <n>} (MySQL/Postgres), and
+     * {@code FROM ? FETCH FIRST <n> ROWS ONLY} (SQL:2008/DB2). Anything else - including single-
+     * statement side effects such as {@code INTO OUTFILE}, {@code lo_export}/{@code lo_import},
+     * {@code UTL_HTTP.REQUEST}, blind/time-based probes such as {@code pg_sleep}, a {@code UNION}
+     * or scalar-subquery read, or a stacked statement - is rejected and falls back to the
+     * injection-free {@link DatabaseMetaData#getColumns} metadata path. Classic PreparedStatement
+     * '?' bind parameters substitute values, not identifiers or arbitrary statement text, so they
+     * cannot be used here - validating the template shape is the available control.
+     */
+    static boolean isSafeSelectLimit(String selectLimit) {
+        if (StringUtils.isEmpty(selectLimit)) {
+            return false;
+        }
+
+        return SAFE_SELECT_LIMIT_PATTERN.matcher(selectLimit.trim()).matches();
     }
 
     /**
