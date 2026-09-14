@@ -2,7 +2,7 @@
 	<name>Mock SMTP Sender</name>
 	<author>Innovar Healthcare</author>
 	<pluginVersion>1.0.0</pluginVersion>
-	<mirthVersion>26.6.0</mirthVersion>
+	<mirthVersion>26.6.1</mirthVersion>
 	<description>Mock SMTP destination used to demonstrate engine-served WebAdmin connector panels (IRT-1422). Performs no real I/O.</description>
 	<clientClassName>com.mirth.connect.connectors.mocksmtp.MockSmtpConnectorPanel</clientClassName>
 	<serverClassName>com.mirth.connect.connectors.mocksmtp.MockSmtpDispatcher</serverClassName>

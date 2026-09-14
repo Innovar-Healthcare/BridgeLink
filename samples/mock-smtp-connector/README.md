@@ -35,5 +35,5 @@ then restart the engine. `ant install` copies the exploded extension straight in
 `server/setup/extensions/mock-smtp` for local dev instead.
 
 Note: `<mirthVersion>` in `plugin.xml`/`destination.xml` is pinned to the engine version
-(26.6.0) — the engine rejects extensions whose `mirthVersion` list doesn't contain its own
+(26.6.1) — the engine rejects extensions whose `mirthVersion` list doesn't contain its own
 version. Bump it when moving to a newer engine line.
