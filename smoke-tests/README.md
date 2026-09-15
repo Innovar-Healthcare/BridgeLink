@@ -8,7 +8,7 @@ an auto-generated keystore, health-checks it over HTTPS, then tears down cleanly
 the embedded-Derby boot path on both JDK 17 (expected clean abort at the JAVA-04 preflight) and
 JDK 21 (successful boot), the two seams the Derby 10.17 CVE backport (IRT-2271) changed.
 
-This is a pruned subset of the channel-deploy smoke harness on `private-org/feature/26.9.x`.
+This is a pruned subset of the 26.9.x channel-deploy smoke harness.
 Only the boot/health-check/teardown path is kept here; channel import/deploy, message
 pump/assert, and every connector-specific fixture are 26.9-only and out of scope for this
 security-only patch release.

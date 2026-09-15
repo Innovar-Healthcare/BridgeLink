@@ -3,10 +3,10 @@ name: Test matrix (JDK 17 / 21)
 on:
   push:
     branches:
-      - release/26.6.1
+      - feature/26.6.1-clean
   pull_request:
     branches:
-      - release/26.6.1
+      - feature/26.6.1-clean
 
 jobs:
   test:

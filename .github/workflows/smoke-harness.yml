@@ -1,18 +1,18 @@
 # Boot-only smoke harness for release/26.6.1 (IRT-2270/2271). Boots the assembled BridgeLink
 # distribution directly on the runner JVM and health-checks it over HTTPS, proving the
 # embedded-Derby boot path both JDK legs exercise: JDK 17 hits the JAVA-04 preflight and
-# aborts cleanly (expected, wrapped below); JDK 21 boots successfully. Backported and pruned
-# from private-org/feature/26.9.x's channel-deploy smoke harness - this copy runs on push/PR
-# to release/26.6.1 only, JDK 17/21 only, and every leg passes --boot-only.
+# aborts cleanly (expected, wrapped below); JDK 21 boots successfully. Pruned from the 26.9.x
+# channel-deploy smoke harness down to the boot/health-check path - this copy runs on push/PR
+# to feature/26.6.1-clean only, JDK 17/21 only, and every leg passes --boot-only.
 name: Smoke harness (JDK 17/21)
 
 on:
   push:
     branches:
-      - release/26.6.1
+      - feature/26.6.1-clean
   pull_request:
     branches:
-      - release/26.6.1
+      - feature/26.6.1-clean
 
 jobs:
   smoke:
