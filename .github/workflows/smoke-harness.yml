@@ -42,7 +42,7 @@ jobs:
 
       - name: Build BridgeLink - unsigned
         working-directory: server
-        run: ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true
+        run: ant -f mirth-build.xml -DdisableSigning=true -Dskip.tests=true
 
       # Own, separate step -- runs on JDK 21 only. The JDK 17 leg uses the expected-failure
       # wrapper below instead.

@@ -148,18 +148,22 @@
 			<fileset dir="${server.setup}/client-lib" />
 		</copy>
 		
-		<!-- Skip when -Dskip.build.tests=true (the smoke-harness workflow assembles the dist to
-		     boot it and runs no tests; test-matrix runs test-run as its own explicit step). Without
-		     this guard the build target's antcall runs the full suite during assemble and, since the
-		     junit targets carry failureproperty/<fail> gating, a single failing test aborts the
-		     build before the boot/test step ever runs. Default (no property set) preserves existing
-		     behavior for build_bridgelink.yml and any other caller. antcall itself has no if/unless
-		     attribute (Ant limitation), so the guard lives on the wrapper target instead.
-		     Backported from feature/26.9.x. -->
-		<antcall target="build-run-tests" />
+		<!--
+			Ant's unless= tests whether a property is SET, not whether it is true, so guarding
+			maybe-test-run on skip.tests directly would let -Dskip.tests=false silently skip the
+			whole suite. Resolve the value to a boolean first.
+		-->
+		<condition property="skip.tests.enabled">
+			<istrue value="${skip.tests}" />
+		</condition>
+		<antcall target="maybe-test-run" />
 	</target>
 
-	<target name="build-run-tests" unless="skip.build.tests">
+	<!--
+		The unit tests now fail the build (see the <fail> at the end of each module's test-run
+		target). Pass -Dskip.tests=true to produce a distribution without running them.
+	-->
+	<target name="maybe-test-run" unless="skip.tests.enabled">
 		<antcall target="test-run" />
 	</target>
 
