@@ -90,22 +90,60 @@ entirely.
 
 ## Windows / Default-Encoding Upgrade Safety (JEP 400, IRT-2217)
 
-BridgeLink now runs on Java 21. Starting with Java 18, JEP 400 changed the
-JVM's platform default charset from the host's locale-driven encoding to
-UTF-8, regardless of operating system. This affects any connector whose
-Encoding setting is left at "Default" (`DEFAULT_ENCODING`): on a pre-Java-18
-Windows server that default used to resolve to windows-1252, and on Java 18
-and later it now resolves to UTF-8.
+Starting with Java 18, JEP 400 changed the JVM's platform default charset
+from the host's locale-driven encoding to UTF-8 on every operating system.
+Any connector whose Encoding is left at "Default" (`DEFAULT_ENCODING`)
+follows that platform default: on a pre-Java-18 Windows server it resolved to
+windows-1252, and on Java 18 and later it resolves to UTF-8.
 
-**Affected connectors:** TCP/MLLP, HTTP, File (text mode), Database (byte
-columns), and SMTP -- any connector where the Encoding field can be left at
-"Default".
+**Embedded Derby installs must be on Java 21 before you upgrade.** The
+installer media bundle no JRE and accept a host JVM of Java 17 through 21.
+Embedded Derby 10.17 in this release requires Java 21. On an older JVM the
+server exits before touching the database, logging:
 
-**What is unchanged.** `CharsetUtils`'s default-resolution logic itself is not
-modified by this release. A connector left on "Default" still resolves the
-same way it always has -- to `server.defaultencoding` when set, otherwise to
-the JVM platform default. Only the JVM's own platform default moved, per JEP
-400.
+```
+embedded Derby requires Java 21+ as of 26.9; upgrade Java or switch to an external database
+```
+
+An install on an external database (MySQL, PostgreSQL, SQL Server) may stay on
+Java 17. Moving a Windows install from Java 17 to Java 21 is what exposes it
+to the charset change above.
+
+**Affected connectors:** TCP/MLLP, File (text mode), Database (byte columns)
+and SMTP -- the connectors whose Encoding field is commonly left at "Default".
+HTTP connectors ship an explicit UTF-8 default rather than "Default", so they
+are affected only where an administrator changed that field: to "Default" on a
+Listener or a Sender, or to "NONE" on a Sender whose remote response omits a
+charset.
+
+**What else changed in this release.** Two changes beyond the JVM default,
+both of which alter how "Default" resolves:
+
+- TCP/MLLP and HTTP connectors on "Default" now honor the server-wide encoding
+  property, which the File, Database and SMTP connectors always did (IRT-1780).
+  If `ca.uhn.hl7v2.llp.charset` is already set in your `mirth.properties`,
+  check its value before upgrading: those connectors previously ignored it and
+  will now follow it, on any Java version.
+- `server.defaultencoding` is new, as the documented name for that same value.
+  It takes precedence over the legacy alias when both are set (IRT-1913).
+
+Beyond those, `CharsetUtils`'s resolution order is unchanged: the server-wide
+property when set, otherwise the JVM platform default.
+
+**How to tell whether this affects you.** At every startup the server compares
+the JVM default charset against the host's native encoding and writes a WARN
+to `mirth.log` when they differ (IRT-1914). In the log from the most recent
+startup, search for:
+
+```
+JVM default charset is ... but the host (native) encoding is ...
+```
+
+`mirth.log` rolls at 500KB, so check it soon after the restart. Read the
+absence of that warning narrowly. It means the two values agree on this host,
+or a server-wide encoding is already pinned. It does not clear you for either
+change listed above, and it compares against the current host rather than
+whatever the previous install ran on.
 
 **Remedy.** To keep the pre-Java-18 host encoding for `DEFAULT_ENCODING`
 connectors, set in `conf/mirth.properties`:
@@ -118,6 +156,11 @@ The legacy alias `ca.uhn.hl7v2.llp.charset` is still honored, but
 `server.defaultencoding` takes precedence when both are set. As an
 alternative to a server-wide setting, pin the Encoding field on each affected
 connector individually instead of relying on "Default".
+
+**What this setting does not cover.** Channel scripts calling `FileUtil.read`
+or `FileUtil.write` without an explicit charset, and the Document Writer's RTF
+output, follow the JVM default directly; `server.defaultencoding` does not
+govern them. Pass an explicit charset in those scripts.
 
 ---
 
