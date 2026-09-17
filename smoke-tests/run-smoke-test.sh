@@ -844,7 +844,18 @@ health_check() {
         attempt=$((attempt + 1))
 
         if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
-            fail "Server process (PID ${SERVER_PID}) exited before becoming healthy"
+            # IRT-2353: reap the process and record its exit status. A server that logs
+            # "aborting startup" and then exits 0 makes a systemd unit with Restart=on-failure
+            # record a clean stop and never restart, which is invisible unless something reads
+            # the status. rc=0 default plus "|| rc=$?" keeps this safe under set -e.
+            local server_rc=0
+            wait "${SERVER_PID}" 2>/dev/null || server_rc=$?
+            # Uncoloured marker line so break-postgres-driver.sh can grep -qF for it.
+            echo "SMOKE-SERVER-EXIT-STATUS: ${server_rc}"
+            fail "Server process (PID ${SERVER_PID}) exited before becoming healthy (exit status ${server_rc})"
+            if [[ ${server_rc} -eq 0 ]]; then
+                fail "Server aborted startup but exited 0 - a service manager with Restart=on-failure would see a clean stop and never restart it (IRT-2353)"
+            fi
             dump_log_tail
             return 1
         fi

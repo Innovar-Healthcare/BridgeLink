@@ -175,6 +175,54 @@ public class Mirth extends Thread {
         return "derby".equalsIgnoreCase(databaseType) && javaFeatureVersion < 21;
     }
 
+    /**
+     * Process exit status for an aborted startup (IRT-2353). The server does not run on the JVM's
+     * main thread - MirthLauncher loads this class reflectively as a Thread and starts it - so
+     * nothing in run() or startup() sets the process status, and every abort used to end at 0. A
+     * systemd unit with Restart=on-failure then records Result=success, goes inactive rather than
+     * failed, and is never restarted; systemd counts 0 as success whatever the unit file says, so
+     * the exit code is the only lever.
+     *
+     * One code for every abort rather than one per cause: systemd partitions zero from non-zero
+     * only, absent SuccessExitStatus=, so a per-cause code would be an external contract nothing
+     * consumes. 1 is what checkDerbyJavaVersion, checkRunningAsRoot and MirthLauncher's root check
+     * already use.
+     */
+    static final int EXIT_STARTUP_ABORTED = 1;
+
+    /**
+     * Prefix of the database startup-abort log line. Kept byte-identical to the pre-IRT-2353
+     * text because operator runbooks grep for it.
+     */
+    static final String DATABASE_ABORT_MSG_PREFIX = "Error establishing connection to database, aborting startup. ";
+
+    /**
+     * Null-safe rendering of the detail an operator needs from a database startup failure.
+     * Prefers the cause, because the connection pool wraps the driver exception, but the second
+     * and third retry loops in startup() rethrow that exception unwrapped and it may carry no
+     * cause at all. Pre-IRT-2353 this was an unguarded e.getCause().getMessage(), which threw
+     * NullPointerException from inside the catch block in exactly that case - so the abort never
+     * reached its own exit, and the process died by another route, also at status 0.
+     *
+     * For a wrapped cause that carries a message - the common case, and the only one that used to
+     * render usefully - the output is byte-identical to the old expression. A cause with a null
+     * message used to render the literal "null" and now renders the exception's toString(), which
+     * is the one deliberate wording change.
+     */
+    static String causeMessage(Throwable t) {
+        Throwable detail = (t != null && t.getCause() != null && t.getCause() != t) ? t.getCause() : t;
+
+        if (detail == null) {
+            return "";
+        }
+
+        return detail.getMessage() != null ? detail.getMessage() : detail.toString();
+    }
+
+    static String databaseAbortMessage(Throwable t) {
+        return DATABASE_ABORT_MSG_PREFIX + causeMessage(t);
+    }
+
     RootCheckResult evaluateRootCheck(String osName, String userName, boolean isWindowsAdmin, boolean allowRoot) {
         boolean isPrivileged;
         if (osName.toLowerCase().contains("win")) {
@@ -219,7 +267,7 @@ public class Mirth extends Thread {
 
         if (derbyPreflightBlocks(dbType, Runtime.version().feature())) {
             logger.error(DERBY_JAVA_ERROR_MSG);
-            System.exit(1);
+            System.exit(EXIT_STARTUP_ABORTED);
         }
     }
 
@@ -238,7 +286,7 @@ public class Mirth extends Thread {
 
         if (result == RootCheckResult.BLOCK) {
             logger.error(ROOT_CHECK_ERROR_MSG);
-            System.exit(1);
+            System.exit(EXIT_STARTUP_ABORTED);
         } else if (result == RootCheckResult.WARN) {
             logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set - proceeding.");
         }
@@ -334,7 +382,10 @@ public class Mirth extends Thread {
             boolean httpsPort = testPort(mirthProperties.getString("https.host"), mirthProperties.getString("https.port"), "https.port");
 
             if (!httpPort || !httpsPort) {
-                return;
+                // testPort() already logged which port and why. Exiting in place rather than
+                // returning, so a service manager sees a failed start (IRT-2353). Still above the
+                // shutdown hook registration below, so no hook runs - the same as the return did.
+                System.exit(EXIT_STARTUP_ABORTED);
             }
 
             running = true;
@@ -357,6 +408,8 @@ public class Mirth extends Thread {
             }
         } else {
             logger.error("could not initialize resources");
+            // IRT-2353. Also above the shutdown hook registration.
+            System.exit(EXIT_STARTUP_ABORTED);
         }
     }
 
@@ -489,9 +542,11 @@ public class Mirth extends Thread {
             }
 
         } catch (Exception e) {
-            // the getCause is needed since the wrapper exception is from the connection pool
-            logger.error("Error establishing connection to database, aborting startup. " + e.getCause().getMessage());
-            System.exit(0);
+            // IRT-2353: exit non-zero so a service manager sees a failed start rather than a
+            // clean stop. causeMessage is null-safe; the pool wraps the driver exception, but the
+            // second and third retry loops above rethrow it unwrapped and it may have no cause.
+            logger.error(databaseAbortMessage(e));
+            System.exit(EXIT_STARTUP_ABORTED);
         } finally {
             if (SqlConfig.getInstance().getSqlSessionManager().isManagedSessionStarted()) {
                 SqlConfig.getInstance().getSqlSessionManager().close();
