@@ -1,0 +1,30 @@
+# DICOM TLS 3DES harness overlay (Phase 18.4, D-04).
+#
+# HARNESS-ONLY OVERRIDE. This file is applied via
+# `-Djava.security.properties=<path>` (SINGLE '=', additive/override mode —
+# NEVER '==', which discards the entire master java.security file) to BOTH
+# the Mirth server JVM and the smoke-test JUnit driver JVM for the duration
+# of the dicom-tls-3des-roundtrip-test.xml smoke run only.
+#
+# It widens the JVM-wide `jdk.tls.disabledAlgorithms` policy by removing
+# `3DES_EDE_CBC` from the disabled list, re-enabling the SSL_RSA_WITH_3DES_EDE_CBC_SHA
+# cipher suite so the DICOM connector's `tls=3des` mode can complete a TLS
+# handshake on JDK 17/21/25 (which all disable 3DES by default — Sweet32,
+# CVE-2016-2183). Every other token from the JDK's baseline disabled-algorithms
+# list is repeated verbatim and unchanged: single-key property override mode
+# replaces the WHOLE value for `jdk.tls.disabledAlgorithms`, not a fragment of
+# it, so this file must carry the entire list minus only `3DES_EDE_CBC`.
+#
+# PRODUCTION IMPLICATION (D-04): this override MUST NEVER be shipped or
+# applied to a production BridgeLink distribution. 3DES/Sweet32 remains a
+# deliberately weak, deprecated cipher — this file exists solely to preserve
+# smoke-test coverage of the connector's `tls=3des` customer-compatibility
+# mode. A BridgeLink operator who has a genuine, accepted-risk business need
+# for `tls=3des` DICOM connectivity on JDK 21/25 must apply the identical
+# `-Djava.security.properties=` override deliberately and explicitly to BOTH
+# the Mirth server JVM and any external SCU/SCP JVM it communicates with —
+# this is not a default-on capability and re-enabling it anywhere is a
+# conscious security tradeoff that must be documented at the point of use.
+jdk.tls.disabledAlgorithms=SSLv3, TLSv1, TLSv1.1, DTLSv1.0, RC4, DES, \
+    MD5withRSA, DH keySize < 1024, EC keySize < 224, anon, NULL, \
+    ECDH

@@ -5,6 +5,12 @@
 	<property name="manifest_thread_count" value="4" />
 	<property name="signjar_thread_count" value="4" />
 	<property name="jdk_src_path" value="" />
+	<!-- IRT-2271: server.test.excludes lets mirth-build.xml's test-run target pass the
+	     JDK-17 Derby-loading class exclusion list (server.derby.test.excludes) into this
+	     module's batchtest fileset without changing what a bare local run of this file
+	     collects (server.test.excludes defaults to empty). -->
+	<property name="server.test.includes" value="**/*Test.class" />
+	<property name="server.test.excludes" value="" />
 
 	<target name="help">
 		<echo>Mirth Connect Build Help</echo>
@@ -1165,8 +1171,9 @@
 				<fileset dir="${lib}">
 					<include name="log4j/log4j-api-2.25.4.jar" />
 					<include name="log4j/log4j-core-2.25.4.jar" />
-					<include name="database/derby-10.10.2.0.jar" />
-					<include name="database/derbytools-10.10.2.0.jar" />
+					<include name="database/derby-10.17.1.0.jar" />
+					<include name="database/derbytools-10.17.1.0.jar" />
+					<include name="database/derbyshared-10.17.1.0.jar" />
 					<include name="commons/commons-io-2.16.1.jar" />
 				</fileset>
 			</classpath>
@@ -1274,13 +1281,13 @@
 
 	<path id="jacoco.classpath">
 		<fileset dir="lib/ant">
-			<include name="org.jacoco.ant-0.8.8.jar"/>
-			<include name="org.jacoco.core-0.8.8.jar"/>
-			<include name="org.jacoco.report-0.8.8.jar"/>
-			<include name="org.jacoco.agent-0.8.8.jar"/>
-			<include name="asm-9.2.jar"/>
-			<include name="asm-tree-9.2.jar"/>
-			<include name="asm-commons-9.2.jar"/>
+			<include name="org.jacoco.ant-0.8.15.jar"/>
+			<include name="org.jacoco.core-0.8.15.jar"/>
+			<include name="org.jacoco.report-0.8.15.jar"/>
+			<include name="org.jacoco.agent-0.8.15.jar"/>
+			<include name="asm-9.10.1.jar"/>
+			<include name="asm-tree-9.10.1.jar"/>
+			<include name="asm-commons-9.10.1.jar"/>
 		</fileset>
 	</path>
 
@@ -1344,9 +1351,12 @@
 						PostgreSQL on localhost:5432, ActiveMQ on 61616, /tmp/prunertest, Windows
 						paths such as C:\NCPDP_*.txt). Adding **/*Tests.class here to match donkey's
 						fileset would pull in ~145 tests that cannot pass and would fail every build.
+						The *Test include lives in ${server.test.includes} (default **/*Test.class);
+						${server.test.excludes} additionally drops the JDK-17 Derby-loading classes
+						(IRT-2271, wired from mirth-build.xml's test-run target).
 					-->
-					<fileset dir="${test_classes}">
-						<include name="**/*Test.class" />
+					<fileset dir="${test_classes}" includes="${server.test.includes}" excludes="${server.test.excludes}">
+						<exclude name="**/*$*.class" />
 					</fileset>
 				</batchtest>
 			</junit>

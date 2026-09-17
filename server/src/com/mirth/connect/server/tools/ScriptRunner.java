@@ -19,7 +19,6 @@ import java.sql.SQLException;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.output.NullOutputStream;
-import org.apache.derby.tools.ij;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,7 +45,11 @@ public class ScriptRunner {
             connection = DriverManager.getConnection("jdbc:derby:mirthdb;create=true");
             in = new FileInputStream(new File(scriptFile));
             OutputStream out = new NullOutputStream();
-            ij.runScript(connection, in, "UTF-8", out, "UTF-8");
+            Class<?> ij = Class.forName("org.apache.derby.tools.ij");
+            java.lang.reflect.Method runScript = ij.getMethod("runScript",
+                    java.sql.Connection.class, java.io.InputStream.class, String.class,
+                    java.io.OutputStream.class, String.class);
+            runScript.invoke(null, connection, in, "UTF-8", out, "UTF-8");
         } catch (Exception e) {
             logger.error("error executing script", e);
         } finally {

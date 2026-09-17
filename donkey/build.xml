@@ -3,10 +3,30 @@
 	<property file="build.properties" />
 	<target name="init">
 		<property file="build.properties" />
-		
+
 		<path id="classpath">
 			<fileset dir="${lib}" includes="**/*.jar" />
 		</path>
+
+		<!-- D-03 (IRT-1489, Phase 24): embedded Derby 10.17 (v63 classfiles) cannot load on
+		     JDK 17 (max v61). test-matrix.yml passes -Dexclude.derby.tests=true explicitly on
+		     the JDK-17 CI leg; this local self-gate additionally sets the same property (a
+		     command-line -D always wins - Ant never overwrites an already-set property) for a
+		     bare local JDK-17 run so a dev invoking test-run directly also self-excludes.
+		     value/else give it a definite true/false always, which the derived pattern-list
+		     condition below needs (istrue errors on a truly unset property). -->
+		<condition property="exclude.derby.tests" value="true" else="false">
+			<equals arg1="${ant.java.version}" arg2="17" />
+		</condition>
+
+		<!-- D-03: the empirically-finalized Derby-loading class list (24-03-SUMMARY.md) is built
+		     as one comma-separated property here and applied as the batchtest fileset's
+		     excludes="" STRING ATTRIBUTE below - the same mechanism server.test.excludes already
+		     uses - rather than as individual nested <exclude if="..."> elements, so it composes
+		     as plain property substitution regardless of how deeply the fileset is nested. -->
+		<condition property="donkey.derby.test.excludes" value="**/ChannelControllerTests.class,**/ChannelTests.class,**/ConnectorTests.class,**/DestinationChainTests.class,**/DestinationConnectorTests.class,**/DonkeyDaoTests.class,**/ExceptionTests.class,**/FilterTransformerTests.class,**/MessageControllerTests.class,**/OverwriteRaceTests.class,**/PerformanceTests.class,**/QueueTests.class,**/RecoveryTests.class,**/SourceConnectorTests.class,**/StatisticsTests.class,**/DerbyEngineSeamTest.class,**/JdbcDriverSeamTest.class,**/HikariCpDerbyBridgeTest.class" else="">
+			<istrue value="${exclude.derby.tests}" />
+		</condition>
 	</target>
 	
 	<target name="clean" depends="init">
@@ -91,13 +111,13 @@
 
 	<path id="jacoco.classpath">
 		<fileset dir="${server}/lib/ant">
-			<include name="org.jacoco.ant-0.8.8.jar"/>
-			<include name="org.jacoco.core-0.8.8.jar"/>
-			<include name="org.jacoco.report-0.8.8.jar"/>
-			<include name="org.jacoco.agent-0.8.8.jar"/>
-			<include name="asm-9.2.jar"/>
-			<include name="asm-tree-9.2.jar"/>
-			<include name="asm-commons-9.2.jar"/>
+			<include name="org.jacoco.ant-0.8.15.jar"/>
+			<include name="org.jacoco.core-0.8.15.jar"/>
+			<include name="org.jacoco.report-0.8.15.jar"/>
+			<include name="org.jacoco.agent-0.8.15.jar"/>
+			<include name="asm-9.10.1.jar"/>
+			<include name="asm-tree-9.10.1.jar"/>
+			<include name="asm-commons-9.10.1.jar"/>
 		</fileset>
 	</path>
 
@@ -112,6 +132,25 @@
 		</classpath>
 	</taskdef>
 	
+	<!-- D-03 (IRT-1489, Phase 24): isolates the HTML-report DB-version-info <sql> query so it
+	     can be skipped via unless when exclude.derby.tests is set (JDK 17). <sql> itself has no
+	     if/unless attribute; a target's own unless still gates it when the target is invoked via
+	     antcall, so this is called unconditionally by test-run and self-skips here. -->
+	<target name="query-db-version-info" depends="init" unless="exclude.derby.tests">
+		<sql driver="${dbinfo.database.driver}"
+			 url="${dbinfo.database.url}"
+			 userid="${dbinfo.database.username}"
+			 password="${dbinfo.database.password}"
+			 print="true"
+			 showheaders="false"
+			 showtrailers="false"
+			 output="${basedir}/db-version-temp.txt"
+			 onerror="continue">
+			<classpath refid="testclasspath"/>
+			${db.version.query}
+		</sql>
+	</target>
+
 	<target name="test-run" depends="test-compile" description="Run unit tests and generate code coverage">
 		<property name="junit-reports" value="junit-reports" />
 		<property name="junit-html" value="junit-html" />
@@ -154,7 +193,14 @@
 				</classpath>
 				<formatter type="xml" />
 				<batchtest todir="${junit-reports}">
-					<fileset dir="${test_classes}">
+					<!-- D-03 (IRT-1489, Phase 24): embedded Derby 10.17 (v63 classfiles) cannot load
+					     on JDK 17 (max v61). donkey.derby.test.excludes (built in init) carries the
+					     empirically-finalized list of Derby-loading classes (24-03-SUMMARY.md) as a
+					     comma-separated excludes ATTRIBUTE - composing with, never replacing, the
+					     nested **/*$*.class exclude below - and is empty (a no-op) on every leg
+					     except JDK 17, where it additionally excludes those classes (never collected,
+					     never assumeTrue-skipped). -->
+					<fileset dir="${test_classes}" excludes="${donkey.derby.test.excludes}">
 						<include name="**/*Tests.class" />
 						<include name="**/*Test.class" />
 						<exclude name="**/*$*.class" />
@@ -202,18 +248,16 @@
 		<condition property="db.version.query" value="VALUES 'Apache Derby (embedded)'">
 			<equals arg1="${dbinfo.database}" arg2="derby"/>
 		</condition>
-		<sql driver="${dbinfo.database.driver}"
-			 url="${dbinfo.database.url}"
-			 userid="${dbinfo.database.username}"
-			 password="${dbinfo.database.password}"
-			 print="true"
-			 showheaders="false"
-			 showtrailers="false"
-			 output="${basedir}/db-version-temp.txt"
-			 onerror="continue">
-			<classpath refid="testclasspath"/>
-			${db.version.query}
-		</sql>
+		<!-- D-03 (IRT-1489, Phase 24): this HTML-report metadata query loads
+		     ${dbinfo.database.driver} directly in the Ant JVM (unconditionally, outside the
+		     batchtest fork), so on JDK 17 with the default derby config it hits the same
+		     UnsupportedClassVersionError as the excluded test classes above - onerror="continue"
+		     does not catch it because the failure is a class-load Error, not a SQL error during
+		     execution. <sql> has no if/unless attribute of its own (verified this session), so
+		     the query is isolated in the query-db-version-info target below, whose OWN unless
+		     gates it even when invoked via antcall; db.version falls back to the existing
+		     "Unknown" default when skipped. -->
+		<antcall target="query-db-version-info" />
 		<exec executable="bash" outputproperty="db.version" failonerror="false">
 			<arg value="-c"/>
 			<arg value="V=$$(head -1 '${basedir}/db-version-temp.txt' 2>/dev/null | xargs); [ -n &quot;$$V&quot; ] &amp;&amp; echo &quot;$$V&quot; || echo 'Unknown'"/>

@@ -50,12 +50,12 @@ public interface DatabaseConnectorServletInterface extends BaseServletInterface 
                     @ExampleObject(name = "table_set", ref = "../apiexamples/table_set_xml") }),
             @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
                     @ExampleObject(name = "table_set", ref = "../apiexamples/table_set_json") }) })
-    @MirthOperation(name = "getTables", display = "Get Tables", type = ExecuteType.ASYNC, auditable = false)
+    @MirthOperation(name = "getTables", display = "Get Tables", type = ExecuteType.ASYNC, auditable = true)
     public SortedSet<Table> getTables(// @formatter:off
             @Param("channelId") @Parameter(description = "The ID of the channel.", required = true) @QueryParam("channelId") String channelId,
             @Param("channelName") @Parameter(description = "The name of the channel.", required = true) @QueryParam("channelName") String channelName,
             @Param("driver") @Parameter(description = "The JDBC driver class to use. (ex: org.postgresql.Driver)", required = true) @QueryParam("driver") String driver,
-            @Param("url") @Parameter(description = "The JDBC connection URL to use. (ex: jdbc:postgresql://localhost:5432/mirthdb)", required = true) @QueryParam("url") String url,
+            @Param(value = "url", excludeFromAudit = true) @Parameter(description = "The JDBC connection URL to use. (ex: jdbc:postgresql://localhost:5432/mirthdb)", required = true) @QueryParam("url") String url,
             @Param("username") @Parameter(description = "The username to authenticate with.") @DefaultValue("") @QueryParam("username") String username,
             @Param(value = "password", excludeFromAudit = true) @Parameter(description = "The password to authenticate with.", schema = @Schema(format = "password")) @DefaultValue("") @QueryParam("password") String password,
             @Param("tableNamePatterns") @Parameter(description = "If specified, filters by table name. Wildcards (* or %) are allowed.") @QueryParam("tableNamePattern") Set<String> tableNamePatterns,
