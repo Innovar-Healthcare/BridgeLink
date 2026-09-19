@@ -3,7 +3,6 @@ package com.mirth.commons.encryption;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.SecureRandom;
 import java.security.spec.KeySpec;
@@ -175,12 +174,13 @@ public class Digester {
 
     public void initialize() throws EncryptionException {
         if (!isInitialized()) {
-            try {
-                saltGenerator = SecureRandom.getInstance("SHA1PRNG");
-            } catch (NoSuchAlgorithmException e) {
-                throw new EncryptionException(e);
-            }
-
+            // new SecureRandom() declares no checked exceptions; the previous
+            // try/catch around SecureRandom.getInstance("SHA1PRNG") is no
+            // longer reachable after issue #135 swapped to the no-arg
+            // constructor. EncryptionException is retained on the method
+            // signature for forward compatibility (subclass overrides,
+            // future re-introduction of a checked-exception primitive).
+            saltGenerator = new SecureRandom();
             setInitialized(true);
         }
     }
