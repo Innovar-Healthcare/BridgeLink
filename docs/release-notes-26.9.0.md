@@ -217,3 +217,31 @@ govern them. Pass an explicit charset in those scripts.
   one-row cap.
 
 ---
+
+## Database - 26.6.1 Migration Rung and Fail-Loud Unknown-Version Startup (IRT-2329)
+
+A database created or last upgraded by `release/26.6.1` (`SCHEMA_INFO.VERSION =
+"26.6.1"`) now upgrades cleanly to 26.9.0. Previously, 26.9.0 did not recognize
+the `26.6.1` schema-version string, and startup silently coerced the unrecognized
+version to `V0` and replayed the entire legacy migration ladder against an
+already-populated schema - a data-integrity hazard that could abort startup
+outright.
+
+- **New `v26_6_1` schema-version rung.** `26.6.1` is schema-identical to
+  `26.6.0` (it added only a no-op migrator upstream, no database delta), so
+  the new rung runs no migration logic of its own. `Migrate26_9_0` is
+  unchanged and unaffected by the new rung - it still only rewrites the
+  persisted JDBC driver list (mssql-jdbc/jTDS retirement, CVE-04) and does
+  not branch on the starting schema version.
+- **Fail-loud on an unrecognized persisted schema version.** This release
+  also hardens `ServerMigrator` (IRT-2295 scope item 3): if `SCHEMA_INFO`
+  holds a version string the server does not recognize, startup now aborts
+  immediately with a `MigrationException` naming the offending string,
+  instead of silently replaying the migration ladder from the beginning. A
+  database with no `SCHEMA_INFO` row at all (a fresh install) is unaffected
+  - that case still initializes normally.
+
+**Upgrade impact:** deployments already running `release/26.6.1` upgrade to
+26.9.0 with no manual database intervention required.
+
+---
