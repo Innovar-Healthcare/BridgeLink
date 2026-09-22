@@ -262,14 +262,22 @@ client and CLI libraries.
 
   **Upgrade impact:** a deployment that set `digest.iterations` above
   10,000,000 will find every administrator login failing after the
-  upgrade. Before upgrading, add
+  upgrade. The failure is silent: every login is rejected as an
+  incorrect username or password, nothing is written to the server
+  log, and each attempt still counts toward account lockout. Setting
+  or changing a password does fail with a visible encryption error,
+  because that path throws instead of silently returning false. An
+  operator seeing only "incorrect credentials" is likely to start a
+  credential reset rather than check the JVM options, so check
+  `digest.iterations` first if every administrator is suddenly locked
+  out after this upgrade. Before upgrading, add
   `-Dorg.bouncycastle.pbe.max_iteration_count` set to at least its
-  `digest.iterations` value to the server's JVM options. Do not lower
-  `digest.iterations` as a fix: stored password hashes do not record
-  their iteration count, so lowering it makes every existing password
-  fail to verify. Raising the cap also widens the bound
-  CVE-2026-17508 places on untrusted PBKDF2 input, so keep it no
-  higher than needed.
+  `digest.iterations` value to the server's JVM options file
+  (`mcservice-java9+.vmoptions`). Do not lower `digest.iterations` as
+  a fix: stored password hashes do not record their iteration count,
+  so lowering it makes every existing password fail to verify.
+  Raising the cap also widens the bound CVE-2026-17508 places on
+  untrusted PBKDF2 input, so keep it no higher than needed.
 - **Removed legacy APIs.** 1.86 removes the deprecated
   `org.bouncycastle.pqc.crypto` ML-DSA, ML-KEM and SLH-DSA classes and
   the legacy Rainbow, Picnic, FrodoKEM and CMCE implementations. A
