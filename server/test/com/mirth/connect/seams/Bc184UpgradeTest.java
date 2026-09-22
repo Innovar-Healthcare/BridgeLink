@@ -109,8 +109,12 @@ import com.mirth.connect.server.util.StatementLock;
  * version, so a stale test classpath cannot report false confidence for the other new
  * assertions.</li>
  * <li>{@link #digesterAcceptsDefaultIterationsAndRejectsAboveBcCap()} (1.86, D-11): the
- * production-wired {@link Digester} path accepts the default {@code digest.iterations} and rejects
- * an iteration count above BouncyCastle 1.86's raw JCA PBKDF2 cap (CVE-2026-17508).</li>
+ * production-wired {@link Digester} path accepts the default {@code digest.iterations}. Above
+ * BouncyCastle 1.86's raw JCA PBKDF2 cap (CVE-2026-17508), the rejection surfaces two different
+ * ways: {@code digest()} (used when setting or changing a password) throws an
+ * {@code EncryptionException}, while the fallback-wired {@code matches()} path that admin login
+ * actually calls swallows the same exception and returns {@code false} silently instead of
+ * throwing.</li>
  * </ul>
  */
 public class Bc184UpgradeTest {
@@ -469,5 +473,23 @@ public class Bc184UpgradeTest {
             cause = cause.getCause();
         }
         assertTrue("BouncyCastle 1.86 caps raw JCA PBKDF2 at 10,000,000 iterations (CVE-2026-17508, org.bouncycastle.pbe.max_iteration_count); expected an InvalidKeySpecException in the cause chain, observed: " + causeChain, foundInvalidKeySpecException);
+
+        // The reject assertion above only exercises digest() (used when setting or changing a
+        // password). Admin login goes through Digester.matches(), which is fallback-wired in
+        // production: DefaultConfigurationController.configureEncryption always calls
+        // setFallbackAlgorithm(...) et al., because EncryptionSettings defaults
+        // digest.fallback.algorithm to SHA256. matches() catches the primary
+        // InvalidKeySpecException, tries the fallback digester, and when the fallback also
+        // returns false, discards the original exception and returns false silently -- no
+        // exception, no log line, just a login rejected as an incorrect password that still
+        // counts toward account lockout. Wire the fallback exactly as configureEncryption does
+        // and pin that real behaviour.
+        Digester fallbackWiredDigester = createProductionWiredBcDigester(aboveCapSettings);
+        fallbackWiredDigester.setFallbackAlgorithm(aboveCapSettings.getDigestFallbackAlgorithm());
+        fallbackWiredDigester.setFallbackSaltSizeBytes(aboveCapSettings.getDigestFallbackSaltSize());
+        fallbackWiredDigester.setFallbackIterations(aboveCapSettings.getDigestFallbackIterations());
+        fallbackWiredDigester.setFallbackUsePBE(aboveCapSettings.getDigestFallbackUsePBE());
+        fallbackWiredDigester.setFallbackKeySizeBits(aboveCapSettings.getDigestFallbackKeySize());
+        assertFalse("above the cap, the fallback-wired login path (Digester.matches) returns false silently instead of throwing", fallbackWiredDigester.matches(syntheticPassword, hash));
     }
 }
