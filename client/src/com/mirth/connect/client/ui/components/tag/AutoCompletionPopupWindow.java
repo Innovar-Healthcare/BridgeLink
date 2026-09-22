@@ -23,6 +23,8 @@ import javax.swing.JTextField;
 import javax.swing.text.BadLocationException;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,6 +41,7 @@ public class AutoCompletionPopupWindow extends JTextField {
     private AutoCompletionDelegate completionDelegate;
     private AutoCompletionProvider provider;
     private WebEngine engineCtrl;
+    private Logger logger = LogManager.getLogger(this.getClass());
 
     private String currentlyEnteredText = "";
     private List<SearchFilterListener> updateSearchListeners = new ArrayList<SearchFilterListener>();
@@ -191,12 +194,26 @@ public class AutoCompletionPopupWindow extends JTextField {
     }
 
     private void doCall(final String method, final Object... args) {
+        // Never set when the tag field's page failed to start; there is nothing to call (IRT-2431).
+        if (engineCtrl == null) {
+            return;
+        }
+
         try {
             Platform.runLater(new Runnable() {
                 @Override
                 public void run() {
-                    JSObject tokenField = (JSObject) engineCtrl.executeScript("window");
-                    tokenField.call(method, args);
+                    try {
+                        JSObject tokenField = (JSObject) engineCtrl.executeScript("window");
+                        tokenField.call(method, args);
+                    } catch (Exception e) {
+                        /*
+                         * Only reachable when the page's scripts failed to start, which
+                         * MirthTagWebBrowser already reports once at ERROR. Logging every call
+                         * at ERROR as well would print several traces per page switch.
+                         */
+                        logger.debug("Error calling tokenField JS method: " + method, e);
+                    }
                 }
             });
         } catch (Exception e) {

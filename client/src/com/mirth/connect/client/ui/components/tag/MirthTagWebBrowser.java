@@ -40,6 +40,12 @@ public class MirthTagWebBrowser extends Region {
 
     private AutoCompletionPopupWindow popupWindow;
 
+    /*
+     * Written on the JavaFX thread once the page's scripts have initialised, read on the Swing
+     * thread when a channel is saved. False means getTags() does not reflect the channel.
+     */
+    private volatile boolean ready;
+
     private Logger logger = LogManager.getLogger(this);
 
     public MirthTagWebBrowser(AutoCompletionPopupWindow popupWindow, List<Map<String, String>> userTags, Map<String, Map<String, String>> attributeMap, boolean channelContext) throws Exception {
@@ -101,6 +107,7 @@ public class MirthTagWebBrowser extends Region {
                         init.setMember("clickController", webController);
                         init.call("updateTags", attributeData, context);
                         init.call("setUserTags", tagData);
+                        ready = true;
                     } catch (Exception e) {
                         /*
                          * Without this the exception is thrown on the JavaFX thread, where
@@ -138,6 +145,14 @@ public class MirthTagWebBrowser extends Region {
 
     public String getTags() {
         return webController.getTags();
+    }
+
+    /**
+     * Whether the page loaded and its scripts initialised, so that getTags() reflects what the
+     * user sees. Anything that saves tags must check this first (IRT-2431).
+     */
+    public boolean isReady() {
+        return ready;
     }
 
     public Map<String, Color> getTagColors() {

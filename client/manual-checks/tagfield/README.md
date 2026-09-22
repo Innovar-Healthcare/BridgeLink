@@ -55,8 +55,11 @@ refused, which is the IRT-2431 failure. `typeof jQuery` is `function` when healt
 
 ## Known results
 
-Measured on macOS arm64 with the fix in place. Before the fix, every runtime carrying the July
-2026 OpenJFX CPU failed.
+Measured on macOS arm64. Only the "After" results for 21.0.12.1, 21.0.11 and 17.0.10, and the
+"Before" result for 21.0.12.1, were measured with this check against the real class. Every
+other entry comes from an earlier harness used during the IRT-2431 investigation, which
+replicated `MirthTagWebBrowser`'s loading logic instead of driving the class. The three
+runtimes that appear only in that earlier set were not kept.
 
 | Runtime | Bundled JavaFX | WebKit | Before the fix | After |
 |---|---|---|---|---|
