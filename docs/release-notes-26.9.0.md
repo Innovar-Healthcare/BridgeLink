@@ -273,8 +273,9 @@ client and CLI libraries.
 - **Removed legacy APIs.** 1.86 removes the deprecated
   `org.bouncycastle.pqc.crypto` ML-DSA, ML-KEM and SLH-DSA classes and
   the legacy Rainbow, Picnic, FrodoKEM and CMCE implementations. A
-  channel script that imported them must move to the standardized
-  classes under `org.bouncycastle.crypto`. BridgeLink itself uses none
+  channel script that imported the ML-DSA, ML-KEM or SLH-DSA classes
+  must move to the standardized classes under `org.bouncycastle.crypto`;
+  Rainbow and Picnic have no replacement. BridgeLink itself uses none
   of them.
 
 **Upgrade impact:** deployments on default settings need no action.

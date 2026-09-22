@@ -352,33 +352,43 @@ public class Bc184UpgradeTest {
         char[] keyPassword = ("bcUpgradeKey" + keystoreType).toCharArray();
         Provider provider = new BouncyCastleProvider();
 
-        KeyStore keyStore = generateCertificateIntoFreshKeystore(keystoreType, provider, storePassword, keyPassword);
-        assertNotEquals("keystore.type (" + keystoreType + ") must resolve to a JDK provider, never to BouncyCastle", "BC", keyStore.getProvider().getName());
+        // Register BC as a JCA provider for the life of this assertion so the "never BC"
+        // check below is falsifiable: KeyStore.getInstance(keystoreType) can only resolve
+        // to BC if BC is actually registered. Core itself never calls Security.addProvider,
+        // so this is scoped to the test and reverted in finally (server/build.xml's <junit>
+        // runs forkmode="perTest", so there is no cross-test leakage either way).
+        Security.addProvider(provider);
+        try {
+            KeyStore keyStore = generateCertificateIntoFreshKeystore(keystoreType, provider, storePassword, keyPassword);
+            assertNotEquals("keystore.type (" + keystoreType + ") must resolve to a JDK provider, never to BouncyCastle", "BC", keyStore.getProvider().getName());
 
-        EncryptionSettings settings = new EncryptionSettings(new Properties());
-        KeyGenerator keyGenerator = KeyGenerator.getInstance(settings.getEncryptionBaseAlgorithm(), provider);
-        keyGenerator.init(settings.getEncryptionKeyLength());
-        SecretKey secretKey = keyGenerator.generateKey();
-        keyStore.setEntry(DefaultConfigurationController.SECRET_KEY_ALIAS, new KeyStore.SecretKeyEntry(secretKey), new KeyStore.PasswordProtection(keyPassword));
+            EncryptionSettings settings = new EncryptionSettings(new Properties());
+            KeyGenerator keyGenerator = KeyGenerator.getInstance(settings.getEncryptionBaseAlgorithm(), provider);
+            keyGenerator.init(settings.getEncryptionKeyLength());
+            SecretKey secretKey = keyGenerator.generateKey();
+            keyStore.setEntry(DefaultConfigurationController.SECRET_KEY_ALIAS, new KeyStore.SecretKeyEntry(secretKey), new KeyStore.PasswordProtection(keyPassword));
 
-        X509Certificate before = (X509Certificate) keyStore.getCertificate(CERT_ALIAS);
+            X509Certificate before = (X509Certificate) keyStore.getCertificate(CERT_ALIAS);
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        keyStore.store(out, storePassword);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            keyStore.store(out, storePassword);
 
-        KeyStore reloaded = KeyStore.getInstance(keystoreType);
-        reloaded.load(new ByteArrayInputStream(out.toByteArray()), storePassword);
+            KeyStore reloaded = KeyStore.getInstance(keystoreType);
+            reloaded.load(new ByteArrayInputStream(out.toByteArray()), storePassword);
 
-        X509Certificate after = (X509Certificate) reloaded.getCertificate(CERT_ALIAS);
-        assertArrayEquals("(" + keystoreType + ") certificate encoding must survive the store/load round trip", before.getEncoded(), after.getEncoded());
-        after.checkValidity();
-        assertEquals("(" + keystoreType + ") reloaded certificate subject should be CN=mirth-connect", "CN=mirth-connect", after.getSubjectX500Principal().getName());
-        assertEquals("(" + keystoreType + ") reloaded private key algorithm should be RSA", "RSA", reloaded.getKey(CERT_ALIAS, keyPassword).getAlgorithm());
-        assertArrayEquals("(" + keystoreType + ") secret-key entry must survive the store/load round trip", secretKey.getEncoded(), reloaded.getKey(DefaultConfigurationController.SECRET_KEY_ALIAS, keyPassword).getEncoded());
+            X509Certificate after = (X509Certificate) reloaded.getCertificate(CERT_ALIAS);
+            assertArrayEquals("(" + keystoreType + ") certificate encoding must survive the store/load round trip", before.getEncoded(), after.getEncoded());
+            after.checkValidity();
+            assertEquals("(" + keystoreType + ") reloaded certificate subject should be CN=mirth-connect", "CN=mirth-connect", after.getSubjectX500Principal().getName());
+            assertEquals("(" + keystoreType + ") reloaded private key algorithm should be RSA", "RSA", reloaded.getKey(CERT_ALIAS, keyPassword).getAlgorithm());
+            assertArrayEquals("(" + keystoreType + ") secret-key entry must survive the store/load round trip", secretKey.getEncoded(), reloaded.getKey(DefaultConfigurationController.SECRET_KEY_ALIAS, keyPassword).getEncoded());
 
-        KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        keyManagerFactory.init(reloaded, keyPassword);
-        assertTrue("(" + keystoreType + ") KeyManagerFactory should produce at least one KeyManager from the reloaded store", keyManagerFactory.getKeyManagers().length > 0);
+            KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            keyManagerFactory.init(reloaded, keyPassword);
+            assertTrue("(" + keystoreType + ") KeyManagerFactory should produce at least one KeyManager from the reloaded store", keyManagerFactory.getKeyManagers().length > 0);
+        } finally {
+            Security.removeProvider("BC");
+        }
     }
 
     @Test
