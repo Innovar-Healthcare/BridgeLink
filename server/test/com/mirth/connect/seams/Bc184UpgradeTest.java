@@ -27,6 +27,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.security.KeyStore;
 import java.security.Provider;
 import java.security.Security;
@@ -407,13 +408,13 @@ public class Bc184UpgradeTest {
 
     @Test
     public void bouncyCastleRuntimeIsAtLeast186() {
-        String versionStr = new BouncyCastleProvider().getVersionStr();
-        String[] parts = versionStr.split("\\.");
-        int major = Integer.parseInt(parts[0].replaceAll("[^0-9]", ""));
-        int minor = parts.length > 1 ? Integer.parseInt(parts[1].replaceAll("[^0-9]", "")) : 0;
-
-        boolean atLeast186 = major > 1 || (major == 1 && minor >= 86);
-        assertTrue("BouncyCastle provider must be at least 1.86 (CVE-2026-8763, CVE-2026-13506, fixed from 1.85); this suite was last verified on 1.86; observed version: " + versionStr, atLeast186);
+        // BouncyCastleProvider is constructed with the double-valued Provider constructor, so
+        // getVersionStr() is Double.toString(version) and drops trailing zeros: 1.90 comes back
+        // as "1.9", not "1.90". Splitting on "." and comparing the minor part as an integer would
+        // then misparse 1.90 as minor 9 (less than 86) and fail a correct upgrade. Compare as a
+        // decimal instead, so "1.9" > "1.86" the way the version numbers actually order.
+        BigDecimal observed = new BigDecimal(new BouncyCastleProvider().getVersionStr().trim());
+        assertTrue("BouncyCastle provider must be at least 1.86 (CVE-2026-8763, CVE-2026-13506, fixed from 1.85); this suite was last verified on 1.86; observed version: " + observed, observed.compareTo(new BigDecimal("1.86")) >= 0);
     }
 
     // ------------------------------------------------------------------------------------------
