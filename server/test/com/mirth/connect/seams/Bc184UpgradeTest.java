@@ -9,9 +9,12 @@
 
 package com.mirth.connect.seams;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -20,6 +23,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.security.KeyStore;
@@ -27,8 +32,12 @@ import java.security.Provider;
 import java.security.Security;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.security.spec.InvalidKeySpecException;
 import java.util.Calendar;
+import java.util.Properties;
 
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 
@@ -37,8 +46,10 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.junit.Test;
 
 import com.mirth.commons.encryption.Digester;
+import com.mirth.commons.encryption.EncryptionException;
 import com.mirth.commons.encryption.Output;
 import com.mirth.connect.model.Credentials;
+import com.mirth.connect.model.EncryptionSettings;
 import com.mirth.connect.model.LoginStatus;
 import com.mirth.connect.model.PasswordRequirements;
 import com.mirth.connect.model.User;
@@ -52,40 +63,53 @@ import com.mirth.connect.server.util.SqlConfig;
 import com.mirth.connect.server.util.StatementLock;
 
 /**
- * Dependency-seam characterization suite (D-13/D-14) for the BC 1.84 bcprov/bcpkix/bcutil-jdk18on
- * jars landed by this plan (Phase 23-03). Restores the 4 gap-test assertions the v26.6.0
- * BouncyCastle upgrade revert (commit {@code 6a483ab9d}) deleted and never restored into
- * {@link BcSeamTest}, recovered from {@code git show
+ * Dependency-seam characterization suite (D-01, D-03, D-11) for the BouncyCastle
+ * (bcprov/bcpkix/bcutil-jdk18on) upgrade, last verified on 1.86 (IRT-2441, Phase 26.15).
+ * <p>
+ * <b>History.</b> Phase 23 created this suite for the 1.78.1 to 1.84 upgrade (restoring the four
+ * gap assertions from commit {@code 6a483ab9d}), recovered from {@code git show
  * 6a483ab9d^:server/test/com/mirth/connect/server/controllers/CertificateGenerationTest.java} and
- * {@code UserLoginPasswordVerifyTest.java}, rewritten here against BC 1.84.
+ * {@code UserLoginPasswordVerifyTest.java}. Phase 26.15 extended it for the 1.86 upgrade: keystore
+ * round-trip coverage (D-03), the PBKDF2 iteration-cap behaviour (D-11), and a runtime-version
+ * floor.
  * <p>
- * <b>Complement contract:</b> {@link BcSeamTest} is LOCKED (D-12) and characterizes what the
- * SHIPPED 1.78.1 jars did before this plan landed &mdash; it stays green UNCHANGED across the whole
- * phase and is evidence of NO REGRESSION, not evidence FOR 1.84. THIS suite states what 1.84 MUST
- * DO and is the actual assertion that the upgrade behaves correctly.
+ * <b>Complement contract:</b> {@link BcSeamTest} is LOCKED (Phase 23 D-12, Phase 26.15 D-02) and
+ * characterizes the pre-upgrade baseline (the SHIPPED 1.78.1 jars): it stays green UNCHANGED across
+ * the whole phase and is evidence of NO REGRESSION, not evidence FOR the shipped BouncyCastle. THIS
+ * suite states what the shipped BouncyCastle MUST DO and is the actual assertion that the upgrade
+ * behaves correctly.
  * <p>
- * <b>Per-assertion residue vs {@link BcSeamTest} (D-13, so a reviewer does not credit SC-2 with a
- * duplicate):</b>
+ * <b>Per-assertion residue vs {@link BcSeamTest} (Phase 23 D-13, so a reviewer does not credit this
+ * suite with a duplicate):</b>
  * <ul>
- * <li>{@link #certificateIsSha256WithRsaAndValid()} &mdash; {@code BcSeamTest
+ * <li>{@link #certificateIsSha256WithRsaAndValid()}: {@code BcSeamTest
  * .generatesCertificateIntoEmptyKeystore} already asserts {@code SHA256withRSA} and calls
  * {@code checkValidity()}. This test's ONLY unique residue is the subject/issuer distinguished-name
  * pair ({@code CN=mirth-connect} / {@code CN=BridgeLink Certificate Authority}).</li>
- * <li>{@link #keystoreUsableForSslContext()} &mdash; largely subsumed by {@code BcSeamTest
+ * <li>{@link #keystoreUsableForSslContext()}: largely subsumed by {@code BcSeamTest
  * .tlsHandshakeWithGeneratedCertificate}, which completes a REAL loopback TLS handshake. This test
  * only asserts {@code SSLContext.init(...)} does not throw and produces a non-null context; it is
- * restored because D-13 mandates it, not as SC-2's HTTPS-handshake evidence.</li>
- * <li>{@link #authorizeUserSucceedsWithRealDigester()} &mdash; genuinely new value: the only test
- * that drives {@code DefaultUserController.authorizeUser(username, plainPassword, serverURL)}
- * end-to-end with a real BC-1.84-provider {@link Digester}. <b>Pre-declared JDK-25-red by
+ * restored because Phase 23 D-13 mandates it, not as evidence of an HTTPS handshake.</li>
+ * <li>{@link #authorizeUserSucceedsWithRealDigester()}: genuinely new value: the only test that
+ * drives {@code DefaultUserController.authorizeUser(username, plainPassword, serverURL)}
+ * end-to-end with a real BC-provider {@link Digester}. <b>Pre-declared JDK-25-red by
  * construction:</b> it opens three {@code mockStatic} scopes ({@code ControllerFactory},
  * {@code StatementLock}, {@code SqlConfig}) against the bundled mockito 5.1.1 / byte-buddy 1.14.13,
- * which cannot mock/instrument concrete classes under JDK 25 (IRT-1488, ON HOLD). This is expected,
- * not a Phase 23 regression, and JDK 25 is not a Phase 23 completion gate (D-29.3).</li>
- * <li>{@link #crossProviderHashStillVerifies()} &mdash; the highest-value assertion in the phase: it
- * is the only one that answers whether existing customer password hashes (produced by the JDK's
- * SunJCE provider before this upgrade) still verify through a BC-1.84-wired {@link Digester} after
- * it.</li>
+ * which cannot mock/instrument concrete classes under JDK 25 (IRT-1488, ON HOLD). JDK 25 is not a
+ * completion gate for a BouncyCastle upgrade (Phase 23 D-29.3, Phase 26.15 D-12).</li>
+ * <li>{@link #crossProviderHashStillVerifies()}: the highest-value assertion carried over from
+ * Phase 23: it is the only one that answers whether existing customer password hashes (produced by
+ * the JDK's SunJCE provider) still verify through a BC-wired {@link Digester}.</li>
+ * <li>{@link #keystoreRoundTripSurvivesForJceks()} and {@link #keystoreRoundTripSurvivesForPkcs12()}
+ * (1.86, D-03): the keystore.type resolution path (JCEKS, PKCS12) never resolves to BouncyCastle; a
+ * certificate and a BC-generated secret key survive a store/load round trip through the same
+ * no-provider {@code KeyStore.getInstance(type)} form Core uses.</li>
+ * <li>{@link #bouncyCastleRuntimeIsAtLeast186()} (1.86): pins the runtime BouncyCastle provider
+ * version, so a stale test classpath cannot report false confidence for the other new
+ * assertions.</li>
+ * <li>{@link #digesterAcceptsDefaultIterationsAndRejectsAboveBcCap()} (1.86, D-11): the
+ * production-wired {@link Digester} path accepts the default {@code digest.iterations} and rejects
+ * an iteration count above BouncyCastle 1.86's raw JCA PBKDF2 cap (CVE-2026-17508).</li>
  * </ul>
  */
 public class Bc184UpgradeTest {
@@ -93,7 +117,7 @@ public class Bc184UpgradeTest {
     private static final String CERT_ALIAS = "mirthconnect";
 
     // ------------------------------------------------------------------------------------------
-    // Test 1 (restored): generated certificate carries the expected subject/issuer DN under 1.84
+    // Test 1 (restored): generated certificate carries the expected subject/issuer DN
     // ------------------------------------------------------------------------------------------
 
     @Test
@@ -122,13 +146,23 @@ public class Bc184UpgradeTest {
 
     /**
      * Builds an empty in-memory JCEKS keystore, invokes the private
-     * {@code generateDefaultCertificate} method via reflection using the supplied fresh BC 1.84
+     * {@code generateDefaultCertificate} method via reflection using the supplied fresh BC
      * {@link BouncyCastleProvider}, and returns the populated keystore. The provider is
      * constructed by each caller (never shared or JVM-registered) so the two suites stay
-     * non-interfering under {@code forkmode="perTest"}.
+     * non-interfering under {@code forkmode="perTest"}. Delegates to the four-argument overload
+     * with keystore type {@code "JCEKS"} so existing callers are unaffected.
      */
     private KeyStore generateCertificateIntoFreshKeystore(Provider provider, char[] storePassword, char[] keyPassword) throws Exception {
-        KeyStore keyStore = KeyStore.getInstance("JCEKS");
+        return generateCertificateIntoFreshKeystore("JCEKS", provider, storePassword, keyPassword);
+    }
+
+    /**
+     * As {@link #generateCertificateIntoFreshKeystore(Provider, char[], char[])}, but takes the
+     * keystore type explicitly, using the same no-provider {@code KeyStore.getInstance(keystoreType)}
+     * form {@code DefaultConfigurationController} and {@code MirthWebServer} use (1.86, D-03).
+     */
+    private KeyStore generateCertificateIntoFreshKeystore(String keystoreType, Provider provider, char[] storePassword, char[] keyPassword) throws Exception {
+        KeyStore keyStore = KeyStore.getInstance(keystoreType);
         keyStore.load(null, storePassword);
 
         // PRECONDITION: the empty keystore must NOT already contain the alias, otherwise the
@@ -147,8 +181,8 @@ public class Bc184UpgradeTest {
 
     /**
      * Reflection hook into the private {@code generateDefaultCertificate(Provider, KeyStore,
-     * char[])} method. Unwraps {@link InvocationTargetException} so a real BC 1.84 API break is
-     * readable in the JUnit XML as the underlying exception, not an opaque reflection wrapper --
+     * char[])} method. Unwraps {@link InvocationTargetException} so a real BouncyCastle API break
+     * is readable in the JUnit XML as the underlying exception, not an opaque reflection wrapper --
      * do NOT skip the unwrap.
      */
     private void invokeGenerateDefaultCertificate(DefaultConfigurationController controller, Provider provider, KeyStore keyStore, char[] keyPassword) throws Exception {
@@ -191,7 +225,7 @@ public class Bc184UpgradeTest {
     }
 
     // ------------------------------------------------------------------------------------------
-    // Test 3 (restored): end-to-end authorizeUser succeeds with a real BC-1.84 Digester
+    // Test 3 (restored): end-to-end authorizeUser succeeds with a real BC-provider Digester
     // ------------------------------------------------------------------------------------------
 
     private Digester createRealBcDigester() {
@@ -259,20 +293,20 @@ public class Bc184UpgradeTest {
             LoginStatus result = userController.authorizeUser(username, plainPassword, serverURL);
 
             assertNotNull("authorizeUser should return a LoginStatus", result);
-            assertEquals("Real BC-1.84 Digester should authenticate through the digester.matches branch", LoginStatus.Status.SUCCESS, result.getStatus());
+            assertEquals("Real BouncyCastle-provider Digester should authenticate through the digester.matches branch", LoginStatus.Status.SUCCESS, result.getStatus());
         }
     }
 
     // ------------------------------------------------------------------------------------------
     // Test 4 (restored, D-14 applied): a pre-upgrade SunJCE-produced hash still verifies under a
-    // BC-1.84-wired Digester -- the highest-value assertion in the phase (T-23-12).
+    // BC-wired Digester (the highest-value assertion carried over from Phase 23, T-23-12).
     // ------------------------------------------------------------------------------------------
 
     @Test
     public void crossProviderHashStillVerifies() throws Exception {
-        // Practical stand-in for cross-version verification (pre-1.84-produced hash): PBKDF2
-        // output must be provider-independent, so a hash produced by the JDK's SunJCE provider
-        // must still verify true against a Digester wired with the BC 1.84 provider.
+        // Practical stand-in for cross-version verification (a hash produced before this
+        // upgrade): PBKDF2 output must be provider-independent, so a hash produced by the JDK's
+        // SunJCE provider must still verify true against a Digester wired with the BC provider.
         Provider sunJceProvider = Security.getProvider("SunJCE");
         // PRECONDITION (D-14): SunJCE ships with every supported JDK, and server/build.xml's
         // test-run target already passes --add-exports=java.base/com.sun.crypto.provider=ALL-UNNAMED,
@@ -298,5 +332,131 @@ public class Bc184UpgradeTest {
         String sunJceHash = sunJceDigester.digest(plainPassword);
 
         assertTrue("BC-provider Digester should verify a hash produced by the SunJCE provider (PBKDF2WithHmacSHA256 output is provider-independent)", bcDigester.matches(plainPassword, sunJceHash));
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Test 5 (1.86, D-03): keystore round-trip through the no-provider keystore.type path, JCEKS and PKCS12
+    // ------------------------------------------------------------------------------------------
+
+    /**
+     * Builds a keystore of the given type through the same no-provider
+     * {@code KeyStore.getInstance(keystoreType)} form {@code DefaultConfigurationController} and
+     * {@code MirthWebServer} use, populates it with the real generated certificate plus a
+     * BC-generated AES secret-key entry (mirroring {@code configureEncryption}), stores it to a
+     * byte array, reloads a fresh keystore of the same type from those bytes, and asserts the
+     * certificate, private key and secret key all survive the round trip and that the provider
+     * serving the keystore is never BC (the D-04 premise this suite pins).
+     */
+    private void assertKeystoreRoundTrip(String keystoreType) throws Exception {
+        char[] storePassword = ("bcUpgradeStore" + keystoreType).toCharArray();
+        char[] keyPassword = ("bcUpgradeKey" + keystoreType).toCharArray();
+        Provider provider = new BouncyCastleProvider();
+
+        KeyStore keyStore = generateCertificateIntoFreshKeystore(keystoreType, provider, storePassword, keyPassword);
+        assertNotEquals("keystore.type (" + keystoreType + ") must resolve to a JDK provider, never to BouncyCastle", "BC", keyStore.getProvider().getName());
+
+        EncryptionSettings settings = new EncryptionSettings(new Properties());
+        KeyGenerator keyGenerator = KeyGenerator.getInstance(settings.getEncryptionBaseAlgorithm(), provider);
+        keyGenerator.init(settings.getEncryptionKeyLength());
+        SecretKey secretKey = keyGenerator.generateKey();
+        keyStore.setEntry(DefaultConfigurationController.SECRET_KEY_ALIAS, new KeyStore.SecretKeyEntry(secretKey), new KeyStore.PasswordProtection(keyPassword));
+
+        X509Certificate before = (X509Certificate) keyStore.getCertificate(CERT_ALIAS);
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        keyStore.store(out, storePassword);
+
+        KeyStore reloaded = KeyStore.getInstance(keystoreType);
+        reloaded.load(new ByteArrayInputStream(out.toByteArray()), storePassword);
+
+        X509Certificate after = (X509Certificate) reloaded.getCertificate(CERT_ALIAS);
+        assertArrayEquals("(" + keystoreType + ") certificate encoding must survive the store/load round trip", before.getEncoded(), after.getEncoded());
+        after.checkValidity();
+        assertEquals("(" + keystoreType + ") reloaded certificate subject should be CN=mirth-connect", "CN=mirth-connect", after.getSubjectX500Principal().getName());
+        assertEquals("(" + keystoreType + ") reloaded private key algorithm should be RSA", "RSA", reloaded.getKey(CERT_ALIAS, keyPassword).getAlgorithm());
+        assertArrayEquals("(" + keystoreType + ") secret-key entry must survive the store/load round trip", secretKey.getEncoded(), reloaded.getKey(DefaultConfigurationController.SECRET_KEY_ALIAS, keyPassword).getEncoded());
+
+        KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        keyManagerFactory.init(reloaded, keyPassword);
+        assertTrue("(" + keystoreType + ") KeyManagerFactory should produce at least one KeyManager from the reloaded store", keyManagerFactory.getKeyManagers().length > 0);
+    }
+
+    @Test
+    public void keystoreRoundTripSurvivesForJceks() throws Exception {
+        assertKeystoreRoundTrip("JCEKS");
+    }
+
+    @Test
+    public void keystoreRoundTripSurvivesForPkcs12() throws Exception {
+        assertKeystoreRoundTrip("PKCS12");
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Test 6 (1.86): the BouncyCastle runtime on the test classpath is at least 1.86
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    public void bouncyCastleRuntimeIsAtLeast186() {
+        String versionStr = new BouncyCastleProvider().getVersionStr();
+        String[] parts = versionStr.split("\\.");
+        int major = Integer.parseInt(parts[0].replaceAll("[^0-9]", ""));
+        int minor = parts.length > 1 ? Integer.parseInt(parts[1].replaceAll("[^0-9]", "")) : 0;
+
+        boolean atLeast186 = major > 1 || (major == 1 && minor >= 86);
+        assertTrue("BouncyCastle provider must be at least 1.86 (CVE-2026-8763, CVE-2026-13506, fixed from 1.85); this suite was last verified on 1.86; observed version: " + versionStr, atLeast186);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Test 7 (1.86, D-11): PBKDF2 iteration cap on the admin-login Digester path
+    // ------------------------------------------------------------------------------------------
+
+    /**
+     * Wires a {@link Digester} exactly as {@code DefaultConfigurationController.configureEncryption}
+     * does (without the fallback digester), driven by the supplied {@link EncryptionSettings}.
+     */
+    private Digester createProductionWiredBcDigester(EncryptionSettings settings) {
+        Digester digester = new Digester();
+        digester.setProvider(new BouncyCastleProvider());
+        digester.setAlgorithm(settings.getDigestAlgorithm());
+        digester.setSaltSizeBytes(settings.getDigestSaltSize());
+        digester.setIterations(settings.getDigestIterations());
+        digester.setUsePBE(settings.getDigestUsePBE());
+        digester.setKeySizeBits(settings.getDigestKeySize());
+        digester.setFormat(Output.BASE64);
+        return digester;
+    }
+
+    @Test
+    public void digesterAcceptsDefaultIterationsAndRejectsAboveBcCap() {
+        // Accept half: default settings still hash and verify.
+        EncryptionSettings defaultSettings = new EncryptionSettings(new Properties());
+        assertEquals("default digest.iterations should be EncryptionSettings.DEFAULT_DIGEST_ITERATIONS", EncryptionSettings.DEFAULT_DIGEST_ITERATIONS, defaultSettings.getDigestIterations());
+
+        Digester defaultDigester = createProductionWiredBcDigester(defaultSettings);
+        String syntheticPassword = "bc186-pbkdf2-cap-check";
+        String hash = defaultDigester.digest(syntheticPassword);
+        assertNotNull("default-iteration digest should produce a hash", hash);
+        assertTrue("default-iteration digest should verify against the same password", defaultDigester.matches(syntheticPassword, hash));
+
+        // Reject half: BouncyCastle 1.86 caps raw JCA PBKDF2 at 10,000,000 iterations.
+        Properties aboveCapProperties = new Properties();
+        aboveCapProperties.setProperty("digest.iterations", "10000001");
+        EncryptionSettings aboveCapSettings = new EncryptionSettings(aboveCapProperties);
+        assertEquals("digest.iterations should read through as configured", Integer.valueOf(10000001), aboveCapSettings.getDigestIterations());
+
+        Digester aboveCapDigester = createProductionWiredBcDigester(aboveCapSettings);
+        EncryptionException thrown = assertThrows(EncryptionException.class, () -> aboveCapDigester.digest(syntheticPassword));
+
+        Throwable cause = thrown.getCause();
+        StringBuilder causeChain = new StringBuilder();
+        boolean foundInvalidKeySpecException = false;
+        while (cause != null) {
+            causeChain.append(cause.getClass().getName()).append(": ").append(cause.getMessage()).append("; ");
+            if (cause instanceof InvalidKeySpecException) {
+                foundInvalidKeySpecException = true;
+            }
+            cause = cause.getCause();
+        }
+        assertTrue("BouncyCastle 1.86 caps raw JCA PBKDF2 at 10,000,000 iterations (CVE-2026-17508, org.bouncycastle.pbe.max_iteration_count); expected an InvalidKeySpecException in the cause chain, observed: " + causeChain, foundInvalidKeySpecException);
     }
 }
