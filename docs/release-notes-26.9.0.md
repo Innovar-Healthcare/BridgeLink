@@ -218,6 +218,69 @@ govern them. Pass an explicit charset in those scripts.
 
 ---
 
+## Security - BouncyCastle 1.86 (IRT-2441, CVE-2026-8763, CVE-2026-13506)
+
+BouncyCastle is upgraded from 1.84 to 1.86 in the server, Administrator
+client and CLI libraries.
+
+| Library | Before | After |
+|---------|--------|-------|
+| bcprov-jdk18on | 1.84 | 1.86 |
+| bcpkix-jdk18on | 1.84 | 1.86 |
+| bcutil-jdk18on | 1.84 | 1.86 |
+
+- **CVE-2026-8763 (critical).** An X.509 name-constraints bypass (a
+  trailing dot on a DNS name) in certificate-path validation performed
+  through BouncyCastle, fixed upstream in 1.85.
+- **CVE-2026-13506 (high).** Denial of service from deeply nested ASN.1
+  structures under lazy parsing, fixed upstream in 1.85.
+- **Stricter ASN.1 time decoding.** Since 1.85, BouncyCastle rejects
+  structurally malformed ASN.1 UTCTime and GeneralizedTime values when
+  decoding. That reaches channel scripts and plugins that parse or
+  verify signatures, certificates or CRLs with BouncyCastle, not only
+  CMS. A zone-less UTCTime (`YYMMDDHHMMSS` without the trailing `Z`)
+  can be re-admitted by adding
+  `-Dorg.bouncycastle.asn1.allow_zoneless_utctime=true` to the server's
+  JVM options. That admits only that one shape; every other malformed
+  value is still rejected. BridgeLink does not ship the option enabled,
+  and nothing in the product sets it.
+- **BouncyCastle's own PKCS12 keystore.** Since 1.85, BouncyCastle's
+  PKCS12 implementation, reached only through an explicit
+  `KeyStore.getInstance("PKCS12", "BC")`, writes keystores with a
+  default PBE iteration count of 600,000 instead of 51,200. Storing and
+  loading such a keystore therefore costs roughly twelve times more.
+  1.86 adds `org.bouncycastle.pkcs12.store_it_count` to set the
+  write-side count. This affects channel scripts and plugins that
+  request BouncyCastle's PKCS12 explicitly. BridgeLink's own keystore
+  (`keystore.type`, JCEKS by default or PKCS12) is served by the JDK's
+  providers, not BouncyCastle, and is unaffected.
+- **PBKDF2 iteration cap (CVE-2026-17508).** BouncyCastle 1.86 rejects
+  a raw JCA PBKDF2 derivation above 10,000,000 iterations (the
+  `org.bouncycastle.pbe.max_iteration_count` system property, default
+  10,000,000). BridgeLink hashes administrator passwords with PBKDF2 at
+  the `digest.iterations` setting (default 600,000, unaffected).
+
+  **Upgrade impact:** a deployment that set `digest.iterations` above
+  10,000,000 will find every administrator login failing after the
+  upgrade. Before upgrading, add
+  `-Dorg.bouncycastle.pbe.max_iteration_count` set to at least its
+  `digest.iterations` value to the server's JVM options. Do not lower
+  `digest.iterations` as a fix: stored password hashes do not record
+  their iteration count, so lowering it makes every existing password
+  fail to verify. Raising the cap also widens the bound
+  CVE-2026-17508 places on untrusted PBKDF2 input, so keep it no
+  higher than needed.
+- **Removed legacy APIs.** 1.86 removes the deprecated
+  `org.bouncycastle.pqc.crypto` ML-DSA, ML-KEM and SLH-DSA classes and
+  the legacy Rainbow, Picnic, FrodoKEM and CMCE implementations. A
+  channel script that imported them must move to the standardized
+  classes under `org.bouncycastle.crypto`. BridgeLink itself uses none
+  of them.
+
+**Upgrade impact:** deployments on default settings need no action.
+
+---
+
 ## Database - 26.6.1 Migration Rung and Fail-Loud Unknown-Version Startup (IRT-2329)
 
 A database created or last upgraded by `release/26.6.1` (`SCHEMA_INFO.VERSION =
