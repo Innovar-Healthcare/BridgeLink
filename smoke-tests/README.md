@@ -620,7 +620,7 @@ jar survives on any runtime path. **Note (CR-04) — now satisfied:** that obser
 meaningful about the re-land if the distribution had actually been rebuilt with the Phase 23 jars.
 For this 2026-07-31 reproduction it had been: `check-dist-freshness.sh` passed (193 jars reconciled)
 immediately before the run, and `server/setup/server-lib` carried `xstream-1.4.21.jar` /
-`rhino-1.7.15.1.jar` / `bcprov-jdk18on-1.84.jar`. (The same command against a stale tree names
+`rhino-1.7.15.1.jar` / the Phase 23 `bcprov-jdk18on` 1.84 jar (since moved to 1.86 by IRT-2441). (The same command against a stale tree names
 `xstream-1.4.20.jar` instead — the drift the gate now blocks.)
 
 This is the D-06 hard-gate evidence for Phase 23's xstream 1.4.21 re-land — NET-05's

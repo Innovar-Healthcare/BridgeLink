@@ -183,9 +183,6 @@
 	<classpathentry kind="lib" path="lib/jackson/jackson-databind-2.18.10.jar"/>
 	<classpathentry kind="lib" path="lib/zip4j_1.3.2.jar"/>
 	<classpathentry kind="lib" path="/Donkey/lib/guava-18.0.jar"/>
-	<classpathentry kind="lib" path="lib/bcpkix-jdk15on-157.jar"/>
-	<classpathentry kind="lib" path="lib/bcprov-ext-jdk15on-157.jar"/>
-	<classpathentry kind="lib" path="lib/bcprov-jdk15on-157.jar"/>
 	<classpathentry kind="lib" path="lib/rhino-1.7.7.1.jar"/>
 	<classpathentry kind="lib" path="lib/commons/commons-vfs2-2.1.jar">
 		<attributes>
