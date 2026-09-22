@@ -2322,32 +2322,41 @@ public class ChannelPanel extends AbstractFramePanel {
             parent.isEditingChannel = true;
         }
 
-        if (isGroupSelected()) {
-            JOptionPane.showMessageDialog(parent, "This operation can only be performed on channels.");
-            return;
-        }
-
-        List<Channel> selectedChannels = getSelectedChannels();
-        if (selectedChannels.size() > 1) {
-            JOptionPane.showMessageDialog(parent, "This operation can only be performed on a single channel.");
-        } else if (selectedChannels.size() == 0) {
-            JOptionPane.showMessageDialog(parent, "Channel no longer exists.");
-        } else {
-            try {
-                Channel channel = selectedChannels.get(0);
-
-                if (channel instanceof InvalidChannel) {
-                    InvalidChannel invalidChannel = (InvalidChannel) channel;
-                    Throwable cause = invalidChannel.getCause();
-                    parent.alertThrowable(parent, cause, "Channel \"" + channel.getName() + "\" is invalid and cannot be edited. " + getMissingExtensions(invalidChannel) + "Original cause:\n" + cause.getMessage());
-                } else {
-                    parent.editChannel((Channel) SerializationUtils.clone(channel));
-                }
-            } catch (SerializationException e) {
-                parent.alertThrowable(parent, e);
+        try {
+            if (isGroupSelected()) {
+                JOptionPane.showMessageDialog(parent, "This operation can only be performed on channels.");
+                return;
             }
+
+            List<Channel> selectedChannels = getSelectedChannels();
+            if (selectedChannels.size() > 1) {
+                JOptionPane.showMessageDialog(parent, "This operation can only be performed on a single channel.");
+            } else if (selectedChannels.size() == 0) {
+                JOptionPane.showMessageDialog(parent, "Channel no longer exists.");
+            } else {
+                try {
+                    Channel channel = selectedChannels.get(0);
+
+                    if (channel instanceof InvalidChannel) {
+                        InvalidChannel invalidChannel = (InvalidChannel) channel;
+                        Throwable cause = invalidChannel.getCause();
+                        parent.alertThrowable(parent, cause, "Channel \"" + channel.getName() + "\" is invalid and cannot be edited. " + getMissingExtensions(invalidChannel) + "Original cause:\n" + cause.getMessage());
+                    } else {
+                        parent.editChannel((Channel) SerializationUtils.clone(channel));
+                    }
+                } catch (SerializationException e) {
+                    parent.alertThrowable(parent, e);
+                }
+            }
+        } finally {
+            /*
+             * Cleared in a finally block because every early return above, and any
+             * exception thrown out of the edit itself, used to skip the reset and leave
+             * the flag latched on. Once latched, the guard above rejects every later
+             * double-click for the rest of the session (IRT-2431).
+             */
+            parent.isEditingChannel = false;
         }
-        parent.isEditingChannel = false;
     }
 
     public void doEnableChannel() {

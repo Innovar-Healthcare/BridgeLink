@@ -702,3 +702,5 @@ donkey/donkey-test
 # Unexpanded ${dir.base} property leaked at the repo root by a build target (Phase 26.3 WR-01);
 # /donkey/${dir.base}/ above only anchors the donkey/ subdirectory, not this root-level case.
 /${dir.base}/
+# compiled output of the manual (non-CI) checks
+client/manual-checks/**/out/

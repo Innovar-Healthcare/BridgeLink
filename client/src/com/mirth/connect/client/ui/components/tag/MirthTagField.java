@@ -59,7 +59,8 @@ public class MirthTagField extends JPanel {
     private Logger logger = LogManager.getLogger(this.getClass());
 
     private JFXPanel jfxPanel;
-    private MirthTagWebBrowser mirthWebBrowser;
+    /* Assigned on the JavaFX thread in initFX, read on the Swing thread everywhere else. */
+    private volatile MirthTagWebBrowser mirthWebBrowser;
     private IconButton clearButton;
     private AutoCompletionPopupWindow acPopupWindow;
 
@@ -89,8 +90,17 @@ public class MirthTagField extends JPanel {
             public void run() {
                 try {
                     initFX(channelContext, tags);
-                } catch (Exception e) {
-                    e.printStackTrace();
+                } catch (Exception | LinkageError e) {
+                    /*
+                     * LinkageError covers a JavaFX runtime whose web module is missing or does
+                     * not fit the JavaFX classes on the classpath (IllegalAccessError,
+                     * NoClassDefFoundError, UnsatisfiedLinkError). The tag field is then
+                     * unavailable, but it must not take channel editing down with it, so every
+                     * method below tolerates mirthWebBrowser staying null (IRT-2431).
+                     */
+                    logger.error("The tag field could not be started. The Java runtime's JavaFX may lack WebView"
+                            + " (javafx.web) or not match the JavaFX bundled with BridgeLink. Tags are unavailable,"
+                            + " and saving a channel will leave its existing tags unchanged.", e);
                 }
             }
         });
@@ -141,7 +151,9 @@ public class MirthTagField extends JPanel {
         clearButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                mirthWebBrowser.clear();
+                if (mirthWebBrowser != null) {
+                    mirthWebBrowser.clear();
+                }
                 clearButton.setEnabled(false);
                 acPopupWindow.deleteTagActionPerformed("");
             }
@@ -181,7 +193,9 @@ public class MirthTagField extends JPanel {
     @Override
     public void setEnabled(boolean enabled) {
         jfxPanel.setEnabled(enabled);
-        mirthWebBrowser.setEnabled(enabled);
+        if (mirthWebBrowser != null) {
+            mirthWebBrowser.setEnabled(enabled);
+        }
     }
 
     public void addUpdateSearchListener(SearchFilterListener searchListener) {
@@ -202,7 +216,9 @@ public class MirthTagField extends JPanel {
 
     public void setFocus(boolean focus) {
         jfxPanel.requestFocus();
-        mirthWebBrowser.setFocus(focus);
+        if (mirthWebBrowser != null) {
+            mirthWebBrowser.setFocus(focus);
+        }
     }
 
     public void closePopupWindow() {
@@ -219,16 +235,30 @@ public class MirthTagField extends JPanel {
             tagAttributes.add(attributes);
         }
 
-        mirthWebBrowser.setUserTags(tagAttributes, true);
+        if (mirthWebBrowser != null) {
+            mirthWebBrowser.setUserTags(tagAttributes, true);
+        }
     }
 
     public void clear() {
         acPopupWindow.clear();
-        mirthWebBrowser.clear();
+        if (mirthWebBrowser != null) {
+            mirthWebBrowser.clear();
+        }
     }
 
     public String getTags() {
         return mirthWebBrowser != null ? mirthWebBrowser.getTags() : "";
+    }
+
+    /**
+     * Whether the tag field started and its page is working. When it is not, getTags() returns an
+     * empty string rather than the channel's real tags, so anything that saves tags must check
+     * this first or it will delete them (IRT-2431).
+     */
+    public boolean isAvailable() {
+        MirthTagWebBrowser browser = mirthWebBrowser;
+        return browser != null && browser.isReady();
     }
 
     public Map<String, Color> getTagColors() {

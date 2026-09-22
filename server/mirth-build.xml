@@ -194,7 +194,7 @@
 		</header>
 
 		<header headerFile="${server}/license-header.txt">
-			<fileset dir="${client}" includes="**/*.java" excludes="src/com/mirth/connect/client/ui/BareBonesBrowserLaunch.java src/com/mirth/connect/client/ui/BeanBinder.java src/com/mirth/connect/client/ui/OSXAdapter.java src/org/**/*.java" />
+			<fileset dir="${client}" includes="**/*.java" excludes="manual-checks/** src/com/mirth/connect/client/ui/BareBonesBrowserLaunch.java src/com/mirth/connect/client/ui/BeanBinder.java src/com/mirth/connect/client/ui/OSXAdapter.java src/org/**/*.java" />
 		</header>
 		
 		<header headerFile="${server}/license-header.txt">
