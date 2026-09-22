@@ -22,7 +22,6 @@ import javafx.scene.layout.Region;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -73,36 +72,42 @@ public class MirthTagWebBrowser extends Region {
         final String attributeData = convertToJSON(attributeMap);
         final String context = convertToJSON(channelContext);
 
-//        webEngine.load(getClass().getResource("bootstrap.min.css").toExternalForm());
-//        webEngine.load(getClass().getResource("bootstrap-tokenfield.css").toExternalForm());
-//        webEngine.load(getClass().getResource("tokenfield-typeahead.css").toExternalForm());
-//        webEngine.load(getClass().getResource("bootstrap-tokenfield.js").toExternalForm());
-//        webEngine.load(getClass().getResource("jquery-ui.min.js").toExternalForm());
-//        webEngine.load(getClass().getResource("jquery.min.js").toExternalForm());
-//        webEngine.load(getClass().getResource("MirthTagField.html").toExternalForm());
-
         /*
-         * This is required because of https://bugs.openjdk.java.net/browse/JDK-8136529. In
-         * 8u60-8u71 linking to resources packaged in the JAR doesn't work when launched via
-         * webstart. So instead the HTML is loaded directly and links are manually replaced.
+         * Load the page by its own URL rather than injecting its markup with loadContent(). A
+         * loadContent() document has an "about:blank" origin, and WebKit refuses to fetch the
+         * page's jar:-scheme stylesheets and scripts from that origin, so jQuery and
+         * bootstrap-tokenfield never load and every call into the page fails. Loading by URL
+         * gives the document the same origin as its resources (IRT-2431).
          */
-        String html = IOUtils.toString(getClass().getResource("MirthTagField.html"), "UTF-8");
-        html = html.replace("bootstrap.min.css", getClass().getResource("bootstrap.min.css").toURI().toString());
-        html = html.replace("bootstrap-tokenfield.css", getClass().getResource("bootstrap-tokenfield.css").toURI().toString());
-        html = html.replace("tokenfield-typeahead.css", getClass().getResource("tokenfield-typeahead.css").toURI().toString());
-        html = html.replace("bootstrap-tokenfield.js", getClass().getResource("bootstrap-tokenfield.js").toURI().toString());
-        html = html.replace("jquery-ui.min.js", getClass().getResource("jquery-ui.min.js").toURI().toString());
-        html = html.replace("jquery.min.js", getClass().getResource("jquery.min.js").toURI().toString());
-        webEngine.loadContent(html);
+        webEngine.load(getClass().getResource("MirthTagField.html").toExternalForm());
 
         webEngine.getLoadWorker().stateProperty().addListener(new ChangeListener<State>() {
             @Override
             public void changed(ObservableValue<? extends State> ov, State oldState, State newState) {
+                if (newState == State.FAILED) {
+                    /*
+                     * Only the page itself failing to load lands here; a missing stylesheet
+                     * or script still reaches SUCCEEDED and surfaces as a JSException in the
+                     * branch below. Left unlogged, either one is an inert tag field with no
+                     * explanation.
+                     */
+                    logger.error("The tag field page failed to load.",
+                            webEngine.getLoadWorker().getException());
+                }
+
                 if (newState == State.SUCCEEDED) {
-                    JSObject init = (JSObject) webEngine.executeScript("window");
-                    init.setMember("clickController", webController);
-                    init.call("updateTags", attributeData, context);
-                    init.call("setUserTags", tagData);
+                    try {
+                        JSObject init = (JSObject) webEngine.executeScript("window");
+                        init.setMember("clickController", webController);
+                        init.call("updateTags", attributeData, context);
+                        init.call("setUserTags", tagData);
+                    } catch (Exception e) {
+                        /*
+                         * Without this the exception is thrown on the JavaFX thread, where
+                         * nothing reports it and the tag field silently does nothing.
+                         */
+                        logger.error("Error initializing the tag field.", e);
+                    }
                 }
             }
         });
