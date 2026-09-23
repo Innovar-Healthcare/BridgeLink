@@ -196,8 +196,9 @@ BridgeLink refuses to run as root. Earlier Linux installers (`.sh` and RPM)
 registered the `blservice` systemd unit with no user, so a default install
 started the server as root and it exited at first boot.
 
-In this release both Linux installers run the service as a system user,
-`bridgelink` by default:
+In this release both Linux installers run the service as a system user:
+`bridgelink` for the RPM, and `bridgelink` or the account you choose in the
+`.sh` installer.
 
 - The installer creates the user if it does not exist and gives it ownership
   of the installation directory.
@@ -206,16 +207,20 @@ In this release both Linux installers run the service as a system user,
 - The `.sh` installer asks which account to use. For an unattended install,
   set `unix_service_user` (for example `-Vunix_service_user=svc-bl`). Running
   as root is still possible with
-  `unix_service_account_type=root (not recommended)`, and starts only when
-  `server.allowRoot = true` is set in `conf/mirth.properties`.
+  `"-Vunix_service_account_type=root (not recommended)"` (keep the quotes, the
+  value contains spaces) or the same line in a response file. The service then
+  starts only when `server.allowRoot = true` is set in `conf/mirth.properties`.
 - On upgrade, the account the service already runs as is kept, including one
   you set yourself with `systemctl edit blservice`.
 - Uninstalling removes the drop-in and leaves the user in place.
 
 **The drop-in sets `NoNewPrivileges=true`.** Channel scripts can no longer
 gain privileges through `sudo` or setuid programs. If a channel needs that,
-remove the line from the drop-in and run `systemctl daemon-reload`. Upgrades
-that already run under your own drop-in do not get this setting.
+do not edit the installer's drop-in: it is rewritten on every upgrade. Run
+`systemctl edit blservice` instead, add `NoNewPrivileges=false` under
+`[Service]`, save, and restart the service. That override is kept across
+upgrades. An install that already runs under a `User=` drop-in of your own
+does not get the installer's drop-in, so it does not get this setting.
 
 ---
 
