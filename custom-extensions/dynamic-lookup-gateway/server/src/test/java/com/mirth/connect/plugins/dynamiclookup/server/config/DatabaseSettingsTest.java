@@ -8,11 +8,12 @@ package com.mirth.connect.plugins.dynamiclookup.server.config;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
 /**
- * Unit tests for {@link DatabaseSettings}' driver defaulting.
+ * Unit tests for {@link DatabaseSettings}' driver defaulting and its password-safe toString().
  */
 public class DatabaseSettingsTest {
 
@@ -37,6 +38,20 @@ public class DatabaseSettingsTest {
             assertNotNull("no default driver for " + database, driver);
             assertFalse(database + " defaults to jTDS: " + driver, driver.startsWith("net.sourceforge.jtds"));
         }
+    }
+
+    @Test
+    public void toString_masksPassword() {
+        DatabaseSettings settings = new DatabaseSettings();
+        settings.setPassword("s3cr3t-Value");
+        String text = settings.toString();
+        assertFalse(text, text.contains("s3cr3t-Value"));
+        assertTrue(text, text.contains("password='<set>'"));
+    }
+
+    @Test
+    public void toString_reportsUnsetPassword() {
+        assertTrue(new DatabaseSettings().toString().contains("password='<unset>'"));
     }
 
     private static String driverFor(String database, String driver) {

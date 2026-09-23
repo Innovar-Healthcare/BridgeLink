@@ -140,7 +140,7 @@ public class DatabaseSettings {
                 ", database='" + database + '\'' +
                 ", url='" + url + '\'' +
                 ", username='" + username + '\'' +
-                ", password='" + password + '\'' +
+                ", password='" + (StringUtils.isNotBlank(password) ? "<set>" : "<unset>") + '\'' +
                 ", driver='" + driver + '\'' +
                 ", maxConnections=" + maxConnections +
                 ", maxRetry=" + maxRetry +
