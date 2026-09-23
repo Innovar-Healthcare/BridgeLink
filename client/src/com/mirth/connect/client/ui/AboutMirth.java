@@ -83,7 +83,6 @@ public class AboutMirth extends com.mirth.connect.client.ui.MirthDialog {
         content.append("This product includes a portion of images from https://www.fatcow.com/free-icons.\n\n");
         content.append("This product includes software developed by the Indiana University Extreme! Lab (http://www.extreme.indiana.edu/).\n\n");
         content.append("This product includes the Flying Saucer XHTML renderer library, licensed under the LGPL version 2.1 (http://www.gnu.org/licenses/lgpl-2.1.html).\n\n");
-        content.append("This product includes the jTDS JDBC driver, licensed under the LGPL version 2.1 (http://www.gnu.org/licenses/lgpl-2.1.html).\n\n");
         content.append("This product includes software developed by the JDOM Project (http://www.jdom.org/).\n\n");
         content.append("This product includes software developed by the SAXPath Project (http://www.saxpath.org/).\n\n");
         content.append("This product includes the JCIFS SMB client library in Java version 1.3.17, copyright (C) 2002  \"Michael B. Allen\" <jcifs at samba dot org> and \"Eric Glass\" <jcifs at samba dot org>, licensed under the LGPL version 2.1 (http://www.gnu.org/licenses/lgpl-2.1.html).\n\n");
