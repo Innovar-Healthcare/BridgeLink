@@ -65,16 +65,16 @@ import com.mirth.connect.server.util.StatementLock;
 
 /**
  * Dependency-seam characterization suite (D-01, D-03, D-11) for the BouncyCastle
- * (bcprov/bcpkix/bcutil-jdk18on) upgrade, last verified on 1.86 (IRT-2441, Phase 26.15).
+ * (bcprov/bcpkix/bcutil-jdk18on) upgrade, last verified on 1.86 (IRT-2441, Phase 26.17).
  * <p>
  * <b>History.</b> Phase 23 created this suite for the 1.78.1 to 1.84 upgrade (restoring the four
  * gap assertions from commit {@code 6a483ab9d}), recovered from {@code git show
  * 6a483ab9d^:server/test/com/mirth/connect/server/controllers/CertificateGenerationTest.java} and
- * {@code UserLoginPasswordVerifyTest.java}. Phase 26.15 extended it for the 1.86 upgrade: keystore
+ * {@code UserLoginPasswordVerifyTest.java}. Phase 26.17 extended it for the 1.86 upgrade: keystore
  * round-trip coverage (D-03), the PBKDF2 iteration-cap behaviour (D-11), and a runtime-version
  * floor.
  * <p>
- * <b>Complement contract:</b> {@link BcSeamTest} is LOCKED (Phase 23 D-12, Phase 26.15 D-02) and
+ * <b>Complement contract:</b> {@link BcSeamTest} is LOCKED (Phase 23 D-12, Phase 26.17 D-02) and
  * characterizes the pre-upgrade baseline (the SHIPPED 1.78.1 jars): it stays green UNCHANGED across
  * the whole phase and is evidence of NO REGRESSION, not evidence FOR the shipped BouncyCastle. THIS
  * suite states what the shipped BouncyCastle MUST DO and is the actual assertion that the upgrade
@@ -97,7 +97,7 @@ import com.mirth.connect.server.util.StatementLock;
  * construction:</b> it opens three {@code mockStatic} scopes ({@code ControllerFactory},
  * {@code StatementLock}, {@code SqlConfig}) against the bundled mockito 5.1.1 / byte-buddy 1.14.13,
  * which cannot mock/instrument concrete classes under JDK 25 (IRT-1488, ON HOLD). JDK 25 is not a
- * completion gate for a BouncyCastle upgrade (Phase 23 D-29.3, Phase 26.15 D-12).</li>
+ * completion gate for a BouncyCastle upgrade (Phase 23 D-29.3, Phase 26.17 D-12).</li>
  * <li>{@link #crossProviderHashStillVerifies()}: the highest-value assertion carried over from
  * Phase 23: it is the only one that answers whether existing customer password hashes (produced by
  * the JDK's SunJCE provider) still verify through a BC-wired {@link Digester}.</li>
