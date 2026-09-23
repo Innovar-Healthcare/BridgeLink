@@ -19,18 +19,21 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
 
 import com.mirth.connect.model.reference.ScriptReference;
 import com.mirth.connect.model.reference.ScriptReference.Type;
+import com.mirth.connect.model.reference.ScriptReferenceCategory;
 
 /**
  * Covers the catalog IRT-1520 serves from {@code GET /server/scriptReferences}. WebAdmin's future
  * consumer (IRT-1666) treats this as a stable contract, so these tests pin the entry count and
- * spot-check representative entries rather than asserting on all ~209 individually.
+ * spot-check representative entries rather than asserting on all ~207 individually.
  */
 public class ScriptReferenceUtilTest {
 
@@ -42,7 +45,7 @@ public class ScriptReferenceUtilTest {
         // lost or duplicated.
         List<ScriptReference> references = ScriptReferenceUtil.getReferences();
         assertNotNull(references);
-        assertEquals(209, references.size());
+        assertEquals(207, references.size());
     }
 
     @Test
@@ -100,6 +103,46 @@ public class ScriptReferenceUtilTest {
         assertEquals(Type.FUNCTION, getMapValue.getType());
         assertNotNull(getMapValue.getFunctionDefinition());
         assertEquals("$", getMapValue.getFunctionDefinition().getName());
+    }
+
+    @Test
+    public void testGetReferencesHasNoJtdsEntries() {
+        // IRT-2458: 26.9 removed the jTDS driver, so the catalog must not offer it.
+        for (ScriptReference reference : ScriptReferenceUtil.getReferences()) {
+            assertFalse("jTDS entry: " + reference.getName(), StringUtils.containsIgnoreCase(reference.getName(), "jtds"));
+            assertFalse("jTDS code in: " + reference.getName(), StringUtils.containsIgnoreCase(reference.getReplacementCode(), "jtds"));
+        }
+    }
+
+    @Test
+    public void testGetReferencesHasOneEntryPerSqlServerString() {
+        List<ScriptReference> references = ScriptReferenceUtil.getReferences();
+
+        ScriptReference driver = findByName(references, "Microsoft SQL Server Driver");
+        assertNotNull(driver);
+        assertEquals("\"com.microsoft.sqlserver.jdbc.SQLServerDriver\"", driver.getReplacementCode());
+
+        ScriptReference template = findByName(references, "Microsoft SQL Server Connection Template");
+        assertNotNull(template);
+        assertEquals("\"jdbc:sqlserver://host:port;databaseName=dbname\"", template.getReplacementCode());
+
+        int sqlServerEntries = 0;
+        for (ScriptReference reference : references) {
+            if (StringUtils.containsIgnoreCase(reference.getReplacementCode(), "sqlserver")) {
+                sqlServerEntries++;
+            }
+        }
+        assertEquals(2, sqlServerEntries);
+    }
+
+    @Test
+    public void testGetReferencesDatabaseNamesAreUnique() {
+        Set<String> names = new HashSet<String>();
+        for (ScriptReference reference : ScriptReferenceUtil.getReferences()) {
+            if (ScriptReferenceCategory.DATABASE.toString().equals(reference.getCategory())) {
+                assertTrue("duplicate Database entry: " + reference.getName(), names.add(reference.getName()));
+            }
+        }
     }
 
     private ScriptReference findByName(List<ScriptReference> references, String name) {
