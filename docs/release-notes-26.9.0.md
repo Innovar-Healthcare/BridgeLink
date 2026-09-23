@@ -224,6 +224,40 @@ does not get the installer's drop-in, so it does not get this setting.
 
 ---
 
+## RPM Upgrades Keep Your conf/ Files (IRT-2320)
+
+Upgrading with `rpm -U` no longer overwrites your configuration. Earlier RPMs
+replaced every file in `conf/` with the packaged template. That lost your
+edits and the keystore password the server generated on first start, so after
+the upgrade the server reported "started" but did not listen on HTTPS (8443).
+
+This release's RPM marks the six conf files as configuration files: `mirth.properties`,
+`dynamic-lookup.properties`, `log4j2.properties`, `log4j2-cli.properties`,
+`mirth-cli-config.properties` and `dbdrivers.xml`. The launcher JVM option files
+(`blservice.vmoptions`, `blserver.vmoptions`, `blcommand.vmoptions`) are kept
+the same way, so a changed heap size (`-Xmx`) survives the upgrade. This also
+protects an upgrade from 26.6.x.
+
+- A file you have changed is kept. If the new template differs from the one
+  your file came from, the template is written next to it as `<name>.rpmnew`,
+  for example `conf/mirth.properties.rpmnew`. Compare the two if you want to
+  pick up template changes; the new `mirth.properties` keys are already added
+  to your file for you. Delete the `.rpmnew` file when you are done. If you
+  edited `blcommand.vmoptions`, merge in the new `--add-opens` lines from
+  `blcommand.vmoptions.rpmnew` so the CLI runs with the same options as a
+  fresh install.
+- A file you never changed is replaced with the new template.
+- `rpm -e` keeps a changed file as `<name>.rpmsave` instead of deleting it.
+  The server's keystore and database in `appdata/` are also left in place. If
+  you reinstall afterwards, the new install starts on the packaged
+  `mirth.properties`, which cannot open the old keystore, so HTTPS does not
+  come up. Copy `conf/mirth.properties.rpmsave` back to
+  `conf/mirth.properties` and run `systemctl restart blservice`.
+
+The `.sh` installer already kept `conf/` and is unchanged.
+
+---
+
 ## Security - Inherited Mirth XXE and SQL Injection CVEs (IRT-2262, ICSMA-26-253-01)
 
 - **CVE-2026-78224 (XSLT Transformer Step no longer resolves external
