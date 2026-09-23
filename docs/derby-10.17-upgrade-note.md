@@ -58,7 +58,7 @@ floor for this line). Consequences:
   a clear message rather than letting an opaque `UnsupportedClassVersionError` surface
   later.
 - **JDK 17 remains supported for external-database deployments only** (MySQL,
-  PostgreSQL, MSSQL/jTDS, etc.) -- those backends never load the Derby classes, so the
+  PostgreSQL, SQL Server, etc.) -- those backends never load the Derby classes, so the
   Java-21 floor applies to the embedded-Derby tier specifically, not to BridgeLink as
   a whole.
 - The **build toolchain** stays on JDK 17 / `--release 17` regardless (see the sibling

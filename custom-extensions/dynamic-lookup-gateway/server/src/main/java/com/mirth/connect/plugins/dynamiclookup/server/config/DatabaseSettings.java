@@ -25,7 +25,7 @@ public class DatabaseSettings {
         DEFAULT_DRIVER_MAP.put("mysql", "com.mysql.cj.jdbc.Driver");
         DEFAULT_DRIVER_MAP.put("oracle", "oracle.jdbc.OracleDriver");
         DEFAULT_DRIVER_MAP.put("postgres", "org.postgresql.Driver");
-        DEFAULT_DRIVER_MAP.put("sqlserver", "net.sourceforge.jtds.jdbc.Driver");
+        DEFAULT_DRIVER_MAP.put("sqlserver", "com.microsoft.sqlserver.jdbc.SQLServerDriver");
     }
 
     private boolean useExternalDb;
@@ -140,7 +140,7 @@ public class DatabaseSettings {
                 ", database='" + database + '\'' +
                 ", url='" + url + '\'' +
                 ", username='" + username + '\'' +
-                ", password='" + password + '\'' +
+                ", password='" + (StringUtils.isNotBlank(password) ? "<set>" : "<unset>") + '\'' +
                 ", driver='" + driver + '\'' +
                 ", maxConnections=" + maxConnections +
                 ", maxRetry=" + maxRetry +

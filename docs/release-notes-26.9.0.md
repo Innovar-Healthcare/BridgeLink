@@ -47,6 +47,40 @@ entirely.
 |---------|--------|-------|
 | mssql-jdbc | 8.4.1.jre8 | 12.10.2.jre11 |
 
+**Action required for SQL Server users: SQL Server certificates are now
+checked by default.** BridgeLink 26.9 upgrades the Microsoft SQL Server JDBC
+driver from 8.4.1 to 12.10.2, which fixes CVE-2025-59250. From driver version
+10.2 onward, Microsoft changed the default for the `encrypt` connection
+setting from `false` to `true`, and the driver now checks the server's
+certificate whenever the connection is encrypted. If you are upgrading from
+BridgeLink 26.6 or earlier, SQL Server connections that did not set `encrypt`
+were either unencrypted or encrypted without a certificate check. After the
+upgrade they are encrypted and the certificate is checked. If your SQL Server
+uses a self-signed certificate, a certificate from a CA the Java runtime
+doesn't trust, or one whose name doesn't match the hostname in the URL, those
+connections will fail. The error will contain "could not establish a secure
+connection", "PKIX path building failed", or "Failed to validate the server
+name". This can affect three places:
+
+- **BridgeLink's own database** (`database.url` in `mirth.properties`): the
+  server will not start. Installs that used the jTDS default for this
+  database must rewrite the URL anyway; see the internal `mcserver` item
+  below.
+- **Database Reader and Database Writer connectors**: the server starts, but
+  those channels will error.
+- **Scripts that open their own SQL Server connections.**
+
+BridgeLink does not change any connection URLs during the upgrade. Please
+review them before you upgrade. The best fix is a SQL Server certificate that
+BridgeLink can validate: one issued by a public CA, or by your internal CA
+with its root added to the Java trust store. If that isn't possible, add
+`;trustServerCertificate=true` to the affected URL. This keeps encryption on
+but skips the certificate check. Adding `;encrypt=false` is not enough on its
+own: if your SQL Server forces encryption, the connection is still encrypted
+and the certificate is still checked. URLs that already set `encrypt=true` are
+not affected. URLs that set `encrypt=false` are affected if the server forces
+encryption.
+
 - **jTDS is retired.** `jtds-1.3.1.jar` and its vendored TLS source patch are
   fully removed from every shipped location, and the "SQL Server/Sybase
   (jTDS)" driver entry is removed from both the driver dropdown
@@ -55,14 +89,6 @@ entirely.
   JDBC option, and mssql-jdbc does not speak the Sybase/TDS dialect. If any
   channel in your environment connects to Sybase, that connectivity does not
   survive this upgrade.
-- **`encrypt=true` default, unchanged since mssql-jdbc 10.2.** mssql-jdbc has
-  validated the server's TLS certificate by default since driver version
-  10.2 - this is not new behavior introduced by the 12.10.2 upgrade. A
-  connection to a SQL Server presenting a self-signed or otherwise
-  untrusted certificate will fail with a
-  `could not establish a secure connection` / PKIX / server-name-validation
-  error unless the connection string opts in to
-  `;trustServerCertificate=true` (or `;encrypt=false`).
 - **Customer channel URL migration required.** Any channel previously
   configured with the jTDS driver
   (`net.sourceforge.jtds.jdbc.Driver`, `jdbc:jtds:sqlserver://host:port/db`)

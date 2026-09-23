@@ -13,13 +13,20 @@ release-level summary of this change.
 
 ### Why connections to self-signed or untrusted-cert SQL Servers may fail
 
-mssql-jdbc has defaulted its `encrypt` connection property to `true` and
-validated the server's TLS certificate **since driver version 10.2** — this is
-not new behavior introduced by the 26.9 upgrade to 12.10.2. If your SQL Server
-presents a self-signed certificate, or a certificate that does not chain to a
-trusted root, or whose Common Name/SAN does not match the hostname used to
-connect, an encrypted JDBC connection with no further configuration will now
-fail with an exception whose signature looks like:
+Microsoft changed the default of mssql-jdbc's `encrypt` connection property
+from `false` to `true` in **driver version 10.2**, and in the same release made
+the driver validate the server's TLS certificate whenever the connection is
+encrypted, including when the server forces encryption on an `encrypt=false`
+connection. BridgeLink 26.6 and earlier shipped driver 8.4.1, so **for anyone
+upgrading from 26.6 or earlier this is a new behavior**: SQL Server
+connections that did not set `encrypt` were either unencrypted or encrypted
+without certificate validation before the upgrade, and are encrypted and
+certificate-validated after it.
+BridgeLink does not rewrite any connection URL during the upgrade. If your SQL
+Server presents a self-signed certificate, or a certificate that does not chain
+to a trusted root, or whose Common Name/SAN does not match the hostname used to
+connect, a connection with no further configuration will now fail with an
+exception whose signature looks like:
 
 ```
 com.microsoft.sqlserver.jdbc.SQLServerException: The driver could not establish
@@ -43,9 +50,10 @@ restore connectivity to that specific SQL Server — without disabling
 encryption or certificate validation for every other JDBC connection in the
 instance.
 
-**Do not read this as "the 26.9 upgrade removed support for self-signed SQL
-Servers."** The secure-by-default posture is intentional and unchanged by this
-upgrade; only the driver version (and the CVE fixes that come with it) moved.
+**Self-signed SQL Servers are still supported.** What changed is that they now
+need an explicit, per-connection opt-out (below) instead of working by default.
+The secure default is intentional, and BridgeLink does not switch it off for
+you.
 
 ### The escape hatch
 
@@ -74,10 +82,13 @@ same live-verified break-then-fix pair that proves the secure default actually
 rejects a self-signed server (the negative leg) and that this exact value
 restores connectivity (the workaround leg).
 
-An equivalent, broader alternative is `;encrypt=false`, which disables
-encryption entirely rather than merely relaxing certificate validation. Prefer
-`trustServerCertificate=true` unless you have a specific reason to disable
-encryption outright.
+`;encrypt=false` is **not** an equivalent alternative. It asks for no
+encryption, but the login packet is always encrypted, and a SQL Server
+configured to force encryption encrypts the whole session regardless. Since
+driver 10.2 the certificate is validated in that case too, so against a
+force-encryption server with a self-signed certificate `;encrypt=false` fails
+with the same error. `;trustServerCertificate=true` is the setting that
+restores connectivity in every case.
 
 **Caution:** `trustServerCertificate=true` disables certificate validation for
 that connection — it accepts *any* certificate the server presents, including
