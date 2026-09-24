@@ -209,6 +209,13 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
         if (connectorMetaData == null || !Objects.equals(connectorMetaData.getPath(), extension.getPath())) {
             throw new MirthApiException(Status.NOT_FOUND);
         }
+        /*
+         * A connector's enabled flag is separate from its plugin's, and the launcher skips a
+         * disabled connector's jars, so without this check the class lookup below fails with a 500.
+         */
+        if (!extensionController.isExtensionEnabled(connectorMetaData.getName())) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
 
         try {
             Class<?> sharedClass = Class.forName(connectorMetaData.getSharedClassName());
