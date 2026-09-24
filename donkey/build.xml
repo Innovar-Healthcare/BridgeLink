@@ -24,7 +24,7 @@
 		     excludes="" STRING ATTRIBUTE below - the same mechanism server.test.excludes already
 		     uses - rather than as individual nested <exclude if="..."> elements, so it composes
 		     as plain property substitution regardless of how deeply the fileset is nested. -->
-		<condition property="donkey.derby.test.excludes" value="**/ChannelControllerTests.class,**/ChannelTests.class,**/ConnectorTests.class,**/DestinationChainTests.class,**/DestinationConnectorTests.class,**/DonkeyDaoTests.class,**/ExceptionTests.class,**/FilterTransformerTests.class,**/MessageControllerTests.class,**/OverwriteRaceTests.class,**/PerformanceTests.class,**/QueueTests.class,**/RecoveryTests.class,**/SourceConnectorTests.class,**/StatisticsTests.class,**/DerbyEngineSeamTest.class,**/JdbcDriverSeamTest.class,**/HikariCpDerbyBridgeTest.class" else="">
+		<condition property="donkey.derby.test.excludes" value="**/ChannelControllerTests.class,**/ChannelLifecycleTests.class,**/ChannelTests.class,**/ConnectorTests.class,**/DestinationChainTests.class,**/DestinationConnectorTests.class,**/DonkeyDaoTests.class,**/ExceptionTests.class,**/FilterTransformerTests.class,**/MessageControllerTests.class,**/OverwriteRaceTests.class,**/PerformanceTests.class,**/QueueTests.class,**/RecoveryTests.class,**/SourceConnectorTests.class,**/StatisticsTests.class,**/DerbyEngineSeamTest.class,**/JdbcDriverSeamTest.class,**/HikariCpDerbyBridgeTest.class" else="">
 			<istrue value="${exclude.derby.tests}" />
 		</condition>
 	</target>
