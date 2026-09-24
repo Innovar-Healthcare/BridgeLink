@@ -34,6 +34,8 @@ Install the zip through the API (`POST /api/extensions/_install`) or the Adminis
 then restart the engine. `ant install` copies the exploded extension straight into
 `server/setup/extensions/mock-smtp` for local dev instead.
 
-Note: `<mirthVersion>` in `plugin.xml`/`destination.xml` is pinned to the engine version
-(26.6.0) — the engine rejects extensions whose `mirthVersion` list doesn't contain its own
-version. Bump it when moving to a newer engine line.
+`<mirthVersion>` in `plugin.xml`/`destination.xml` is the token `@MIRTH_VERSION@`, filled in
+at build time from `version=` in `server/mirth-build.properties` — the engine rejects an
+extension whose `mirthVersion` doesn't name its own version, and a literal here went stale at
+the 26.9.0 bump (IRT-1422). The zip therefore installs on the engine built from the same tree;
+to target a different engine, pass `ant -Dengine.version=<version>`.
