@@ -224,6 +224,73 @@ does not get the installer's drop-in, so it does not get this setting.
 
 ---
 
+## Windows Installer Runs the Service as a Virtual Account (IRT-2332)
+
+BridgeLink refuses to run as an administrator, and Local System is one.
+Earlier Windows installers defaulted to Local System and recommended it, so a
+default install ended with a service that never started (`mirth.log` shows
+`BridgeLink is running as root/Administrator` and nothing listens on 8443).
+
+In this release the Windows installer runs `blservice` as
+`NT SERVICE\blservice` by default. This is the service's own virtual account:
+Windows manages it, it has no password, there is no user to create, and it is
+not an administrator. The installer gives it write access to the installation
+directory, which the server needs for `logs\` and `appdata\`.
+
+- **Custom account** is still offered, for SQL Server Windows authentication,
+  UNC file shares or other domain resources. It is granted the "Log on as a
+  service" right and write access to the installation directory, as before.
+- **Local System (not recommended)** is still offered. The service then starts
+  only when `server.allowRoot = true` is set in `conf/mirth.properties`.
+  Otherwise the installer does not start it and says why on the last screen
+  and in the installer log.
+- **On upgrade:**
+  - A custom account is kept. Leave the password blank to keep the stored one.
+    This now holds for unattended (`-q`) upgrades too: earlier installers
+    registered `blservice` again during an unattended upgrade, which reset
+    it to Local System and discarded the stored password, so the service
+    failed to log on and did not start.
+  - A service on Local System moves to the virtual account, unless
+    `server.allowRoot = true` is set in `conf/mirth.properties`. That repairs
+    a 26.6.x install that never started. A `-Dserver.allowRoot=true` line in
+    `blservice.vmoptions` alone does not keep Local System; set it in
+    `conf/mirth.properties`.
+  - A service on Local Service or Network Service also moves to the virtual
+    account.
+- **Unattended installs:** the default needs no response-file line. For a
+  custom account set `service_account_type=Custom account...`,
+  `service_account_user` and `service_account_password`. In a response file,
+  write a backslash in the user name twice (`service_account_user=.\\svc-bl`),
+  because the file uses Java properties escaping. A `service_account_type=Local
+  System` line from an older response file is read as the old default and
+  gives the virtual account. To choose Local System on purpose, use
+  `service_account_type=Local System (not recommended)`.
+
+The virtual account reaches the network as the computer account. If a channel
+reads a UNC share or connects to SQL Server with Windows authentication, grant
+the computer account access, or install with a custom account.
+
+---
+
+## Unattended Windows Installs Install WebAdmin (IRT-2364)
+
+An unattended Windows install (`-q`) used to skip WebAdmin without saying so,
+while the response file it wrote still recorded `installWebAdmin=true`. It now
+runs the WebAdmin installer silently and waits for it to finish, so the run
+ends with the `BridgeLinkWebAdmin` service installed and listening on 8444.
+
+- To skip WebAdmin on purpose, pass `-VinstallWebAdmin=false` or put
+  `installWebAdmin=false` in the response file. The installer log then says
+  `WebAdmin skipped`.
+- If the WebAdmin installer fails or takes longer than 15 minutes, the
+  installer log says `WebAdmin was not installed:` with the reason. The
+  WebAdmin installer's own log is `webadmin-setup.log` in the installation
+  directory.
+- When WebAdmin was skipped or could not be installed, the installer no
+  longer leaves `installWebAdmin=true` in effect for the rest of the run.
+
+---
+
 ## RPM Upgrades Keep Your conf/ Files (IRT-2320)
 
 Upgrading with `rpm -U` no longer overwrites your configuration. Earlier RPMs
