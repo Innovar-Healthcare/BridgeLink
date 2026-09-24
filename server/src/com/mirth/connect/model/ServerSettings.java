@@ -38,6 +38,7 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
 
     private static final String CLEAR_GLOBAL_MAP = "server.resetglobalvariables";
     protected static final String QUEUE_BUFFER_SIZE = "server.queuebuffersize";
+    protected static final String CHANNEL_STOP_GRACE_PERIOD = "server.channelstopgraceperiod";
     protected static final String DEFAULT_METADATA_COLUMNS = "server.defaultmetadatacolumns";
     protected static final String DEFAULT_ADMINISTRATOR_COLOR = "server.defaultadministratorcolor";
     private static final String SMTP_HOST = "smtp.host";
@@ -64,6 +65,15 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
     private String serverName;
     private Boolean clearGlobalMap;
     private Integer queueBufferSize;
+    /*
+     * IRT-2107: seconds a channel stop waits for its threads and connector hooks before failing with a
+     * StopException naming the stuck thread. Null means "not set here": the engine default (120 s) on a
+     * server that never saved a value, otherwise the stored value is left as it is, because the
+     * configuration controller only upserts the keys present. Zero means wait without bound, which is
+     * how stop behaved before the grace period existed. Values of a few seconds or less will trip on a
+     * healthy stop, because a source queue thread polls in one-second slices.
+     */
+    private Integer channelStopGracePeriod;
     private List<MetaDataColumn> defaultMetaDataColumns;
     private Color defaultAdministratorBackgroundColor;
 
@@ -112,6 +122,9 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
         }
         if (getQueueBufferSize() != null) {
             properties.put(QUEUE_BUFFER_SIZE, getQueueBufferSize().toString());
+        }
+        if (getChannelStopGracePeriod() != null) {
+            properties.put(CHANNEL_STOP_GRACE_PERIOD, getChannelStopGracePeriod().toString());
         }
         if (getDefaultMetaDataColumns() != null) {
             properties.put(DEFAULT_METADATA_COLUMNS, ObjectXMLSerializer.getInstance().serialize(getDefaultMetaDataColumns()));
@@ -181,6 +194,7 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
     public void setProperties(Properties properties) {
         setClearGlobalMap(intToBooleanObject(properties.getProperty(CLEAR_GLOBAL_MAP)));
         setQueueBufferSize(toIntegerObject(properties.getProperty(QUEUE_BUFFER_SIZE)));
+        setChannelStopGracePeriod(toIntegerObject(properties.getProperty(CHANNEL_STOP_GRACE_PERIOD)));
         setDefaultMetaDataColumns(toList(properties.getProperty(DEFAULT_METADATA_COLUMNS), MetaDataColumn.class, DefaultMetaData.DEFAULT_COLUMNS));
         setDefaultAdministratorBackgroundColor(deserialize(properties.getProperty(DEFAULT_ADMINISTRATOR_COLOR), Color.class, DEFAULT_COLOR));
         setSmtpHost(properties.getProperty(SMTP_HOST));
@@ -233,6 +247,15 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
 
     public void setQueueBufferSize(Integer queueBufferSize) {
         this.queueBufferSize = queueBufferSize;
+    }
+
+    /** Seconds a channel stop waits before failing; null for the engine default, zero for unbounded. */
+    public Integer getChannelStopGracePeriod() {
+        return channelStopGracePeriod;
+    }
+
+    public void setChannelStopGracePeriod(Integer channelStopGracePeriod) {
+        this.channelStopGracePeriod = channelStopGracePeriod;
     }
 
     public List<MetaDataColumn> getDefaultMetaDataColumns() {
@@ -413,6 +436,7 @@ public class ServerSettings extends AbstractSettings implements Serializable, Au
         Map<String, Object> purgedProperties = new HashMap<String, Object>();
         purgedProperties.put("clearGlobalMap", clearGlobalMap);
         purgedProperties.put("queueBufferSize", queueBufferSize);
+        purgedProperties.put("channelStopGracePeriod", channelStopGracePeriod);
         purgedProperties.put("defaultMetaDataColumns", PurgeUtil.purgeList(defaultMetaDataColumns));
         purgedProperties.put("defaultAdministratorBackgroundColor", defaultAdministratorBackgroundColor);
         purgedProperties.put("smtpTimeout", PurgeUtil.getNumericValue(smtpTimeout));

@@ -11,8 +11,11 @@ package com.mirth.connect.donkey.server.channel;
 
 import java.util.Calendar;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -271,6 +274,17 @@ public abstract class DestinationConnector extends Connector implements Runnable
     }
 
     public void updateCurrentState(DeployedState currentState) {
+        /*
+         * IRT-2107: a thread an earlier stop or halt abandoned must not write connector state. Its hook runs to
+         * completion on its own thread whatever the channel does in the meantime, so a stop abandoned
+         * an hour ago still reaches its terminal updateCurrentState when the blocked call finally
+         * returns -- reporting the connector stopped underneath a channel that has since restarted.
+         * The abandoned thread has no standing to describe the channel any more, so drop the write.
+         */
+        if (AbandonedThreadRegistry.isAbandoned(getChannelId(), Thread.currentThread())) {
+            logger.error("Ignoring a " + currentState + " state update for " + getClass().getSimpleName() + " on channel " + channel.getName() + " (" + getChannelId() + ") from a thread an earlier stop or halt abandoned; the channel has moved on since.");
+            return;
+        }
         setCurrentState(currentState);
         channel.getEventDispatcher().dispatchEvent(new DeployedStateEvent(getChannelId(), channel.getName(), getMetaDataId(), destinationName, DeployedStateEventType.getTypeFromDeployedState(currentState)));
     }
@@ -370,25 +384,57 @@ public abstract class DestinationConnector extends Connector implements Runnable
     }
 
     public void halt() throws ConnectorTaskException, InterruptedException {
+        halt(Long.MAX_VALUE);
+    }
+
+    /**
+     * Halts the connector, joining its queue threads only until the deadline (IRT-2107). Threads still
+     * alive at the deadline are removed from this connector, so the next start does not inherit them,
+     * and returned to the caller, which records them as abandoned. An unbounded deadline is the
+     * pre-IRT-2107 halt.
+     *
+     * @return the queue threads still running at the deadline, never null
+     */
+    public Set<Thread> halt(long deadlineMillis) throws ConnectorTaskException, InterruptedException {
         updateCurrentState(DeployedState.STOPPING);
         stopQueue.set(true);
 
-        if (MapUtils.isNotEmpty(queueThreads)) {
-            for (Thread thread : queueThreads.values()) {
-                thread.interrupt();
-            }
+        /*
+         * IRT-2107: snapshot the threads this halt is responsible for, taken where they are
+         * interrupted. onHalt() below can block past the deadline and be abandoned, and the channel can
+         * then be restarted while it is still running -- at which point the live queueThreads field
+         * holds the RESTARTED connector's threads. Re-reading the field in the finally would mark those
+         * abandoned and clear the map, leaving a destination that reports Started with no queue threads
+         * and messages piling up QUEUED with nothing to drain them.
+         */
+        Map<Long, DestinationQueueThread> haltedThreads = new HashMap<Long, DestinationQueueThread>(queueThreads);
+
+        for (Thread thread : haltedThreads.values()) {
+            thread.interrupt();
         }
+
+        Set<Thread> survivors = new HashSet<Thread>();
 
         try {
             onHalt();
         } finally {
-            if (MapUtils.isNotEmpty(queueThreads)) {
+            if (!haltedThreads.isEmpty()) {
                 try {
-                    for (Thread thread : queueThreads.values()) {
-                        thread.join();
+                    for (Map.Entry<Long, DestinationQueueThread> entry : haltedThreads.entrySet()) {
+                        DestinationQueueThread thread = entry.getValue();
+                        if (!ThreadUtils.joinUntil(thread, deadlineMillis)) {
+                            /*
+                             * Removed from the connector below, so a restart does not join it; flagged so
+                             * that when its send finally returns it exits instead of looping alongside the
+                             * restarted queue thread as a second, unregistered sender (which would break
+                             * single-thread ordering).
+                             */
+                            thread.markAbandoned();
+                            survivors.add(thread);
+                        }
+                        // Remove only this halt's own threads, never a restarted connector's
+                        queueThreads.remove(entry.getKey(), thread);
                     }
-
-                    queueThreads.clear();
                 } finally {
                     // Invalidate the queue's buffer when the queue is stopped to prevent the buffer becoming 
                     // unsynchronized with the data store.
@@ -399,6 +445,8 @@ public abstract class DestinationConnector extends Connector implements Runnable
             channel.getEventDispatcher().dispatchEvent(new ConnectionStatusEvent(getChannelId(), getMetaDataId(), getDestinationName(), ConnectionStatusEventType.IDLE));
             updateCurrentState(DeployedState.STOPPED);
         }
+
+        return survivors;
     }
 
     private MessageContent getSentContent(ConnectorMessage message, ConnectorProperties connectorProperties) {
@@ -904,7 +952,7 @@ public abstract class DestinationConnector extends Connector implements Runnable
                     statusUpdateLock = null;
                 }
             }
-        } while ((getCurrentState() == DeployedState.STARTED || getCurrentState() == DeployedState.STARTING) && !stopQueue.get());
+        } while ((getCurrentState() == DeployedState.STARTED || getCurrentState() == DeployedState.STARTING) && !stopQueue.get() && !isCurrentQueueThreadAbandoned());
         }
     }
 
@@ -1032,9 +1080,25 @@ public abstract class DestinationConnector extends Connector implements Runnable
         previousStatus = connectorMessage.getStatus();
     }
 
+    /** True when the current thread is a queue thread a halt gave up on (IRT-2107); such a thread must exit its loop. */
+    private static boolean isCurrentQueueThreadAbandoned() {
+        Thread thread = Thread.currentThread();
+        return thread instanceof DestinationQueueThread && ((DestinationQueueThread) thread).isAbandoned();
+    }
+
     public static class DestinationQueueThread extends Thread {
 
         private AtomicBoolean waitingRetryInterval = new AtomicBoolean(false);
+        private volatile boolean abandoned;
+
+        /** Set by a bounded halt that gave up joining this thread; it exits its loop at the next check. */
+        public void markAbandoned() {
+            abandoned = true;
+        }
+
+        public boolean isAbandoned() {
+            return abandoned;
+        }
 
         public DestinationQueueThread(Runnable runnable) {
             super(runnable);

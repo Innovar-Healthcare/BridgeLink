@@ -124,10 +124,32 @@ public class TestChannel extends Channel {
         return message;
     }
 
+    /*
+     * IRT-2107: a recovery that never returns. start() runs recovery while holding the lifecycle lock,
+     * so this is how a test parks a channel in STARTING with the lock held, the way a recovery blocked
+     * in a JDBC call does. The block ignores interrupts; the test releases the gate in a finally.
+     */
+    private volatile CountDownLatch recoveryGate;
+    private final CountDownLatch recoveryEntered = new CountDownLatch(1);
+
+    public void blockRecovery(CountDownLatch gate) {
+        this.recoveryGate = gate;
+    }
+
+    public CountDownLatch getRecoveryEntered() {
+        return recoveryEntered;
+    }
+
     @Override
     public void processUnfinishedMessages() throws Exception {
         // We only run it once and store it because the tests usually call channel.start() before calling this method directly. 
         // Channel.start() also calls this method so there is nothing left to process by the time we actual want the return value.
+
+        CountDownLatch gate = recoveryGate;
+        if (gate != null) {
+            recoveryEntered.countDown();
+            TestSourceConnector.awaitUninterruptibly(gate);
+        }
 
         super.processUnfinishedMessages();
     }

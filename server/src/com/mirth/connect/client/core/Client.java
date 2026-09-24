@@ -1457,6 +1457,16 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     }
 
     /**
+     * Returns the live threads belonging to a deployed channel, as plain JSON (IRT-2107).
+     *
+     * @see ChannelStatusServletInterface#getChannelThreads
+     */
+    @Override
+    public javax.ws.rs.core.Response getChannelThreads(String channelId, Integer maxFrames) throws ClientException {
+        return getServlet(ChannelStatusServletInterface.class).getChannelThreads(channelId, maxFrames);
+    }
+
+    /**
      * Halts the channels with the specified IDs.
      * 
      * @see ChannelStatusServletInterface#haltChannels

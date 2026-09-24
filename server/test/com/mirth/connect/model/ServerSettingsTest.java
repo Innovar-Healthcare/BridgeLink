@@ -65,6 +65,31 @@ public class ServerSettingsTest {
         assertTrue(1000 == serverSettings.getQueueBufferSize());
     }
 
+    /**
+     * IRT-2107: the channel stop grace period round-trips through the properties form the
+     * configuration controller stores, and is absent (engine default) when never set.
+     */
+    @Test
+    public void channelStopGracePeriodRoundTrip() {
+        ServerSettings settings = new ServerSettings();
+        assertNull(settings.getChannelStopGracePeriod());
+        assertFalse(settings.getProperties().containsKey("server.channelstopgraceperiod"));
+
+        settings.setChannelStopGracePeriod(45);
+        Properties properties = settings.getProperties();
+        assertEquals("45", properties.getProperty("server.channelstopgraceperiod"));
+
+        ServerSettings restored = new ServerSettings();
+        restored.setProperties(properties);
+        assertEquals(Integer.valueOf(45), restored.getChannelStopGracePeriod());
+
+        // Zero is a legitimate value (unbounded), distinct from unset
+        settings.setChannelStopGracePeriod(0);
+        restored.setProperties(settings.getProperties());
+        assertEquals(Integer.valueOf(0), restored.getChannelStopGracePeriod());
+        assertEquals(Integer.valueOf(0), restored.getPurgedProperties().get("channelStopGracePeriod"));
+    }
+
     // -----------------------------------------------------------------------
     // reconcileSmtpAuth — authType drives the smtpAuth boolean
     // -----------------------------------------------------------------------

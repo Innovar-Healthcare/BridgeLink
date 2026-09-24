@@ -9,12 +9,15 @@
 
 package com.mirth.connect.connectors.ws;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -33,8 +36,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.xml.ws.Endpoint;
@@ -48,6 +53,7 @@ import org.junit.Test;
 import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
+import com.sun.net.httpserver.HttpServer;
 import com.mirth.connect.donkey.model.channel.ConnectorPluginProperties;
 import com.mirth.connect.donkey.server.ConnectorTaskException;
 import com.mirth.connect.donkey.server.channel.Channel;
@@ -278,6 +284,75 @@ public class WebServiceReceiverTest {
 
         assertTrue("executor.shutdown() must run even though webServiceEndpoint.stop() threw", realExecutor.isShutdown());
         assertNull("the executor field must be nulled after shutdown", getPrivateField(testReceiver, "executor"));
+    }
+
+    @Test
+    public void lateOnStopDoesNotClearResourcesOfARestartedListener() throws Exception {
+        // IRT-2107 x IRT-2428: a halt can abandon onStop() while it is still running and let the
+        // next start proceed without waiting for it. When the abandoned onStop() finally returns it
+        // must not null the fresh server, executor and endpoint that the restart assigned, or the
+        // restarted listener keeps its port while the connector has no reference left to release
+        // it with. RED on revert: against the unconditional field clears, all three fields read
+        // null after the late return.
+        WebServiceReceiverProperties props = new WebServiceReceiverProperties();
+        WebServiceReceiver testReceiver = new TestWebServiceReceiver(props);
+
+        CountDownLatch insideStop = new CountDownLatch(1);
+        CountDownLatch releaseStop = new CountDownLatch(1);
+        Endpoint oldEndpoint = mock(Endpoint.class);
+        doAnswer(invocation -> {
+            insideStop.countDown();
+            releaseStop.await();
+            return null;
+        }).when(oldEndpoint).stop();
+        HttpServer oldServer = mock(HttpServer.class);
+        ExecutorService oldExecutor = Executors.newSingleThreadExecutor();
+
+        setPrivateField(testReceiver, "webServiceEndpoint", oldEndpoint);
+        setPrivateField(testReceiver, "server", oldServer);
+        setPrivateField(testReceiver, "executor", oldExecutor);
+        setPrivateField(testReceiver, "authenticatorProvider", null);
+
+        AtomicReference<Throwable> stopFailure = new AtomicReference<>();
+        Thread abandonedStop = new Thread(() -> {
+            try {
+                testReceiver.onStop();
+            } catch (Throwable t) {
+                stopFailure.set(t);
+            }
+        }, "irt2107-abandoned-ws-stop");
+        abandonedStop.start();
+        assertTrue("onStop() never reached endpoint.stop()", insideStop.await(10, TimeUnit.SECONDS));
+
+        // The restart, while the old onStop() is still blocked.
+        Endpoint newEndpoint = mock(Endpoint.class);
+        HttpServer newServer = mock(HttpServer.class);
+        ExecutorService newExecutor = Executors.newSingleThreadExecutor();
+        try {
+            testReceiver.setServer(newServer);
+            setPrivateField(testReceiver, "executor", newExecutor);
+            setPrivateField(testReceiver, "webServiceEndpoint", newEndpoint);
+
+            releaseStop.countDown();
+            abandonedStop.join(10000);
+            assertFalse("the abandoned onStop() did not return", abandonedStop.isAlive());
+            assertNull("the late onStop() failed: " + stopFailure.get(), stopFailure.get());
+
+            assertSame("a late onStop() cleared the restarted endpoint", newEndpoint, getPrivateField(testReceiver, "webServiceEndpoint"));
+            assertSame("a late onStop() cleared the restarted server", newServer, getPrivateField(testReceiver, "server"));
+            assertSame("a late onStop() cleared the restarted executor", newExecutor, getPrivateField(testReceiver, "executor"));
+
+            // It still stopped what it captured, and nothing of the restart's.
+            verify(oldServer).stop(1);
+            assertTrue("the late onStop() must still shut down the executor it captured", oldExecutor.isShutdown());
+            verify(newEndpoint, never()).stop();
+            verify(newServer, never()).stop(anyInt());
+            assertFalse("the late onStop() shut down the restarted executor", newExecutor.isShutdown());
+        } finally {
+            releaseStop.countDown();
+            newExecutor.shutdownNow();
+            oldExecutor.shutdownNow();
+        }
     }
 
     @Test

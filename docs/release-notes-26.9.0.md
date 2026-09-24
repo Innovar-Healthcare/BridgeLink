@@ -411,3 +411,130 @@ outright.
 26.9.0 with no manual database intervention required.
 
 ---
+
+## Stuck Channels - Stop Grace Period, Thread Diagnostics and Bounded Halt (IRT-2107)
+
+A channel whose connector is waiting on something that never answers, such as
+a partner system that accepts a connection and then goes silent, or a database
+call that never returns, can no longer take the rest of the server with it.
+Before this release Stop never answered for such a channel, Halt could hang on
+the same work, and because undeploy stops a channel first, one stuck channel
+could hold up Redeploy All and a server shutdown for every other channel.
+
+**Stop**
+
+- **Stop has a grace period.** A stop now waits at most
+  `server.channelstopgraceperiod` seconds (Settings > Server > "Channel Stop
+  Grace Period", default 120) for its dispatch threads, queue threads and
+  connector stop hooks. When the period runs out the stop fails with an error
+  that names the stuck thread and its top stack frames, and the channel stays
+  Stopping. Nothing escalates to halt on its own. Keep the period at ten
+  seconds or more: a source queue thread polls in one-second slices, so a very
+  short period trips on healthy stops. Setting it to 0 restores the previous
+  wait-forever behaviour for stop; it does not affect halt. It also switches
+  off the overdue flag described under Diagnostics, so with 0 the Web Admin
+  no longer marks a channel that is stuck Stopping or Starting.
+- **A stop that ran out of time finishes on its own once its work does.** When
+  the threads the stop gave up on finish, or, for a pooled thread such as a
+  web server's, once it leaves the channel, the stop completes and the channel
+  reaches Stopped without an operator touching it. A channel whose threads
+  never finish still needs a halt, and so does one where repeated attempts to
+  finish the stop keep running out of time: after ten it stops trying and logs
+  that it has.
+- **Only stop is bounded.** Deploy, start, pause, resume and
+  remove-all-messages wait without limit, exactly as before. Stop is what the
+  setting is named for and the only operation an operator is told to halt out
+  of. The one exception is a channel lock held by a thread a halt has already
+  abandoned: that holder will never let go, so start, pause, resume and
+  remove-all-messages fail at once, name the operation that is stuck, and tell
+  you to undeploy the channel and deploy it again to rebuild it.
+- **Undeploy and Redeploy All no longer wait forever on one channel.**
+  Undeploying a running channel stops it first, so it inherits the grace
+  period. If the channel does not stop in time the undeploy stops there, the
+  channel is left Stopping, and the rest of an Undeploy All or Redeploy All
+  carries on. An undeploy or redeploy of a channel that is already Stopping is
+  refused with advice to halt first, because tearing it down under a live
+  dispatch thread could deliver a message twice. When a timed-out stop later
+  completes on its own the undeploy is not resumed, so issue it again.
+  Undeploy's own connector hooks are not time-limited, except after a forced
+  halt (see below). Raise the grace period if your channels legitimately take
+  longer than it to stop.
+
+**Diagnostics**
+
+- **New endpoint `GET /channels/{channelId}/_threads`.** Returns every live
+  thread that belongs to the channel (dispatch, source and destination queues,
+  chains, recovery, connector receivers, lifecycle hooks and channel scripts)
+  with its state, the lock it is blocked on and its top stack frames, plus
+  what the most recent stop timed out waiting on. Plain JSON, stack frames
+  only: never message content or connector settings. Requires the dashboard
+  view permission. The Web Admin shows it as Thread Diagnostics on the
+  dashboard.
+- **Dashboard status carries `stateSince` and `lifecycleOverdue`.** The flag
+  is set when a channel has been Stopping or Starting longer than the grace
+  period, so the Web Admin can offer the diagnostics and the halt.
+- **Cancelled channel scripts are visible.** A script whose caller gave up on
+  it but whose thread is still blocked inside a Java call now appears in the
+  threads endpoint flagged as a cancelled script.
+
+**Halt**
+
+- **Halt still reacts immediately, and now it also finishes.** As before, halt
+  shuts down the channel executor, stops the source queue, interrupts every
+  busy dispatch thread and tells each connector to shut down, all without
+  waiting. What is new is the ending: instead of blocking forever on the
+  channel lock, halt gives the threads it interrupted a short fixed interval
+  (two seconds) to wind down, then marks the channel Stopped regardless.
+  Whatever is still running is logged with its stack frames and recorded as
+  abandoned, and the next halt interrupts it again. Abandoned threads stay
+  visible in the threads endpoint, flagged `abandoned`, once the channel is
+  redeployed; the endpoint answers only for a deployed channel, so between
+  undeploy and deploy it returns 404.
+- **Halt does not use the stop grace period.** Its wind-down interval is fixed
+  and deliberately short, because halt is the emergency action: an operator
+  who shortens the grace period to see stop diagnostics is not asking halt to
+  take longer, and one who lengthens it is not asking halt to take minutes.
+  The two-second wait exists only so a thread that is milliseconds from a
+  clean exit is not reported as abandoned. A grace period of 0 cannot make
+  halt unbounded.
+- **Forced mode.** If a wedged stop or start still holds the channel's
+  lifecycle lock when that interval expires, halt proceeds without it,
+  interrupts the holder, and reports it. The same applies to undeploy after a
+  forced halt, which runs the connector undeploy hooks on halt's short
+  interval, so a redeploy always builds a fresh channel instance and is never
+  blocked by the old one.
+- **Halt interrupts what a stop gave up on, and a later start does not wait
+  for it.** A thread that ignored an interrupt is not closer to finishing than
+  when it was abandoned, and making a start queue behind it would hand the
+  stuck thread control of the next operation too. Instead the write it would
+  have made is dropped: a connector state update from an abandoned thread is
+  ignored, so a hook that finishes an hour later cannot report a connector
+  stopped underneath a channel that has since restarted. A halt that gives up
+  on a connector's hook also marks that connector Stopped itself, so the next
+  start does not skip it.
+- **Abandoned queue threads stay retired.** A destination or source queue
+  thread a halt gave up on exits when its blocked call finally returns,
+  instead of resuming next to the restarted queue thread as a second sender.
+- **Stale permit protection.** A dispatch thread abandoned by a halt that
+  completes after a restart cannot release a permit into the restarted
+  channel's process lock.
+- **A halt during a deploy is not overtaken.** A deploy that goes on to start
+  the channel releases the channel's lock in between, and a halt could land in
+  that gap, mark the channel Stopped, and then be undone by the start that
+  followed. The channel is now left deployed and Stopped with an error in the
+  log, and you start it explicitly if that is what you wanted.
+- **The REST halt call returns within a bounded time**, about 34 seconds
+  (twice the wind-down interval plus a 30-second margin for a task that never
+  started), and reports a timeout error if the task is still running; the task
+  itself continues.
+
+**What has not changed**
+
+Halt still trades a possible duplicate delivery for never losing a message. A
+message that was part-way through delivery may be delivered a second time once
+the channel is started again, and because a start no longer waits for
+abandoned threads, restarting soon after a halt makes that duplicate reachable
+sooner. A message is still never lost. The Web Admin's halt confirmation now
+says so.
+
+---
