@@ -82,6 +82,9 @@ public class WebServiceReceiver extends SourceConnector {
     private TemplateValueReplacer replacer = new TemplateValueReplacer();
     private WebServiceConfiguration configuration;
     private HttpServer server;
+    // Guards the server, executor and webServiceEndpoint fields against a stop hook that a halt
+    // abandoned (IRT-2107) finishing after the next start: see onStop().
+    private final Object resourceLock = new Object();
     private WebServiceReceiverProperties connectorProperties;
     private HttpAuthConnectorPluginProperties authProps;
     private AuthenticatorProvider authenticatorProvider;
@@ -149,6 +152,9 @@ public class WebServiceReceiver extends SourceConnector {
 
         java.util.logging.Logger.getLogger("javax.enterprise.resource.webservices.jaxws.server").setLevel(java.util.logging.Level.OFF);
 
+        // onStart works on locals from here on rather than re-reading the fields it assigns: a halt
+        // in forced mode can run onStop() concurrently and clear a field this start just set.
+        HttpServer httpServer;
         try {
             try {
                 if (System.getProperty("sun.net.httpserver.maxReqTime") == null) {
@@ -162,7 +168,10 @@ public class WebServiceReceiver extends SourceConnector {
                 logger.error("Failed to set properties sun.net.httpserver.maxReqTime and sun.net.httpserver.maxRspTime", e);
             }
             configuration.configureReceiver(this);
-            server.bind(new InetSocketAddress(host, port), DEFAULT_BACKLOG);
+            synchronized (resourceLock) {
+                httpServer = server;
+            }
+            httpServer.bind(new InetSocketAddress(host, port), DEFAULT_BACKLOG);
         } catch (Exception e) {
             throw new ConnectorTaskException("Error creating HTTP Server.", e);
         }
@@ -205,7 +214,7 @@ public class WebServiceReceiver extends SourceConnector {
         final ClassLoader connectorClassLoader = resolvedConnectorClassLoader;
 
         // Allow more than the channel processing threads so WDSL requests can be accepted even if all processing threads are busy
-        executor = Executors.newFixedThreadPool(processingThreads + 4, new ThreadFactory() {
+        ExecutorService newExecutor = Executors.newFixedThreadPool(processingThreads + 4, new ThreadFactory() {
             private final ThreadFactory delegate = Executors.defaultThreadFactory();
 
             @Override
@@ -215,8 +224,11 @@ public class WebServiceReceiver extends SourceConnector {
                 return thread;
             }
         });
-        server.setExecutor(executor);
-        server.start();
+        synchronized (resourceLock) {
+            executor = newExecutor;
+        }
+        httpServer.setExecutor(newExecutor);
+        httpServer.start();
 
         AcceptMessage acceptMessageWebService = null;
 
@@ -257,21 +269,24 @@ public class WebServiceReceiver extends SourceConnector {
                 acceptMessageWebService = new DefaultAcceptMessage(this);
             }
 
-            webServiceEndpoint = Endpoint.create(connectorProperties.getSoapBinding().getValue(), acceptMessageWebService);
-            Binding binding = webServiceEndpoint.getBinding();
+            Endpoint newEndpoint = Endpoint.create(connectorProperties.getSoapBinding().getValue(), acceptMessageWebService);
+            synchronized (resourceLock) {
+                webServiceEndpoint = newEndpoint;
+            }
+            Binding binding = newEndpoint.getBinding();
             List<Handler> handlerChain = new LinkedList<Handler>();
             handlerChain.add(new LoggingSOAPHandler(this));
             binding.setHandlerChain(handlerChain);
 
             String serviceName = replacer.replaceValues(connectorProperties.getServiceName(), channelId, channelName);
-            HttpContext context = server.createContext("/services/" + serviceName);
+            HttpContext context = httpServer.createContext("/services/" + serviceName);
 
             // Set a security authenticator if needed
             if (authenticatorProvider != null) {
                 context.setAuthenticator(createAuthenticator());
             }
 
-            webServiceEndpoint.publish(context);
+            newEndpoint.publish(context);
         } finally {
             // Restore the thread context classloader
             Thread.currentThread().setContextClassLoader(currentContextClassLoader);
@@ -289,23 +304,45 @@ public class WebServiceReceiver extends SourceConnector {
         // redeploy. The pre-existing single-throw contract is preserved: the FIRST failure is
         // captured and rethrown, later failures are logged rather than swallowed. Each field is
         // nulled after its own block so the resource is not retained across redeploy.
+        //
+        // The resources are captured once, up front, and each field is cleared only if it still
+        // holds the instance this call stopped (IRT-2107). A halt can abandon this hook while it is
+        // still running and let the next start proceed without waiting for it, so a late return
+        // here must not null the fresh server, executor and endpoint that start assigned: the
+        // restarted listener would keep its port while the connector lost every reference to it,
+        // so no later stop could release it. The fields are not taken at capture time either,
+        // because a halt landing while this hook is stuck inside endpoint.stop() must still be able
+        // to stop the same server and executor and free the port.
         logger.debug("stopping Web Service HTTP server");
+
+        Endpoint endpointToStop;
+        HttpServer serverToStop;
+        ExecutorService executorToStop;
+        synchronized (resourceLock) {
+            endpointToStop = webServiceEndpoint;
+            serverToStop = server;
+            executorToStop = executor;
+        }
 
         ConnectorTaskException firstCause = null;
 
-        if (webServiceEndpoint != null) {
+        if (endpointToStop != null) {
             try {
-                webServiceEndpoint.stop();
+                endpointToStop.stop();
             } catch (Exception e) {
                 firstCause = new ConnectorTaskException("Failed to stop Web Service Listener", e);
             } finally {
-                webServiceEndpoint = null;
+                synchronized (resourceLock) {
+                    if (webServiceEndpoint == endpointToStop) {
+                        webServiceEndpoint = null;
+                    }
+                }
             }
         }
 
-        if (server != null) {
+        if (serverToStop != null) {
             try {
-                server.stop(1);
+                serverToStop.stop(1);
             } catch (Exception e) {
                 if (firstCause == null) {
                     firstCause = new ConnectorTaskException("Failed to stop Web Service Listener", e);
@@ -313,13 +350,17 @@ public class WebServiceReceiver extends SourceConnector {
                     logger.error("Failed to stop Web Service Listener HTTP server", e);
                 }
             } finally {
-                server = null;
+                synchronized (resourceLock) {
+                    if (server == serverToStop) {
+                        server = null;
+                    }
+                }
             }
         }
 
-        if (executor != null) {
+        if (executorToStop != null) {
             try {
-                executor.shutdown();
+                executorToStop.shutdown();
             } catch (Exception e) {
                 if (firstCause == null) {
                     firstCause = new ConnectorTaskException("Failed to stop Web Service Listener", e);
@@ -327,7 +368,11 @@ public class WebServiceReceiver extends SourceConnector {
                     logger.error("Failed to shut down Web Service Listener executor", e);
                 }
             } finally {
-                executor = null;
+                synchronized (resourceLock) {
+                    if (executor == executorToStop) {
+                        executor = null;
+                    }
+                }
             }
         }
 
@@ -419,7 +464,9 @@ public class WebServiceReceiver extends SourceConnector {
     }
 
     public void setServer(HttpServer server) {
-        this.server = server;
+        synchronized (resourceLock) {
+            this.server = server;
+        }
     }
 
     private com.sun.net.httpserver.Authenticator createAuthenticator() throws ConnectorTaskException {

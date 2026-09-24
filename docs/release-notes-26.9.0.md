@@ -431,7 +431,9 @@ could hold up Redeploy All and a server shutdown for every other channel.
   Stopping. Nothing escalates to halt on its own. Keep the period at ten
   seconds or more: a source queue thread polls in one-second slices, so a very
   short period trips on healthy stops. Setting it to 0 restores the previous
-  wait-forever behaviour for stop; it does not affect halt.
+  wait-forever behaviour for stop; it does not affect halt. It also switches
+  off the overdue flag described under Diagnostics, so with 0 the Web Admin
+  no longer marks a channel that is stuck Stopping or Starting.
 - **A stop that ran out of time finishes on its own once its work does.** When
   the threads the stop gave up on finish, or, for a pooled thread such as a
   web server's, once it leaves the channel, the stop completes and the channel
