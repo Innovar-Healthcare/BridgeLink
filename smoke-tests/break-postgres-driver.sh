@@ -126,6 +126,21 @@ else
         echo "INCONCLUSIVE: harness failed, but no known pg driver/auth fault signature was found in the evidence log or mirth.log"
         VERDICT_EXIT=2
     fi
+
+    # IRT-2353: the signature match above proves the harness noticed the fault. This proves the
+    # server told the service manager about it. Before IRT-2353 the server logged "aborting
+    # startup" and exited 0, so a systemd unit with Restart=on-failure recorded Result=success
+    # and never restarted -- the defect was invisible to everything that was not reading logs.
+    # A missing marker stays inconclusive rather than failing: the fault can also surface as a
+    # health-check timeout, in which case the process never exited and there is nothing to read.
+    if grep -qF "SMOKE-SERVER-EXIT-STATUS: 0" "${EVIDENCE_LOG}"; then
+        echo "SELF-TEST FAILED: server exited 0 after aborting startup on an unreachable database (IRT-2353 regression)"
+        VERDICT_EXIT=1
+    elif grep -qE "SMOKE-SERVER-EXIT-STATUS: [1-9]" "${EVIDENCE_LOG}"; then
+        ok "server exited non-zero after aborting startup ($(grep -oE 'SMOKE-SERVER-EXIT-STATUS: [0-9]+' "${EVIDENCE_LOG}" | tail -1)) -- IRT-2353 satisfied"
+    else
+        info "no SMOKE-SERVER-EXIT-STATUS marker in the evidence log; the fault did not reach the startup-abort path this run"
+    fi
 fi
 
 # ---------------------------------------------------------------------------

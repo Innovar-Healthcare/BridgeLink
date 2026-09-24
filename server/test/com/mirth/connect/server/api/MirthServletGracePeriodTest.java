@@ -13,8 +13,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.annotation.Annotation;
@@ -117,6 +122,23 @@ public class MirthServletGracePeriodTest extends ServletTestBase {
         };
     }
 
+    private UserServlet newUserServlet() {
+        return new UserServlet(request, sc, controllerFactory);
+    }
+
+    /**
+     * Both method objects Jersey could hand the invocation handler for this endpoint, and it has
+     * handed both: through Jersey 2.22.1 the dispatcher passed the definition method (the
+     * interface), and since the 2.48 upgrade it passes the public handling method (UserServlet).
+     * Only the interface declares {@link Param}, so the handler has to reach the interface itself
+     * rather than trusting what it is given. Every case below runs against both.
+     */
+    private static Method[] updateUserPasswordMethods() throws Exception {
+        return new Method[] {
+                UserServlet.class.getMethod("updateUserPassword", Integer.class, String.class),
+                UserServletInterface.class.getMethod("updateUserPassword", Integer.class, String.class) };
+    }
+
     /**
      * The restriction ships off, so a grace period must not change what a login can do until an
      * operator opts in.
@@ -179,6 +201,44 @@ public class MirthServletGracePeriodTest extends ServletTestBase {
         } catch (Throwable t) {
             assertForbiddenException(t);
         }
+    }
+
+    /**
+     * Everything above calls checkUserAuthorized directly, hand-feeding the target ID that
+     * {@link com.mirth.connect.server.api.providers.MirthResourceInvocationHandlerProvider} is
+     * supposed to resolve from the request — so none of it exercises the resolution the scoping
+     * depends on. Drive the real handler instead. QA found a grace-restricted user refused their
+     * own password change on a running server while every test here passed, which is exactly the
+     * gap this closes: refused for want of a target, the user can neither work nor escape the
+     * restriction (IRT-1798).
+     */
+    @Test
+    public void restrictedSessionMayStillChangeItsOwnPasswordThroughTheHandler() throws Throwable {
+        for (Method method : updateUserPasswordMethods()) {
+            givenGraceRestrictedSession(true);
+
+            ih.invoke(newUserServlet(), method, new Object[] { SESSION_USER_ID, "N3wPassword!" });
+        }
+
+        // Not throwing is not the same as arriving; the change has to reach the controller
+        verify(userController, atLeastOnce()).checkOrUpdateUserPassword(eq(SESSION_USER_ID), any());
+    }
+
+    /**
+     * The same path the bypass was reported on. The direct-call test above covers the check
+     * itself; this covers it as the server actually reaches it.
+     */
+    @Test
+    public void restrictedSessionCannotChangeAnotherUsersPasswordThroughTheHandler() throws Exception {
+        for (Method method : updateUserPasswordMethods()) {
+            givenGraceRestrictedSession(true);
+
+            assertForbiddenInvocation(newUserServlet(), method, new Object[] { OTHER_USER_ID,
+                    "N3wPassword!" });
+        }
+
+        // The property QA checks on a live server: the other user's password is genuinely untouched
+        verify(userController, never()).checkOrUpdateUserPassword(eq(OTHER_USER_ID), any());
     }
 
     /**

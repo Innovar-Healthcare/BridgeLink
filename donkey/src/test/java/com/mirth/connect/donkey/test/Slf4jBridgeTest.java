@@ -1,7 +1,5 @@
 package com.mirth.connect.donkey.test;
 
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 import org.apache.log4j.Category;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -34,7 +32,12 @@ import static org.junit.Assert.*;
  * - log4j-1.2-api-2.25.3.jar: Log4j 1.x compatibility API
  * - log4j-slf4j2-impl-2.25.3.jar: SLF4J → Log4j 2.x bridge
  * - slf4j-api-2.0.16.jar: SLF4J API
- * - Third-party libraries: HikariCP and Quartz using SLF4J
+ * - Third-party libraries: Quartz using SLF4J
+ *
+ * The HikariCP-against-embedded-Derby coverage (IRT-1489, Phase 24, D-03) lives in the
+ * sibling HikariCpDerbyBridgeTest, split out because it is the only Derby-loading part
+ * of this suite and must be excluded on the JDK-17 build leg; everything remaining here
+ * has no database dependency and runs on every JDK leg.
  */
 public class Slf4jBridgeTest {
 
@@ -370,54 +373,7 @@ public class Slf4jBridgeTest {
     }
 
     // ========== THIRD-PARTY LIBRARY TESTS ==========
-
-    @Test
-    public void testHikariCpSlf4jBridge() {
-        System.out.println("\n=== Testing HikariCP SLF4J → Log4j 2.x Bridge ===");
-
-        testAppender.clear();
-        HikariDataSource dataSource = null;
-
-        try {
-            // Configure HikariCP - this will trigger SLF4J logging
-            HikariConfig config = new HikariConfig();
-            config.setJdbcUrl("jdbc:derby:memory:hikaritest;create=true");
-            config.setDriverClassName("org.apache.derby.jdbc.EmbeddedDriver");
-            config.setUsername("");
-            config.setPassword("");
-            config.setMaximumPoolSize(2);
-            config.setMinimumIdle(1);
-            config.setConnectionTimeout(3000);
-            config.setPoolName("HikariCP-Test-Pool");
-
-            System.out.println("Creating HikariCP DataSource (logs via SLF4J)...");
-            dataSource = new HikariDataSource(config);
-
-            // Give HikariCP a moment to initialize and log
-            Thread.sleep(1000);
-
-            List<LogEvent> capturedLogs = testAppender.getEvents();
-
-            System.out.println("Captured " + capturedLogs.size() + " log events from HikariCP");
-
-            // Verify that HikariCP logged through SLF4J → Log4j 2.x
-            assertFalse("HikariCP should have logged messages via SLF4J bridge",
-                       capturedLogs.isEmpty());
-
-            boolean hasHikariLogs = capturedLogs.stream()
-                .anyMatch(event -> event.getLoggerName().toLowerCase().contains("hikari"));
-            assertTrue("Should have HikariCP logs routed through Log4j 2.x", hasHikariLogs);
-
-            System.out.println("✓ HikariCP → SLF4J → log4j-slf4j2-impl → Log4j 2.x verified");
-
-        } catch (Exception e) {
-            fail("HikariCP SLF4J bridge test failed: " + e.getMessage());
-        } finally {
-            if (dataSource != null) {
-                dataSource.close();
-            }
-        }
-    }
+    // (HikariCP-against-Derby coverage lives in HikariCpDerbyBridgeTest - see class Javadoc)
 
     @Test
     public void testQuartzSlf4jBridge() {
@@ -470,73 +426,7 @@ public class Slf4jBridgeTest {
         }
     }
 
-    @Test
-    public void testBothLibrariesSimultaneously() {
-        System.out.println("\n=== Testing HikariCP + Quartz Simultaneous Logging ===");
-
-        testAppender.clear();
-        HikariDataSource dataSource = null;
-        Scheduler scheduler = null;
-
-        try {
-            System.out.println("Initializing both HikariCP and Quartz...");
-
-            // HikariCP
-            HikariConfig hikariConfig = new HikariConfig();
-            hikariConfig.setJdbcUrl("jdbc:derby:memory:multitest;create=true");
-            hikariConfig.setDriverClassName("org.apache.derby.jdbc.EmbeddedDriver");
-            hikariConfig.setMaximumPoolSize(2);
-            hikariConfig.setPoolName("Multi-Test-Pool");
-            dataSource = new HikariDataSource(hikariConfig);
-
-            // Quartz
-            Properties quartzProps = new Properties();
-            quartzProps.setProperty("org.quartz.scheduler.instanceName", "Multi-Test-Scheduler");
-            quartzProps.setProperty("org.quartz.threadPool.threadCount", "2");
-            quartzProps.setProperty("org.quartz.threadPool.class", "org.quartz.simpl.SimpleThreadPool");
-            quartzProps.setProperty("org.quartz.jobStore.class", "org.quartz.simpl.RAMJobStore");
-            StdSchedulerFactory factory = new StdSchedulerFactory(quartzProps);
-            scheduler = factory.getScheduler();
-            scheduler.start();
-
-            // Give both time to log
-            Thread.sleep(1000);
-
-            List<LogEvent> capturedLogs = testAppender.getEvents();
-
-            long hikariLogCount = capturedLogs.stream()
-                .filter(event -> event.getLoggerName().toLowerCase().contains("hikari"))
-                .count();
-
-            long quartzLogCount = capturedLogs.stream()
-                .filter(event -> event.getLoggerName().toLowerCase().contains("quartz"))
-                .count();
-
-            System.out.println("Total captured logs: " + capturedLogs.size());
-            System.out.println("  - HikariCP logs: " + hikariLogCount);
-            System.out.println("  - Quartz logs: " + quartzLogCount);
-
-            // Verify both libraries logged
-            assertTrue("HikariCP should have logged", hikariLogCount > 0);
-            assertTrue("Quartz should have logged", quartzLogCount > 0);
-
-            System.out.println("✓ Both libraries successfully logging through SLF4J → Log4j 2.x");
-
-        } catch (Exception e) {
-            fail("Simultaneous logging test failed: " + e.getMessage());
-        } finally {
-            if (dataSource != null) {
-                dataSource.close();
-            }
-            if (scheduler != null) {
-                try {
-                    scheduler.shutdown(false);
-                } catch (SchedulerException e) {
-                    System.err.println("Error shutting down scheduler: " + e.getMessage());
-                }
-            }
-        }
-    }
+    // (testBothLibrariesSimultaneously - HikariCP+Quartz - lives in HikariCpDerbyBridgeTest)
 
     // ========== VERSION AND CONFIGURATION TESTS ==========
 

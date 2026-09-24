@@ -38,9 +38,13 @@ set -euo pipefail
 DB_TYPE="derby"   # default (D-03: only derby is functional in Phase 18)
 BOOT_ONLY=0
 DEPLOY_ONLY=0
+# IRT-2217 (Phase 26.12 plan 04, criterion 4): when supplied, patch_properties writes
+# server.defaultencoding = <charset> into the built mirth.properties (the pinned-encoding
+# leg). Left empty by default -- the UTF-8-default leg, no server.defaultencoding write.
+DEFAULT_ENCODING=""
 
 usage() {
-    echo "Usage: $0 [--db derby|mysql|postgres|mssql] [--boot-only] [--deploy-only] [--help]"
+    echo "Usage: $0 [--db derby|mysql|postgres|mssql] [--boot-only] [--deploy-only] [--default-encoding <charset>] [--help]"
     echo ""
     echo "  --db <backend>   Database backend (default: derby). Only 'derby' is functional"
     echo "                   in Phase 18 — other values are accepted but fail fast with a"
@@ -50,6 +54,10 @@ usage() {
     echo "  --deploy-only    Boot + import + deploy all 20 reference channels, then tear"
     echo "                   down (no message pump/assert driver — that's 18-06/18-07)."
     echo "                   Mutually exclusive with --boot-only."
+    echo "  --default-encoding <charset>   Patch server.defaultencoding = <charset> into the"
+    echo "                   built mirth.properties before boot (IRT-2217 criterion 4's"
+    echo "                   pinned-encoding leg, e.g. windows-1252). Omit for the"
+    echo "                   UTF-8-default leg (no write)."
     echo "  --help           Show this message and exit 0."
 }
 
@@ -70,6 +78,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --deploy-only)
             DEPLOY_ONLY=1
+            shift
+            ;;
+        --default-encoding)
+            shift
+            if [[ $# -eq 0 ]]; then
+                echo "Error: --default-encoding requires a value (e.g. windows-1252)" >&2
+                exit 1
+            fi
+            DEFAULT_ENCODING="$1"
             shift
             ;;
         --help)
@@ -389,6 +406,9 @@ allocate_ports() {
     # PR-#177-gated JS-Writer SMTP fixtures (D1/D2/D3, plan 18.5-03+).
     SMTP_CCBCC_PORT=$(free_port)
     SMTP_JS_PORT=$(free_port)
+    # 26.15-02 (IRT-2428): Web Service Listener smoke fixture (ws-listener-test.xml, channel
+    # 00000040), proves the WebServiceReceiver classloader fix end-to-end on the JDK 21/25 legs.
+    WS_LISTENER_PORT=$(free_port)
     # SOAP_URL is derived, not a raw port — the Web Service Sender fixture (soap-test.xml)
     # substitutes ${SOAP_URL} directly (D-07: Endpoint.publish stub target).
     SOAP_URL="http://127.0.0.1:${SOAP_PORT}/smoketest"
@@ -397,8 +417,8 @@ allocate_ports() {
         HTTP_STUB_PORT HTTP_CTXPATH_PORT HTTP_LARGE_PORT HTTP_ERROR500_PORT \
         DICOM_LISTENER_PORT DICOM_ROUNDTRIP_SCP_PORT DICOM_COMPRESSED_LISTENER_PORT DICOM_COMPRESSED_SCP_PORT \
         DICOM_TLS_AES_LISTENER_PORT DICOM_TLS_AES_SCP_PORT DICOM_TLS_3DES_LISTENER_PORT DICOM_TLS_3DES_SCP_PORT \
-        WEBDAV_PORT WEBDAV_TLS_PORT SMTP_CCBCC_PORT SMTP_JS_PORT
-    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT} DICOM_COMPRESSED_LISTENER=${DICOM_COMPRESSED_LISTENER_PORT} DICOM_COMPRESSED_SCP=${DICOM_COMPRESSED_SCP_PORT} DICOM_TLS_AES_LISTENER=${DICOM_TLS_AES_LISTENER_PORT} DICOM_TLS_AES_SCP=${DICOM_TLS_AES_SCP_PORT} DICOM_TLS_3DES_LISTENER=${DICOM_TLS_3DES_LISTENER_PORT} DICOM_TLS_3DES_SCP=${DICOM_TLS_3DES_SCP_PORT} WEBDAV=${WEBDAV_PORT} WEBDAV_TLS=${WEBDAV_TLS_PORT} SMTP_CCBCC=${SMTP_CCBCC_PORT} SMTP_JS=${SMTP_JS_PORT}"
+        WEBDAV_PORT WEBDAV_TLS_PORT SMTP_CCBCC_PORT SMTP_JS_PORT WS_LISTENER_PORT
+    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT} DICOM_COMPRESSED_LISTENER=${DICOM_COMPRESSED_LISTENER_PORT} DICOM_COMPRESSED_SCP=${DICOM_COMPRESSED_SCP_PORT} DICOM_TLS_AES_LISTENER=${DICOM_TLS_AES_LISTENER_PORT} DICOM_TLS_AES_SCP=${DICOM_TLS_AES_SCP_PORT} DICOM_TLS_3DES_LISTENER=${DICOM_TLS_3DES_LISTENER_PORT} DICOM_TLS_3DES_SCP=${DICOM_TLS_3DES_SCP_PORT} WEBDAV=${WEBDAV_PORT} WEBDAV_TLS=${WEBDAV_TLS_PORT} SMTP_CCBCC=${SMTP_CCBCC_PORT} SMTP_JS=${SMTP_JS_PORT} WS_LISTENER=${WS_LISTENER_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -423,7 +443,8 @@ allocate_work_dirs() {
              "${OUT_DIR}/js" "${OUT_DIR}/doc" \
              "${OUT_DIR}/http-response" "${OUT_DIR}/http-xmlbody" "${OUT_DIR}/http-binary" \
              "${OUT_DIR}/http-auth-basic" "${OUT_DIR}/http-auth-digest" \
-             "${OUT_DIR}/http-ctxpath"
+             "${OUT_DIR}/http-ctxpath" \
+             "${OUT_DIR}/ws"
 
     # 18.2: pre-create the IRT-828 FILE static resource (NET-07). The server JVM reads
     # this path directly at deploy/request time — no container/bind-mount in this harness
@@ -748,11 +769,27 @@ patch_properties() {
         fi
     fi
 
+    # IRT-2217 (Phase 26.12 plan 04, criterion 4): only write server.defaultencoding when
+    # --default-encoding was supplied -- the flag omitted means the UTF-8-default leg, no
+    # write at all, byte-identical to today. The shipped key ships commented out
+    # (server/conf/mirth.properties:68, "#server.defaultencoding ="), so both an already-
+    # uncommented line and the shipped commented line need their own -e clause; only one
+    # ever matches a given line, sed processes both harmlessly.
+    if [[ -n "${DEFAULT_ENCODING}" ]]; then
+        sed_args+=(
+            -e "s|^#server.defaultencoding.*|server.defaultencoding = ${DEFAULT_ENCODING}|"
+            -e "s|^server.defaultencoding *=.*|server.defaultencoding = ${DEFAULT_ENCODING}|"
+        )
+    fi
+
     sed -i.smoke-bak "${sed_args[@]}" "${MIRTH_PROPS}"
 
     pass "mirth.properties patched: http.port=${HTTP_PORT} https.port=${HTTPS_PORT} dir.appdata=${APPDATA} http.host=127.0.0.1 https.host=127.0.0.1"
     if [[ "${DB_TYPE}" == "postgres" ]]; then
         pass "mirth.properties DB keys patched: database=postgres database.url=jdbc:postgresql://127.0.0.1:${PG_PORT}/mirthdb database.username=mirthdb"
+    fi
+    if [[ -n "${DEFAULT_ENCODING}" ]]; then
+        pass "mirth.properties server.defaultencoding patched: server.defaultencoding=${DEFAULT_ENCODING}"
     fi
 }
 
@@ -811,7 +848,18 @@ health_check() {
         attempt=$((attempt + 1))
 
         if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
-            fail "Server process (PID ${SERVER_PID}) exited before becoming healthy"
+            # IRT-2353: reap the process and record its exit status. A server that logs
+            # "aborting startup" and then exits 0 makes a systemd unit with Restart=on-failure
+            # record a clean stop and never restart, which is invisible unless something reads
+            # the status. rc=0 default plus "|| rc=$?" keeps this safe under set -e.
+            local server_rc=0
+            wait "${SERVER_PID}" 2>/dev/null || server_rc=$?
+            # Uncoloured marker line so break-postgres-driver.sh can grep -qF for it.
+            echo "SMOKE-SERVER-EXIT-STATUS: ${server_rc}"
+            fail "Server process (PID ${SERVER_PID}) exited before becoming healthy (exit status ${server_rc})"
+            if [[ ${server_rc} -eq 0 ]]; then
+                fail "Server aborted startup but exited 0 - a service manager with Restart=on-failure would see a clean stop and never restart it (IRT-2353)"
+            fi
             dump_log_tail
             return 1
         fi
@@ -851,7 +899,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-compressed-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test file-webdav-test smtp-legacy-null-test smtp-ccbcc-test smtp-js-ccbcc-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-compressed-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test file-webdav-test smtp-legacy-null-test smtp-ccbcc-test smtp-js-ccbcc-test ws-listener-test)
 # 25.1-03 (SC-3, IRT-1541): the two legacy-algorithm fixtures are appended ONLY when
 # SFTP_LEGACY_PORT is pre-exported by the external break-then-fix driver — an ordinary
 # run-smoke-test.sh invocation has no legacy server to dial, so these must stay out of the
@@ -926,6 +974,7 @@ CHANNEL_IDS=(
     "00000038-0000-0000-0000-000000000038"
     "00000037-0000-0000-0000-000000000037"
     "00000039-0000-0000-0000-000000000039"
+    "00000040-0000-0000-0000-000000000040"
 )
 if [[ -n "${SFTP_LEGACY_PORT:-}" ]]; then
     CHANNEL_IDS+=(
@@ -989,7 +1038,10 @@ fi
 # CC/BCC coverage fixtures (smtp-ccbcc-test.xml/smtp-legacy-null-test.xml, plan 18.5-02+)
 # and the PR-#177-gated JS-Writer SMTP fixtures (plan 18.5-03+). Harmless (envsubst no-op)
 # until those fixtures are added to CHANNEL_FILES.
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_COMPRESSED_LISTENER_PORT} ${DICOM_COMPRESSED_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT} ${WEBDAV_PORT} ${WEBDAV_TLS_PORT} ${MSSQL_HOST} ${MSSQL_PORT} ${MSSQL_DB} ${MSSQL_USER} ${MSSQL_PASSWORD} ${SMTP_CCBCC_PORT} ${SMTP_JS_PORT}'
+# 26.15-02 (IRT-2428) adds WS_LISTENER_PORT: the Web Service Listener smoke fixture
+# (ws-listener-test.xml, channel 00000040) substitutes it directly into the listener
+# source's <port> element.
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_COMPRESSED_LISTENER_PORT} ${DICOM_COMPRESSED_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT} ${WEBDAV_PORT} ${WEBDAV_TLS_PORT} ${MSSQL_HOST} ${MSSQL_PORT} ${MSSQL_DB} ${MSSQL_USER} ${MSSQL_PASSWORD} ${SMTP_CCBCC_PORT} ${SMTP_JS_PORT} ${WS_LISTENER_PORT}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -1512,6 +1564,27 @@ except Exception:
             fatal "DICOM TLS Listener port ${p} did not accept connections within 60s"
         fi
     done
+
+    # 26.15-02 (IRT-2428): WS Listener (ws-listener-test.xml, channel 00000040), probe the
+    # published WSDL endpoint (JAX-WS/SAAJ publishes this on Endpoint.publish, independent of
+    # the DefaultAcceptMessage dispatch path), so this readiness check succeeds even when the
+    # unfixed receiver would fail a real SOAP POST with the SAAJ meta-factory error. Any
+    # non-"000" response code means the listener socket is up; never assert a specific code.
+    attempts=0
+    info "  WS Listener (port ${WS_LISTENER_PORT})..."
+    while [[ ${attempts} -lt 20 ]]; do
+        code=$(curl -s --max-time 3 --connect-timeout 2 -o /dev/null -w "%{http_code}" \
+            "http://127.0.0.1:${WS_LISTENER_PORT}/services/Mirth?wsdl" 2>/dev/null || echo "000")
+        if [[ "${code}" != "000" ]]; then
+            pass "  WS Listener port ${WS_LISTENER_PORT} responding (HTTP ${code})"
+            break
+        fi
+        sleep 3
+        attempts=$((attempts + 1))
+    done
+    if [[ "${code}" == "000" ]]; then
+        fatal "WS Listener port ${WS_LISTENER_PORT} did not respond within 60s"
+    fi
 }
 
 # Two fixtures may legitimately SHARE a channel id when they are mutually exclusive alternatives
@@ -1671,6 +1744,8 @@ run_driver() {
         -DWEBDAV_TLS_KEYSTORE="${WEBDAV_TLS_KEYSTORE}" \
         -DWEBDAV_TLS_KEYSTORE_PW="${WEBDAV_TLS_KEYSTORE_PW}" \
         -DWEBDAV_ROOT_DIR="${WEBDAV_ROOT_DIR}" \
+        -DSERVER_DEFAULT_ENCODING="${DEFAULT_ENCODING}" \
+        -DWS_LISTENER_PORT="${WS_LISTENER_PORT}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else

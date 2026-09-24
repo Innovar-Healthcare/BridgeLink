@@ -102,7 +102,7 @@ public class ManagerDialog extends JDialog {
         databaseUrls.put("postgres", "jdbc:postgresql://localhost:5432/mirthdb");
         databaseUrls.put("mysql", "jdbc:mysql://localhost:3306/mirthdb");
         databaseUrls.put("oracle", "jdbc:oracle:thin:@localhost:1521:DB");
-        databaseUrls.put("sqlserver", "jdbc:jtds:sqlserver://localhost:1433/mirthdb");
+        databaseUrls.put("sqlserver", "jdbc:sqlserver://localhost:1433;databaseName=mirthdb");
 
         // Remove the service tab if it's not supported
         if (!serviceController.isShowServiceTab()) {

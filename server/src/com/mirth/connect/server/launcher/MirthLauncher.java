@@ -51,7 +51,19 @@ public class MirthLauncher {
 
     private static String appDataDir = null;
 
-    private static final String ROOT_CHECK_ERROR_MSG =
+    private static LoggerWrapper logger;
+
+    public enum RootCheckResult {
+        BLOCK, WARN, OK
+    }
+
+    /**
+     * The root/Administrator startup-guard remediation message.
+     *
+     * NOTE: a byte-identical twin of this constant lives in Mirth.java (package-private there).
+     * The launcher cannot depend on mirth-server.jar, so the two copies must be kept in sync.
+     */
+    public static final String ROOT_CHECK_ERROR_MSG =
         "================================================================\n" +
         "ERROR: BridgeLink is running as root/Administrator.\n" +
         "\n" +
@@ -60,19 +72,15 @@ public class MirthLauncher {
         "\n" +
         "To fix: create a dedicated service account and run BridgeLink as\n" +
         "that user:\n" +
-        "  Linux/macOS:  useradd -r -s /sbin/nologin bridgelink\n" +
-        "  Windows:      create a non-administrator local or domain account\n" +
+        "  Linux:    useradd -r -s /bin/false bridgelink\n" +
+        "  macOS:    sudo sysadminctl -addUser _bridgelink -roleAccount -UID 450 -shell /usr/bin/false\n" +
+        "  Windows:  create a non-administrator local or domain account and run the\n" +
+        "            BridgeLink service as that account\n" +
         "\n" +
         "To override (not recommended):\n" +
         "  Set server.allowRoot = true in conf/mirth.properties\n" +
         "  or use JVM flag: -Dserver.allowRoot=true\n" +
         "================================================================";
-
-    private static LoggerWrapper logger;
-
-    public enum RootCheckResult {
-        BLOCK, WARN, OK
-    }
 
     public static RootCheckResult evaluateRootCheck(String osName, String userName, boolean isWindowsAdmin, boolean allowRoot) {
         boolean isPrivileged;
@@ -129,7 +137,7 @@ public class MirthLauncher {
             logger.error(ROOT_CHECK_ERROR_MSG);
             System.exit(1);
         } else if (result == RootCheckResult.WARN) {
-            logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set — proceeding.");
+            logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set - proceeding.");
         } else {
             logger.debug("Privilege check passed: running as user '" + userName + "' (not root/Administrator).");
         }
@@ -137,6 +145,7 @@ public class MirthLauncher {
 
     public static void main(String[] args) {
         JarFile mirthClientCoreJarFile = null;
+        int exitStatus = 0;
         try {
             List<URL> classpathUrls = new ArrayList<>();
             // Always add log4j
@@ -203,7 +212,13 @@ public class MirthLauncher {
             mirthThread.setContextClassLoader(classLoader);
             mirthThread.start();
         } catch (Exception e) {
+            // IRT-2353: a failure here means the server thread never started, so nothing else
+            // will ever set a status. Printing and returning made the JVM exit 0 and a systemd
+            // unit record a clean stop. Deliberately still catch (Exception), not Throwable: an
+            // Error escaping main() already exits non-zero via the JVM's default handler, so
+            // widening this would change a case that is not broken.
             e.printStackTrace();
+            exitStatus = 1;
         } finally {
             try {
                 if (mirthClientCoreJarFile != null) {
@@ -212,6 +227,13 @@ public class MirthLauncher {
             } catch (IOException e) {
                 logger.error("Error closing mirthClientCoreJarFile.", e);
             }
+        }
+
+        if (exitStatus != 0) {
+            // After the finally, so mirthClientCoreJarFile is still closed. On the normal path
+            // main() returns here and the JVM stays alive on the non-daemon Main Server Thread,
+            // so there must be no System.exit(0).
+            System.exit(exitStatus);
         }
     }
 

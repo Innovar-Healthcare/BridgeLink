@@ -333,7 +333,7 @@
   <postprocessingScript>return;</postprocessingScript>
   <deployScript>// Create the destination table if it doesn't already exist (sqlite has no
 // implicit-DDL-on-insert behavior, unlike some other JDBC targets).
-var conn = java.sql.DriverManager.getConnection('jdbc:sqlite:${SQLITE_PATH}');
+var conn = DatabaseConnectionFactory.createDatabaseConnection('org.sqlite.JDBC', 'jdbc:sqlite:${SQLITE_PATH}').getConnection();
 try {
 	var stmt = conn.createStatement();
 	stmt.execute('CREATE TABLE IF NOT EXISTS dest_records (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT, payload TEXT)');

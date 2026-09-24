@@ -38,7 +38,7 @@ import com.mirth.connect.server.controllers.ControllerFactory;
  * place with the canonical Microsoft SQL Server entry when it is the list's only SQL Server
  * driver (IRT-1912); the Microsoft SQL Server entry is retained, the surviving entries keep
  * their original relative order, the migration is idempotent on a second run, and it is safe
- * (no exception, true no-op — {@code setDatabaseDrivers} is never invoked) on an empty list or a
+ * (no exception, true no-op - {@code setDatabaseDrivers} is never invoked) on an empty list or a
  * list carrying no jTDS entry.
  */
 public class Migrate26_9_0Test {
@@ -104,7 +104,7 @@ public class Migrate26_9_0Test {
         reset(configurationController);
 
         // Second run: feed the already-stripped list back in. Nothing changed, so the
-        // migrator must be a true no-op — it must NOT re-persist the list.
+        // migrator must be a true no-op - it must NOT re-persist the list.
         when(configurationController.getDatabaseDrivers()).thenReturn(new ArrayList<DriverInfo>(firstRunResult));
         new Migrate26_9_0().migrate();
 
@@ -237,6 +237,19 @@ public class Migrate26_9_0Test {
         expected.add(oracle);
 
         assertEquals("first jTDS substituted, additional jTDS rows removed, no duplicate Microsoft entry", expected, result);
+    }
+
+    /**
+     * Guard regression test (IRT-2217, revised SC-2 per the IRT-1780 warning-only decision,
+     * 2026-09-10): Migrate26_9_0 must NOT participate in ServerMigrator's
+     * instanceof-ConfigurationMigrator dispatch (ServerMigrator.java:109), because BridgeLink
+     * must not auto-write server.defaultencoding on upgrade. This is the tripwire against a
+     * future refactor silently re-introducing that auto-write path.
+     */
+    @Test
+    public void migrate26_9_0IsNotAConfigurationMigrator() throws Exception {
+        assertFalse("Migrate26_9_0 must not implement ConfigurationMigrator (IRT-1780: no charset auto-write on upgrade)",
+                ConfigurationMigrator.class.isAssignableFrom(Migrate26_9_0.class));
     }
 
     private List<DriverInfo> captureSetDatabaseDrivers() throws ControllerException {

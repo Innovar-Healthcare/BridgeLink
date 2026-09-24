@@ -4,6 +4,24 @@
 		<property name="donkey.setup" value="${donkey}/setup" />
 		<property name="server.setup" value="${server}/setup" />
 		<property name="server.build" value="${server}/build" />
+
+		<!-- D-03 (IRT-1489, Phase 24): embedded Derby 10.17 (v63 classfiles) cannot load on
+		     JDK 17 (max v61). test-matrix.yml passes -Dexclude.derby.tests=true explicitly on
+		     the JDK-17 CI leg (a command-line -D always wins - Ant never overwrites an
+		     already-set property); this local self-gate additionally sets it for a bare local
+		     JDK-17 invocation of this file. value/else give it a definite true/false always,
+		     which the derived exclude-list condition below needs (istrue errors on a truly
+		     unset property). server.derby.test.excludes carries the two empirically-finalized
+		     (24-03-SUMMARY.md) server test classes that load embedded Derby directly
+		     (MapUtilTest, DefaultUserControllerTest - both under com/mirth/connect/server/**,
+		     so only test-run and test-run-group-a actually collect them; test-run-group-b
+		     already excludes all of com/mirth/connect/server/** via server.shard.pattern). -->
+		<condition property="exclude.derby.tests" value="true" else="false">
+			<equals arg1="${ant.java.version}" arg2="17" />
+		</condition>
+		<condition property="server.derby.test.excludes" value="**/MapUtilTest.class,**/DefaultUserControllerTest.class" else="">
+			<istrue value="${exclude.derby.tests}" />
+		</condition>
 	</target>
 	
 	<!-- Donkey -->
@@ -176,7 +194,7 @@
 		</header>
 
 		<header headerFile="${server}/license-header.txt">
-			<fileset dir="${client}" includes="**/*.java" excludes="src/com/mirth/connect/client/ui/BareBonesBrowserLaunch.java src/com/mirth/connect/client/ui/BeanBinder.java src/com/mirth/connect/client/ui/OSXAdapter.java src/org/**/*.java" />
+			<fileset dir="${client}" includes="**/*.java" excludes="manual-checks/** src/com/mirth/connect/client/ui/BareBonesBrowserLaunch.java src/com/mirth/connect/client/ui/BeanBinder.java src/com/mirth/connect/client/ui/OSXAdapter.java src/org/**/*.java" />
 		</header>
 		
 		<header headerFile="${server}/license-header.txt">
@@ -213,7 +231,9 @@
 		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run">
 			<property name="skip.recompile" value="true"/>
 		</ant>
-		<ant antfile="${server}/build.xml" dir="${server}" target="test-run"/>
+		<ant antfile="${server}/build.xml" dir="${server}" target="test-run">
+			<property name="server.test.excludes" value="${server.derby.test.excludes}"/>
+		</ant>
 		<ant antfile="${client}/ant-build.xml" dir="${client}" target="test-run"/>
 		<ant antfile="${cli}/build.xml" dir="${cli}" target="test-run"/>
 		<ant antfile="build.xml" dir="${custom-extensions}/dynamic-lookup-gateway" target="test-run"/>
@@ -238,6 +258,7 @@
 		</ant>
 		<ant antfile="${server}/build.xml" dir="${server}" target="test-run">
 			<property name="server.test.includes" value="${server.shard.pattern}"/>
+			<property name="server.test.excludes" value="${server.derby.test.excludes}"/>
 		</ant>
 	</target>
 

@@ -208,6 +208,16 @@ public class LoadedExtensions {
                 if (PlatformUI.MIRTH_FRAME.mirthClient.isExtensionEnabled(metaData.getName())) {
 
                     String connectorName = metaData.getName();
+
+                    if (!hasClientClass(metaData)) {
+                        // Developer signal only: the client ships rootLogger=ERROR
+                        // (client/src/log4j2.properties), so this is dropped unless someone
+                        // has lowered the level. It is deliberately not an error -- see
+                        // hasClientClass.
+                        logger.info("Connector \"" + connectorName + "\" declares no client class; its settings are not editable in the Administrator.");
+                        continue;
+                    }
+
                     ConnectorSettingsPanel connectorSettingsPanel = (ConnectorSettingsPanel) Class.forName(metaData.getClientClassName()).newInstance();
 
                     if (metaData.getType() == ConnectorMetaData.Type.SOURCE) {
@@ -222,12 +232,23 @@ public class LoadedExtensions {
                     }
                 }
             } catch (Exception e) {
-                PlatformUI.MIRTH_FRAME.alertThrowable(PlatformUI.MIRTH_FRAME, e, "Could not load connector class: " + metaData.getClientClassName());
+                PlatformUI.MIRTH_FRAME.alertThrowable(PlatformUI.MIRTH_FRAME, e, "Could not load connector \"" + metaData.getName() + "\" (client class " + metaData.getClientClassName() + ")");
             }
         }
 
         // Signal the reference list factory that all other plugins have been loaded
         ReferenceListFactory.getInstance().loadReferencesAfterPlugins();
+    }
+
+    /**
+     * Returns true if the connector declares a client-side settings panel class.
+     * 
+     * A connector without one is not an error. Its settings UI may be contributed by WebAdmin
+     * instead, in which case the connector is server-side only and has nothing to display here --
+     * the Administrator omits it from the source and destination connector type lists.
+     */
+    static boolean hasClientClass(ConnectorMetaData metaData) {
+        return StringUtils.isNotEmpty(metaData.getClientClassName());
     }
 
     public void startPlugins() {

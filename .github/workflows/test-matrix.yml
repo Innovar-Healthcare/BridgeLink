@@ -60,7 +60,12 @@ jobs:
             all) target=test-run-and-aggregate ;;
             *)   echo "unknown matrix group '${{ matrix.group }}'"; exit 1 ;;
           esac
-          ant -f mirth-build.xml "$target"
+          # D-03 (IRT-1489, Phase 24): embedded Derby 10.17 (v63 classfiles) cannot load
+          # on JDK 17 (max v61); the 21/25 legs keep collecting and running the
+          # Derby-loading donkey/server test classes normally (never assumeTrue-skipped).
+          extra_args=""
+          [ "${{ matrix.java }}" = "17" ] && extra_args="-Dexclude.derby.tests=true"
+          ant -f mirth-build.xml $extra_args "$target"
 
       - name: Upload reports
         if: always()

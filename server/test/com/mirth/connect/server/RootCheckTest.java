@@ -1,6 +1,8 @@
 package com.mirth.connect.server;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -209,6 +211,29 @@ public class RootCheckTest {
                 System.setProperty("server.allowRoot", prev);
             }
         }
+    }
+
+    // ===== ROOT_CHECK_ERROR_MSG cross-copy identity (IRT-1678, 260908-a0g) =====
+    // Reverts PR #48's per-OS branched message back to a single combined constant.
+    // This is the only guard against the two files' constants drifting.
+
+    @Test
+    public void testRootCheckErrorMsg_copiesAreIdentical() {
+        assertEquals(MirthLauncher.ROOT_CHECK_ERROR_MSG, Mirth.ROOT_CHECK_ERROR_MSG);
+    }
+
+    // Content guard against a future shared regression: the identity test above only proves
+    // the two copies match, not that either still carries the correct recipes. This pins the
+    // load-bearing tokens so both copies cannot silently drop the override footer, regress the
+    // macOS recipe back to useradd (the original IRT-584 bug), or reintroduce the Red Hat-only
+    // /sbin/nologin path. Asserting one copy is sufficient because identity is already pinned.
+    @Test
+    public void testRootCheckErrorMsg_carriesCorrectRecipesAndOverride() {
+        String msg = Mirth.ROOT_CHECK_ERROR_MSG;
+        assertTrue(msg.contains("useradd -r -s /bin/false bridgelink"));
+        assertTrue(msg.contains("sysadminctl -addUser _bridgelink -roleAccount"));
+        assertTrue(msg.contains("server.allowRoot"));
+        assertFalse(msg.contains("/sbin/nologin"));
     }
 
 }
