@@ -79,7 +79,8 @@ public class MockSmtpDispatcher extends DestinationConnector {
         eventController.dispatchEvent(new ConnectionStatusEvent(getChannelId(), getMetaDataId(), getDestinationName(), ConnectionStatusEventType.SENDING, "Mock SMTP: " + props.getSmtpHost() + ":" + props.getSmtpPort()));
 
         try {
-            logger.info("Mock SMTP send (channel " + getChannelId() + "): to=" + props.getTo() + ", from=" + props.getFrom() + ", subject=" + props.getSubject());
+            // No to/from/subject: they are resolved from message content and can carry PHI
+            logger.info("Mock SMTP send (channel " + getChannelId() + ", message " + message.getMessageId() + ") via " + props.getSmtpHost() + ":" + props.getSmtpPort());
             return new Response(Status.SENT, null, "Mock SMTP: message accepted by " + props.getSmtpHost() + ":" + props.getSmtpPort());
         } finally {
             eventController.dispatchEvent(new ConnectionStatusEvent(getChannelId(), getMetaDataId(), getDestinationName(), ConnectionStatusEventType.IDLE));

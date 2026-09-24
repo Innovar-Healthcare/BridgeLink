@@ -2,6 +2,12 @@
 
     <property file="build.properties" />
 
+    <!-- The engine rejects an extension whose mirthVersion does not name its own version
+         (ExtensionLoader.isExtensionCompatible), so stamp the engine this tree builds rather
+         than a literal that goes stale at the next release bump. -Dengine.version=X overrides. -->
+    <property file="${engine.build.properties}" prefix="engine" />
+    <fail unless="engine.version" message="No engine version: ${engine.build.properties} is missing or has no version= line" />
+
     <target name="clean">
         <delete dir="${build.dir}" />
     </target>
@@ -39,7 +45,9 @@
     </target>
 
     <target name="build" depends="clean, jar">
-        <copy file="plugin.xml" todir="${dist.dir}" />
+        <copy file="plugin.xml" todir="${dist.dir}">
+            <filterset><filter token="MIRTH_VERSION" value="${engine.version}" /></filterset>
+        </copy>
         <copy todir="${dist.dir}/webadmin">
             <fileset dir="webadmin" includes="**/*" />
         </copy>
