@@ -61,9 +61,11 @@ every message.
 cannot slow down and a genuine per-message read is required, store a timestamp alongside the
 cached ticks and roll the cache forward ONLY when a measurement was actually taken, so the guard
 can fire for a channel invoked faster than the floor instead of never firing at all. The snippet
-between the markers below is extracted verbatim and executed by
-`OshiScriptSurfaceSeamTest#samplingFloorRecipeGuardFiresOnceTheFloorElapses`: the markers must not
-be removed, and exactly one fenced block belongs between them.
+between the markers below is also committed as
+`server/test/com/mirth/connect/seams/oshi-sampling-floor-recipe.js`, which
+`OshiScriptSurfaceSeamTest` executes; `#samplingFloorRecipeFileMatchesTheMigrationNote` fails if
+the two differ, so change both together. The markers must not be removed, and exactly one fenced
+block belongs between them.
 
 <!-- irt1801-sampling-floor-recipe:begin -->
 ```javascript
