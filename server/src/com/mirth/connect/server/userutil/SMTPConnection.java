@@ -226,6 +226,33 @@ public class SMTPConnection {
 
     /**
      * Sends an e-mail message.
+     *
+     * @param toList
+     *            A string representing a list of e-mail addresses to send the message to (separated
+     *            by ",").
+     * @param ccList
+     *            A string representing a list of e-mail addresses to copy the message to (separated
+     *            by ",").
+     * @param bccList
+     *            A string representing a list of e-mail addresses to blind copy the message to
+     *            (separated by ",").
+     * @param from
+     *            The FROM field to use for the e-mail message.
+     * @param subject
+     *            The subject of the e-mail message.
+     * @param body
+     *            The content of the e-mail message.
+     * @param charset
+     *            The charset encoding to use when sending the e-mail message.
+     * @throws EmailException
+     *             If an error occurred while sending the e-mail message.
+     */
+    public void send(String toList, String ccList, String bccList, String from, String subject, String body, String charset) throws EmailException {
+        smtpConnection.send(toList, ccList, bccList, from, subject, body, charset);
+    }
+
+    /**
+     * Sends an e-mail message.
      * 
      * @param toList
      *            A string representing a list of e-mail addresses to send the message to (separated
