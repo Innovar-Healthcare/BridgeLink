@@ -704,3 +704,7 @@ donkey/donkey-test
 /${dir.base}/
 # compiled output of the manual (non-CI) checks
 client/manual-checks/**/out/
+
+# GSD local planning state (local-only, never committed on this branch)
+.planning/
+.gsd/
