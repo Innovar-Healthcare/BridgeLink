@@ -27,7 +27,7 @@ APACHE-LICENSE-2.0.txt):
 	HikariCP 2.3.2 [Mirth Connect only]
 	J2ObjC Annotations 1.3 [Mirth Connect only] (https://github.com/google/j2objc/)
 	Jackson Project (https://github.com/FasterXML/jackson)
-	Java Native Access (JNA) 4.5.2 [Mirth Connect only] (https://github.com/java-native-access/jna)
+	Java Native Access (JNA) 5.18.1 [Mirth Connect only] (https://github.com/java-native-access/jna)
 	Jetty 9.4.53 [Mirth Connect only]
 	Joda-Time 2.2 [Mirth Connect only]
 	JSR305 Annotations for Findbugs 3.0.2 [Mirth Connect only] (http://findbugs.sourceforge.net/)
@@ -86,7 +86,7 @@ Mirth Connect includes the following, which is distributed under the terms of
 the MPL version 2.0 (see MPL-2.0.txt). The source code is also available under
 the same license terms.
 
-	Mozilla Rhino 1.7.13 (source code can be downloaded at:
+	Mozilla Rhino 1.7.15.1 (source code can be downloaded at:
 	https://developer.mozilla.org/en-US/docs/Rhino)
 	This library was modified to fix some issues in XML processing, and to make
 	the debugger easier to implement.
@@ -274,21 +274,6 @@ can be found within the Mirth Connect installation folder at:
 Or in the Mirth Connect source code distribution, it can be found at:
 
 	[Mirth Connect Server Source Folder]/lib/jetty/jsp/
-
-
---------------------------------------------------------------------------------
-
-
-Mirth Connect includes the jTDS JDBC driver version 1.3.1. This library and its
-use are covered by the LGPL version 2.1 (see LGPL-2.1.txt). The library source
-code is available at http://jtds.sourceforge.net/. The following file has
-been changed:
-
-	net/sourceforge/jtds/ssl/TdsTlsOutputStream.java
-	
-	Changes: Fixes made to allow SSL/TLS connections. More information here:
-	https://sourceforge.net/p/jtds/bugs/725/
-	https://sourceforge.net/p/jtds/patches/129/#08be
 
 
 --------------------------------------------------------------------------------
@@ -1074,7 +1059,7 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 The license below pertains to a portion of the software included with Mozilla
-Rhino 1.7.13 (most of the classes in the
+Rhino 1.7.15.1 (most of the classes in the
 org.mozilla.javascript.v8dtoa package), which is included with Mirth Connect.
 
 =================== Beginning of License ===================
@@ -1113,7 +1098,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 The license below pertains to a portion of the software included with Mozilla
-Rhino 1.7.13 (the org.mozilla.javascript.DToA class), which is
+Rhino 1.7.15.1 (the org.mozilla.javascript.DToA class), which is
 included with Mirth Connect.
 
 =================== Beginning of License ===================
@@ -1144,7 +1129,7 @@ included with Mirth Connect.
 
 
 The license below pertains to a portion of the software included with Mozilla
-Rhino 1.7.13 (the classes in the
+Rhino 1.7.15.1 (the classes in the
 org.mozilla.javascript.tools.debugger.treetable package), which is included with
 Mirth Connect.
 

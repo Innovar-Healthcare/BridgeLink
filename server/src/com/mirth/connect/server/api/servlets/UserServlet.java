@@ -22,12 +22,16 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
 
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.api.MirthApiException;
 import com.mirth.connect.client.core.api.servlets.UserServletInterface;
+import com.mirth.connect.model.ExtendedLoginStatus;
 import com.mirth.connect.model.LoginStatus;
 import com.mirth.connect.model.LoginStatus.Status;
 import com.mirth.connect.model.ServerEvent;
@@ -45,12 +49,30 @@ import com.mirth.connect.server.util.UserSessionCache;
 
 public class UserServlet extends MirthServlet implements UserServletInterface {
 
-    private static final UserController userController = ControllerFactory.getFactory().createUserController();
-    private static final EventController eventController = ControllerFactory.getFactory().createEventController();
-    private static final ConfigurationController configurationController = ControllerFactory.getFactory().createConfigurationController();
+    private static final Logger logger = LogManager.getLogger(UserServlet.class);
+    private static UserController userController;
+    private static EventController eventController;
+    private static ConfigurationController configurationController;
 
     public UserServlet(@Context HttpServletRequest request, @Context SecurityContext sc) {
         super(request, sc, false);
+    }
+
+    /*
+     * Lets a test supply mock controllers, the same way EngineServlet and the other servlets take
+     * one. Without it nothing can drive this servlet through the real invocation handler, which is
+     * where the grace-period scoping actually resolves its target user (IRT-1798).
+     */
+    public UserServlet(@Context HttpServletRequest request, @Context SecurityContext sc, ControllerFactory controllerFactory) {
+        super(request, null, sc, false, controllerFactory);
+    }
+
+    @Override
+    protected void initializeControllers() {
+        super.initializeControllers();
+        userController = controllerFactory.createUserController();
+        eventController = controllerFactory.createEventController();
+        configurationController = controllerFactory.createConfigurationController();
     }
 
     @Override
@@ -77,18 +99,69 @@ public class UserServlet extends MirthServlet implements UserServletInterface {
                 String serverURL = request.getHeader(LOGIN_SERVER_URL_HEADER);
                 // Used for the second leg of multi-factor authentication
                 String loginData = request.getHeader(LOGIN_DATA_HEADER);
+                HttpSession session = request.getSession();
+                // Set when the "Password does not meet requirements" event was already raised on
+                // the first leg of a two-leg MFA login, so it isn't raised a second time below.
+                boolean pendingGraceAlreadyReported = false;
 
                 if (StringUtils.isNotBlank(loginData) && ControllerFactory.getFactory().createExtensionController().getMultiFactorAuthenticationPlugin() != null) {
                     // We're on the second leg of multi-factor authentication, so delegate to the plugin
                     loginStatus = ControllerFactory.getFactory().createExtensionController().getMultiFactorAuthenticationPlugin().authenticate(loginData);
+
+                    /*
+                     * Restore a password-policy verdict stashed by the first leg. This leg only
+                     * carries the second factor, never the plaintext password, so it cannot
+                     * re-derive the verdict itself. See IRT-1802.
+                     *
+                     * Only consume the stash on a successful second factor: a wrong OTP is an
+                     * ordinary retry, not the end of this login attempt, and discarding the
+                     * verdict here would silently drop it the moment the user fixes their typo.
+                     */
+                    if (loginStatus != null && loginStatus.getStatus() == Status.SUCCESS) {
+                        String pendingGraceMessage = (String) session.getAttribute(SESSION_PENDING_GRACE_MESSAGE);
+                        if (pendingGraceMessage != null) {
+                            session.removeAttribute(SESSION_PENDING_GRACE_MESSAGE);
+                            loginStatus = new LoginStatus(Status.SUCCESS_GRACE_PERIOD, pendingGraceMessage, loginStatus.getUpdatedUsername());
+                            pendingGraceAlreadyReported = true;
+                        }
+                    }
                 } else {
                     // Primary authentication
                     loginStatus = userController.authorizeUser(username, password, serverURL);
+
+                    /*
+                     * Clear any stash left by a different, abandoned two-leg attempt on this same
+                     * session before possibly setting a fresh one below. Without this, a user who
+                     * starts a two-leg login and never finishes it could leave their grace verdict
+                     * behind for the next login on the same session (e.g. a shared workstation) to
+                     * pick up. See IRT-1802.
+                     */
+                    session.removeAttribute(SESSION_PENDING_GRACE_MESSAGE);
+
+                    if (loginStatus instanceof ExtendedLoginStatus) {
+                        String pendingGraceMessage = ((ExtendedLoginStatus) loginStatus).getPendingGraceMessage();
+                        if (pendingGraceMessage != null) {
+                            session.setAttribute(SESSION_PENDING_GRACE_MESSAGE, pendingGraceMessage);
+
+                            /*
+                             * Raise the discovery event now rather than waiting for a second leg
+                             * that may never complete: stored passwords are hashed, so this is the
+                             * only way an administrator can find affected accounts, and it must not
+                             * depend on the user finishing MFA. See IRT-1802.
+                             */
+                            String pendingUsername = StringUtils.defaultString(loginStatus.getUpdatedUsername(), username);
+                            User pendingUser = null;
+                            try {
+                                pendingUser = userController.getUser(null, pendingUsername);
+                            } catch (ControllerException e) {
+                                logger.warn("Unable to resolve user id for password-requirements event: \"" + pendingUsername + "\"", e);
+                            }
+                            dispatchPasswordRequirementsEvent(pendingUsername, pendingUser != null ? pendingUser.getId() : null, pendingGraceMessage);
+                        }
+                    }
                 }
 
                 ConfigurationController configurationController = ControllerFactory.getFactory().createConfigurationController();
-
-                HttpSession session = request.getSession();
 
                 /*
                  * Default is 72 hours (3 days). The default SSL connection timeout is 24 hours, but
@@ -115,6 +188,17 @@ public class UserServlet extends MirthServlet implements UserServletInterface {
                         session.setAttribute(SESSION_USER, validUser.getId());
                         session.setAttribute(SESSION_AUTHORIZED, true);
 
+                        /*
+                         * A grace period means the stored password no longer meets the password
+                         * requirements (or has expired). Mark the session so MirthServlet can
+                         * confine it to changing that password, if the server is configured to.
+                         */
+                        if (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD) {
+                            session.setAttribute(SESSION_GRACE_RESTRICTED, true);
+                        } else {
+                            session.removeAttribute(SESSION_GRACE_RESTRICTED);
+                        }
+
                         // set the user status to logged in in the database
                         userController.loginUser(validUser);
 
@@ -139,6 +223,18 @@ public class UserServlet extends MirthServlet implements UserServletInterface {
                 event.setAttributes(attributes);
 
                 eventController.dispatchEvent(event);
+
+                /*
+                 * Raise a distinct event when the login was allowed but the password no longer
+                 * meets requirements. Because stored passwords are hashed there is no way to audit
+                 * which accounts are affected, so this is the only way an administrator can find
+                 * them. It is dispatched here rather than in authorizeUser because that method also
+                 * runs on every Basic auth REST request, which would flood the event table. Skipped
+                 * when the first leg of a two-leg MFA login already raised it for this attempt.
+                 */
+                if (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD && !pendingGraceAlreadyReported) {
+                    dispatchPasswordRequirementsEvent(username, validUser != null ? validUser.getId() : null, loginStatus.getMessage());
+                }
             }
         } catch (Exception e) {
             throw new MirthApiException(e);
@@ -149,6 +245,23 @@ public class UserServlet extends MirthServlet implements UserServletInterface {
         }
 
         return loginStatus;
+    }
+
+    private void dispatchPasswordRequirementsEvent(String username, Integer userId, String details) {
+        ServerEvent passwordEvent = new ServerEvent(configurationController.getServerId(), "Password does not meet requirements");
+        if (userId != null) {
+            passwordEvent.setUserId(userId);
+        }
+        passwordEvent.setIpAddress(getRequestIpAddress());
+        passwordEvent.setLevel(Level.INFORMATION);
+        passwordEvent.setOutcome(Outcome.SUCCESS);
+
+        Map<String, String> passwordAttributes = new HashMap<String, String>();
+        passwordAttributes.put("username", username);
+        passwordAttributes.put("details", details);
+        passwordEvent.setAttributes(passwordAttributes);
+
+        eventController.dispatchEvent(passwordEvent);
     }
 
     @Override
@@ -293,7 +406,19 @@ public class UserServlet extends MirthServlet implements UserServletInterface {
     @CheckAuthorizedUserId
     public List<String> updateUserPassword(Integer userId, String plainPassword) {
         try {
-            return userController.checkOrUpdateUserPassword(userId, plainPassword);
+            List<String> responses = userController.checkOrUpdateUserPassword(userId, plainPassword);
+
+            /*
+             * The password now meets requirements, so lift any restriction placed on this session
+             * at login. The database grace period is cleared by checkOrUpdateUserPassword, but the
+             * session flag is separate state and would otherwise persist for the life of the
+             * session, leaving the user unable to do anything after a successful change.
+             */
+            if (CollectionUtils.isEmpty(responses) && isCurrentUser(userId)) {
+                request.getSession().removeAttribute(SESSION_GRACE_RESTRICTED);
+            }
+
+            return responses;
         } catch (ControllerException e) {
             throw new MirthApiException(e);
         }

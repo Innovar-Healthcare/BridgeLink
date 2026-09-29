@@ -83,7 +83,7 @@ public class DatabaseSettingsTest {
         databaseSettings.setDatabaseDriver(null);
         databaseSettings.setDatabaseReadOnly("sqlserver");
         databaseSettings.setDatabaseReadOnlyDriver(null);
-        assertEquals("net.sourceforge.jtds.jdbc.Driver", databaseSettings.getMappedReadOnlyDatabaseDriver());
+        assertEquals("com.microsoft.sqlserver.jdbc.SQLServerDriver", databaseSettings.getMappedReadOnlyDatabaseDriver());
         verify(databaseSettings, times(0)).getMappedDatabaseDriver();
     }
 

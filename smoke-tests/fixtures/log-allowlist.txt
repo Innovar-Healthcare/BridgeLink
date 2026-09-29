@@ -1,0 +1,64 @@
+# log-allowlist.txt
+#
+# Purpose: L3 log-scan exclusion patterns (grep -v -f) for smoke-tests/run-smoke-test.sh
+# and the future JUnit assertion driver (18-05/18-06/18-07). The harness scans
+# server/setup/logs/mirth.log for lines matching `^ERROR|ERROR \[` and treats any
+# surviving match as a failed run. Lines matching a pattern in this file are
+# considered benign/expected and are grepped OUT before the failure check runs.
+#
+# Format: one extended-regex pattern per line (fed to `grep -v -f` with -E semantics
+# via the harness's grep invocation). Blank lines and lines starting with # are
+# ignored by convention (grep -v -f treats a literal `#...` line as a pattern that
+# will simply never match real log output, so comments are harmless as no-ops).
+#
+# Seed state: no known-benign ERROR patterns identified yet for the boot-only
+# harness (Task 2 of 18-01 only exercises boot/health-check/teardown — no channels
+# are deployed, so no channel-level ERROR noise exists to allowlist). Later plans
+# (18-05 channel fixtures, 18-06 pump/assert driver, 18-08 break-dependency) may
+# append entries here as legitimate benign ERROR-level log lines are discovered
+# during real channel execution (e.g. a connector's expected retry-then-succeed
+# logging). Keep this file's provenance comment (this header) intact when adding
+# new entries below it.
+
+# 25.1-03 (SC-3, IRT-1541): the legacy-negative fixture (channel 00000030,
+# file-sftp-legacy-negative-test.xml) is DELIBERATELY EXPECTED to fail algorithm
+# negotiation against the legacy-only SFTP server (D-07's falsifiable negative proof).
+# Rule 1 correction (discovered via live run, not FileReceiver.poll() as originally
+# assumed): FileReceiver.onStart() (server/src/.../file/FileReceiver.java) eagerly opens
+# a connection at DEPLOY time, so the JSchAlgoNegoFailException surfaces synchronously
+# as a channel-start failure, logged by ErrorTaskHandler as
+# "Failed to start channel File SFTP Legacy Negative Test (<id>)." (ERROR level), not a
+# per-poll-cycle message. Scoped to this ONE channel ID only (never a bare
+# "Failed to start channel" pattern) so an unrelated connector's genuine start failure on
+# any OTHER channel still fails the L3 scan. Only ever matches when SFTP_LEGACY_PORT is
+# active (external break-then-fix driver); harmless no-op on an ordinary
+# run-smoke-test.sh invocation.
+Failed to start channel File SFTP Legacy Negative Test \(00000030-0000-0000-0000-000000000030\)\.
+
+# D-09 (CVE-04, SC-3, phase 25-cve-mssql-jdbc-upgrade, plan 25-04): the self-signed-negative
+# fixture (channel 00000035, jdbc-mssql-selfsigned-negative-test.xml) is DELIBERATELY EXPECTED
+# to fail certificate validation on every poll attempt against the self-signed SQL Server
+# container (D-09's falsifiable negative proof). Unlike the SFTP legacy-negative leg above
+# (whose FileReceiver.onStart() opens the connection synchronously as a channel-START
+# failure), this channel's keepConnectionOpen=false means onStart() never blocks -- the
+# channel reaches STARTED and DatabaseReceiver.poll()'s catch block logs TWO ERROR lines per
+# failed poll cycle (pollingFrequency 3000ms): a generic "Failed to poll" line and a
+# channel-specific "Error in channel" line carrying the SQLServerException cert-validation
+# signature. Both patterns are scoped to this ONE channel's exact name (never a bare "Failed
+# to poll"/"Error in channel" pattern) so an unrelated connector's genuine poll failure on any
+# OTHER channel still fails the L3 scan. Only ever matches when MSSQL_PORT is active (external
+# break-then-fix driver); harmless no-op on an ordinary run-smoke-test.sh invocation.
+#
+# WR-02 correction: the pattern below originally matched on the SQLServerException CLASS NAME
+# alone, so any other SQLServerException on this channel (login failure, timeout, protocol
+# error) would have been silently swallowed by this allowlist entry too. Anchored to also
+# require the cert-validation signature text on the same line -- three separate lines below
+# (one per accepted signature phrase) rather than a single `(a|b|c)` alternation, because this
+# file is consumed via plain `grep -v -f` (no -E) at run-smoke-test.sh:1580, i.e. POSIX BRE,
+# where unescaped `(`/`|` are literal characters, not alternation. Each line below is an
+# independent OR'd pattern (grep -f semantics), so only the intended cert-validation failure is
+# allowlisted -- any other SQLServerException on this channel still fails the L3 scan.
+Failed to poll for messages from the database in channel "JDBC MSSQL Self-Signed Negative Test"
+Error in channel "JDBC MSSQL Self-Signed Negative Test": com.microsoft.sqlserver.jdbc.SQLServerException.*could not establish a secure connection
+Error in channel "JDBC MSSQL Self-Signed Negative Test": com.microsoft.sqlserver.jdbc.SQLServerException.*PKIX
+Error in channel "JDBC MSSQL Self-Signed Negative Test": com.microsoft.sqlserver.jdbc.SQLServerException.*Failed to validate the server name

@@ -40,13 +40,13 @@ import javax.ws.rs.ext.Provider;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.configuration2.PropertiesConfiguration;
-import org.apache.commons.httpclient.HttpStatus;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.filefilter.FalseFileFilter;
 import org.apache.commons.io.filefilter.TrueFileFilter;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpStatus;
 import org.apache.http.entity.ContentType;
 import org.apache.http.protocol.HTTP;
 import org.apache.ibatis.session.SqlSessionManager;
@@ -125,6 +125,7 @@ import com.mirth.connect.server.controllers.ControllerFactory;
 import com.mirth.connect.server.controllers.ExtensionController;
 import com.mirth.connect.server.servlets.SwaggerExamplesServlet;
 import com.mirth.connect.server.servlets.SwaggerServlet;
+import com.mirth.connect.server.servlets.WebAdminUrlServlet;
 import com.mirth.connect.server.servlets.WebStartServlet;
 import com.mirth.connect.server.tools.ClassPathResource;
 import com.mirth.connect.server.util.PackagePredicate;
@@ -262,7 +263,11 @@ public class MirthWebServer extends Server {
         rootContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart.jnlp");
         rootContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart");
         rootContextHandler.addServlet(new ServletHolder(new WebStartServlet()), "/webstart/extensions/*");
-        
+
+        // Serves the optional webadmin.url property to the landing page
+        rootContextHandler.addFilter(new FilterHolder(new MethodFilter()), "/webadmin-url", EnumSet.of(DispatcherType.REQUEST));
+        rootContextHandler.addServlet(new ServletHolder(new WebAdminUrlServlet(mirthProperties)), "/webadmin-url");
+
         // Add default servlet for static files from public_html
         String publicPath = ControllerFactory.getFactory().createConfigurationController().getBaseDir() + File.separator + "public_html";
         ServletHolder defaultServlet = new ServletHolder("default", DefaultServlet.class);

@@ -24,6 +24,9 @@ import com.mirth.connect.client.ui.PlatformUI;
 import com.mirth.connect.plugins.dynamiclookup.client.exception.LookupApiClientException;
 import com.mirth.connect.plugins.dynamiclookup.shared.builder.AdvancedJsonFilterBuilder;
 import com.mirth.connect.plugins.dynamiclookup.shared.capability.DatabaseInfo;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupKeyRequest;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupKeyValueRequest;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupNameRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupValueRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ErrorResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.ExportGroupPagedResponse;
@@ -96,8 +99,12 @@ public class LookupServiceClient {
 
     public LookupGroup getGroupByName(String name) throws ClientException {
         try {
-            // 1. Make the call
-            String response = getServlet().getGroupByName(name);
+            // 1. Make the call — name travels in the body so names with /, %, \ are not rejected
+            //    by Jetty in the URL path (IRT-1997).
+            LookupNameRequest request = new LookupNameRequest();
+            request.setName(name);
+
+            String response = getServlet().getGroupByNameBody(JsonUtils.toJson(request));
 
             return JsonUtils.fromJson(response, LookupGroup.class);
         } catch (ClientException e) {
@@ -220,7 +227,7 @@ public class LookupServiceClient {
 
     public boolean checkValueExists(Integer groupId, String key) throws ClientException {
         try {
-            String response = getServlet().getValue(groupId, key);
+            String response = getServlet().getValueBody(groupId, JsonUtils.toJson(keyRequest(key)));
             JsonUtils.fromJson(response, LookupValue.class);
             return true;
 
@@ -241,8 +248,9 @@ public class LookupServiceClient {
 
     public LookupValue getValue(Integer groupId, String key) throws ClientException {
         try {
-            // 1. Make the call
-            String response = getServlet().getValue(groupId, key);
+            // 1. Make the call — key travels in the body so keys with /, %, \ are not rejected
+            //    by Jetty in the URL path (IRT-1997).
+            String response = getServlet().getValueBody(groupId, JsonUtils.toJson(keyRequest(key)));
 
             // 2. Parse successful response
             return JsonUtils.fromJson(response, LookupValue.class);
@@ -260,12 +268,14 @@ public class LookupServiceClient {
 
     public LookupValueResponse setValue(Integer groupId, LookupValue value) throws ClientException {
         try {
-            // 1. Serialize the request body
-            LookupValueRequest request = new LookupValueRequest();
+            // 1. Serialize the request body — key travels in the body alongside the value so keys
+            //    with /, %, \ are not rejected by Jetty in the URL path (IRT-1997).
+            LookupKeyValueRequest request = new LookupKeyValueRequest();
+            request.setKey(value.getKeyValue());
             request.setValue(value.getValueData());
 
             // 2. Make the call
-            String response = getServlet().setValue(groupId, value.getKeyValue(), JsonUtils.toJson(request));
+            String response = getServlet().setValueBody(groupId, JsonUtils.toJson(request));
 
             // 3. Parse successful response
             return JsonUtils.fromJson(response, LookupValueResponse.class);
@@ -283,8 +293,9 @@ public class LookupServiceClient {
 
     public void deleteValue(Integer groupId, String key) throws ClientException {
         try {
-            // 1. Make the call
-            getServlet().deleteValue(groupId, key);
+            // 1. Make the call — key travels in the body so keys with /, %, \ are not rejected
+            //    by Jetty in the URL path (IRT-1997).
+            getServlet().deleteValueBody(groupId, JsonUtils.toJson(keyRequest(key)));
         } catch (ClientException e) {
             // 2. Rethrow ClientException with parsed ErrorResponse if available
             rethrowParsedClientError(e);
@@ -292,6 +303,12 @@ public class LookupServiceClient {
             // 3. JSON serialization or unexpected errors
             throw new RuntimeException("Failed to delete value", e);
         }
+    }
+
+    private static LookupKeyRequest keyRequest(String key) {
+        LookupKeyRequest request = new LookupKeyRequest();
+        request.setKey(key);
+        return request;
     }
 
     public LookupAllValuesResponse searchValuesByJsonFields(Integer groupId, int offset, int limit, AdvancedJsonFilterState filter) throws ClientException {

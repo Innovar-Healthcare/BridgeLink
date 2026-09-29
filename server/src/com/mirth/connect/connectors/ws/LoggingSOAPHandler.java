@@ -60,10 +60,11 @@ public class LoggingSOAPHandler implements SOAPHandler<SOAPMessageContext> {
             } else {
                 logger.debug("Web Service returning response.");
             }
-            smc.getMessage();
         } catch (Exception e) {
+            // IRT-2428 follow-up (D-04): a pure-logging handler must never reverse jaxws-rt
+            // message direction. Returning false here makes jaxws-rt reverse direction and echo
+            // the client's own request back as a 200, with the channel never seeing the message.
             logger.error("Error handling SOAP message", e);
-            return false;
         }
         return true;
     }

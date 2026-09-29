@@ -29,6 +29,14 @@ public class ChannelFuture {
         this.handler = handler;
     }
 
+    public String getChannelId() {
+        return channelId;
+    }
+
+    public Integer getMetaDataId() {
+        return metaDataId;
+    }
+
     public void get() {
         try {
             delegate.get();
@@ -39,6 +47,11 @@ public class ChannelFuture {
         } catch (CancellationException e) {
             handler.taskCancelled(channelId, metaDataId, e);
         }
+    }
+
+    /** Reports an error for this task to its handler without waiting on it (IRT-2107 bounded waits). */
+    public void reportError(Exception e) {
+        handler.taskErrored(channelId, metaDataId, e);
     }
 
     public void get(long timeout, TimeUnit unit) throws TimeoutException {

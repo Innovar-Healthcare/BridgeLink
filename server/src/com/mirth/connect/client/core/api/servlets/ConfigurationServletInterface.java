@@ -41,6 +41,7 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 
 import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.core.Operation.ExecuteType;
@@ -48,6 +49,7 @@ import com.mirth.connect.client.core.Permissions;
 import com.mirth.connect.client.core.api.BaseServletInterface;
 import com.mirth.connect.client.core.api.MirthOperation;
 import com.mirth.connect.client.core.api.Param;
+import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.donkey.model.channel.DeployedState;
 import com.mirth.connect.model.ChannelDependency;
 import com.mirth.connect.model.ChannelMetadata;
@@ -460,6 +462,71 @@ public interface ConfigurationServletInterface extends BaseServletInterface {
                     @ExampleObject(name = "rhinoLanguageVersion", ref = "../apiexamples/integer_json") }) })
     @MirthOperation(name = "getRhinoLanguageVersion", display = "Get rhino language version", type = ExecuteType.ASYNC, auditable = false)
     public int getRhinoLanguageVersion() throws ClientException;
+
+    @GET
+    @Path("/scriptReferences")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Returns the catalog of script reference/autocomplete entries (code snippets, variables, functions, and E4X XML members) available when writing JavaScript filter/transformer code. Plain JSON response, not the standard serialized envelope.")
+    @MirthOperation(name = "getScriptReferences", display = "Get script references", type = ExecuteType.ASYNC, auditable = false)
+    public RawContent getScriptReferences() throws ClientException;
+
+    @POST
+    @Path("/_validateScript")
+    @Consumes(MediaType.TEXT_PLAIN)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Validates a JavaScript script using the server's Rhino engine, returning the first syntax error (if any). Plain JSON response, not the standard serialized envelope.")
+    @ApiResponse(responseCode = "200", description = "The validation result.", content = @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
+            @ExampleObject(name = "valid", summary = "Valid script", value = "{\"valid\":true,\"error\":null}"),
+            @ExampleObject(name = "invalid", summary = "Invalid script", value = "{\"valid\":false,\"error\":{\"line\":1,\"column\":9,\"message\":\"syntax error\"}}") }))
+    @MirthOperation(name = "validateScript", display = "Validate script", type = ExecuteType.ASYNC, auditable = false)
+    public RawContent validateScript(@Param("script") @RequestBody(description = "The script body to validate.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String script) throws ClientException;
+
+    @POST
+    @Path("/_validateScripts")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Validates multiple JavaScript scripts in one request using the server's Rhino engine, returning the first syntax error (if any) per script. The request is a JSON object mapping a caller-supplied id (opaque to the server) to a script body; the response maps each id to its result. Plain JSON request/response, not the standard serialized envelope.")
+    @ApiResponse(responseCode = "200", description = "The validation results, keyed by the same ids supplied in the request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
+            @ExampleObject(name = "results", summary = "Mixed valid/invalid results", value = "{\"src-filter-0\":{\"valid\":true,\"error\":null},\"dest-2-transformer-1\":{\"valid\":false,\"error\":{\"line\":3,\"column\":9,\"message\":\"syntax error\"}}}") }))
+    @MirthOperation(name = "validateScripts", display = "Validate scripts", type = ExecuteType.ASYNC, auditable = false)
+    public RawContent validateScripts(@Param("request") @RequestBody(description = "A JSON object mapping each caller-supplied id to the script body to validate.", required = true, content = @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
+            @ExampleObject(name = "request", value = "{\"src-filter-0\":\"var x = 1;\",\"channel-deploy\":\"var y = ;\"}") })) String request) throws ClientException;
+
+    @POST
+    @Path("/_validateCron")
+    @Consumes(MediaType.TEXT_PLAIN)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Validates a Quartz cron expression using the server's real Quartz CronExpression parser. Plain JSON response, not the standard serialized envelope.")
+    @ApiResponse(responseCode = "200", description = "The validation result.", content = @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
+            @ExampleObject(name = "valid", summary = "Valid expression", value = "{\"valid\":true,\"message\":null}"),
+            @ExampleObject(name = "invalid", summary = "Invalid expression", value = "{\"valid\":false,\"message\":\"Unexpected end of expression.\"}") }))
+    @MirthOperation(name = "validateCron", display = "Validate cron expression", type = ExecuteType.ASYNC, auditable = false)
+    public RawContent validateCron(@Param("expression") @RequestBody(description = "The Quartz cron expression to validate.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String expression) throws ClientException;
+
+    @POST
+    @Path("/_replaceTemplate")
+    @Consumes(MediaType.TEXT_PLAIN)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Resolves ${...} template values using the server's real template engine (Velocity), the same one channels use. Plain JSON response, not the standard serialized envelope.")
+    @ApiResponse(responseCode = "200", description = "The resolved template.", content = @Content(mediaType = MediaType.APPLICATION_JSON, examples = {
+            @ExampleObject(name = "resolved", value = "{\"result\":\"Hello World\"}") }))
+    @MirthOperation(name = "replaceTemplate", display = "Replace template values", type = ExecuteType.ASYNC, auditable = false)
+    public RawContent replaceTemplate(
+            @Param("channelId") @Parameter(description = "Optional channel ID whose global channel variable map is included in the preview. A random ID is used if omitted, matching no real channel (empty variable map).") @QueryParam("channelId") String channelId,
+            @Param("template") @RequestBody(description = "The template string containing ${...} references to resolve.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String template) throws ClientException;
+
+    /*
+     * Produces declares JSON as well so JSON-accepting clients (the WebAdmin fetch wrapper sends
+     * Accept: application/json) are not rejected with 406; the implementation pins the actual
+     * response Content-Type to text/plain.
+     */
+    @POST
+    @Path("/_prettyPrintScript")
+    @Consumes(MediaType.TEXT_PLAIN)
+    @Produces({ MediaType.TEXT_PLAIN, MediaType.APPLICATION_JSON })
+    @Operation(summary = "Pretty-prints a JavaScript/E4X script using the server's js-beautify formatter. Raw text response (Content-Type text/plain), not the standard serialized envelope.")
+    @MirthOperation(name = "prettyPrintScript", display = "Pretty print script", type = ExecuteType.ASYNC, auditable = false)
+    public Response prettyPrintScript(@Param("script") @RequestBody(description = "The script to pretty-print.", required = true, content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(implementation = String.class))) String script) throws ClientException;
 
     @POST
     @Path("/keystore/regenerate")

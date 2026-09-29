@@ -1,0 +1,30 @@
+# Trivy suppression list — one CVE id per line.
+# Policy is "decide later": keep this empty until you've seen real scan volume,
+# then add ONLY CVEs you've reviewed and accepted (upstream/vendored, not fixable
+# on your schedule). Always leave a reason + review date so the list stays honest.
+#
+# Example:
+# CVE-2022-46337  # derby: not reachable in our config; upstream Mirth. review 2026-Q4
+
+# --- Reviewed false positives ------------------------------------------------
+# CVE-2025-59250 — mssql-jdbc. FALSE POSITIVE: we ship mssql-jdbc-12.10.2.jre11,
+# which IS the fixed release for the 12.10 line (advisory fix = 12.10.2.jre11).
+# The jar's pom.properties reports the bare version "12.10.2" (no .jre11), so
+# Trivy compares 12.10.2 < 12.10.2.jre11 under Maven ordering and mis-flags the
+# patched jar as vulnerable. Not exploitable — we are on the fix.
+# Reviewed 2026-08-18 (zweng). Remove after the IRT-575 upgrade to 13.4.0 lands
+# and is smoke-verified. Re-review 2026-Q4 if still present.
+CVE-2025-59250
+
+# --- Deliberately vulnerable test fixture, not suppressed by CVE id -----------
+# server/test/fixtures/rhino-1.7.13.jar (IRT-1489, 23.1-05) is the deliberately
+# vulnerable engine used only as the "before" half of a two-jar behavioral
+# differential harness (RhinoEngineVersionDifferentialTest). It carries the
+# toFixed DoS finding (CVE-2025-66453) but is never on any production or ant
+# classpath and lives outside SCAN_DIR (server/setup), so it cannot appear in
+# a scan of the assembled tree in the first place. No id for that finding is
+# added here on purpose: this file suppresses by id globally, which would
+# also hide a genuine regression if a vulnerable Rhino ever returned to
+# server/lib. The path-scoped suppress entry in
+# config/dependency-check-suppression.xml is the correct place for that.
+# Reviewed 2026-08-26 (zweng). Re-review 2026-Q4.

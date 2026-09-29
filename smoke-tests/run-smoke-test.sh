@@ -406,6 +406,9 @@ allocate_ports() {
     # PR-#177-gated JS-Writer SMTP fixtures (D1/D2/D3, plan 18.5-03+).
     SMTP_CCBCC_PORT=$(free_port)
     SMTP_JS_PORT=$(free_port)
+    # 26.15-02 (IRT-2428): Web Service Listener smoke fixture (ws-listener-test.xml, channel
+    # 00000040), proves the WebServiceReceiver classloader fix end-to-end on the JDK 21/25 legs.
+    WS_LISTENER_PORT=$(free_port)
     # SOAP_URL is derived, not a raw port — the Web Service Sender fixture (soap-test.xml)
     # substitutes ${SOAP_URL} directly (D-07: Endpoint.publish stub target).
     SOAP_URL="http://127.0.0.1:${SOAP_PORT}/smoketest"
@@ -414,8 +417,8 @@ allocate_ports() {
         HTTP_STUB_PORT HTTP_CTXPATH_PORT HTTP_LARGE_PORT HTTP_ERROR500_PORT \
         DICOM_LISTENER_PORT DICOM_ROUNDTRIP_SCP_PORT DICOM_COMPRESSED_LISTENER_PORT DICOM_COMPRESSED_SCP_PORT \
         DICOM_TLS_AES_LISTENER_PORT DICOM_TLS_AES_SCP_PORT DICOM_TLS_3DES_LISTENER_PORT DICOM_TLS_3DES_SCP_PORT \
-        WEBDAV_PORT WEBDAV_TLS_PORT SMTP_CCBCC_PORT SMTP_JS_PORT
-    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT} DICOM_COMPRESSED_LISTENER=${DICOM_COMPRESSED_LISTENER_PORT} DICOM_COMPRESSED_SCP=${DICOM_COMPRESSED_SCP_PORT} DICOM_TLS_AES_LISTENER=${DICOM_TLS_AES_LISTENER_PORT} DICOM_TLS_AES_SCP=${DICOM_TLS_AES_SCP_PORT} DICOM_TLS_3DES_LISTENER=${DICOM_TLS_3DES_LISTENER_PORT} DICOM_TLS_3DES_SCP=${DICOM_TLS_3DES_SCP_PORT} WEBDAV=${WEBDAV_PORT} WEBDAV_TLS=${WEBDAV_TLS_PORT} SMTP_CCBCC=${SMTP_CCBCC_PORT} SMTP_JS=${SMTP_JS_PORT}"
+        WEBDAV_PORT WEBDAV_TLS_PORT SMTP_CCBCC_PORT SMTP_JS_PORT WS_LISTENER_PORT
+    pass "Ports allocated: HTTP=${HTTP_PORT} HTTPS=${HTTPS_PORT} MLLP=${MLLP_PORT} HTTP_LISTENER=${HTTP_LISTENER_PORT} SMTP=${SMTP_PORT} SCP=${SCP_PORT} SOAP=${SOAP_PORT} (SOAP_URL=${SOAP_URL}) HTTP_RESPONSE=${HTTP_RESPONSE_PORT} HTTP_XMLBODY=${HTTP_XMLBODY_PORT} HTTP_BINARY=${HTTP_BINARY_PORT} HTTP_AUTH_BASIC=${HTTP_AUTH_BASIC_PORT} HTTP_AUTH_DIGEST=${HTTP_AUTH_DIGEST_PORT} HTTP_STUB=${HTTP_STUB_PORT} HTTP_CTXPATH=${HTTP_CTXPATH_PORT} HTTP_LARGE=${HTTP_LARGE_PORT} HTTP_ERROR500=${HTTP_ERROR500_PORT} DICOM_LISTENER=${DICOM_LISTENER_PORT} DICOM_ROUNDTRIP_SCP=${DICOM_ROUNDTRIP_SCP_PORT} DICOM_COMPRESSED_LISTENER=${DICOM_COMPRESSED_LISTENER_PORT} DICOM_COMPRESSED_SCP=${DICOM_COMPRESSED_SCP_PORT} DICOM_TLS_AES_LISTENER=${DICOM_TLS_AES_LISTENER_PORT} DICOM_TLS_AES_SCP=${DICOM_TLS_AES_SCP_PORT} DICOM_TLS_3DES_LISTENER=${DICOM_TLS_3DES_LISTENER_PORT} DICOM_TLS_3DES_SCP=${DICOM_TLS_3DES_SCP_PORT} WEBDAV=${WEBDAV_PORT} WEBDAV_TLS=${WEBDAV_TLS_PORT} SMTP_CCBCC=${SMTP_CCBCC_PORT} SMTP_JS=${SMTP_JS_PORT} WS_LISTENER=${WS_LISTENER_PORT}"
 }
 
 # ---------------------------------------------------------------------------
@@ -440,7 +443,8 @@ allocate_work_dirs() {
              "${OUT_DIR}/js" "${OUT_DIR}/doc" \
              "${OUT_DIR}/http-response" "${OUT_DIR}/http-xmlbody" "${OUT_DIR}/http-binary" \
              "${OUT_DIR}/http-auth-basic" "${OUT_DIR}/http-auth-digest" \
-             "${OUT_DIR}/http-ctxpath"
+             "${OUT_DIR}/http-ctxpath" \
+             "${OUT_DIR}/ws"
 
     # 18.2: pre-create the IRT-828 FILE static resource (NET-07). The server JVM reads
     # this path directly at deploy/request time — no container/bind-mount in this harness
@@ -455,26 +459,262 @@ allocate_work_dirs() {
 }
 
 # ---------------------------------------------------------------------------
-# IRT-2270: deploy-only stages pruned for the release/26.6.1 boot-only smoke harness.
-# generate_dicom_tls_keystore, generate_webdav_tls_keystore, launch_webdav_stub,
-# generate_sftp_fixtures, check_sftp_legacy_fixture and check_mssql_fixture only ever
-# prepared fixtures for the channel-deploy path (import_deploy), which never runs
-# under --boot-only. launch_webdav_stub also compiled smoke-tests/src/ and
-# smoke-tests/testlib/ via smoke-tests/build.xml, both of which are dropped from this
-# branch's boot-path-only smoke-tests/ subset -- keeping the call would hard-fail
-# before launch_server() ever runs. See 03-RESEARCH.md V-2.
+# Stage: generate_dicom_tls_keystore — 18.4-03 (NET-09, D-02 corrected): mints ONE
+# shared self-signed PKCS12 keystore/truststore per run via keytool (there is no
+# pre-existing keytool machinery in this harness to reuse — the server's own
+# "keystore per run" is its in-process BC JCEKS admin-HTTPS cert, a different
+# mechanism entirely). The same file is used as BOTH keyStore and trustStore on
+# every TLS peer (Listener, Sender, SCU driver, SCP stub). Lives under
+# CHANNEL_WORK_DIR so the existing cleanup() rm -rf tears it down with everything
+# else. PKCS12 requires the store password and key password to match (JDK 9+
+# keytool constraint) — never pass a separate key-password flag (Pitfall 5).
+# ---------------------------------------------------------------------------
+generate_dicom_tls_keystore() {
+    hr
+    info "Generating shared DICOM TLS PKCS12 keystore/truststore..."
+    DICOM_TLS_KEYSTORE="${CHANNEL_WORK_DIR}/dicom-tls-shared.p12"
+    DICOM_TLS_KEYSTORE_PW="smoketest-$(date +%s)"
+
+    keytool -genkeypair \
+        -alias dicom-tls-smoke \
+        -keyalg RSA -keysize 2048 \
+        -validity 7 \
+        -dname "CN=dicom-tls-smoke,O=BridgeLink Smoke Harness" \
+        -keystore "${DICOM_TLS_KEYSTORE}" \
+        -storetype PKCS12 \
+        -storepass "${DICOM_TLS_KEYSTORE_PW}" \
+        > /dev/null 2>&1
+
+    export DICOM_TLS_KEYSTORE DICOM_TLS_KEYSTORE_PW
+    pass "Generated shared PKCS12 keystore: ${DICOM_TLS_KEYSTORE}"
+}
+
+# ---------------------------------------------------------------------------
+# Stage: generate_webdav_tls_keystore — 22-05 (CVE-06/D-07): mints a dedicated
+# self-signed PKCS12 keystore for the embedded WebDavServerStub's HTTPS (webdavs://)
+# listener, mirroring generate_dicom_tls_keystore()'s keytool invocation exactly
+# (own file/password, decoupled from the DICOM TLS keystore — kept separate rather
+# than reused, so neither leg's lifecycle depends on the other's).
+# ---------------------------------------------------------------------------
+generate_webdav_tls_keystore() {
+    hr
+    info "Generating WebDAV TLS PKCS12 keystore..."
+    WEBDAV_TLS_KEYSTORE="${CHANNEL_WORK_DIR}/webdav-tls.p12"
+    WEBDAV_TLS_KEYSTORE_PW="smoketest-$(date +%s)"
+
+    keytool -genkeypair \
+        -alias webdav-tls-smoke \
+        -keyalg RSA -keysize 2048 \
+        -validity 7 \
+        -dname "CN=127.0.0.1,O=BridgeLink Smoke Harness" \
+        -keystore "${WEBDAV_TLS_KEYSTORE}" \
+        -storetype PKCS12 \
+        -storepass "${WEBDAV_TLS_KEYSTORE_PW}" \
+        > /dev/null 2>&1
+
+    export WEBDAV_TLS_KEYSTORE WEBDAV_TLS_KEYSTORE_PW
+    pass "Generated WebDAV TLS PKCS12 keystore: ${WEBDAV_TLS_KEYSTORE}"
+}
+
+# ---------------------------------------------------------------------------
+# Stage: launch_webdav_stub — 22-05 (CVE-06/D-07): starts WebDavServerStub as an
+# INDEPENDENT OS process (mirroring the SFTP leg's independent atmoz/sftp Docker
+# container), BEFORE the channel import/deploy stage.
 #
-# WEBDAV_STUB_PID, WEBDAV_ROOT_DIR and SFTP_CONTAINER_NAME stay declared empty below:
-# cleanup() references them unconditionally under `set -u`.
+# Rule 1 fix: unlike DicomScpStub/SoapStub (whose connectors only connect out lazily,
+# at send time), FileReceiver.onStart() eagerly opens and validates its connection at
+# CHANNEL DEPLOY time. Starting the WebDAV stub from inside the JUnit driver's
+# @BeforeClass (this harness's usual embedded-stub pattern) would leave
+# file-webdav-test.xml deploying against nothing listening yet, and deploy would FAIL
+# before the driver phase ever runs. WebDavServerStub therefore ships a standalone
+# main() launched here as a background `java` process; WebDavRoundTripTest (run later,
+# in run_driver()) only reads WEBDAV_ROOT_DIR to seed/poll files against the SAME
+# already-running server.
+#
+# Only smoke-tests/build/classes is needed on the classpath — WebDavServerStub itself
+# is pure JDK (com.sun.net.httpserver), zero new jars (matches the D-07 "no silent
+# no-op gate" principle without dragging in Milton's heavy transitive graph, see
+# WebDavServerStub's class javadoc). Compiles the smoke-tests driver early (idempotent
+# — run_driver()'s later `ant test-run` recompiles the same sources) so build/classes
+# exists at this point in the sequence.
 # ---------------------------------------------------------------------------
 WEBDAV_STUB_PID=""
 WEBDAV_ROOT_DIR=""
+
+launch_webdav_stub() {
+    hr
+    info "Compiling smoke-tests driver (needed early for the standalone WebDavServerStub launcher)..."
+    if ! ant -f "${SCRIPT_DIR}/build.xml" compile -Dsmoke.setup.dir="${SERVER_SETUP}" > /dev/null; then
+        fatal "smoke-tests driver compile failed (needed for WebDavServerStub launch) — see output above"
+    fi
+    pass "smoke-tests driver compiled"
+
+    info "Launching WebDavServerStub (embedded WebDAV server, D-07 hard gate)..."
+    WEBDAV_ROOT_DIR="${CHANNEL_WORK_DIR}/webdav-root"
+    mkdir -p "${WEBDAV_ROOT_DIR}/upload"
+
+    java -cp "${SCRIPT_DIR}/build/classes" com.mirth.connect.smoketest.stubs.WebDavServerStub \
+        "${WEBDAV_PORT}" "${WEBDAV_TLS_PORT}" "${WEBDAV_ROOT_DIR}" "webdavuser" "webdavpass" \
+        "${WEBDAV_TLS_KEYSTORE}" "${WEBDAV_TLS_KEYSTORE_PW}" \
+        > "${HARNESS_LOG_DIR}/webdav-stub-stdout.log" 2>&1 &
+    WEBDAV_STUB_PID=$!
+
+    # Poll for TCP-listening (no fixed sleep, Pitfall 7) — mirrors the DICOM listener-port
+    # liveness probe further below.
+    local deadline=$((SECONDS + 20))
+    while [[ ${SECONDS} -lt ${deadline} ]]; do
+        if python3 -c "
+import socket, sys
+s = socket.socket()
+s.settimeout(1)
+try:
+    s.connect(('127.0.0.1', ${WEBDAV_PORT}))
+    sys.exit(0)
+except OSError:
+    sys.exit(1)
+"; then
+            pass "WebDavServerStub listening on 127.0.0.1:${WEBDAV_PORT} (PID=${WEBDAV_STUB_PID}, root=${WEBDAV_ROOT_DIR})"
+            return 0
+        fi
+        sleep 0.5
+    done
+
+    fail "WebDavServerStub did not start listening on 127.0.0.1:${WEBDAV_PORT} within 20s"
+    cat "${HARNESS_LOG_DIR}/webdav-stub-stdout.log" 2>/dev/null || true
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# Stage: generate_sftp_fixtures — 25.1-02 (SC-2, IRT-1541): mints a pinned modern
+# OpenSSH (atmoz/sftp) container plus a throwaway ed25519 client keypair and a
+# runtime-captured known_hosts fixture, so the File connector's jsch 2.28.5 SFTP
+# transport can be exercised end-to-end for password auth, key auth, and
+# known-hosts host-key verification (D-06). Modeled on generate_dicom_tls_keystore()
+# above: all generated file material lives under CHANNEL_WORK_DIR so the existing
+# cleanup() rm -rf tears it down; the container itself needs its own explicit
+# `docker rm -f` in cleanup() (a container is not a filesystem path).
+# ---------------------------------------------------------------------------
 SFTP_CONTAINER_NAME=""
+SFTP_IMAGE_TAG="atmoz/sftp:alpine"
 
 # 26.8-02 (SC-2, D-05): the postgres container name, initialized empty at top level so
 # cleanup()'s guard below is safe under `set -u` when postgres was never selected
 # (DB_TYPE=derby is the default and does not call this arm of configure_db()).
 PG_CONTAINER_NAME=""
+
+generate_sftp_fixtures() {
+    hr
+    info "Generating modern SFTP fixtures (container + keypair + known_hosts)..."
+
+    # Docker-availability preflight (RESEARCH Environment Availability / T-25.1-02c):
+    # fail fast with an actionable message instead of a cryptic mid-run failure.
+    if ! docker info > /dev/null 2>&1; then
+        fatal "Docker is not available (docker info failed). The modern-SFTP smoke leg (SC-2) requires a running Docker daemon:
+  - macOS: open -a Docker (Docker Desktop) and wait for it to finish starting
+  - Linux: sudo systemctl start docker
+Re-run smoke-tests/run-smoke-test.sh once Docker is available."
+    fi
+
+    SFTP_MODERN_PORT=$(free_port)
+
+    local sftp_work_dir="${CHANNEL_WORK_DIR}/sftp"
+    SFTP_UPLOAD_DIR="${sftp_work_dir}/upload"
+    mkdir -p "${SFTP_UPLOAD_DIR}"
+    # atmoz/sftp's create-sftp-user only chown's a dir it creates itself; a bind-mounted
+    # dir already exists, so it is skipped and never chowned to the container's "smoke"
+    # user. This is a throwaway per-run work dir (CHANNEL_WORK_DIR, never a committed
+    # fixture), so world-writable is an acceptable trade to keep both host and container
+    # UIDs able to read/write it without pre-computing a matching numeric UID.
+    chmod 777 "${SFTP_UPLOAD_DIR}"
+
+    # Throwaway client keypair — never committed (T-25.1-02b), lives under
+    # CHANNEL_WORK_DIR and is torn down by cleanup()'s existing rm -rf.
+    SFTP_KEY_PATH="${sftp_work_dir}/id_ed25519"
+    ssh-keygen -t ed25519 -N '' -f "${SFTP_KEY_PATH}" -C "smoke-harness" > /dev/null
+
+    # Pinned tag (never :latest, T-25.1-SC) — resolve and record the concrete digest at
+    # execution time (rather than hardcoding one), so the pin is visible in run output
+    # without needing to bump the script every time the upstream image is rebuilt.
+    docker pull "${SFTP_IMAGE_TAG}" > /dev/null
+    local sftp_image_digest
+    sftp_image_digest=$(docker inspect --format '{{index .RepoDigests 0}}' "${SFTP_IMAGE_TAG}" 2>/dev/null || echo "unknown")
+    info "Modern SFTP image: ${SFTP_IMAGE_TAG} (${sftp_image_digest})"
+
+    SFTP_CONTAINER_NAME="smoke-sftp-modern-$$"
+    docker run -d \
+        --name "${SFTP_CONTAINER_NAME}" \
+        -p "127.0.0.1:${SFTP_MODERN_PORT}:22" \
+        -v "${SFTP_UPLOAD_DIR}:/home/smoke/upload" \
+        -v "${SFTP_KEY_PATH}.pub:/home/smoke/.ssh/keys/id_ed25519.pub:ro" \
+        "${SFTP_IMAGE_TAG}" \
+        smoke:smokepass:::upload \
+        > /dev/null
+
+    # Capture the container's host key into a runtime known_hosts fixture once sshd is
+    # accepting connections — ssh-keyscan itself doubles as the readiness probe here
+    # (retried on a poll loop, Pitfall 7: no fixed sleep before the first attempt).
+    SFTP_KNOWN_HOSTS_PATH="${sftp_work_dir}/known_hosts"
+    local attempts=0
+    while [[ ${attempts} -lt 30 ]]; do
+        if ssh-keyscan -p "${SFTP_MODERN_PORT}" -T 3 127.0.0.1 > "${SFTP_KNOWN_HOSTS_PATH}" 2>/dev/null \
+                && [[ -s "${SFTP_KNOWN_HOSTS_PATH}" ]]; then
+            break
+        fi
+        sleep 2
+        attempts=$((attempts + 1))
+    done
+    if [[ ! -s "${SFTP_KNOWN_HOSTS_PATH}" ]]; then
+        fatal "Modern SFTP container did not accept connections within 60s (ssh-keyscan never produced a host key)"
+    fi
+
+    export SFTP_MODERN_PORT SFTP_KEY_PATH SFTP_KNOWN_HOSTS_PATH SFTP_UPLOAD_DIR
+    pass "Modern SFTP fixtures ready: container=${SFTP_CONTAINER_NAME} port=${SFTP_MODERN_PORT} keyPath=${SFTP_KEY_PATH} knownHosts=${SFTP_KNOWN_HOSTS_PATH} uploadDir=${SFTP_UPLOAD_DIR}"
+}
+
+# ---------------------------------------------------------------------------
+# Stage: check_sftp_legacy_fixture — 25.1-03 (SC-3, IRT-1541): conditional legacy-algorithm
+# leg, gated on SFTP_LEGACY_PORT being pre-exported by an EXTERNAL driver
+# (regression-scripts/test-irt1541-jsch-sftp-upgrade.sh) BEFORE this script is invoked. This
+# harness does NOT boot the legacy server itself — that lives in the driver's own
+# docker-compose.test-irt1541.yml, since the legacy server is deliberately weak (algorithm
+# negotiation should FAIL against it by default) and standing it up unconditionally inside
+# every ordinary harness run would be a needless Docker/CI cost for a leg only the
+# break-then-fix driver ever exercises. Unset (the normal case) => the two legacy channel
+# fixtures are never added to CHANNEL_FILES/CHANNEL_IDS below, and SftpParamsTest's two
+# legacy @Test methods self-skip via Assume.assumeTrue — a plain run-smoke-test.sh is
+# completely unaffected.
+# ---------------------------------------------------------------------------
+SFTP_LEGACY_LEG_ACTIVE=0
+check_sftp_legacy_fixture() {
+    hr
+    if [[ -n "${SFTP_LEGACY_PORT:-}" ]]; then
+        SFTP_LEGACY_LEG_ACTIVE=1
+        info "SFTP_LEGACY_PORT=${SFTP_LEGACY_PORT} detected (external driver) — legacy-algorithm fixtures ACTIVE"
+    else
+        info "SFTP_LEGACY_PORT not set — legacy-algorithm fixtures SKIPPED (only exercised via regression-scripts/test-irt1541-jsch-sftp-upgrade.sh)"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Stage: check_mssql_fixture — CVE-04 (SC-3, phase 25-cve-mssql-jdbc-upgrade, plan 25-01):
+# conditional encrypted-SQL-Server leg, gated on MSSQL_PORT being pre-exported by an EXTERNAL
+# driver (regression-scripts/test-cve04-mssql-jdbc-upgrade.sh) BEFORE this script is invoked —
+# mirrors check_sftp_legacy_fixture()'s convention exactly. This harness does NOT boot the SQL
+# Server container itself — that lives in the driver's own docker-compose.test-cve04.yml. Unset
+# (the normal case) => the encrypted JDBC fixture is never added to CHANNEL_FILES/CHANNEL_IDS
+# below, and MssqlJdbcParamsTest's encryptedReadWrite @Test self-skips via Assume.assumeTrue — a
+# plain run-smoke-test.sh invocation is completely unaffected.
+# ---------------------------------------------------------------------------
+MSSQL_LEG_ACTIVE=0
+check_mssql_fixture() {
+    hr
+    if [[ -n "${MSSQL_PORT:-}" ]]; then
+        MSSQL_LEG_ACTIVE=1
+        info "MSSQL_PORT=${MSSQL_PORT} detected (external driver) — encrypted mssql-jdbc fixture ACTIVE"
+    else
+        info "MSSQL_PORT not set — encrypted mssql-jdbc fixture SKIPPED (only exercised via regression-scripts/test-cve04-mssql-jdbc-upgrade.sh)"
+    fi
+}
 
 # ---------------------------------------------------------------------------
 # Stage: patch_properties — sed -i.smoke-bak in place; restored in cleanup (Pitfall 3)
@@ -608,7 +848,18 @@ health_check() {
         attempt=$((attempt + 1))
 
         if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
-            fail "Server process (PID ${SERVER_PID}) exited before becoming healthy"
+            # IRT-2353: reap the process and record its exit status. A server that logs
+            # "aborting startup" and then exits 0 makes a systemd unit with Restart=on-failure
+            # record a clean stop and never restart, which is invisible unless something reads
+            # the status. rc=0 default plus "|| rc=$?" keeps this safe under set -e.
+            local server_rc=0
+            wait "${SERVER_PID}" 2>/dev/null || server_rc=$?
+            # Uncoloured marker line so break-postgres-driver.sh can grep -qF for it.
+            echo "SMOKE-SERVER-EXIT-STATUS: ${server_rc}"
+            fail "Server process (PID ${SERVER_PID}) exited before becoming healthy (exit status ${server_rc})"
+            if [[ ${server_rc} -eq 0 ]]; then
+                fail "Server aborted startup but exited 0 - a service manager with Restart=on-failure would see a clean stop and never restart it (IRT-2353)"
+            fi
             dump_log_tail
             return 1
         fi
@@ -648,7 +899,7 @@ dump_log_tail() {
 # ---------------------------------------------------------------------------
 API=""
 COOKIE_JAR=""
-CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-compressed-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test file-webdav-test smtp-legacy-null-test smtp-ccbcc-test smtp-js-ccbcc-test)
+CHANNEL_FILES=(http-test tcp-mllp-test file-test jdbc-test vm-test js-test smtp-test soap-test dicom-test doc-writer-test legacy-migration-test legacy-migration-3-4-test http-listener-response-test http-datatype-xml-test http-datatype-binary-recv-test http-listener-auth-basic-test http-listener-auth-digest-test http-sender-params-test http-sender-timeout-test http-datatype-binary-send-test http-listener-contextpath-test http-listener-largeresp-test http-listener-error500-test dicom-roundtrip-test dicom-compressed-roundtrip-test dicom-tls-aes-roundtrip-test dicom-tls-3des-roundtrip-test file-sftp-modern-test file-sftp-keyauth-test file-sftp-knownhosts-test file-webdav-test smtp-legacy-null-test smtp-ccbcc-test smtp-js-ccbcc-test ws-listener-test)
 # 25.1-03 (SC-3, IRT-1541): the two legacy-algorithm fixtures are appended ONLY when
 # SFTP_LEGACY_PORT is pre-exported by the external break-then-fix driver — an ordinary
 # run-smoke-test.sh invocation has no legacy server to dial, so these must stay out of the
@@ -723,6 +974,7 @@ CHANNEL_IDS=(
     "00000038-0000-0000-0000-000000000038"
     "00000037-0000-0000-0000-000000000037"
     "00000039-0000-0000-0000-000000000039"
+    "00000040-0000-0000-0000-000000000040"
 )
 if [[ -n "${SFTP_LEGACY_PORT:-}" ]]; then
     CHANNEL_IDS+=(
@@ -786,7 +1038,10 @@ fi
 # CC/BCC coverage fixtures (smtp-ccbcc-test.xml/smtp-legacy-null-test.xml, plan 18.5-02+)
 # and the PR-#177-gated JS-Writer SMTP fixtures (plan 18.5-03+). Harmless (envsubst no-op)
 # until those fixtures are added to CHANNEL_FILES.
-ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_COMPRESSED_LISTENER_PORT} ${DICOM_COMPRESSED_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT} ${WEBDAV_PORT} ${WEBDAV_TLS_PORT} ${MSSQL_HOST} ${MSSQL_PORT} ${MSSQL_DB} ${MSSQL_USER} ${MSSQL_PASSWORD} ${SMTP_CCBCC_PORT} ${SMTP_JS_PORT}'
+# 26.15-02 (IRT-2428) adds WS_LISTENER_PORT: the Web Service Listener smoke fixture
+# (ws-listener-test.xml, channel 00000040) substitutes it directly into the listener
+# source's <port> element.
+ENVSUBST_ALLOWLIST='${HTTP_LISTENER_PORT} ${MLLP_PORT} ${SMTP_PORT} ${SCP_PORT} ${SOAP_URL} ${SQLITE_PATH} ${IN_DIR} ${OUT_DIR} ${HTTP_RESPONSE_PORT} ${HTTP_XMLBODY_PORT} ${HTTP_BINARY_PORT} ${HTTP_AUTH_BASIC_PORT} ${HTTP_AUTH_DIGEST_PORT} ${HTTP_STUB_PORT} ${HTTP_CTXPATH_PORT} ${HTTP_LARGE_PORT} ${HTTP_ERROR500_PORT} ${STATIC_FILE_PATH} ${DICOM_LISTENER_PORT} ${DICOM_ROUNDTRIP_SCP_PORT} ${DICOM_COMPRESSED_LISTENER_PORT} ${DICOM_COMPRESSED_SCP_PORT} ${DICOM_TLS_KEYSTORE} ${DICOM_TLS_KEYSTORE_PW} ${DICOM_TLS_AES_LISTENER_PORT} ${DICOM_TLS_AES_SCP_PORT} ${DICOM_TLS_3DES_LISTENER_PORT} ${DICOM_TLS_3DES_SCP_PORT} ${SFTP_MODERN_PORT} ${SFTP_KEY_PATH} ${SFTP_KNOWN_HOSTS_PATH} ${SFTP_UPLOAD_DIR} ${SFTP_LEGACY_PORT} ${WEBDAV_PORT} ${WEBDAV_TLS_PORT} ${MSSQL_HOST} ${MSSQL_PORT} ${MSSQL_DB} ${MSSQL_USER} ${MSSQL_PASSWORD} ${SMTP_CCBCC_PORT} ${SMTP_JS_PORT} ${WS_LISTENER_PORT}'
 
 bl_login() {
     info "Logging in to ${API}..."
@@ -1309,6 +1564,27 @@ except Exception:
             fatal "DICOM TLS Listener port ${p} did not accept connections within 60s"
         fi
     done
+
+    # 26.15-02 (IRT-2428): WS Listener (ws-listener-test.xml, channel 00000040), probe the
+    # published WSDL endpoint (JAX-WS/SAAJ publishes this on Endpoint.publish, independent of
+    # the DefaultAcceptMessage dispatch path), so this readiness check succeeds even when the
+    # unfixed receiver would fail a real SOAP POST with the SAAJ meta-factory error. Any
+    # non-"000" response code means the listener socket is up; never assert a specific code.
+    attempts=0
+    info "  WS Listener (port ${WS_LISTENER_PORT})..."
+    while [[ ${attempts} -lt 20 ]]; do
+        code=$(curl -s --max-time 3 --connect-timeout 2 -o /dev/null -w "%{http_code}" \
+            "http://127.0.0.1:${WS_LISTENER_PORT}/services/Mirth?wsdl" 2>/dev/null || echo "000")
+        if [[ "${code}" != "000" ]]; then
+            pass "  WS Listener port ${WS_LISTENER_PORT} responding (HTTP ${code})"
+            break
+        fi
+        sleep 3
+        attempts=$((attempts + 1))
+    done
+    if [[ "${code}" == "000" ]]; then
+        fatal "WS Listener port ${WS_LISTENER_PORT} did not respond within 60s"
+    fi
 }
 
 # Two fixtures may legitimately SHARE a channel id when they are mutually exclusive alternatives
@@ -1469,6 +1745,7 @@ run_driver() {
         -DWEBDAV_TLS_KEYSTORE_PW="${WEBDAV_TLS_KEYSTORE_PW}" \
         -DWEBDAV_ROOT_DIR="${WEBDAV_ROOT_DIR}" \
         -DSERVER_DEFAULT_ENCODING="${DEFAULT_ENCODING}" \
+        -DWS_LISTENER_PORT="${WS_LISTENER_PORT}" \
         > "${driver_log}" 2>&1; then
         pass "JUnit pump/assert driver passed"
     else
@@ -1686,6 +1963,12 @@ preflight
 detect_pr177_presence
 allocate_ports
 allocate_work_dirs
+generate_dicom_tls_keystore
+generate_webdav_tls_keystore
+generate_sftp_fixtures
+check_sftp_legacy_fixture
+check_mssql_fixture
+launch_webdav_stub
 patch_properties
 launch_server
 

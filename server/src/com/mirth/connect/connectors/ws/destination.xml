@@ -2,7 +2,7 @@
 	<name>Web Service Sender</name>
 	<author>NextGen Healthcare</author>
 	<pluginVersion>@mirthversion</pluginVersion>
-	<mirthVersion>26.6.1</mirthVersion>
+	<mirthVersion>26.9.0</mirthVersion>
 	<url>http://www.nextgen.com</url>
 	<description>This connector allows Mirth Connect to invoke remote Web Services over HTTP.</description>
 	<clientClassName>com.mirth.connect.connectors.ws.WebServiceSender</clientClassName>
@@ -14,7 +14,7 @@
 	<library type="SERVER" path="ws-server.jar" />
 	<library type="CLIENT" path="ws-client.jar" />
 	<library type="SHARED" path="ws-shared.jar" />
-	<library type="SHARED" path="lib/wsdl4j-1.6.2-fixed.jar" />
+	<library type="SHARED" path="lib/wsdl4j-1.6.3.jar" />
 	<apiProvider type="SERVLET_INTERFACE" name="com.mirth.connect.connectors.ws.WebServiceConnectorServletInterface"/>
 	<apiProvider type="SERVER_CLASS" name="com.mirth.connect.connectors.ws.WebServiceConnectorServlet"/>
 </connectorMetaData>

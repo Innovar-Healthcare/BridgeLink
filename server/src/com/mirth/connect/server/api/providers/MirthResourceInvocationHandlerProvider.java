@@ -85,6 +85,15 @@ public class MirthResourceInvocationHandlerProvider implements ResourceMethodInv
                                         if (BaseServletInterface.class.isAssignableFrom(interfaceClass)) {
                                             operation = OperationUtil.getOperation(interfaceClass, method);
                                             if (operation != null) {
+                                                /*
+                                                 * Published before the operation, because the
+                                                 * operation is the flag that lets another thread
+                                                 * skip this block. A thread that sees the operation
+                                                 * but not yet the interface method would resolve
+                                                 * parameter names from the implementation and cache
+                                                 * the unscoped result for the life of the JVM.
+                                                 */
+                                                methodInfo.setAnnotatedMethod(getInterfaceMethod(interfaceClass, method));
                                                 methodInfo.setOperation(operation);
                                                 break;
                                             }
@@ -137,10 +146,35 @@ public class MirthResourceInvocationHandlerProvider implements ResourceMethodInv
                                         /*
                                          * The Param annotation lets us know at runtime the name to
                                          * use when adding entries into the parameter map, which
-                                         * will eventually be stored in the event logs.
+                                         * will eventually be stored in the event logs. Read it off
+                                         * the servlet interface rather than off whatever method
+                                         * Jersey handed us: since 2.48 the dispatcher prefers the
+                                         * public implementation method over the definition method
+                                         * (AbstractJavaResourceMethodDispatcher), where 2.22.1
+                                         * always passed the definition method. No servlet
+                                         * implementation declares Param -- they all inherit it from
+                                         * the interface -- so reading the implementation yields
+                                         * nothing and every parameter falls back to an "argN" name.
+                                         * That is not only cosmetic: the CheckAuthorizedUserId and
+                                         * CheckAuthorizedChannelId indexes below are resolved by
+                                         * matching a Param name, so losing the names silently loses
+                                         * the user and channel scoping those annotations exist to
+                                         * apply (IRT-1798).
                                          */
+                                        Method annotatedMethod = methodInfo.getAnnotatedMethod();
+                                        if (annotatedMethod == null) {
+                                            /*
+                                             * Only reachable for a servlet whose operation could
+                                             * not be resolved at all, which fails a few lines later
+                                             * in isUserAuthorized anyway. Once an operation is
+                                             * found the interface method is found with it, since
+                                             * OperationUtil uses the same lookup.
+                                             */
+                                            annotatedMethod = method;
+                                        }
+
                                         int count = 0;
-                                        for (Annotation[] paramAnnotations : method.getParameterAnnotations()) {
+                                        for (Annotation[] paramAnnotations : annotatedMethod.getParameterAnnotations()) {
                                             boolean found = false;
                                             for (Annotation annotation : paramAnnotations) {
                                                 if (annotation instanceof Param) {
@@ -292,6 +326,19 @@ public class MirthResourceInvocationHandlerProvider implements ResourceMethodInv
         return null;
     }
 
+    /**
+     * The interface declaration of a servlet method, which is where every JAX-RS and
+     * {@link Param} annotation actually lives. Returns null if the interface does not declare it,
+     * in which case the caller falls back to the method it was given.
+     */
+    private Method getInterfaceMethod(Class<?> interfaceClass, Method method) {
+        try {
+            return interfaceClass.getMethod(method.getName(), method.getParameterTypes());
+        } catch (NoSuchMethodException | SecurityException e) {
+            return null;
+        }
+    }
+
     private String getDefaultParamName(List<String> paramNames) {
         int count = 0;
         String name;
@@ -302,14 +349,21 @@ public class MirthResourceInvocationHandlerProvider implements ResourceMethodInv
         return name;
     }
 
+    /*
+     * Fields are volatile because instances are shared across request threads through infoMap and
+     * are populated lazily. Without it a thread can see checkAuthorized set while
+     * checkAuthorizedUserId is still null, resolve userIdIndex to -1, and cache that -1 for the
+     * life of the JVM -- turning a scoped authorization check into an unscoped one for good.
+     */
     private class MethodInfo {
-        private Operation operation;
-        private Boolean checkAuthorized;
-        private CheckAuthorizedChannelId checkAuthorizedChannelId;
-        private CheckAuthorizedUserId checkAuthorizedUserId;
-        private List<String> paramNames;
-        private Integer channelIdIndex;
-        private Integer userIdIndex;
+        private volatile Operation operation;
+        private volatile Method annotatedMethod;
+        private volatile Boolean checkAuthorized;
+        private volatile CheckAuthorizedChannelId checkAuthorizedChannelId;
+        private volatile CheckAuthorizedUserId checkAuthorizedUserId;
+        private volatile List<String> paramNames;
+        private volatile Integer channelIdIndex;
+        private volatile Integer userIdIndex;
 
         public Operation getOperation() {
             return operation;
@@ -317,6 +371,14 @@ public class MirthResourceInvocationHandlerProvider implements ResourceMethodInv
 
         public void setOperation(Operation operation) {
             this.operation = operation;
+        }
+
+        public Method getAnnotatedMethod() {
+            return annotatedMethod;
+        }
+
+        public void setAnnotatedMethod(Method annotatedMethod) {
+            this.annotatedMethod = annotatedMethod;
         }
 
         public Boolean getCheckAuthorized() {

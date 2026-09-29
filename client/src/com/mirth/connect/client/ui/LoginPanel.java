@@ -564,6 +564,31 @@ public class LoginPanel extends AbstractLoginPanel {
 
                 com.mirth.connect.client.ui.PlatformUI.USER_NAME = StringUtils.defaultString(loginStatus.getUpdatedUsername(), username.getText());
                 setStatus("Authenticated...");
+
+                /*
+                 * Deal with a grace period before the Administrator starts up, not after. The
+                 * server can be configured to confine a grace-period login to password-change
+                 * operations, in which case every request the Administrator makes while loading
+                 * would be rejected before the user ever saw the prompt.
+                 */
+                boolean passwordChanged = false;
+                if (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD) {
+                    User graceUser = client.getCurrentUser();
+                    ChangePasswordDialog changePasswordDialog = new ChangePasswordDialog(client, graceUser, loginStatus.getMessage());
+
+                    if (!changePasswordDialog.getResult()) {
+                        // Dismissed without changing it, so the login cannot proceed
+                        try {
+                            client.logout();
+                        } catch (ClientException e) {
+                            // Already failing the login; nothing useful to do with this
+                        }
+                        return false;
+                    }
+
+                    passwordChanged = true;
+                }
+
                 new Mirth(client);
                 setVisible(false);
 
@@ -574,6 +599,7 @@ public class LoginPanel extends AbstractLoginPanel {
                 preferenceNames.add("checkForNotifications");
                 preferenceNames.add("showNotificationPopup");
                 preferenceNames.add("archivedNotifications");
+                preferenceNames.add("webAdminMigrationWarningDismissed");
                 try {
                     userPreferences = client.getUserPreferences(currentUser.getId(), preferenceNames);
 
@@ -601,13 +627,12 @@ public class LoginPanel extends AbstractLoginPanel {
                             	currentUser.setDescription(info[10]);
                         	}
                     	}
-                        com.mirth.connect.client.ui.FirstLoginDialog firstLoginDialog = new com.mirth.connect.client.ui.FirstLoginDialog(currentUser);
+                        // The password is already compliant if it was changed above, so don't ask twice
+                        com.mirth.connect.client.ui.FirstLoginDialog firstLoginDialog = new com.mirth.connect.client.ui.FirstLoginDialog(currentUser, !passwordChanged);
                         // if leaving the first login dialog without saving
                         if (!firstLoginDialog.getResult()) {
                         	return false;
                         }
-                    } else if (loginStatus.getStatus() == LoginStatus.Status.SUCCESS_GRACE_PERIOD) {
-                        new com.mirth.connect.client.ui.ChangePasswordDialog(currentUser, loginStatus.getMessage());
                     }
 
                     // Check for new notifications from update server if enabled
@@ -638,6 +663,19 @@ public class LoginPanel extends AbstractLoginPanel {
                     KeystoreWarningDialog dialog = new KeystoreWarningDialog(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME);
                     if (dialog.wasOkClicked() && dialog.isRegenerateRequested()) {
                         triggerKeystoreRegeneration();
+                    }
+                }
+
+                // Warn that BridgeLink has moved to the WebAdmin client, unless the user has dismissed it
+                String webAdminWarningDismissed = userPreferences.getProperty("webAdminMigrationWarningDismissed");
+                if (webAdminWarningDismissed == null || !BooleanUtils.toBoolean(webAdminWarningDismissed)) {
+                    WebAdminMigrationDialog webAdminDialog = new WebAdminMigrationDialog(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME);
+                    if (webAdminDialog.isDoNotShowAgainChecked()) {
+                        try {
+                            client.setUserPreference(currentUser.getId(), "webAdminMigrationWarningDismissed", "true");
+                        } catch (ClientException e) {
+                            com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME.alertThrowable(com.mirth.connect.client.ui.PlatformUI.MIRTH_FRAME, e);
+                        }
                     }
                 }
 

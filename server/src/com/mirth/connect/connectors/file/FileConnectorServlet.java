@@ -82,14 +82,19 @@ public class FileConnectorServlet extends MirthServlet implements FileConnectorS
 
             try {
                 connection = ((PooledObject<FileSystemConnection>) factory.makeObject()).getObject();
-
-                if (read && connection.canRead(dir) || !read && connection.canWrite(dir)) {
-                    return new ConnectionTestResponse(ConnectionTestResponse.Type.SUCCESS, "Successfully connected to: " + hostDisplayName);
-                } else {
-                    return new ConnectionTestResponse(ConnectionTestResponse.Type.FAILURE, "Unable to connect to: " + hostDisplayName);
-                }
             } catch (Exception e) {
                 return new ConnectionTestResponse(ConnectionTestResponse.Type.FAILURE, "Unable to connect to: " + hostDisplayName + ", Reason: " + e.getMessage());
+            }
+
+            try {
+                connection.checkDirectoryAccess(dir, read);
+                return new ConnectionTestResponse(ConnectionTestResponse.Type.SUCCESS, "Successfully connected to: " + hostDisplayName);
+            } catch (Exception e) {
+                String message = "Unable to connect to: " + hostDisplayName;
+                if (e.getMessage() != null) {
+                    message += ", Reason: " + e.getMessage();
+                }
+                return new ConnectionTestResponse(ConnectionTestResponse.Type.FAILURE, message);
             } finally {
                 if (connection != null) {
                     connection.destroy();

@@ -9,7 +9,9 @@ import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
 
+import com.mirth.connect.client.core.Version;
 import com.mirth.connect.donkey.util.DonkeyElement;
+import com.mirth.connect.model.converters.ObjectXMLSerializer;
 
 public class SmtpDispatcherPropertiesMigrationTest {
 
@@ -103,5 +105,45 @@ public class SmtpDispatcherPropertiesMigrationTest {
 
         assertEquals("https://custom.scope/.default",
                 element.getChildElement("oAuthScope").getTextContent());
+    }
+
+    // -----------------------------------------------------------------------
+    // cc/bcc survive an XStream round trip and the migration path (A3/F3)
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void testCcBccSurviveXStreamRoundTrip() throws Exception {
+        try {
+            ObjectXMLSerializer.getInstance().init(Version.getLatest().toString());
+        } catch (Exception e) {
+            // Ignore if it has already been initialized
+        }
+
+        SmtpDispatcherProperties original = new SmtpDispatcherProperties();
+        original.setCc("cc@example.com");
+        original.setBcc("bcc@example.com");
+
+        // ObjectXMLSerializer is the serializer Mirth actually uses -- not a hand-rolled
+        // XML compare (RESEARCH "Don't Hand-Roll").
+        String xml = ObjectXMLSerializer.getInstance().serialize(original);
+        SmtpDispatcherProperties deserialized = ObjectXMLSerializer.getInstance()
+                .deserialize(xml, SmtpDispatcherProperties.class);
+
+        assertEquals("cc should survive an XStream serialize -> deserialize round trip",
+                "cc@example.com", deserialized.getCc());
+        assertEquals("bcc should survive an XStream serialize -> deserialize round trip",
+                "bcc@example.com", deserialized.getBcc());
+
+        // Migration path: cc/bcc must not be dropped or renamed by migrate26_3_0, mirroring
+        // the existing testMigrate_* methods' DonkeyElement + getChildElement style.
+        DonkeyElement migratedElement = new DonkeyElement(xml);
+        new SmtpDispatcherProperties().migrate26_3_0(migratedElement);
+
+        DonkeyElement ccElement = migratedElement.getChildElement("cc");
+        DonkeyElement bccElement = migratedElement.getChildElement("bcc");
+        assertNotNull("cc element should survive migration", ccElement);
+        assertEquals("cc@example.com", ccElement.getTextContent());
+        assertNotNull("bcc element should survive migration", bccElement);
+        assertEquals("bcc@example.com", bccElement.getTextContent());
     }
 }

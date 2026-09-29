@@ -17,10 +17,13 @@ import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.SecurityContext;
 
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.api.MirthApiException;
@@ -33,6 +36,7 @@ import com.mirth.connect.server.api.DontCheckAuthorized;
 import com.mirth.connect.server.api.MirthServlet;
 import com.mirth.connect.server.controllers.CodeTemplateController;
 import com.mirth.connect.server.controllers.ControllerFactory;
+import com.mirth.connect.util.CodeTemplateUtil;
 
 public class CodeTemplateServlet extends MirthServlet implements CodeTemplateServletInterface {
 
@@ -124,6 +128,12 @@ public class CodeTemplateServlet extends MirthServlet implements CodeTemplateSer
                 throw new MirthApiException(e);
             }
         }
+    }
+
+    @Override
+    public Response generateDoc(String code) {
+        String result = CodeTemplateUtil.updateCode(StringUtils.defaultString(code));
+        return Response.ok(result, MediaType.TEXT_PLAIN_TYPE).build();
     }
 
     @Override

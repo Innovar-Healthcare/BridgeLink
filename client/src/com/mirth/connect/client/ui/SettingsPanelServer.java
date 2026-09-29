@@ -92,6 +92,7 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
         provideUsageStatsMoreInfoLabel.setToolTipText(com.mirth.connect.client.ui.UIConstants.PRIVACY_TOOLTIP);
         provideUsageStatsMoreInfoLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
         queueBufferSizeField.setDocument(new MirthFieldConstraints(8, false, false, true));
+        channelStopGracePeriodField.setDocument(new MirthFieldConstraints(6, false, false, true));
         smtpTimeoutField.setDocument(new MirthFieldConstraints(0, false, false, false));
         administratorAutoLogoutIntervalField.setDocument(new MirthFieldConstraints(2, false, false, true));
         
@@ -349,6 +350,13 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
             queueBufferSizeField.setText("");
         }
 
+        // Blank means no stored value (engine default of 120 seconds); zero means wait without bound
+        if (serverSettings.getChannelStopGracePeriod() != null) {
+            channelStopGracePeriodField.setText(serverSettings.getChannelStopGracePeriod().toString());
+        } else {
+            channelStopGracePeriodField.setText("");
+        }
+
         // TODO: Change this to use a more complex custom metadata table rather than checkboxes
         List<MetaDataColumn> defaultMetaDataColumns = serverSettings.getDefaultMetaDataColumns();
         if (defaultMetaDataColumns != null) {
@@ -427,6 +435,14 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
             serverSettings.setQueueBufferSize(null);
         } else {
             serverSettings.setQueueBufferSize(queueBufferSize);
+        }
+
+        // Blank leaves the stored value unchanged (a null is not saved); any digits, including 0, are an explicit value
+        String channelStopGracePeriod = StringUtils.trimToNull(channelStopGracePeriodField.getText());
+        if (channelStopGracePeriod == null) {
+            serverSettings.setChannelStopGracePeriod(null);
+        } else {
+            serverSettings.setChannelStopGracePeriod(NumberUtils.toInt(channelStopGracePeriod, 0));
         }
 
         // TODO: Change this to use a more complex custom metadata table rather than checkboxes
@@ -816,6 +832,10 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
         queueBufferSizeField = new MirthTextField();
         queueBufferSizeField.setToolTipText("The default source/destination queue buffer size to use for new channels.");
 
+        channelStopGracePeriodLabel = new JLabel("Channel Stop Grace Period (sec):");
+        channelStopGracePeriodField = new MirthTextField();
+        channelStopGracePeriodField.setToolTipText("<html>How long a channel stop waits for its threads and connector hooks before failing and naming the stuck thread.<br/>The channel stays Stopping so you can halt it. The default is 120 seconds; 0 waits without limit.</html>");
+
         defaultMetaDataLabel = new JLabel("Default Metadata Columns:");
 
         defaultMetaDataSourceCheckBox = new MirthCheckBox("Source");
@@ -995,6 +1015,8 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
         channelPanel.add(clearGlobalMapNoRadio);
         channelPanel.add(queueBufferSizeLabel, "newline, right");
         channelPanel.add(queueBufferSizeField, "w 50!");
+        channelPanel.add(channelStopGracePeriodLabel, "newline, right");
+        channelPanel.add(channelStopGracePeriodField, "w 50!");
         channelPanel.add(defaultMetaDataLabel, "newline, right");
         channelPanel.add(defaultMetaDataSourceCheckBox, "split 3");
         channelPanel.add(defaultMetaDataTypeCheckBox);
@@ -1236,6 +1258,8 @@ public class SettingsPanelServer extends com.mirth.connect.client.ui.AbstractSet
     private MirthRadioButton clearGlobalMapNoRadio;
     private JLabel queueBufferSizeLabel;
     private MirthTextField queueBufferSizeField;
+    private JLabel channelStopGracePeriodLabel;
+    private MirthTextField channelStopGracePeriodField;
     private JLabel defaultMetaDataLabel;
     private MirthCheckBox defaultMetaDataSourceCheckBox;
     private MirthCheckBox defaultMetaDataTypeCheckBox;

@@ -354,6 +354,7 @@ public class LookupService {
             Map<String, String> importValues = (values == null) ? Collections.emptyMap() : values;
             boolean isValueJson = LookupConstants.isJsonValueType(group.getValueType());
 
+            int skippedCount = 0;
             if (isValueJson && !importValues.isEmpty()) {
                 Map<String, String> filtered = new LinkedHashMap<>();
                 for (Map.Entry<String, String> entry : importValues.entrySet()) {
@@ -364,12 +365,25 @@ public class LookupService {
                     }
                 }
 
+                skippedCount = importValues.size() - filtered.size();
                 importValues = filtered;
             }
-            int count = valueDao.importValues(tableName, importValues);
+            int count;
+            if (isValueJson) {
+                count = valueDao.importValuesJson(tableName, importValues);
+            } else {
+                count = valueDao.importValues(tableName, importValues);
+            }
 
-            // Audit
-            recordAudit(groupId, tableName, "*", "IMPORT", null, count + " values imported", userId);
+            // Audit — include the skipped-entry count so silently-dropped invalid-JSON rows are
+            // visible in the audit trail, not just the (invisible-at-ERROR-only-root-logger) log.
+            String auditDetail = count + " values imported"
+                    + (skippedCount > 0 ? ", " + skippedCount + " skipped (invalid JSON)" : "");
+            recordAudit(groupId, tableName, "*", "IMPORT", null, auditDetail, userId);
+
+            if (skippedCount > 0) {
+                logger.error("Import for group {} (ID: {}) skipped {} entries with invalid JSON", group.getName(), groupId, skippedCount);
+            }
 
             logger.info("Imported {} values into group: {} (ID: {})", count, group.getName(), groupId);
 

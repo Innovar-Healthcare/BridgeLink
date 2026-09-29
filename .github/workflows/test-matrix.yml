@@ -1,20 +1,40 @@
-name: Test matrix (JDK 17 / 21)
+# Dedicated JDK 17/21/25 test matrix (JAVA-03).
+# Sibling of build_bridgelink.yml (which stays untouched, D-05); this workflow
+# runs the unsigned build + full test suite + coverage as parallel, independent
+# legs (D-07) so a failing test turns its own leg red honestly (Plan 16-03
+# wired failureproperty + <fail> into the junit targets). Push/PR legs are
+# split into two shard jobs each (IRT-1932): group A runs donkey plus the
+# com.mirth.connect.server.* slice of the server suite, group B runs the rest.
+name: Test matrix (JDK 17/21/25)
 
 on:
   push:
-    branches:
-      - feature/26.6.1-clean
+    branches: [feature/26.9.x, feature/26.9.x-clean, bridgelink_development]
   pull_request:
-    branches:
-      - feature/26.6.1-clean
+    branches: [feature/26.9.x, feature/26.9.x-clean, bridgelink_development]
+  schedule:
+    # Nightly JDK 25 leg (IRT-1932). The 25 leg is known-red until mockito/byte-buddy
+    # are bumped (pinned 5.1.1/1.14.13), so it tracks the signal without gating PRs.
+    - cron: '0 6 * * *'
+
+# Superseded pushes to the same ref stop consuming runners (IRT-1932).
+# The nightly schedule gets its own group and is never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        java: [17, 21]
+        java: ${{ github.event_name == 'schedule' && fromJSON('["25"]') || fromJSON('["17", "21"]') }}
+        # The nightly stays one unsharded full-suite job, so one job still equals
+        # the whole suite and the unsharded ant path keeps getting exercised.
+        group: ${{ github.event_name == 'schedule' && fromJSON('["all"]') || fromJSON('["A", "B"]') }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,13 +42,37 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java }}
-          java-package: 'jdk+fx'
           distribution: 'zulu'
+          java-package: 'jdk+fx'
 
-      - name: Build BridgeLink (unsigned)
+      - name: Build Bridgelink - unsigned
         working-directory: server
-        run: ant -f mirth-build.xml -DdisableSigning=true
+        run: ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true -Dskip.javadocs=true
 
-      - name: Run unit tests (all modules)
+      # A shard's aggregate coverage report only covers the modules that shard ran
+      # (others show 0%); the nightly reports-jdk25-all artifact is the full-suite one.
+      - name: Test + aggregate coverage (group ${{ matrix.group }})
         working-directory: server
-        run: ant -f mirth-build.xml test-run
+        run: |
+          case "${{ matrix.group }}" in
+            A)   target=test-run-group-a-and-aggregate ;;
+            B)   target=test-run-group-b-and-aggregate ;;
+            all) target=test-run-and-aggregate ;;
+            *)   echo "unknown matrix group '${{ matrix.group }}'"; exit 1 ;;
+          esac
+          # D-03 (IRT-1489, Phase 24): embedded Derby 10.17 (v63 classfiles) cannot load
+          # on JDK 17 (max v61); the 21/25 legs keep collecting and running the
+          # Derby-loading donkey/server test classes normally (never assumeTrue-skipped).
+          extra_args=""
+          [ "${{ matrix.java }}" = "17" ] && extra_args="-Dexclude.derby.tests=true"
+          ant -f mirth-build.xml $extra_args "$target"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-jdk${{ matrix.java }}-${{ matrix.group }}
+          path: |
+            aggregate-reports/
+            server/junit-reports/
+            donkey/junit-reports/

@@ -1,0 +1,72 @@
+<project name="mock-dimse-datatype" default="build">
+
+    <property file="build.properties" />
+
+    <!-- The engine rejects an extension whose mirthVersion does not name its own version
+         (ExtensionLoader.isExtensionCompatible), so stamp the engine this tree builds rather
+         than a literal that goes stale at the next release bump. -Dengine.version=X overrides. -->
+    <property file="${engine.build.properties}" prefix="engine" />
+    <fail unless="engine.version" message="No engine version: ${engine.build.properties} is missing or has no version= line" />
+
+    <target name="clean">
+        <delete dir="${build.dir}" />
+    </target>
+
+    <target name="compile">
+        <mkdir dir="${classes.dir}/shared" />
+        <mkdir dir="${classes.dir}/server" />
+
+        <javac srcdir="shared" destdir="${classes.dir}/shared" includeantruntime="false" release="17" debug="true">
+            <classpath>
+                <pathelement path="${server.classes.dir}" />
+                <fileset dir="${server.lib}" includes="**/*.jar" />
+            </classpath>
+        </javac>
+
+        <javac srcdir="server" destdir="${classes.dir}/server" includeantruntime="false" release="17" debug="true">
+            <classpath>
+                <pathelement path="${classes.dir}/shared" />
+                <pathelement path="${server.classes.dir}" />
+                <fileset dir="${server.lib}" includes="**/*.jar" />
+            </classpath>
+        </javac>
+    </target>
+
+    <target name="jar" depends="compile">
+        <mkdir dir="${dist.dir}" />
+
+        <jar destfile="${dist.dir}/${plugin.name}-shared.jar">
+            <fileset dir="${classes.dir}/shared" includes="**/*" />
+        </jar>
+
+        <jar destfile="${dist.dir}/${plugin.name}-server.jar">
+            <fileset dir="${classes.dir}/server" includes="**/*" />
+        </jar>
+    </target>
+
+    <target name="build" depends="clean, jar">
+        <copy file="plugin.xml" todir="${dist.dir}">
+            <filterset><filter token="MIRTH_VERSION" value="${engine.version}" /></filterset>
+        </copy>
+        <copy todir="${dist.dir}/webadmin">
+            <fileset dir="webadmin" includes="**/*" />
+        </copy>
+
+        <!-- Single top-level folder named after the extension path, as the installer expects -->
+        <zip destfile="${build.dir}/${plugin.package.name}.zip" encoding="UTF-8" level="9" zip64Mode="never">
+            <zipfileset dir="${dist.dir}" prefix="${plugin.path}/" />
+        </zip>
+
+        <echo message="Built ${build.dir}/${plugin.package.name}.zip" />
+    </target>
+
+    <!-- Local dev convenience: copy the exploded extension into the setup dir (restart the server after) -->
+    <target name="install" depends="build">
+        <mkdir dir="${server.setup.extensions}/${plugin.path}" />
+        <copy todir="${server.setup.extensions}/${plugin.path}">
+            <fileset dir="${dist.dir}" includes="**/*" />
+        </copy>
+        <echo message="Installed to ${server.setup.extensions}/${plugin.path}" />
+    </target>
+
+</project>

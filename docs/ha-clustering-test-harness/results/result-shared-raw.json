@@ -1,0 +1,73 @@
+{
+  "total_deliveries": 10,
+  "distinct_message_ids": 10,
+  "duplicated_message_ids": 0,
+  "extra_deliveries": 0,
+  "in_flight_now": 10,
+  "duplicate_detail": {},
+  "by_node": {
+    "737b6544ec50": 10
+  },
+  "deliveries": [
+    {
+      "id": "7",
+      "node": "737b6544ec50",
+      "at": 11.292,
+      "first": true
+    },
+    {
+      "id": "2",
+      "node": "737b6544ec50",
+      "at": 11.292,
+      "first": true
+    },
+    {
+      "id": "3",
+      "node": "737b6544ec50",
+      "at": 11.293,
+      "first": true
+    },
+    {
+      "id": "8",
+      "node": "737b6544ec50",
+      "at": 11.293,
+      "first": true
+    },
+    {
+      "id": "4",
+      "node": "737b6544ec50",
+      "at": 11.293,
+      "first": true
+    },
+    {
+      "id": "9",
+      "node": "737b6544ec50",
+      "at": 11.293,
+      "first": true
+    },
+    {
+      "id": "5",
+      "node": "737b6544ec50",
+      "at": 11.293,
+      "first": true
+    },
+    {
+      "id": "6",
+      "node": "737b6544ec50",
+      "at": 11.294,
+      "first": true
+    },
+    {
+      "id": "10",
+      "node": "737b6544ec50",
+      "at": 11.294,
+      "first": true
+    },
+    {
+      "id": "1",
+      "node": "737b6544ec50",
+      "at": 11.294,
+      "first": true
+    }
+  ]
+}

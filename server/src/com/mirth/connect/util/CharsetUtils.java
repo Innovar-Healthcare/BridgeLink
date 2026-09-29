@@ -39,6 +39,13 @@ public class CharsetUtils {
     }
 
     public static String getEncoding(String charsetEncoding) {
-        return getEncoding(charsetEncoding, null);
+        // IRT-1780: fall back to the server-wide ca.uhn.hl7v2.llp.charset override (promoted from
+        // mirth.properties in DefaultConfigurationController) before resolving DEFAULT_ENCODING to
+        // Charset.defaultCharset(). This gives the single-argument callers (TCP and HTTP connectors)
+        // the same operator lever the File/DB/SMTP connectors already pass explicitly, so a channel
+        // relying on DEFAULT_ENCODING can be pinned without depending on the JVM platform default
+        // (which JEP 400 changed to UTF-8 on Java 18+). With the property unset getProperty returns
+        // null and behavior is identical to before.
+        return getEncoding(charsetEncoding, System.getProperty("ca.uhn.hl7v2.llp.charset"));
     }
 }

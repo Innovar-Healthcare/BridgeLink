@@ -10,6 +10,7 @@
 package com.mirth.connect.donkey.server.channel;
 
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 public class DefaultChannelProcessLock implements ChannelProcessLock {
     private int permits;
@@ -34,6 +35,11 @@ public class DefaultChannelProcessLock implements ChannelProcessLock {
     }
 
     @Override
+    public boolean tryAcquireAll(long timeout, TimeUnit unit) throws InterruptedException {
+        return lock.tryAcquire(permits, timeout, unit);
+    }
+
+    @Override
     public void release() {
         lock.release();
     }
@@ -46,5 +52,14 @@ public class DefaultChannelProcessLock implements ChannelProcessLock {
     @Override
     public void reset() {
         lock = new Semaphore(permits, true);
+    }
+
+    /** Permits currently available; equals the configured count when nothing is dispatching. For tests and diagnostics. */
+    public int availablePermits() {
+        return lock.availablePermits();
+    }
+
+    public int getPermits() {
+        return permits;
     }
 }

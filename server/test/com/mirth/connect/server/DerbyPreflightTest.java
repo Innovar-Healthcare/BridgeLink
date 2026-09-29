@@ -60,7 +60,7 @@ public class DerbyPreflightTest {
 
     @Test
     public void testErrorMessageIsVerbatimIrt1488Text() {
-        assertEquals("embedded Derby requires Java 21+ as of 26.6.1; upgrade Java or switch to an external database",
+        assertEquals("embedded Derby requires Java 21+ as of 26.9; upgrade Java or switch to an external database",
             Mirth.DERBY_JAVA_ERROR_MSG);
     }
 

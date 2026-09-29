@@ -36,6 +36,8 @@ import java.util.Map;
 import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
 
 import org.junit.Before;
@@ -353,6 +355,47 @@ public class CodeTemplateServletTest extends ServletTestBase {
         CodeTemplateLibrarySaveResult result = servlet.updateLibrariesAndTemplates(
                 new ArrayList<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), true);
         assertNotNull(result);
+    }
+
+    // ========== generateDoc (IRT-1521) ==========
+
+    @Test
+    public void testGenerateDocAddsPlaceholderDescription() throws Exception {
+        Response response = servlet.generateDoc("function myFunc(arg1) {\n\treturn arg1;\n}");
+        assertEquals(200, response.getStatus());
+        String result = (String) response.getEntity();
+        assertNotNull(result);
+        assertTrue(result.startsWith("/**"));
+        assertTrue(result.contains("@param"));
+    }
+
+    @Test
+    public void testGenerateDocBlankCodeReturnsBlank() throws Exception {
+        Response response = servlet.generateDoc(null);
+        assertEquals(200, response.getStatus());
+        assertEquals("", response.getEntity());
+    }
+
+    /**
+     * {@code _generateDoc}'s {@code @Produces} admits {@code application/json} (WebAdmin's fetch
+     * wrapper sends {@code Accept: application/json}), but the actual response Content-Type must
+     * stay pinned to {@code text/plain} - a bare regenerated-JSDoc String, never the JSON envelope
+     * and never wrapped in {@link com.mirth.connect.client.core.api.RawContent} (its
+     * {@code MessageBodyWriter} only advertises XML/JSON, RESEARCH Pitfall 5). Neither
+     * {@link #testGenerateDocAddsPlaceholderDescription} nor
+     * {@link #testGenerateDocBlankCodeReturnsBlank} assert {@link Response#getMediaType()}, so a
+     * future edit that dropped the explicit {@code MediaType.TEXT_PLAIN_TYPE} argument from
+     * {@code CodeTemplateServlet.generateDoc}'s {@code Response.ok(...)} call would pass the
+     * shipped suite silently.
+     */
+    @Test
+    public void testGenerateDocMediaTypePinnedToTextPlainAsBareString() throws Exception {
+        Response response = servlet.generateDoc("function myFunc(arg1) {\n\treturn arg1;\n}");
+        assertEquals(200, response.getStatus());
+        assertEquals(MediaType.TEXT_PLAIN_TYPE, response.getMediaType());
+        String body = (String) response.getEntity();
+        assertNotNull(body);
+        assertTrue(body.startsWith("/**"));
     }
 
     /**

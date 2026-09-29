@@ -4,13 +4,13 @@
 	<property name="keystore_property_file" value="keystore.properties" />
 	<property name="manifest_thread_count" value="4" />
 	<property name="signjar_thread_count" value="4" />
-	<property name="jdk_src_path" value="" />
-	<!-- IRT-2271: server.test.excludes lets mirth-build.xml's test-run target pass the
-	     JDK-17 Derby-loading class exclusion list (server.derby.test.excludes) into this
-	     module's batchtest fileset without changing what a bare local run of this file
-	     collects (server.test.excludes defaults to empty). -->
+	<property name="junit_thread_count" value="2" />
+	<!-- Comma-separated ant patterns selecting which test classes test-run executes.
+	     The defaults run everything; mirth-build.xml's shard targets override them so
+	     CI can split the suite across parallel jobs (IRT-1932). -->
 	<property name="server.test.includes" value="**/*Test.class" />
 	<property name="server.test.excludes" value="" />
+	<property name="jdk_src_path" value="" />
 
 	<target name="help">
 		<echo>Mirth Connect Build Help</echo>
@@ -1016,7 +1016,6 @@
 			<include name="com/mirth/connect/plugins/*.class" />
 			<include name="com/mirth/connect/connectors/*.class" />
 			<include name="org/**" />
-			<include name="net/sourceforge/jtds/ssl/**" />
 
 			<include name="mirth-client.jnlp" />
 
@@ -1145,7 +1144,9 @@
 		<mkdir dir="${dist}" />
 	</target>
 
-	<target name="create-javadocs" depends="init">
+	<!-- skip.javadocs skips userutil javadoc generation; CI test builds set it since
+	     nothing in the test run consumes the docs. Release builds must not set it. -->
+	<target name="create-javadocs" depends="init" unless="skip.javadocs">
 		<mkdir dir="${docs.javadocs}" />
 
 		<javadoc sourcepath="${src}:${jdk_src_path}" destdir="${docs.javadocs.userapi}" packagenames="com.mirth.connect.server.userutil,com.mirth.connect.userutil,com.mirth.connect.plugins.httpauth.userutil" link="https://docs.oracle.com/javase/8/docs/api/">
@@ -1217,48 +1218,75 @@
 		<!-- compile the source -->
 		<mkdir dir="${test_classes}" />
 
+		<!-- Unit A (D-01/D-02): release="17" checks the test tree's API surface against ct.sym,
+		     closing the "test code silently uses 21+ APIs" gap ahead of the JDK 17/21/25 CI
+		     matrix (Plan 16-04). NO compilerarg elements are permitted here: javac hard-rejects
+		     the release flag combined with the add-exports/add-opens flags into java.base
+		     (JDK-8308399, empirically verified in 16-RESEARCH.md Pitfall 2).
+		     Any future test that needs a JDK-internal API (sun.*/com.sun.*) at compile time must
+		     be added to Unit A's excludes here AND to quarantine Unit B's explicit include list
+		     below: until then it fails loudly in this unit (D-03 self-policing).
+		     Currently Unit A has NO excludes: the quarantine list is empty. Verified this session
+		     (16-RESEARCH.md Finding 1 / Pitfall 3): zero test files import sun.*/com.sun.* classes;
+		     the internal-package mentions in KeyEncryptorTest/WebStartServletTest/
+		     ObjectXMLSerializerTest are string literals only (XML fixtures, a JNLP template, and
+		     a provider-name argument), none of which require the add-exports flag to compile.
+		     Do NOT pre-populate this list from assumption. -->
+		<javac srcdir="${test}" destdir="${test_classes}" debug="on" includeAntRuntime="false" release="17">
+			<classpath refid="testclasspath" />
+		</javac>
+
+		<!-- Unit B (D-01/D-02/D-03): quarantine scaffold for tests that genuinely need
+		     JDK-internal APIs at compile time. Uses source/target (not release) because javac
+		     permits the add-exports/add-opens flags into java.base only under source/target
+		     compilation (see Unit A comment above for the exact rejection). The include list
+		     below is explicit and currently EMPTY: the placeholder include matches no real file,
+		     so this unit compiles 0 source files today (verified: no current test needs it). Ant
+		     semantics trap: a javac with zero nested include elements compiles EVERYTHING, so the
+		     placeholder is required, not optional. When a test is quarantined, exclude it from
+		     Unit A above and replace the placeholder line below with an explicit include element
+		     naming that one file's path (no wildcards). -->
 		<javac srcdir="${test}" destdir="${test_classes}" debug="on" includeAntRuntime="false" source="17" target="17">
 			<classpath refid="testclasspath" />
-<!--			 Uncomment the following and add additional dashes in front of the arguments to allow Java 9+-->
-							<compilerarg value="--add-modules" />
-							<compilerarg value="java.sql.rowset" />
-							<compilerarg value="--add-exports" />
-							<compilerarg value="java.sql.rowset/com.sun.rowset=ALL-UNNAMED" />
-						<compilerarg value="--add-exports" />
-						<compilerarg value="java.base/com.sun.crypto.provider=ALL-UNNAMED" />
-						<compilerarg value="--add-exports" />
-						<compilerarg value="java.base/sun.security.provider=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.lang=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.lang.reflect=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.math=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.net=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.security=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.security.cert=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.text=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/java.util=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/sun.security.pkcs=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/sun.security.rsa=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.base/sun.security.x509=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.desktop/java.awt=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.desktop/java.awt.color=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.desktop/java.awt.font=ALL-UNNAMED" />
-						<compilerarg value="--add-opens" />
-						<compilerarg value="java.xml/com.sun.org.apache.xalan.internal.xsltc.trax=ALL-UNNAMED" />
-
+			<include name="**/__quarantine_placeholder__/*.java" />
+			<compilerarg value="--add-modules" />
+			<compilerarg value="java.sql.rowset" />
+			<compilerarg value="--add-exports" />
+			<compilerarg value="java.sql.rowset/com.sun.rowset=ALL-UNNAMED" />
+			<compilerarg value="--add-exports" />
+			<compilerarg value="java.base/com.sun.crypto.provider=ALL-UNNAMED" />
+			<compilerarg value="--add-exports" />
+			<compilerarg value="java.base/sun.security.provider=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.lang=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.lang.reflect=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.math=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.net=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.security=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.security.cert=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.text=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/java.util=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/sun.security.pkcs=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/sun.security.rsa=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.base/sun.security.x509=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.desktop/java.awt=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.desktop/java.awt.color=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.desktop/java.awt.font=ALL-UNNAMED" />
+			<compilerarg value="--add-opens" />
+			<compilerarg value="java.xml/com.sun.org.apache.xalan.internal.xsltc.trax=ALL-UNNAMED" />
 		</javac>
 
 		<copy todir="${test_classes}">
@@ -1308,12 +1336,9 @@
 		<mkdir dir="${junit-html}" />
 
 		<jacoco:coverage destfile="${code-coverage-reports}/jacoco.exec" xmlns:jacoco="antlib:org.jacoco.ant" exclclassloader="sun.reflect.DelegatingClassLoader:javassist.Loader" >
-			<!--
-				haltonfailure stays false on purpose: the run must finish so that the JUnit XML,
-				the HTML report and the JaCoCo coverage below are all written even when tests
-				fail. The build is failed by the <fail> at the end of this target instead.
-			-->
-			<junit haltonfailure="false" printsummary="yes" failureproperty="tests.failed" errorproperty="tests.errored" fork="true" forkmode="perTest">
+			<!-- threads only applies with forkmode="perTest": each test class already runs in
+			     its own JVM, so running forks concurrently preserves per-JVM isolation. -->
+			<junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="perTest" threads="${junit_thread_count}" dir="${basedir}">
 				<jvmarg value="-Xms128m" />
 				<jvmarg value="-Xmx2048m" />
 <!--				&lt;!&ndash;Uncomment the following and add additional dashes in front of the arguments to allow Java 9+-->
@@ -1345,16 +1370,6 @@
 				</classpath>
 				<formatter type="xml" />
 				<batchtest todir="${junit-reports}">
-					<!--
-						*Test only, deliberately. The 23 legacy *Tests classes under server/test are
-						quarantined: they require infrastructure this build does not provide (a live
-						PostgreSQL on localhost:5432, ActiveMQ on 61616, /tmp/prunertest, Windows
-						paths such as C:\NCPDP_*.txt). Adding **/*Tests.class here to match donkey's
-						fileset would pull in ~145 tests that cannot pass and would fail every build.
-						The *Test include lives in ${server.test.includes} (default **/*Test.class);
-						${server.test.excludes} additionally drops the JDK-17 Derby-loading classes
-						(IRT-2271, wired from mirth-build.xml's test-run target).
-					-->
 					<fileset dir="${test_classes}" includes="${server.test.includes}" excludes="${server.test.excludes}">
 						<exclude name="**/*$*.class" />
 					</fileset>
@@ -1373,15 +1388,7 @@
 		<!-- Automatically generate JaCoCo HTML report after tests -->
 		<antcall target="jacoco-report"/>
 
-		<!-- Gate the build on the test results. Must stay last so the reports above are written first. -->
-		<fail message="Unit tests failed in server. See ${junit-reports}/ for details.">
-			<condition>
-				<or>
-					<isset property="tests.failed" />
-					<isset property="tests.errored" />
-				</or>
-			</condition>
-		</fail>
+		<fail if="test.failed" message="Unit tests failed - see junit-reports/"/>
 	</target>
 
 	<target name="jacoco-report" depends="init">

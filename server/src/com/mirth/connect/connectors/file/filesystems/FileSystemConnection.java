@@ -9,6 +9,7 @@
 
 package com.mirth.connect.connectors.file.filesystems;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
@@ -148,4 +149,30 @@ public interface FileSystemConnection {
 
     /** Test if can write to specified directory **/
     public boolean canWrite(String writeDir);
+
+    /**
+     * Verifies that the specified directory can be accessed, throwing an exception carrying the
+     * underlying reason when it cannot. Unlike {@link #canRead(String)} / {@link #canWrite(String)},
+     * which collapse every failure into a bare {@code false}, this lets a connection surface why the
+     * directory could not be opened (e.g. an SFTP {@code cd} that fails after a successful login) so
+     * a Test Connection result can report the real cause instead of a misleading "Unable to
+     * connect". See IRT-1757.
+     * <p>
+     * The default implementation preserves the historical behavior: it delegates to
+     * {@code canRead}/{@code canWrite} and, on failure, throws an {@link IOException} with no
+     * message, so callers append no reason. Connections that can obtain a specific reason should
+     * override this and throw an {@link IOException} whose message carries it.
+     *
+     * @param dir
+     *            The directory to test.
+     * @param read
+     *            True to test read access, false to test write access.
+     * @throws IOException
+     *             If the directory cannot be accessed.
+     */
+    default void checkDirectoryAccess(String dir, boolean read) throws IOException {
+        if (!(read ? canRead(dir) : canWrite(dir))) {
+            throw new IOException();
+        }
+    }
 }

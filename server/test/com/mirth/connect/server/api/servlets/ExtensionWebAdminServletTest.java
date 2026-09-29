@@ -10,6 +10,7 @@
 package com.mirth.connect.server.api.servlets;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -19,10 +20,14 @@ import static org.mockito.Mockito.when;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.Produces;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.SecurityContext;
 
@@ -40,6 +45,7 @@ import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 import com.mirth.connect.client.core.api.MirthApiException;
+import com.mirth.connect.client.core.api.servlets.ExtensionServletInterface;
 import com.mirth.connect.model.ConnectorMetaData;
 import com.mirth.connect.model.PluginMetaData;
 import com.mirth.connect.server.api.ServletTestBase;
@@ -94,10 +100,26 @@ public class ExtensionWebAdminServletTest extends ServletTestBase {
 
     @Test
     public void testManifestListMatchesContractFixture() throws Exception {
+        // The fixture (contract Revision 3) carries one entry per fixture extension; stub each
+        // as an installed and enabled plugin, in fixture order (the endpoint preserves it)
         JsonNode fixture = readManifestListFixture();
-        writeManifest(EXTENSION_PATH, objectMapper.writeValueAsString(fixture.get("entries").get(0).get("manifest")));
 
-        stubExtension(PLUGIN_NAME, CONNECTOR_NAME, EXTENSION_PATH, true);
+        Map<String, PluginMetaData> pluginMap = new LinkedHashMap<>();
+        for (JsonNode entry : fixture.get("entries")) {
+            String name = entry.get("name").asText();
+            String path = entry.get("path").asText();
+            writeManifest(path, objectMapper.writeValueAsString(entry.get("manifest")));
+
+            PluginMetaData pluginMetaData = new PluginMetaData();
+            pluginMetaData.setName(name);
+            pluginMetaData.setPath(path);
+            pluginMetaData.setPluginVersion(entry.get("version").asText());
+            pluginMap.put(name, pluginMetaData);
+            when(mockExtensionController.isExtensionEnabled(name)).thenReturn(true);
+        }
+
+        when(mockExtensionController.getPluginMetaData()).thenReturn(pluginMap);
+        when(mockExtensionController.getConnectorMetaData()).thenReturn(new HashMap<>());
 
         JsonNode actual = objectMapper.readTree(servlet.getWebAdminManifests().getContent());
         assertEquals(fixture, actual);
@@ -197,6 +219,26 @@ public class ExtensionWebAdminServletTest extends ServletTestBase {
         writeManifest(EXTENSION_PATH, "{\"manifestVersion\":1}");
         stubExtension(PLUGIN_NAME, CONNECTOR_NAME, EXTENSION_PATH, false);
         assertNotFound(() -> servlet.getWebAdminConnectorDefaults(PLUGIN_NAME, CONNECTOR_NAME));
+    }
+
+    @Test
+    public void testDefaultsNotFoundWhenOnlyConnectorDisabled() throws Exception {
+        writeManifest(EXTENSION_PATH, "{\"manifestVersion\":1}");
+        stubExtension(PLUGIN_NAME, CONNECTOR_NAME, EXTENSION_PATH, true);
+        when(mockExtensionController.isExtensionEnabled(CONNECTOR_NAME)).thenReturn(false);
+        assertNotFound(() -> servlet.getWebAdminConnectorDefaults(PLUGIN_NAME, CONNECTOR_NAME));
+    }
+
+    /*
+     * The WebAdmin fetch wrapper sends Accept: application/json, so dropping JSON from @Produces
+     * turns every defaults request into a 406 before the method runs (the regression fixed in
+     * public PR #173). Read off the annotation rather than restating the list.
+     */
+    @Test
+    public void testDefaultsInterfaceProducesIncludesJson() throws Exception {
+        Produces produces = ExtensionServletInterface.class.getMethod("getWebAdminConnectorDefaults", String.class, String.class).getAnnotation(Produces.class);
+        assertNotNull("getWebAdminConnectorDefaults must carry a method-level @Produces", produces);
+        assertTrue("406-avoidance: @Produces must still list application/json", Arrays.asList(produces.value()).contains(MediaType.APPLICATION_JSON));
     }
 
     @Test

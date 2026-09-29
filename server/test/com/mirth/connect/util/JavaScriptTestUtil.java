@@ -52,6 +52,11 @@ public class JavaScriptTestUtil {
     private static ScriptableObject sealedSharedScope;
 
     public static void setup() throws Exception {
+        // Match production: mirth.properties ships rhino.languageversion=es6. Without this call
+        // getGlobalContextForValidation() runs the shared static's default (VERSION_DEFAULT),
+        // making the ~27 behavioral tests below unfaithful to what BridgeLink actually executes
+        // (Phase 23.1 T1 / CVE-13).
+        JavaScriptSharedUtil.setRhinoLanguageVersion(Context.VERSION_ES6);
         Context context = JavaScriptSharedUtil.getGlobalContextForValidation();
         try {
             sealedSharedScope = new ImporterTopLevel(context);

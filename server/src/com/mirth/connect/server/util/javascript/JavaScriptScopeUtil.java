@@ -16,6 +16,7 @@ import java.util.Map.Entry;
 import java.util.Properties;
 
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.mozilla.javascript.Context;
@@ -24,6 +25,7 @@ import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.NativeArray;
 import org.mozilla.javascript.NativeJSON;
 import org.mozilla.javascript.NativeObject;
+import org.mozilla.javascript.ObjArray;
 import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -54,22 +56,41 @@ import com.mirth.connect.util.PropertyLoader;
 
 public class JavaScriptScopeUtil {
     private static Logger logger = LogManager.getLogger(JavaScriptScopeUtil.class);
+    /** -1 = interpretive mode, Rhino's own default and BridgeLink's shipped setting (MIRTH-1627). */
+    private static final Integer DEFAULT_RHINO_OPTIMIZATION_LEVEL = -1;
     private static Integer rhinoOptimizationLevel = null;
 
     static {
         /*
          * Checks mirth.properties for the rhino.optimizationlevel property. Setting it to -1 runs
          * it in interpretive mode. See MIRTH-1627 for more information.
+         *
+         * Two constraints on this block, both learned the hard way:
+         *
+         *  - It must NEVER throw. An exception escaping a static initializer becomes
+         *    ExceptionInInitializerError, which permanently poisons this class for the JVM's
+         *    lifetime and takes down every JavaScript path (transformers, filters, connectors)
+         *    with an error that does not even name the offending property. A one-character typo in
+         *    mirth.properties must degrade to the default, loudly logged, not to a dead server.
+         *  - The diagnostic must be logged AFTER the value is resolved. The previous version logged
+         *    rhinoOptimizationLevel on the line before it was assigned, so the single diagnostic
+         *    for this setting always read "null".
          */
         Properties properties = PropertyLoader.loadProperties("mirth");
+        String configuredOptimizationLevel = MapUtils.isNotEmpty(properties) ? properties.getProperty("rhino.optimizationlevel") : null;
 
-        if (MapUtils.isNotEmpty(properties) && properties.containsKey("rhino.optimizationlevel")) {
-            logger.debug("set Rhino context optimization level: " + rhinoOptimizationLevel);
-            rhinoOptimizationLevel = Integer.valueOf(properties.getProperty("rhino.optimizationlevel")).intValue();
+        if (StringUtils.isNotBlank(configuredOptimizationLevel)) {
+            try {
+                rhinoOptimizationLevel = Integer.valueOf(configuredOptimizationLevel.trim());
+            } catch (NumberFormatException e) {
+                rhinoOptimizationLevel = DEFAULT_RHINO_OPTIMIZATION_LEVEL;
+                logger.error("Invalid rhino.optimizationlevel value \"" + configuredOptimizationLevel + "\" in mirth.properties; using default (" + DEFAULT_RHINO_OPTIMIZATION_LEVEL + ")", e);
+            }
         } else {
-            logger.debug("using default Rhino context optimization level (-1)");
-            rhinoOptimizationLevel = -1;
+            rhinoOptimizationLevel = DEFAULT_RHINO_OPTIMIZATION_LEVEL;
         }
+
+        logger.debug("Rhino context optimization level: " + rhinoOptimizationLevel);
     }
 
     /*
@@ -100,9 +121,42 @@ public class JavaScriptScopeUtil {
 
     // Creates a new global scope within the current Context
     private static Scriptable getScope(Context context) {
-        Scriptable scope = context.newObject(((MirthContext) context).getSealedSharedScope());
-        scope.setPrototype(((MirthContext) context).getSealedSharedScope());
+        ScriptableObject sealedSharedScope = ((MirthContext) context).getSealedSharedScope();
+        ScriptableObject scope = (ScriptableObject) context.newObject(sealedSharedScope);
+        scope.setPrototype(sealedSharedScope);
         scope.setParentScope(null);
+        // Rhino 1.7.15+ stores importPackage'd packages as associatedValue("importedPackages") on
+        // the ImporterTopLevel scope. getNativeJavaPackages() looks up this value on the scope
+        // returned by getTopLevelScope(), which traverses parentScope. With parentScope=null the
+        // child scope is the top-level scope and carries no packages. We propagate the sealed
+        // scope's importedPackages to the child so importPackage'd symbols (e.g. Lists, Response)
+        // remain accessible without making the child's parentScope point to the sealed scope
+        // (which would cause bare-assignment global writes to fail on the sealed object).
+        //
+        // The propagation MUST be a per-scope COPY, never the sealed scope's own ObjArray:
+        // ImporterTopLevel.importPackage() mutates that array in place (ObjArray.add) and
+        // ImporterTopLevel.realScope() resolves to getTopLevelScope(scope), which for these
+        // parentScope=null child scopes is the child itself. Sharing one instance would (a) leak
+        // one channel's importPackage into every other channel's scope and back into the sealed
+        // scope, (b) re-open a mutation channel through the sealObject() seal (associatedValues
+        // are not covered by the seal), and (c) race, because importPackage/getNativeJavaPackages
+        // synchronize on the scope object they are handed, not on the array.
+        Object importedPackages = sealedSharedScope.getAssociatedValue("importedPackages");
+        if (importedPackages instanceof ObjArray) {
+            Object[] snapshot;
+            // Read under the owning scope's monitor -- the same monitor
+            // importPackage()/getNativeJavaPackages() take when handed the sealed scope.
+            synchronized (sealedSharedScope) {
+                snapshot = ((ObjArray) importedPackages).toArray();
+            }
+
+            ObjArray copy = new ObjArray();
+            for (Object importedPackage : snapshot) {
+                copy.add(importedPackage);
+            }
+
+            scope.associateValue("importedPackages", copy);
+        }
         return scope;
     }
 

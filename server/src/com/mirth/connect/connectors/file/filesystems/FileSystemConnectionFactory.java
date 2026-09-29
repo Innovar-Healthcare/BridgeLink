@@ -179,7 +179,10 @@ public class FileSystemConnectionFactory implements PooledObjectFactory<FileSyst
         } else if (scheme.equals(FileScheme.SMB)) {
             return new DefaultPooledObject<FileSystemConnection>(new SmbFileConnection(host, fileSystemOptions, timeout));
         } else if (scheme.equals(FileScheme.WEBDAV)) {
-            return new DefaultPooledObject<FileSystemConnection>(new WebDavConnection(host, secure, fileSystemOptions));
+            // Rule 1 fix (22-05/D-06): port was previously dropped entirely for WEBDAV (unlike
+            // the FTP/SFTP branches above, which both pass it through) -- see WebDavConnection's
+            // constructor javadoc for why that was a real feature-loss bug, not cosmetic.
+            return new DefaultPooledObject<FileSystemConnection>(new WebDavConnection(host, port, secure, fileSystemOptions));
         } else {
             logger.error("makeObject doesn't handle scheme " + scheme);
             throw new IOException("Unimplemented or unrecognized scheme");

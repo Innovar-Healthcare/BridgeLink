@@ -1,0 +1,55 @@
+
+[1m== MODE=shared   A_ID=5ha4ed00-0000-0000-0000-00000000shar   B_ID=5ha4ed00-0000-0000-0000-00000000shar   messages=10   hold=240s[0m
+
+[1m== Resetting the stack (fresh database)[0m
+
+[1m== Starting node A[0m
+  node A up after ~10s
+  login A: 200
+
+[1m== Deploying the channel on node A[0m
+  import HTTP 200
+  deploy HTTP 204
+  STARTED
+
+[1m== Sending 10 messages into node A[0m
+
+[1m== Waiting for messages to be in flight on node A[0m
+  in flight: 0
+  in flight: 10
+  deliveries before scale-out: 10
+
+[1m== SCALE-OUT: starting node B and deploying the same channel[0m
+  node B up after ~10s
+  login B: 200
+  deploy on B HTTP 204
+
+[1m== Letting node B's recovery run[0m
+
+[1m== RESULT[0m
+  mode                     : shared
+  deliveries before B      : 10
+  deliveries total         : 20
+  distinct message ids     : 10
+  ids delivered more than once: 10
+  EXTRA (duplicate) deliveries: 10
+  by node                  : {'bf7f63f30505': 10, '780d9a0be6c3': 10}
+  duplicates (message id -> delivering nodes):
+    1: ['bf7f63f30505', '780d9a0be6c3']
+    10: ['bf7f63f30505', '780d9a0be6c3']
+    2: ['bf7f63f30505', '780d9a0be6c3']
+    3: ['bf7f63f30505', '780d9a0be6c3']
+    4: ['bf7f63f30505', '780d9a0be6c3']
+    5: ['bf7f63f30505', '780d9a0be6c3']
+    6: ['bf7f63f30505', '780d9a0be6c3']
+    7: ['bf7f63f30505', '780d9a0be6c3']
+    8: ['bf7f63f30505', '780d9a0be6c3']
+    9: ['bf7f63f30505', '780d9a0be6c3']
+
+  VERDICT: DUPLICATE PROCESSING OBSERVED
+
+[1m== Did node B run recovery?[0m
+bl-b-1  | INFO  2026-09-01 18:59:58.304 [Recovery Task Thread on HA Shared Server ID Test (0000ha01-0000-0000-0000-0000000ha001) < pool-8-thread-1] com.mirth.connect.donkey.server.channel.RecoveryTask: Starting message recovery for channel HA Shared Server ID Test (0000ha01-0000-0000-0000-0000000ha001). Incomplete unfinished messages found.
+bl-b-1  | INFO  2026-09-01 18:59:58.380 [Recovery Task Thread on HA Shared Server ID Test (0000ha01-0000-0000-0000-0000000ha001) < pool-8-thread-1] com.mirth.connect.donkey.server.channel.RecoveryTask: Completed message recovery for channel HA Shared Server ID Test (0000ha01-0000-0000-0000-0000000ha001). Successfully recovered 10 out of 10 messages.
+
+Full JSON: result-shared.json

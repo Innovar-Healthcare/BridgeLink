@@ -12,10 +12,9 @@ package com.mirth.connect.server.api.servlets;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -28,17 +27,9 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.SecurityContext;
-import javax.xml.XMLConstants;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -49,24 +40,20 @@ import com.mirth.connect.client.core.ControllerException;
 import com.mirth.connect.client.core.api.MirthApiException;
 import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.client.core.api.servlets.ExtensionServletInterface;
-import com.mirth.connect.donkey.model.channel.ConnectorPluginProperties;
 import com.mirth.connect.donkey.model.channel.ConnectorProperties;
-import com.mirth.connect.donkey.model.channel.DestinationConnectorProperties;
-import com.mirth.connect.donkey.model.channel.DestinationConnectorPropertiesInterface;
-import com.mirth.connect.donkey.model.channel.SourceConnectorProperties;
-import com.mirth.connect.donkey.model.channel.SourceConnectorPropertiesInterface;
-import com.mirth.connect.donkey.server.Constants;
-import com.mirth.connect.donkey.util.DonkeyElement;
 import com.mirth.connect.model.ConnectorMetaData;
 import com.mirth.connect.model.MetaData;
+import com.mirth.connect.model.PluginClass;
 import com.mirth.connect.model.PluginMetaData;
 import com.mirth.connect.model.ServerEvent.Outcome;
-import com.mirth.connect.model.converters.ObjectXMLSerializer;
+import com.mirth.connect.model.datatype.DataTypeProperties;
+import com.mirth.connect.plugins.DataTypeServerPlugin;
 import com.mirth.connect.server.api.DontCheckAuthorized;
 import com.mirth.connect.server.api.MirthServlet;
 import com.mirth.connect.server.controllers.ControllerFactory;
 import com.mirth.connect.server.controllers.ExtensionController;
 import com.mirth.connect.server.controllers.ExtensionController.InstallationResult;
+import com.mirth.connect.server.util.ConnectorPropertiesUtil;
 
 public class ExtensionServlet extends MirthServlet implements ExtensionServletInterface {
 
@@ -222,6 +209,13 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
         if (connectorMetaData == null || !Objects.equals(connectorMetaData.getPath(), extension.getPath())) {
             throw new MirthApiException(Status.NOT_FOUND);
         }
+        /*
+         * A connector's enabled flag is separate from its plugin's, and the launcher skips a
+         * disabled connector's jars, so without this check the class lookup below fails with a 500.
+         */
+        if (!extensionController.isExtensionEnabled(connectorMetaData.getName())) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
 
         try {
             Class<?> sharedClass = Class.forName(connectorMetaData.getSharedClassName());
@@ -233,7 +227,50 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
              * The explicit media type pins the response to application/xml even when the client
              * sent Accept: application/json (which the method's Produces admits to avoid a 406).
              */
-            RawContent body = new RawContent(toConnectorPropertiesXml(instance));
+            RawContent body = new RawContent(ConnectorPropertiesUtil.toConnectorPropertiesXml(instance));
+            return Response.ok(body, MediaType.APPLICATION_XML_TYPE).build();
+        } catch (MirthApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new MirthApiException(e);
+        }
+    }
+
+    @Override
+    public Response getWebAdminDataTypeDefaults(String extensionName, String dataTypeName) {
+        MetaData extension = extensionController.getPluginMetaData().get(extensionName);
+        if (extension == null) {
+            extension = extensionController.getConnectorMetaData().get(extensionName);
+        }
+        if (extension == null || !extensionController.isExtensionEnabled(extension.getName())) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
+
+        File manifestFile = getGuardedWebAdminManifestFile(new File(getExtensionsPath()), extension.getPath());
+        if (manifestFile == null || !manifestFile.isFile()) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
+
+        /*
+         * The data type must be declared by the named extension itself: the loaded plugin's class
+         * must be one of the extension's registered server classes. Only the already-loaded plugin
+         * instance is used — never a caller-supplied class name.
+         */
+        DataTypeServerPlugin dataTypePlugin = extensionController.getDataTypePlugins().get(dataTypeName);
+        if (dataTypePlugin == null || !declaresServerClass(extension, dataTypePlugin.getClass().getName())) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
+
+        try {
+            DataTypeProperties properties = dataTypePlugin.getDefaultProperties();
+            if (properties == null) {
+                throw new MirthApiException(Status.NOT_FOUND);
+            }
+            /*
+             * The explicit media type pins the response to application/xml even when the client
+             * sent Accept: application/json (which the method's Produces admits to avoid a 406).
+             */
+            RawContent body = new RawContent(ConnectorPropertiesUtil.toRetaggedXml(properties, "dataTypeProperties"));
             return Response.ok(body, MediaType.APPLICATION_XML_TYPE).build();
         } catch (MirthApiException e) {
             throw e;
@@ -286,18 +323,6 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
         return ExtensionController.getExtensionsPath();
     }
 
-    private int getDefaultQueueBufferSize() {
-        try {
-            Integer queueBufferSize = ControllerFactory.getFactory().createConfigurationController().getServerSettings().getQueueBufferSize();
-            if (queueBufferSize != null && queueBufferSize > 0) {
-                return queueBufferSize;
-            }
-        } catch (Exception e) {
-            // Fall through to the donkey default
-        }
-        return Constants.DEFAULT_QUEUE_BUFFER_SIZE;
-    }
-
     /**
      * Resolves an extension's webadmin manifest file, guarding against paths that traverse outside
      * the extensions directory. Returns null when the resolved file escapes the directory.
@@ -319,70 +344,21 @@ public class ExtensionServlet extends MirthServlet implements ExtensionServletIn
     }
 
     /**
-     * Serializes freshly instantiated connector properties into the same form they take when
-     * embedded in a channel: a root <properties> element carrying class and version attributes.
+     * Whether the extension's plugin metadata declares the given class as one of its server
+     * classes. Connector-only extensions declare no server plugin classes.
      */
-    private String toConnectorPropertiesXml(ConnectorProperties properties) throws Exception {
-        /*
-         * Client-created channels always carry a pluginProperties element (the Swing client sets
-         * an empty set); serialize the same form so defaults match saved channel XML.
-         */
-        if (properties.getPluginProperties() == null) {
-            properties.setPluginProperties(new HashSet<ConnectorPluginProperties>());
+    private boolean declaresServerClass(MetaData extension, String className) {
+        if (!(extension instanceof PluginMetaData)) {
+            return false;
         }
-
-        /*
-         * The Swing client replaces a zero queue buffer size with the server's configured default
-         * before displaying defaults (ConnectorPanel); do the same so served defaults match.
-         */
-        if (properties instanceof SourceConnectorPropertiesInterface) {
-            SourceConnectorProperties sourceProperties = ((SourceConnectorPropertiesInterface) properties).getSourceConnectorProperties();
-            if (sourceProperties != null && sourceProperties.getQueueBufferSize() <= 0) {
-                sourceProperties.setQueueBufferSize(getDefaultQueueBufferSize());
+        List<PluginClass> serverClasses = ((PluginMetaData) extension).getServerClasses();
+        if (serverClasses != null) {
+            for (PluginClass serverClass : serverClasses) {
+                if (serverClass != null && Objects.equals(serverClass.getName(), className)) {
+                    return true;
+                }
             }
         }
-        if (properties instanceof DestinationConnectorPropertiesInterface) {
-            DestinationConnectorProperties destinationProperties = ((DestinationConnectorPropertiesInterface) properties).getDestinationConnectorProperties();
-            if (destinationProperties != null && destinationProperties.getQueueBufferSize() <= 0) {
-                destinationProperties.setQueueBufferSize(getDefaultQueueBufferSize());
-            }
-        }
-
-        String xml = ObjectXMLSerializer.getInstance().serialize(properties);
-        DonkeyElement element = new DonkeyElement(xml);
-        // The standalone root node name is exactly what XStream emits as the class attribute
-        element.setAttribute("class", element.getNodeName());
-        element.setNodeName("properties");
-        stripStructuralWhitespace(element.getElement());
-
-        TransformerFactory transformerFactory = TransformerFactory.newInstance();
-        transformerFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-        transformerFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
-        Transformer transformer = transformerFactory.newTransformer();
-        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
-        transformer.setOutputProperty(OutputKeys.INDENT, "no");
-        StringWriter writer = new StringWriter();
-        transformer.transform(new DOMSource(element.getElement()), new StreamResult(writer));
-        return writer.toString();
-    }
-
-    private void stripStructuralWhitespace(Node node) {
-        boolean hasElementChild = false;
-        NodeList children = node.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            if (children.item(i).getNodeType() == Node.ELEMENT_NODE) {
-                hasElementChild = true;
-                break;
-            }
-        }
-
-        for (int i = children.getLength() - 1; i >= 0; i--) {
-            Node child = children.item(i);
-            if (child.getNodeType() == Node.TEXT_NODE && hasElementChild && StringUtils.isBlank(child.getNodeValue())) {
-                node.removeChild(child);
-            } else if (child.getNodeType() == Node.ELEMENT_NODE) {
-                stripStructuralWhitespace(child);
-            }
-        }
+        return false;
     }
 }

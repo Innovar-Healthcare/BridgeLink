@@ -106,7 +106,14 @@ public class Mirth extends Thread {
 
     private static List<Thread> shutdownHooks = new ArrayList<Thread>();
 
-    private static final String ROOT_CHECK_ERROR_MSG =
+    /**
+     * The root/Administrator startup-guard remediation message.
+     *
+     * NOTE: a byte-identical twin of this constant lives in
+     * MirthLauncher.java (public static there, reached cross-package by RootCheckTest). The
+     * launcher cannot depend on mirth-server.jar, so the two copies must be kept in sync.
+     */
+    static final String ROOT_CHECK_ERROR_MSG =
         "================================================================\n" +
         "ERROR: BridgeLink is running as root/Administrator.\n" +
         "\n" +
@@ -115,8 +122,10 @@ public class Mirth extends Thread {
         "\n" +
         "To fix: create a dedicated service account and run BridgeLink as\n" +
         "that user:\n" +
-        "  Linux/macOS:  useradd -r -s /sbin/nologin bridgelink\n" +
-        "  Windows:      create a non-administrator local or domain account\n" +
+        "  Linux:    useradd -r -s /bin/false bridgelink\n" +
+        "  macOS:    sudo sysadminctl -addUser _bridgelink -roleAccount -UID 450 -shell /usr/bin/false\n" +
+        "  Windows:  create a non-administrator local or domain account and run the\n" +
+        "            BridgeLink service as that account\n" +
         "\n" +
         "To override (not recommended):\n" +
         "  Set server.allowRoot = true in conf/mirth.properties\n" +
@@ -130,7 +139,7 @@ public class Mirth extends Thread {
         "A malicious or compromised BridgeLink channel could attempt to\n" +
         "escalate privileges via sudo, SUID binaries, or capabilities.\n" +
         "\n" +
-        "Recommended hardening — set one of:\n" +
+        "Recommended hardening - set one of:\n" +
         "\n" +
         "  systemd unit file:\n" +
         "    [Service]\n" +
@@ -154,7 +163,7 @@ public class Mirth extends Thread {
     // Package-private (not private, like ROOT_CHECK_ERROR_MSG) so DerbyPreflightTest can
     // assert the exact verbatim IRT-1488 text - message verbatim-ness IS the requirement.
     static final String DERBY_JAVA_ERROR_MSG =
-        "embedded Derby requires Java 21+ as of 26.6.1; upgrade Java or switch to an external database";
+        "embedded Derby requires Java 21+ as of 26.9; upgrade Java or switch to an external database";
 
     /**
      * Pure evaluate method for the Derby/Java-21 startup preflight (JAVA-04).
@@ -164,6 +173,54 @@ public class Mirth extends Thread {
      */
     static boolean derbyPreflightBlocks(String databaseType, int javaFeatureVersion) {
         return "derby".equalsIgnoreCase(databaseType) && javaFeatureVersion < 21;
+    }
+
+    /**
+     * Process exit status for an aborted startup (IRT-2353). The server does not run on the JVM's
+     * main thread - MirthLauncher loads this class reflectively as a Thread and starts it - so
+     * nothing in run() or startup() sets the process status, and every abort used to end at 0. A
+     * systemd unit with Restart=on-failure then records Result=success, goes inactive rather than
+     * failed, and is never restarted; systemd counts 0 as success whatever the unit file says, so
+     * the exit code is the only lever.
+     *
+     * One code for every abort rather than one per cause: systemd partitions zero from non-zero
+     * only, absent SuccessExitStatus=, so a per-cause code would be an external contract nothing
+     * consumes. 1 is what checkDerbyJavaVersion, checkRunningAsRoot and MirthLauncher's root check
+     * already use.
+     */
+    static final int EXIT_STARTUP_ABORTED = 1;
+
+    /**
+     * Prefix of the database startup-abort log line. Kept byte-identical to the pre-IRT-2353
+     * text because operator runbooks grep for it.
+     */
+    static final String DATABASE_ABORT_MSG_PREFIX = "Error establishing connection to database, aborting startup. ";
+
+    /**
+     * Null-safe rendering of the detail an operator needs from a database startup failure.
+     * Prefers the cause, because the connection pool wraps the driver exception, but the second
+     * and third retry loops in startup() rethrow that exception unwrapped and it may carry no
+     * cause at all. Pre-IRT-2353 this was an unguarded e.getCause().getMessage(), which threw
+     * NullPointerException from inside the catch block in exactly that case - so the abort never
+     * reached its own exit, and the process died by another route, also at status 0.
+     *
+     * For a wrapped cause that carries a message - the common case, and the only one that used to
+     * render usefully - the output is byte-identical to the old expression. A cause with a null
+     * message used to render the literal "null" and now renders the exception's toString(), which
+     * is the one deliberate wording change.
+     */
+    static String causeMessage(Throwable t) {
+        Throwable detail = (t != null && t.getCause() != null && t.getCause() != t) ? t.getCause() : t;
+
+        if (detail == null) {
+            return "";
+        }
+
+        return detail.getMessage() != null ? detail.getMessage() : detail.toString();
+    }
+
+    static String databaseAbortMessage(Throwable t) {
+        return DATABASE_ABORT_MSG_PREFIX + causeMessage(t);
     }
 
     RootCheckResult evaluateRootCheck(String osName, String userName, boolean isWindowsAdmin, boolean allowRoot) {
@@ -210,7 +267,7 @@ public class Mirth extends Thread {
 
         if (derbyPreflightBlocks(dbType, Runtime.version().feature())) {
             logger.error(DERBY_JAVA_ERROR_MSG);
-            System.exit(1);
+            System.exit(EXIT_STARTUP_ABORTED);
         }
     }
 
@@ -229,9 +286,9 @@ public class Mirth extends Thread {
 
         if (result == RootCheckResult.BLOCK) {
             logger.error(ROOT_CHECK_ERROR_MSG);
-            System.exit(1);
+            System.exit(EXIT_STARTUP_ABORTED);
         } else if (result == RootCheckResult.WARN) {
-            logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set — proceeding.");
+            logger.warn("BridgeLink is running as root/Administrator. server.allowRoot=true is set - proceeding.");
         }
     }
 
@@ -325,7 +382,10 @@ public class Mirth extends Thread {
             boolean httpsPort = testPort(mirthProperties.getString("https.host"), mirthProperties.getString("https.port"), "https.port");
 
             if (!httpPort || !httpsPort) {
-                return;
+                // testPort() already logged which port and why. Exiting in place rather than
+                // returning, so a service manager sees a failed start (IRT-2353). Still above the
+                // shutdown hook registration below, so no hook runs - the same as the return did.
+                System.exit(EXIT_STARTUP_ABORTED);
             }
 
             running = true;
@@ -348,6 +408,8 @@ public class Mirth extends Thread {
             }
         } else {
             logger.error("could not initialize resources");
+            // IRT-2353. Also above the shutdown hook registration.
+            System.exit(EXIT_STARTUP_ABORTED);
         }
     }
 
@@ -480,9 +542,11 @@ public class Mirth extends Thread {
             }
 
         } catch (Exception e) {
-            // the getCause is needed since the wrapper exception is from the connection pool
-            logger.error("Error establishing connection to database, aborting startup. " + e.getCause().getMessage());
-            System.exit(0);
+            // IRT-2353: exit non-zero so a service manager sees a failed start rather than a
+            // clean stop. causeMessage is null-safe; the pool wraps the driver exception, but the
+            // second and third retry loops above rethrow it unwrapped and it may have no cause.
+            logger.error(databaseAbortMessage(e));
+            System.exit(EXIT_STARTUP_ABORTED);
         } finally {
             if (SqlConfig.getInstance().getSqlSessionManager().isManagedSessionStarted()) {
                 SqlConfig.getInstance().getSqlSessionManager().close();
@@ -726,6 +790,11 @@ public class Mirth extends Thread {
         logger.info("This product was developed by Innovar Healthcare (https://www.innovarhealthcare.com) and its contributors (c)2025-now.");
         logger.info("Running " + System.getProperty("java.vm.name") + " " + System.getProperty("java.version") + " on " + System.getProperty("os.name") + " (" + System.getProperty("os.version") + ", " + System.getProperty("os.arch") + "), " + configurationController.getDatabaseType() + ", with charset " + Charset.defaultCharset() + ".");
 
+        String encodingWarning = defaultEncodingMismatchWarning(Charset.defaultCharset(), System.getProperty("native.encoding"), System.getProperty("ca.uhn.hl7v2.llp.charset"));
+        if (encodingWarning != null) {
+            logger.warn(encodingWarning);
+        }
+
         if (webServer != null) {
             String httpUrl = null;
             if (isUsingHttp()) {
@@ -735,6 +804,39 @@ public class Mirth extends Thread {
 
             logger.info("Web server running at " + (httpUrl != null ? httpUrl + " and " : "") + httpsUrl);
         }
+    }
+
+    /**
+     * Builds a startup warning (or null) when the JVM default charset differs from the host's native
+     * encoding. Connectors set to DEFAULT_ENCODING follow {@link Charset#defaultCharset()}, which JEP
+     * 400 made UTF-8 on Java 18+ regardless of the host; on a server migrated from a Java-17-or-earlier
+     * install this silently changes how those connectors decode. The {@code native.encoding} system
+     * property (added in Java 17) reports the host encoding the old default would have used. Returns
+     * null when the two agree, when {@code native.encoding} is unavailable, or when the operator has
+     * already pinned a default encoding ({@code configuredEncoding}).
+     */
+    static String defaultEncodingMismatchWarning(Charset defaultCharset, String nativeEncoding, String configuredEncoding) {
+        // The operator has explicitly pinned a default encoding (IRT-1913 server.defaultencoding or
+        // the legacy ca.uhn.hl7v2.llp.charset, exported to this system property before startup). That
+        // pinned charset overrides Charset.defaultCharset() for DEFAULT_ENCODING connectors, so there
+        // is nothing to warn about - and warning would misstate what those connectors actually use.
+        if (StringUtils.isNotBlank(configuredEncoding)) {
+            return null;
+        }
+
+        if (StringUtils.isBlank(nativeEncoding)) {
+            return null;
+        }
+
+        try {
+            if (defaultCharset.equals(Charset.forName(nativeEncoding))) {
+                return null;
+            }
+        } catch (IllegalArgumentException e) {
+            // native.encoding is not a resolvable charset name; fall through and surface it verbatim.
+        }
+
+        return "JVM default charset is " + defaultCharset.name() + " but the host (native) encoding is " + nativeEncoding + ". Connectors set to DEFAULT_ENCODING will decode and encode using " + defaultCharset.name() + ". If this server was migrated from a Java-17-or-earlier install where the default differed, set an explicit Encoding on those connectors, or set server.defaultencoding (legacy alias: ca.uhn.hl7v2.llp.charset) in mirth.properties.";
     }
 
     private boolean isUsingHttp() {

@@ -47,6 +47,24 @@ public class DashboardStatusTest {
         assertFalse(ds.isWaitForPrevious());
     }
 
+    // IRT-2107: the overdue-lifecycle signal defaults off and the state timestamp is unset
+    @Test
+    public void defaultConstructor_lifecycleOverdueFalseAndStateSinceNull() {
+        DashboardStatus ds = new DashboardStatus();
+        assertFalse(ds.isLifecycleOverdue());
+        assertNull(ds.getStateSince());
+    }
+
+    @Test
+    public void setLifecycleOverdueAndStateSince_roundTrip() {
+        DashboardStatus ds = new DashboardStatus();
+        java.util.Calendar since = java.util.Calendar.getInstance();
+        ds.setStateSince(since);
+        ds.setLifecycleOverdue(true);
+        assertEquals(since, ds.getStateSince());
+        assertTrue(ds.isLifecycleOverdue());
+    }
+
     // ------------------------------------------------------------------
     // Getter/setter round-trips
     // ------------------------------------------------------------------

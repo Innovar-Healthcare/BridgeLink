@@ -965,6 +965,66 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
         return getServlet(ConfigurationServletInterface.class).getRhinoLanguageVersion();
     }
 
+    /**
+     * Returns the catalog of script reference/autocomplete entries.
+     *
+     * @see ConfigurationServletInterface#getScriptReferences
+     */
+    @Override
+    public RawContent getScriptReferences() throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).getScriptReferences();
+    }
+
+    /**
+     * Validates a JavaScript script using the server's Rhino engine.
+     *
+     * @see ConfigurationServletInterface#validateScript
+     */
+    @Override
+    public RawContent validateScript(String script) throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).validateScript(script);
+    }
+
+    /**
+     * Validates multiple JavaScript scripts in one request using the server's Rhino engine.
+     *
+     * @see ConfigurationServletInterface#validateScripts
+     */
+    @Override
+    public RawContent validateScripts(String request) throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).validateScripts(request);
+    }
+
+    /**
+     * Validates a Quartz cron expression using the server's real Quartz CronExpression parser.
+     *
+     * @see ConfigurationServletInterface#validateCron
+     */
+    @Override
+    public RawContent validateCron(String expression) throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).validateCron(expression);
+    }
+
+    /**
+     * Resolves ${...} template values using the server's real template engine.
+     *
+     * @see ConfigurationServletInterface#replaceTemplate
+     */
+    @Override
+    public RawContent replaceTemplate(String channelId, String template) throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).replaceTemplate(channelId, template);
+    }
+
+    /**
+     * Pretty-prints a JavaScript/E4X script using the server's js-beautify formatter.
+     *
+     * @see ConfigurationServletInterface#prettyPrintScript
+     */
+    @Override
+    public javax.ws.rs.core.Response prettyPrintScript(String script) throws ClientException {
+        return getServlet(ConfigurationServletInterface.class).prettyPrintScript(script);
+    }
+
     /*******************
      * Channel Servlet *
      *******************/
@@ -1394,6 +1454,16 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     @Override
     public void haltChannel(String channelId, boolean returnErrors) throws ClientException {
         getServlet(ChannelStatusServletInterface.class).haltChannel(channelId, returnErrors);
+    }
+
+    /**
+     * Returns the live threads belonging to a deployed channel, as plain JSON (IRT-2107).
+     *
+     * @see ChannelStatusServletInterface#getChannelThreads
+     */
+    @Override
+    public javax.ws.rs.core.Response getChannelThreads(String channelId, Integer maxFrames) throws ClientException {
+        return getServlet(ChannelStatusServletInterface.class).getChannelThreads(channelId, maxFrames);
     }
 
     /**
@@ -2499,6 +2569,16 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
         return getServlet(CodeTemplateServletInterface.class).updateLibrariesAndTemplates(libraries, removedLibraryIds, updatedCodeTemplates, removedCodeTemplateIds, override);
     }
 
+    /**
+     * Regenerates the JSDoc comment block for a code template's JavaScript.
+     *
+     * @see CodeTemplateServletInterface#generateDoc
+     */
+    @Override
+    public javax.ws.rs.core.Response generateDoc(String code) throws ClientException {
+        return getServlet(CodeTemplateServletInterface.class).generateDoc(code);
+    }
+
     /*************************
      * Database Task Servlet *
      *************************/
@@ -2648,6 +2728,17 @@ public class Client implements UserServletInterface, ConfigurationServletInterfa
     @Override
     public javax.ws.rs.core.Response getWebAdminConnectorDefaults(String extensionName, String transportName) throws ClientException {
         return getServlet(ExtensionServletInterface.class).getWebAdminConnectorDefaults(extensionName, transportName);
+    }
+
+    /**
+     * Returns the default data type properties XML for a data type declared by the named
+     * extension. The response is raw XML.
+     *
+     * @see ExtensionServletInterface#getWebAdminDataTypeDefaults
+     */
+    @Override
+    public javax.ws.rs.core.Response getWebAdminDataTypeDefaults(String extensionName, String dataTypeName) throws ClientException {
+        return getServlet(ExtensionServletInterface.class).getWebAdminDataTypeDefaults(extensionName, dataTypeName);
     }
 
     /**

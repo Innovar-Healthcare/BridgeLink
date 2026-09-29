@@ -5,14 +5,17 @@
 		<property name="server.setup" value="${server}/setup" />
 		<property name="server.build" value="${server}/build" />
 
-		<!-- IRT-2271: embedded Derby 10.17 (v63 classfiles) cannot load on JDK 17 (max v61).
-		     value/else give exclude.derby.tests a definite true/false always, which the
-		     derived exclude-list condition below needs (istrue errors on a truly unset
-		     property). server.derby.test.excludes carries the two server test classes that
-		     load embedded Derby directly (MapUtilTest, DefaultUserControllerTest - both under
-		     com/mirth/connect/server/**), collected by the test-run target's server <ant>
-		     call below. If ant.java.version does not resolve to exactly "17" on a given
-		     runner, pass -Dexclude.derby.tests=true explicitly on that JDK-17 leg. -->
+		<!-- D-03 (IRT-1489, Phase 24): embedded Derby 10.17 (v63 classfiles) cannot load on
+		     JDK 17 (max v61). test-matrix.yml passes -Dexclude.derby.tests=true explicitly on
+		     the JDK-17 CI leg (a command-line -D always wins - Ant never overwrites an
+		     already-set property); this local self-gate additionally sets it for a bare local
+		     JDK-17 invocation of this file. value/else give it a definite true/false always,
+		     which the derived exclude-list condition below needs (istrue errors on a truly
+		     unset property). server.derby.test.excludes carries the two empirically-finalized
+		     (24-03-SUMMARY.md) server test classes that load embedded Derby directly
+		     (MapUtilTest, DefaultUserControllerTest - both under com/mirth/connect/server/**,
+		     so only test-run and test-run-group-a actually collect them; test-run-group-b
+		     already excludes all of com/mirth/connect/server/** via server.shard.pattern). -->
 		<condition property="exclude.derby.tests" value="true" else="false">
 			<equals arg1="${ant.java.version}" arg2="17" />
 		</condition>
@@ -41,6 +44,11 @@
 	</target>
 	
 	<!-- WebAdmin -->
+	<!--
+		The legacy webadmin war is unsupported and is no longer part of the default build (IRT-1765).
+		The browser-based console is the separate BridgeLink Web Administrator. This target is kept
+		so the module can still be built on demand, but nothing depends on it.
+	-->
 	<target name="build-webadmin" depends="init">
 		<ant antfile="${webadmin}/build.xml" dir="${webadmin}" target="dist"/>
 		<copy file="${webadmin}/dist/webadmin.war" todir="${server.build}/webapps" />
@@ -135,11 +143,11 @@
 		</copy>
 	</target>
 
-	<target name="build" depends="build-manager, build-cli, build-webadmin">
+	<target name="build" depends="build-manager, build-cli">
 		<ant antfile="${server}/build.xml" dir="${server}" target="create-setup">
 			<property name="version" value="${version}" />
 		</ant>
-		
+
 		<copy todir="${server.build}/extensions/">
 			<fileset dir="${server.setup}/extensions/" />
 		</copy>
@@ -147,27 +155,22 @@
 		<copy todir="${server.build}/client-lib">
 			<fileset dir="${server.setup}/client-lib" />
 		</copy>
-		
-		<!--
-			Ant's unless= tests whether a property is SET, not whether it is true, so guarding
-			maybe-test-run on skip.tests directly would let -Dskip.tests=false silently skip the
-			whole suite. Resolve the value to a boolean first.
-		-->
-		<condition property="skip.tests.enabled">
-			<istrue value="${skip.tests}" />
-		</condition>
-		<antcall target="maybe-test-run" />
+
+		<!-- Skip when -Dskip.build.tests=true (CI test-matrix workflow runs test-run-and-aggregate
+		     as its own explicit step; without this guard the build target's antcall would run the
+		     full suite a second time and, since Plan 16-03 wired failureproperty/<fail> into the
+		     junit targets, a single failing test would abort the build step before the dedicated
+		     test step ever runs). Default (no property set) preserves existing behavior for
+		     build_bridgelink.yml and any other caller. antcall itself has no if/unless attribute
+		     (Ant limitation), so the guard lives on the wrapper target instead. -->
+		<antcall target="build-run-tests" />
 	</target>
 
-	<!--
-		The unit tests now fail the build (see the <fail> at the end of each module's test-run
-		target). Pass -Dskip.tests=true to produce a distribution without running them.
-	-->
-	<target name="maybe-test-run" unless="skip.tests.enabled">
+	<target name="build-run-tests" unless="skip.build.tests">
 		<antcall target="test-run" />
 	</target>
 
-	<target name="dist" depends="build-manager, build-cli, build-webadmin">
+	<target name="dist" depends="build-manager, build-cli">
 		<echo>Application version: ${version}</echo>
 
 		<ant antfile="${server}/build.xml" dir="${server}" target="create-dist">
@@ -191,7 +194,7 @@
 		</header>
 
 		<header headerFile="${server}/license-header.txt">
-			<fileset dir="${client}" includes="**/*.java" excludes="src/com/mirth/connect/client/ui/BareBonesBrowserLaunch.java src/com/mirth/connect/client/ui/BeanBinder.java src/com/mirth/connect/client/ui/OSXAdapter.java src/org/**/*.java" />
+			<fileset dir="${client}" includes="**/*.java" excludes="manual-checks/** src/com/mirth/connect/client/ui/BareBonesBrowserLaunch.java src/com/mirth/connect/client/ui/BeanBinder.java src/com/mirth/connect/client/ui/OSXAdapter.java src/org/**/*.java" />
 		</header>
 		
 		<header headerFile="${server}/license-header.txt">
@@ -223,7 +226,11 @@
 	</target>
 
 	<target name="test-run" depends="init, test-extensions-init">
-		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run"/>
+		<!-- test-run assumes a completed build (server tests need server/classes), so
+		     donkey does not need to clean and recompile what that build just produced. -->
+		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run">
+			<property name="skip.recompile" value="true"/>
+		</ant>
 		<ant antfile="${server}/build.xml" dir="${server}" target="test-run">
 			<property name="server.test.excludes" value="${server.derby.test.excludes}"/>
 		</ant>
@@ -234,6 +241,42 @@
 	</target>
 
 	<target name="test-run-and-aggregate" depends="test-run" description="Run all tests and aggregate reports">
+		<antcall target="aggregate-test-reports"/>
+	</target>
+
+	<!-- CI shard targets (IRT-1932): split test-run across two parallel jobs. Group A pairs
+	     donkey with the com.mirth.connect.server.* slice of the server suite (~37% of its
+	     runtime), group B runs the rest of the server suite plus the small modules. The same
+	     pattern is group A's includes and group B's excludes, so the union is always the full
+	     suite and the intersection is always empty. test-run stays the unsharded whole (used
+	     locally and by the nightly leg). -->
+	<property name="server.shard.pattern" value="com/mirth/connect/server/**/*Test.class" />
+
+	<target name="test-run-group-a" depends="init">
+		<ant antfile="${donkey}/build.xml" dir="${donkey}" target="test-run">
+			<property name="skip.recompile" value="true"/>
+		</ant>
+		<ant antfile="${server}/build.xml" dir="${server}" target="test-run">
+			<property name="server.test.includes" value="${server.shard.pattern}"/>
+			<property name="server.test.excludes" value="${server.derby.test.excludes}"/>
+		</ant>
+	</target>
+
+	<target name="test-run-group-b" depends="init, test-extensions-init">
+		<ant antfile="${server}/build.xml" dir="${server}" target="test-run">
+			<property name="server.test.excludes" value="${server.shard.pattern}"/>
+		</ant>
+		<ant antfile="${client}/ant-build.xml" dir="${client}" target="test-run"/>
+		<ant antfile="${cli}/build.xml" dir="${cli}" target="test-run"/>
+		<ant antfile="build.xml" dir="${custom-extensions}/dynamic-lookup-gateway" target="test-run"/>
+		<ant antfile="build.xml" dir="${custom-extensions}/message-trends" target="test-run"/>
+	</target>
+
+	<target name="test-run-group-a-and-aggregate" depends="test-run-group-a" description="Run shard A tests and aggregate their reports">
+		<antcall target="aggregate-test-reports"/>
+	</target>
+
+	<target name="test-run-group-b-and-aggregate" depends="test-run-group-b" description="Run shard B tests and aggregate their reports">
 		<antcall target="aggregate-test-reports"/>
 	</target>
 
@@ -258,13 +301,13 @@
 		<!-- JaCoCo libraries -->
 		<path id="jacoco.classpath">
 			<fileset dir="${server}/lib/ant">
-				<include name="org.jacoco.ant-0.8.8.jar"/>
-				<include name="org.jacoco.core-0.8.8.jar"/>
-				<include name="org.jacoco.report-0.8.8.jar"/>
-				<include name="org.jacoco.agent-0.8.8.jar"/>
-				<include name="asm-9.2.jar"/>
-				<include name="asm-tree-9.2.jar"/>
-				<include name="asm-commons-9.2.jar"/>
+				<include name="org.jacoco.ant-0.8.15.jar"/>
+				<include name="org.jacoco.core-0.8.15.jar"/>
+				<include name="org.jacoco.report-0.8.15.jar"/>
+				<include name="org.jacoco.agent-0.8.15.jar"/>
+				<include name="asm-9.10.1.jar"/>
+				<include name="asm-tree-9.10.1.jar"/>
+				<include name="asm-commons-9.10.1.jar"/>
 			</fileset>
 		</path>
 

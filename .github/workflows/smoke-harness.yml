@@ -1,35 +1,42 @@
-# Boot-only smoke harness for release/26.6.1 (IRT-2270/2271). Boots the assembled BridgeLink
-# distribution directly on the runner JVM and health-checks it over HTTPS, proving the
-# embedded-Derby boot path both JDK legs exercise: JDK 17 hits the JAVA-04 preflight and
-# aborts cleanly (expected, wrapped below); JDK 21 boots successfully. Pruned from the 26.9.x
-# channel-deploy smoke harness down to the boot/health-check path - this copy runs on push/PR
-# to feature/26.6.1-clean only, JDK 17/21 only, and every leg passes --boot-only.
-name: Smoke harness (JDK 17/21)
+# Nightly + manual-dispatch smoke harness matrix (NET-01/02/05, IRT-1491, D-04).
+#
+# Sibling of test-matrix.yml (JAVA-03's unit-test matrix) — this workflow boots the real
+# assembled BridgeLink distribution directly on the runner JVM (smoke-tests/run-smoke-test.sh)
+# across the JDK 17/21/25 matrix, on a schedule (not push/PR — the full pipeline takes
+# minutes, not seconds, so it runs nightly plus on-demand rather than on every push) per D-04.
+name: Smoke harness (JDK 17/21/25)
 
 on:
-  push:
-    branches:
-      - feature/26.6.1-clean
-  pull_request:
-    branches:
-      - feature/26.6.1-clean
+  schedule:
+    # 07:00 UTC nightly.
+    - cron: '0 7 * * *'
+  workflow_dispatch: {}
 
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    # The mandatory "Build BridgeLink - unsigned" assemble step alone runs ~22-23 min on a cold
-    # ubuntu-latest runner (measured against test-matrix.yml's build step), so 15 min cancelled
-    # the build before the boot-only smoke steps ran. 40 min covers the assemble plus runner
-    # variance and the seconds-long boot, while still capping a genuinely hung boot (T-03-03).
-    timeout-minutes: 40
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        java: [17, 21]
-    # Job name must contain the raw JDK version (not just "smoke") - downstream tooling
-    # (gh run view --json jobs) keys on job names containing 17/21 to confirm which legs
-    # went green.
+        java: ['17', '21', '25']
+    # Job name must contain the raw JDK version (not just "smoke") -- downstream tooling
+    # (this plan's automated verify, gh run view --json jobs) keys on job names containing
+    # 17/21 to confirm which legs went green.
     name: smoke (${{ matrix.java }})
+    # HISTORY (plans 18-01/18-07/18-08/18-09, then IRT-1491, then Phase 24/IRT-1489): this
+    # job wrapped the JDK 17 leg in an expected-failure-signature assert because Phase 16's
+    # JAVA-04 Derby/Java-21 preflight (Mirth.derbyPreflightBlocks) unconditionally aborted
+    # embedded-Derby boot below Java 21. That preflight was REVERTED on 2026-08-13
+    # (9ed03fab7) after 26.9 dropped back to a Java-17 floor, so the wrapper's
+    # "unexpectedly PASSED" tripwire fired on the 2026-08-27 nightly and the wrapper was
+    # removed (IRT-1491, 2026-08-28): all three JDK legs ran the harness plainly and each
+    # expected exit 0.
+    # Phase 24 (IRT-1489, D-02/D-03) bumped Derby to 10.17.1.0 (v63 classfiles, CVE-2022-46337)
+    # and reinstated JAVA-04 (embedded Derby now requires Java 21+ again, verbatim message in
+    # Mirth.DERBY_JAVA_ERROR_MSG), exactly the condition the original comment named as the
+    # reinstatement trigger. The JDK 17 leg below is wrapped again to expect that abort; the
+    # JDK 21/25 legs are unaffected and still expect plain exit 0.
     steps:
       - uses: actions/checkout@v4
 
@@ -42,18 +49,20 @@ jobs:
 
       - name: Build BridgeLink - unsigned
         working-directory: server
-        run: ant -f mirth-build.xml -DdisableSigning=true -Dskip.tests=true
+        run: ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true
 
-      # Own, separate step -- runs on JDK 21 only. The JDK 17 leg uses the expected-failure
-      # wrapper below instead.
+      # Own, separate, timed step -- the script's own "HARNESS DURATION: <n>s" line (boot
+      # through teardown) is the D-04 <=10-minute-per-leg measurement, distinct from the
+      # build step above (Pitfall 11). Runs on 21/25 only -- the JDK 17 leg uses the
+      # expected-failure-signature step below instead (Phase 24, D-03 knock-on).
       - name: Run smoke harness
         if: matrix.java != '17'
-        run: bash smoke-tests/run-smoke-test.sh --boot-only
+        run: bash smoke-tests/run-smoke-test.sh
 
-      # JDK 17 leg: the harness is EXPECTED to fail at the JAVA-04 preflight (embedded Derby
-      # requires Java 21+ as of 26.6.1). Three outcomes:
-      #   (a) harness unexpectedly PASSES -> the preflight tier may have changed; fail loudly
-      #       rather than silently accept a result nobody re-verified.
+      # JDK 17 leg (Phase 24, IRT-1489): the harness is EXPECTED to fail at the reinstated
+      # JAVA-04 preflight (embedded Derby requires Java 21+). Three outcomes:
+      #   (a) harness unexpectedly PASSES -> the preflight or the Derby version tier may have
+      #       changed; fail loudly rather than silently accept a result nobody re-verified.
       #   (b) harness fails AND smoke-tests/out/ contains the known preflight signature ->
       #       exactly the expected, ratified gap; emit a ::notice and exit 0 (green).
       #   (c) harness fails WITHOUT the signature -> an unknown JDK-17 failure; fail loudly,
@@ -62,17 +71,17 @@ jobs:
         if: matrix.java == '17'
         run: |
           set +e
-          bash smoke-tests/run-smoke-test.sh --boot-only
+          bash smoke-tests/run-smoke-test.sh
           HARNESS_EXIT=$?
           set -e
 
           if [[ ${HARNESS_EXIT} -eq 0 ]]; then
-            echo "::error::JDK 17 leg unexpectedly PASSED - the Derby/Java-21 preflight (IRT-2270/2271, JAVA-04 seam) may have changed; remove this expected-failure wrapper deliberately, do not let it rot"
+            echo "::error::JDK 17 leg unexpectedly PASSED - the Derby/Java-21 preflight tier (Phase 16 JAVA-04, Phase 24 reinstatement) may have changed; remove this expected-failure wrapper deliberately, do not let it rot"
             exit 1
           fi
 
-          if grep -rq "as of 26.6.1" smoke-tests/out/; then
-            echo "::notice title=Known JDK 17 gap::embedded Derby requires Java 21+ as of 26.6.1 (IRT-2271 JAVA-04 preflight). This leg is EXPECTED to fail at boot at exactly this seam."
+          if grep -rq "embedded Derby requires Java 21" smoke-tests/out/; then
+            echo "::notice title=Known JDK 17 gap::embedded Derby requires Java 21+ (Phase 16 JAVA-04 preflight, reinstated in Phase 24 alongside the Derby 10.17 CVE bump). This leg is EXPECTED to fail at boot at exactly this seam - see 24-03-SUMMARY.md for full history."
             exit 0
           fi
 
@@ -84,4 +93,43 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: smoke-jdk${{ matrix.java }}
+          path: smoke-tests/out/**
+
+  # smoke-postgres (Phase 26.8, SC-3/D-01/D-02): a sibling job for the postgres backend
+  # (smoke-tests/run-smoke-test.sh --db postgres, landed in 26.8-02). Runs plainly on all
+  # three JDKs and expects exit 0 on each, same as the derby job above (since the JAVA-04
+  # Derby/Java-21 preflight was reverted; see the derby job's HISTORY comment).
+  smoke-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['17', '21', '25']
+    # Job name carries the raw JDK version (same per-leg green-reporting convention as the
+    # derby job above), and the artifact name below is distinct from smoke-jdk${{ matrix.java }}
+    # to avoid an upload-artifact name collision between the two jobs.
+    name: smoke-postgres (${{ matrix.java }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'zulu'
+          java-package: 'jdk+fx'
+
+      - name: Build BridgeLink - unsigned
+        working-directory: server
+        run: ant -f mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true
+
+      - name: Run smoke harness (postgres)
+        run: bash smoke-tests/run-smoke-test.sh --db postgres
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-postgres-jdk${{ matrix.java }}
           path: smoke-tests/out/**

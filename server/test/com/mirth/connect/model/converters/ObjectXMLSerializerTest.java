@@ -9,17 +9,26 @@
 
 package com.mirth.connect.model.converters;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.commons.io.IOUtils;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.mirth.connect.client.core.Version;
 import com.mirth.connect.donkey.model.message.ConnectorMessage;
 import com.mirth.connect.donkey.model.message.MapContent;
+import com.mirth.connect.model.Channel;
+import com.mirth.connect.model.InvalidChannel;
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.Xpp3Driver;
 import com.thoughtworks.xstream.security.AnyTypePermission;
@@ -33,6 +42,54 @@ public class ObjectXMLSerializerTest {
         } catch (Exception e) {
             // Ignore if it has already been initialized
         }
+    }
+
+    // CVE-01 / D-29.1: < 3.5.0 XML-path old-format channel regression assertion, the XML-path
+    // sibling of ObjectJSONSerializerTest.testDeserializeOldChannel. Deserializing a channel
+    // rooted below schema 3.5.0 must invoke Channel.migrate3_5_0() and produce a real Channel,
+    // not an InvalidChannel: the removal side (a stale DOM child-element cache raises
+    // UnknownFieldException on the removed codeTemplateLibraries field and downgrades the
+    // result) and the addition side (a stale cache makes the newly-added exportData element
+    // invisible and this dereference NPEs) must both succeed. Green here on the shipped
+    // xstream 1.4.20 is expected -- 1.4.20's DomReader eagerly rebuilds its child cache on
+    // every reassignCurrentElement() call, so this seam cannot be broken until the 1.4.21
+    // bump. This test's falsifiability proof is plan 02's responsibility: revert
+    // MirthDomReader on the 1.4.21 jars and confirm both this test and
+    // ObjectJSONSerializerTest.testDeserializeOldChannel go red, then restore.
+    //
+    // What would make this green for the wrong reason, and how that is closed: crediting
+    // XStreamSeamTest.knownOldFormatChannelXmlDeserializes instead -- its fixture is rooted at
+    // schema 3.6.0, so MigratableConverter.migrateElement() never invokes migrate3_5_0() for
+    // it and it cannot detect this regression (Pitfall 4). This assertion exists on the
+    // ObjectXMLSerializer path specifically because that suite's coverage is JSON-only.
+    @Test
+    public void testDeserializeOldFormatChannelXmlBelow3_5_0() throws Exception {
+        String xml;
+        // try-with-resources + an explicit charset: IOUtils.toString(InputStream) is deprecated and
+        // decodes with the platform default charset, and the stream was never closed. The null check
+        // matters because getResourceAsStream returns null if the fixture is not on the test
+        // classpath, which would otherwise surface as a bare NPE inside IOUtils naming nothing.
+        try (InputStream in = ObjectXMLSerializerTest.class.getResourceAsStream("legacy-migration-3-4-channel.xml")) {
+            assertNotNull("fixture legacy-migration-3-4-channel.xml missing from the test classpath "
+                    + "(server/build.xml's test-compile must copy **/*.xml into ${test_classes})", in);
+            xml = IOUtils.toString(in, StandardCharsets.UTF_8);
+        }
+
+        Channel channel = ObjectXMLSerializer.getInstance().deserialize(xml, Channel.class);
+
+        // Removal side: a stale child-element cache raises UnknownFieldException on the
+        // removed codeTemplateLibraries field and downgrades deserialization to InvalidChannel.
+        // (There is deliberately no `assertTrue(channel instanceof Channel)` here: `channel` is
+        // declared Channel, so that assertion can never fail and asserts nothing. InvalidChannel
+        // extends Channel, so this assertFalse is the real type check.)
+        assertFalse("channel must not degrade to InvalidChannel", channel instanceof InvalidChannel);
+        assertEquals("00000012-0000-0000-0000-000000000012", channel.getId());
+        // Addition side: a stale child-element cache makes the newly-added exportData element
+        // invisible to xstream, and this dereference NPEs.
+        assertNotNull(channel.getExportData());
+        assertNotNull(channel.getExportData().getMetadata());
+        assertNotNull(channel.getExportData().getMetadata().getPruningSettings());
+        assertTrue(channel.getExportData().getMetadata().getPruningSettings().isArchiveEnabled());
     }
 
     @Test

@@ -31,6 +31,7 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 
 import com.mirth.connect.client.core.ClientException;
 import com.mirth.connect.client.core.Operation.ExecuteType;
@@ -56,6 +57,22 @@ public interface ChannelStatusServletInterface extends BaseServletInterface {
                     @ExampleObject(name = "dashboard_status", ref = "../apiexamples/dashboard_status_json") }) })
     @MirthOperation(name = "getChannelStatus", display = "Get status for single channel", permission = Permissions.DASHBOARD_VIEW, type = ExecuteType.ASYNC, auditable = false)
     public DashboardStatus getChannelStatus(@Param("channelId") @Parameter(description = "The channel ID to return a dashboard status for.") @PathParam("channelId") String channelId) throws ClientException;
+
+    /*
+     * Produces declares XML as well so a client that accepts only XML is not rejected with 406 during
+     * content negotiation; the implementation pins the actual response Content-Type to
+     * application/json, which is the only form this payload has (the same arrangement as the raw
+     * extension endpoints). ChannelStatusServletTest pins both halves of that.
+     */
+    @GET
+    @Path("/{channelId}/_threads")
+    @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+    @Operation(summary = "Returns the live threads that belong to a deployed channel: each thread's name, state, the lock it is blocked on and its top stack frames, plus the channel's lifecycle state, how long it has been in it, and what the most recent stop timed out waiting on. Plain JSON response, not the standard serialized envelope. Stack frames only; never message content or connector settings. Returns 404 when the channel is not deployed.")
+    @MirthOperation(name = "getChannelThreads", display = "Get channel threads", permission = Permissions.DASHBOARD_VIEW, type = ExecuteType.ASYNC, auditable = false)
+    public Response getChannelThreads(// @formatter:off
+            @Param("channelId") @Parameter(description = "The channel ID to return threads for.", required = true) @PathParam("channelId") String channelId,
+            @Param("maxFrames") @Parameter(description = "Maximum stack frames to return per thread. Defaults to 30 when absent or not positive; capped at 500.") @QueryParam("maxFrames") Integer maxFrames) throws ClientException;
+            // @formatter:on
 
     @GET
     @Path("/statuses")

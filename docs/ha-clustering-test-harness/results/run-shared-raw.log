@@ -1,0 +1,43 @@
+
+[1m== MODE=shared-raw   A_ID=5ha4ed00-0000-0000-0000-00000000shar   B_ID=5ha4ed00-0000-0000-0000-00000000shar   messages=10   hold=240s[0m
+
+[1m== Resetting the stack (fresh database)[0m
+
+[1m== Starting node A[0m
+  node A up after ~10s
+  login A: 200
+
+[1m== Deploying the channel on node A[0m
+  import HTTP 200
+  deploy HTTP 204
+  STARTED
+
+[1m== Sending 10 messages into node A[0m
+
+[1m== Waiting for messages to be in flight on node A[0m
+  in flight: 0
+  in flight: 10
+  deliveries before scale-out: 10
+
+[1m== SCALE-OUT: starting node B and deploying the same channel[0m
+  node B up after ~10s
+  login B: 200
+  deploy on B HTTP 204
+
+[1m== Letting node B's recovery run[0m
+
+[1m== RESULT[0m
+  mode                     : shared-raw
+  deliveries before B      : 10
+  deliveries total         : 10
+  distinct message ids     : 10
+  ids delivered more than once: 0
+  EXTRA (duplicate) deliveries: 0
+  by node                  : {'737b6544ec50': 10}
+
+  VERDICT: no duplicates observed
+
+[1m== Did node B run recovery?[0m
+bl-b-1  | INFO  2026-09-02 14:51:43.827 [Recovery Task Thread on HA Shared Server ID Test (0000ha01-0000-0000-0000-0000000ha001) < pool-8-thread-1] com.mirth.connect.donkey.server.channel.RecoveryTask: Incomplete messages found for channel HA Shared Server ID Test (0000ha01-0000-0000-0000-0000000ha001) but message storage settings do not support recovery. Skipping recovery task.
+
+Full JSON: results/result-shared-raw.json

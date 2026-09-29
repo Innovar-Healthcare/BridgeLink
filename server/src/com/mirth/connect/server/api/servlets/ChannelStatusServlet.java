@@ -20,14 +20,20 @@ import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.SecurityContext;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mirth.connect.client.core.api.MirthApiException;
+import com.mirth.connect.client.core.api.RawContent;
 import com.mirth.connect.client.core.api.servlets.ChannelStatusServletInterface;
+import com.mirth.connect.model.ChannelThreadReport;
 import com.mirth.connect.model.DashboardChannelInfo;
 import com.mirth.connect.model.DashboardStatus;
 import com.mirth.connect.model.filter.SearchFilter;
@@ -44,6 +50,7 @@ public class ChannelStatusServlet extends MirthServlet implements ChannelStatusS
 
     private static EngineController engineController;
     private static ConfigurationController configurationController;
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public ChannelStatusServlet(@Context HttpServletRequest request, @Context SecurityContext sc) {
         super(request, sc);
@@ -68,6 +75,22 @@ public class ChannelStatusServlet extends MirthServlet implements ChannelStatusS
             throw new MirthApiException(Status.NOT_FOUND);
         }
         return status;
+    }
+
+    @Override
+    @CheckAuthorizedChannelId
+    public Response getChannelThreads(String channelId, Integer maxFrames) {
+        ChannelThreadReport report = engineController.getChannelThreads(channelId, maxFrames != null ? maxFrames : 0);
+        if (report == null) {
+            throw new MirthApiException(Status.NOT_FOUND);
+        }
+
+        try {
+            // Pinned to JSON regardless of the negotiated type; see the interface for why XML is declared
+            return Response.ok(new RawContent(objectMapper.writeValueAsString(report)), MediaType.APPLICATION_JSON_TYPE).build();
+        } catch (JsonProcessingException e) {
+            throw new MirthApiException(e);
+        }
     }
 
     @Override

@@ -15,7 +15,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -56,7 +58,22 @@ public class JavaScriptSharedUtil {
     private final static Pattern INVALID_PROLOG_PATTERN = Pattern.compile("<<\\s*\\?\\s*xml\\s+version\\s*=\\s*\"(?<version>[^\"]*)\"(\\s+encoding\\s*=\\s*\"(?<encoding>[^\"]*)\")?\\s*\\?\\s*>");
     private final static int FULL_NAME_MATCHER_INDEX = 2;
     private final static int SHORT_NAME_MATCHER_INDEX = 5;
+    /*
+     * Scripts are wrapped in a dummy function before validation so that top-level "return"
+     * statements are legal. The prefix sits on line 1 with no trailing newline, so reported line
+     * numbers are unaffected, but a column reported on line 1 is shifted right by the prefix length
+     * and must be adjusted back before being handed to a caller.
+     */
+    private final static String SCRIPT_WRAPPER_PREFIX = "function rhinoWrapper() {";
+    private final static String SCRIPT_WRAPPER_SUFFIX = "\n}";
+    private final static int SCRIPT_WRAPPER_PREFIX_LENGTH = SCRIPT_WRAPPER_PREFIX.length();
     private static volatile ScriptableObject cachedFormatterScope;
+    /*
+     * cachedFormatterScope's global/opts objects are shared mutable state across calls; js_beautify
+     * execution against them must be serialized so concurrent callers (e.g. concurrent REST
+     * requests on the server) don't race on them.
+     */
+    private static final Object FORMATTER_LOCK = new Object();
     private static int rhinoLanguageVersion = Context.VERSION_DEFAULT;
     private static Logger logger = LogManager.getLogger(JavaScriptSharedUtil.class);
 
@@ -84,7 +101,7 @@ public class JavaScriptSharedUtil {
     public static String validateScript(String script) {
         Context context = JavaScriptSharedUtil.getGlobalContextForValidation();
         try {
-            context.compileString("function rhinoWrapper() {" + script + "\n}", UUID.randomUUID().toString(), 1, null);
+            context.compileString(SCRIPT_WRAPPER_PREFIX + script + SCRIPT_WRAPPER_SUFFIX, UUID.randomUUID().toString(), 1, null);
         } catch (EvaluatorException e) {
             return "Error on line " + e.lineNumber() + ": " + e.getMessage() + ".";
         } catch (Exception e) {
@@ -93,6 +110,65 @@ public class JavaScriptSharedUtil {
             Context.exit();
         }
         return null;
+    }
+
+    /**
+     * Compiles the given script with the real Rhino engine and returns a structured result instead
+     * of the single, human-readable string produced by {@link #validateScript(String)}. Rhino's
+     * compiler stops at the first syntax error, so at most one error is ever reported. Line and
+     * column are 1-based and normalized to the caller's script (the internal wrapper offset is
+     * removed); a column of 0 means Rhino could not determine one.
+     *
+     * @param script the script body to validate (may be null or empty, which is treated as valid)
+     * @return a {@link ScriptValidationResult} describing whether the script compiled and, if not,
+     *         where it failed
+     */
+    public static ScriptValidationResult validateScriptStructured(String script) {
+        if (StringUtils.isBlank(script)) {
+            return ScriptValidationResult.valid();
+        }
+
+        Context context = JavaScriptSharedUtil.getGlobalContextForValidation();
+        try {
+            context.compileString(SCRIPT_WRAPPER_PREFIX + script + SCRIPT_WRAPPER_SUFFIX, UUID.randomUUID().toString(), 1, null);
+            return ScriptValidationResult.valid();
+        } catch (EvaluatorException e) {
+            int line = e.lineNumber();
+            int column = e.columnNumber();
+            /*
+             * Rhino columns are 1-based. Only line 1 carries the wrapper prefix, so only errors on
+             * that line need the prefix width subtracted; a non-positive column means "unknown".
+             */
+            if (line == 1 && column > SCRIPT_WRAPPER_PREFIX_LENGTH) {
+                column -= SCRIPT_WRAPPER_PREFIX_LENGTH;
+            } else if (column < 0) {
+                column = 0;
+            }
+            String message = StringUtils.defaultIfBlank(e.details(), e.getMessage());
+            return ScriptValidationResult.invalid(new ScriptValidationResult.ScriptValidationError(line, column, message));
+        } catch (Exception e) {
+            return ScriptValidationResult.invalid(new ScriptValidationResult.ScriptValidationError(0, 0, "Unknown error occurred during validation."));
+        } finally {
+            Context.exit();
+        }
+    }
+
+    /**
+     * Validates multiple scripts in one call, e.g. every filter/transformer/channel script in a
+     * channel gathered into a single request. Each script is validated independently via
+     * {@link #validateScriptStructured(String)}. Scripts are keyed by a caller-supplied id (its
+     * value is opaque to the server) and each result is returned under the same key, so callers map
+     * results back by id rather than by position. Iteration order is preserved in the returned map.
+     *
+     * @param scripts a map of id to script body (never null, but may be empty)
+     * @return a map of the same ids to their {@link ScriptValidationResult}
+     */
+    public static Map<String, ScriptValidationResult> validateScriptsStructured(Map<String, String> scripts) {
+        Map<String, ScriptValidationResult> results = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : scripts.entrySet()) {
+            results.put(entry.getKey(), validateScriptStructured(entry.getValue()));
+        }
+        return results;
     }
 
     /*
@@ -154,38 +230,40 @@ public class JavaScriptSharedUtil {
         if (scope != null) {
             Context currentThreadContext = getGlobalContextForValidation();
             try {
-                /*
-                 * The beautify library wraps everything in a closure and adds the beautify function
-                 * to a specified object. We inject the global object so that we can access the
-                 * function here.
-                 */
-                Scriptable global = (Scriptable) scope.get("global", scope);
-                Scriptable opts = (Scriptable) scope.get("opts", scope);
-                Function function = (Function) global.get("js_beautify", global);
-                Object result = function.call(currentThreadContext, scope, scope, new Object[] {
-                        script, opts });
-                String prettyPrinted = (String) (Context.jsToJava(result, String.class));
+                synchronized (FORMATTER_LOCK) {
+                    /*
+                     * The beautify library wraps everything in a closure and adds the beautify
+                     * function to a specified object. We inject the global object so that we can
+                     * access the function here.
+                     */
+                    Scriptable global = (Scriptable) scope.get("global", scope);
+                    Scriptable opts = (Scriptable) scope.get("opts", scope);
+                    Function function = (Function) global.get("js_beautify", global);
+                    Object result = function.call(currentThreadContext, scope, scope, new Object[] {
+                            script, opts });
+                    String prettyPrinted = (String) (Context.jsToJava(result, String.class));
 
-                Matcher matcher = INVALID_PROLOG_PATTERN.matcher(prettyPrinted);
-                if (matcher.find()) {
-                    StringBuffer buffer = new StringBuffer();
+                    Matcher matcher = INVALID_PROLOG_PATTERN.matcher(prettyPrinted);
+                    if (matcher.find()) {
+                        StringBuffer buffer = new StringBuffer();
 
-                    do {
-                        String version = matcher.group("version");
-                        String encoding = matcher.group("encoding");
-                        StringBuilder prolog = new StringBuilder("<?xml version=\"").append(version).append('"');
-                        if (encoding != null) {
-                            prolog.append(" encoding=\"").append(encoding).append('"');
-                        }
-                        prolog.append("?>");
-                        matcher.appendReplacement(buffer, prolog.toString());
-                    } while (matcher.find());
+                        do {
+                            String version = matcher.group("version");
+                            String encoding = matcher.group("encoding");
+                            StringBuilder prolog = new StringBuilder("<?xml version=\"").append(version).append('"');
+                            if (encoding != null) {
+                                prolog.append(" encoding=\"").append(encoding).append('"');
+                            }
+                            prolog.append("?>");
+                            matcher.appendReplacement(buffer, prolog.toString());
+                        } while (matcher.find());
 
-                    matcher.appendTail(buffer);
-                    prettyPrinted = buffer.toString();
+                        matcher.appendTail(buffer);
+                        prettyPrinted = buffer.toString();
+                    }
+
+                    return prettyPrinted;
                 }
-
-                return prettyPrinted;
             } finally {
                 Context.exit();
             }

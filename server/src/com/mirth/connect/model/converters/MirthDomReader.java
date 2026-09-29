@@ -9,40 +9,72 @@
 
 package com.mirth.connect.model.converters;
 
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
+import java.util.ArrayList;
+import java.util.List;
 
-import com.thoughtworks.xstream.io.naming.NameCoder;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+
 import com.thoughtworks.xstream.io.xml.DomReader;
-import com.thoughtworks.xstream.io.xml.XmlFriendlyReplacer;
 
 public class MirthDomReader extends DomReader {
 
+    /*
+     * The only constructor BridgeLink uses (ObjectXMLSerializer:348,405,421). The five other
+     * DomReader constructor overloads this class used to mirror had no callers anywhere in the
+     * tree, and two of them took the deprecated XmlFriendlyReplacer; they were removed rather than
+     * left as untested surface that a future xstream bump would have to keep compiling.
+     */
     public MirthDomReader(Element rootElement) {
         super(rootElement);
     }
 
-    public MirthDomReader(Document document) {
-        super(document);
+    /*
+     * MIRTH-3446 / IRT-1396 regression fix: prior to xstream 1.4.21, DomReader#reassignCurrentElement
+     * eagerly rebuilt its internal child-element cache every time it was called, so calling
+     * reassignCurrentElement(getCurrent()) here was sufficient to force DomReader to re-scan the
+     * live DOM after MigratableConverter mutated it (added/removed child elements during
+     * version migration). xstream 1.4.21 (GHI:#342, "Optimize internal handling of children in
+     * DomReader avoiding O(n^2) access times for siblings") split that behavior: the private
+     * childElements cache is now only rebuilt from DomReader#moveDown(), and
+     * reassignCurrentElement() merely reassigns the current element reference without touching
+     * the cache. Calling reassignCurrentElement(getCurrent()) is therefore now a no-op for reload
+     * purposes, so migrated elements (e.g. Channel's migrate3_5_0, which removes
+     * "codeTemplateLibraries" and adds "exportData") were silently deserialized against a STALE
+     * child list, causing UnknownFieldException on removed legacy fields and dropping newly added
+     * ones.
+     *
+     * Fix: override getChildCount()/getChild(int) (both declared protected in DomReader) so that
+     * MirthDomReader never depends on that private, version-fragile cache at all — every access
+     * re-reads the live DOM directly off the current element. This restores the pre-1.4.21
+     * always-fresh behavior for our reader without reaching into xstream's private internals.
+     *
+     * Consequently there is no reload step and no reloadCurrentElement() helper any more: the old
+     * helper (and MigratableConverter's call to it) was a provable no-op under 1.4.21 sitting under
+     * a comment that claimed load-bearing behavior — exactly what leads a later maintainer to
+     * conclude the reload path is still active and revert the overrides below. If a future xstream
+     * ever restores rebuild-on-reassign semantics, the overrides below remain correct regardless.
+     */
+    @Override
+    protected int getChildCount() {
+        return getLiveChildElements().size();
     }
 
-    public MirthDomReader(Element rootElement, NameCoder nameCoder) {
-        super(rootElement, nameCoder);
+    @Override
+    protected Object getChild(int index) {
+        return getLiveChildElements().get(index);
     }
 
-    public MirthDomReader(Document document, NameCoder nameCoder) {
-        super(document, nameCoder);
-    }
-
-    public MirthDomReader(Element rootElement, XmlFriendlyReplacer replacer) {
-        super(rootElement, replacer);
-    }
-
-    public MirthDomReader(Document document, XmlFriendlyReplacer replacer) {
-        super(document, replacer);
-    }
-
-    protected void reloadCurrentElement() {
-        reassignCurrentElement(getCurrent());
+    private List<Element> getLiveChildElements() {
+        List<Element> children = new ArrayList<Element>();
+        NodeList nodeList = ((Element) getCurrent()).getChildNodes();
+        for (int i = 0; i < nodeList.getLength(); i++) {
+            Node node = nodeList.item(i);
+            if (node instanceof Element) {
+                children.add((Element) node);
+            }
+        }
+        return children;
     }
 }

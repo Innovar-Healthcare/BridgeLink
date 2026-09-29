@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 
 import javax.servlet.http.HttpServletResponse;
 import javax.xml.ws.Binding;
@@ -81,6 +82,9 @@ public class WebServiceReceiver extends SourceConnector {
     private TemplateValueReplacer replacer = new TemplateValueReplacer();
     private WebServiceConfiguration configuration;
     private HttpServer server;
+    // Guards the server, executor and webServiceEndpoint fields against a stop hook that a halt
+    // abandoned (IRT-2107) finishing after the next start: see onStop().
+    private final Object resourceLock = new Object();
     private WebServiceReceiverProperties connectorProperties;
     private HttpAuthConnectorPluginProperties authProps;
     private AuthenticatorProvider authenticatorProvider;
@@ -124,6 +128,16 @@ public class WebServiceReceiver extends SourceConnector {
 
     @Override
     public void onUndeploy() throws ConnectorTaskException {
+        // authenticatorProvider is deploy-scoped (created in onDeploy) and must only be shut down
+        // and nulled here, never in onStop() -- Donkey stop/start and pause/resume do not re-run
+        // onDeploy(), so nulling it in onStop() would publish the endpoint with no authenticator on
+        // a bare stop/start, silently disabling auth on a PHI endpoint (IRT-2428 review). Mirrors
+        // HttpReceiver.onUndeploy().
+        if (authenticatorProvider != null) {
+            authenticatorProvider.shutdown();
+            authenticatorProvider = null;
+        }
+
         configuration.configureConnectorUndeploy(this);
     }
 
@@ -138,6 +152,9 @@ public class WebServiceReceiver extends SourceConnector {
 
         java.util.logging.Logger.getLogger("javax.enterprise.resource.webservices.jaxws.server").setLevel(java.util.logging.Level.OFF);
 
+        // onStart works on locals from here on rather than re-reading the fields it assigns: a halt
+        // in forced mode can run onStop() concurrently and clear a field this start just set.
+        HttpServer httpServer;
         try {
             try {
                 if (System.getProperty("sun.net.httpserver.maxReqTime") == null) {
@@ -151,7 +168,10 @@ public class WebServiceReceiver extends SourceConnector {
                 logger.error("Failed to set properties sun.net.httpserver.maxReqTime and sun.net.httpserver.maxRspTime", e);
             }
             configuration.configureReceiver(this);
-            server.bind(new InetSocketAddress(host, port), DEFAULT_BACKLOG);
+            synchronized (resourceLock) {
+                httpServer = server;
+            }
+            httpServer.bind(new InetSocketAddress(host, port), DEFAULT_BACKLOG);
         } catch (Exception e) {
             throw new ConnectorTaskException("Error creating HTTP Server.", e);
         }
@@ -162,10 +182,53 @@ public class WebServiceReceiver extends SourceConnector {
             processingThreads = 1;
         }
 
+        // Resolve the connector's application classloader BEFORE building the httpserver thread pool.
+        // On JDK 19+ (JEP 425) a non-inheriting httpserver worker thread defaults to the system
+        // classloader, which cannot see the SAAJ impl in server-lib, so we must pin this loader onto
+        // every worker via the pool's ThreadFactory (IRT-2428).
+        //
+        // Resolve-or-degrade: a getContextFactory() failure or a null application classloader must
+        // never fail connector start and must never pin a null/system loader. Both trouble cases fall
+        // back to this class's own classloader, which is always server-lib-visible (loaded by the
+        // single MirthLauncher URLClassLoader) and therefore still resolves SAAJ while degraded.
+        // A blank-final variable cannot be assigned from both the try block and its catch block
+        // (javac's conservative definite-assignment analysis for try/catch), so resolve into a
+        // plain local first and copy it into the effectively-final connectorClassLoader exactly
+        // once, after the try/catch completes.
+        ClassLoader resolvedConnectorClassLoader;
+        boolean forceDefaultAcceptMessage = false;
+        try {
+            MirthContextFactory contextFactory = contextFactoryController.getContextFactory(getResourceIds());
+            ClassLoader applicationClassLoader = contextFactory.getApplicationClassLoader();
+            if (applicationClassLoader == null) {
+                logger.error("Web Service context factory returned a null application classloader for connector \"" + getSourceName() + "\" on channel " + getChannelId() + "; falling back to the connector classloader so SAAJ still resolves (IRT-2428).");
+                resolvedConnectorClassLoader = getClass().getClassLoader();
+            } else {
+                resolvedConnectorClassLoader = applicationClassLoader;
+            }
+        } catch (Exception e) {
+            logger.error("Failed to resolve the Web Service context factory for connector \"" + getSourceName() + "\" on channel " + getChannelId() + "; degrading to DefaultAcceptMessage and pinning the connector classloader (IRT-2428).", e);
+            resolvedConnectorClassLoader = getClass().getClassLoader();
+            forceDefaultAcceptMessage = true;
+        }
+        final ClassLoader connectorClassLoader = resolvedConnectorClassLoader;
+
         // Allow more than the channel processing threads so WDSL requests can be accepted even if all processing threads are busy
-        executor = Executors.newFixedThreadPool(processingThreads + 4);
-        server.setExecutor(executor);
-        server.start();
+        ExecutorService newExecutor = Executors.newFixedThreadPool(processingThreads + 4, new ThreadFactory() {
+            private final ThreadFactory delegate = Executors.defaultThreadFactory();
+
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread thread = delegate.newThread(r);
+                thread.setContextClassLoader(connectorClassLoader);
+                return thread;
+            }
+        });
+        synchronized (resourceLock) {
+            executor = newExecutor;
+        }
+        httpServer.setExecutor(newExecutor);
+        httpServer.start();
 
         AcceptMessage acceptMessageWebService = null;
 
@@ -173,32 +236,32 @@ public class WebServiceReceiver extends SourceConnector {
         ClassLoader currentContextClassLoader = Thread.currentThread().getContextClassLoader();
 
         try {
-            try {
-                MirthContextFactory contextFactory = contextFactoryController.getContextFactory(getResourceIds());
+            if (!forceDefaultAcceptMessage) {
+                try {
+                    // Set the current thread context classloader in case custom web service classes need it
+                    Thread.currentThread().setContextClassLoader(connectorClassLoader);
 
-                // Set the current thread context classloader in case custom web service classes need it 
-                Thread.currentThread().setContextClassLoader(contextFactory.getApplicationClassLoader());
+                    Class<?> clazz = Class.forName(replacer.replaceValues(connectorProperties.getClassName(), channelId, channelName), true, connectorClassLoader);
 
-                Class<?> clazz = Class.forName(replacer.replaceValues(connectorProperties.getClassName(), channelId, channelName), true, contextFactory.getApplicationClassLoader());
-
-                if (clazz.getSuperclass().equals(AcceptMessage.class)) {
-                    Constructor<?>[] constructors = clazz.getDeclaredConstructors();
-                    for (int i = 0; i < constructors.length; i++) {
-                        Class<?>[] parameters = constructors[i].getParameterTypes();
-                        if ((parameters.length == 1) && parameters[0].equals(this.getClass())) {
-                            acceptMessageWebService = (AcceptMessage) constructors[i].newInstance(new Object[] {
-                                    this });
+                    if (clazz.getSuperclass().equals(AcceptMessage.class)) {
+                        Constructor<?>[] constructors = clazz.getDeclaredConstructors();
+                        for (int i = 0; i < constructors.length; i++) {
+                            Class<?>[] parameters = constructors[i].getParameterTypes();
+                            if ((parameters.length == 1) && parameters[0].equals(this.getClass())) {
+                                acceptMessageWebService = (AcceptMessage) constructors[i].newInstance(new Object[] {
+                                        this });
+                            }
                         }
-                    }
 
-                    if (acceptMessageWebService == null) {
-                        logger.error("Custom web service class must implement the constructor: public AcceptMessage(WebServiceReceiver webServiceReceiver)");
+                        if (acceptMessageWebService == null) {
+                            logger.error("Custom web service class must implement the constructor: public AcceptMessage(WebServiceReceiver webServiceReceiver)");
+                        }
+                    } else {
+                        logger.error("Custom web service class must extend com.mirth.connect.connectors.ws.AcceptMessage");
                     }
-                } else {
-                    logger.error("Custom web service class must extend com.mirth.connect.connectors.ws.AcceptMessage");
+                } catch (Exception e) {
+                    logger.error("Custom web service class initialization failed", e);
                 }
-            } catch (Exception e) {
-                logger.error("Custom web service class initialization failed", e);
             }
 
             if (acceptMessageWebService == null) {
@@ -206,21 +269,24 @@ public class WebServiceReceiver extends SourceConnector {
                 acceptMessageWebService = new DefaultAcceptMessage(this);
             }
 
-            webServiceEndpoint = Endpoint.create(connectorProperties.getSoapBinding().getValue(), acceptMessageWebService);
-            Binding binding = webServiceEndpoint.getBinding();
+            Endpoint newEndpoint = Endpoint.create(connectorProperties.getSoapBinding().getValue(), acceptMessageWebService);
+            synchronized (resourceLock) {
+                webServiceEndpoint = newEndpoint;
+            }
+            Binding binding = newEndpoint.getBinding();
             List<Handler> handlerChain = new LinkedList<Handler>();
             handlerChain.add(new LoggingSOAPHandler(this));
             binding.setHandlerChain(handlerChain);
 
             String serviceName = replacer.replaceValues(connectorProperties.getServiceName(), channelId, channelName);
-            HttpContext context = server.createContext("/services/" + serviceName);
+            HttpContext context = httpServer.createContext("/services/" + serviceName);
 
             // Set a security authenticator if needed
             if (authenticatorProvider != null) {
                 context.setAuthenticator(createAuthenticator());
             }
 
-            webServiceEndpoint.publish(context);
+            newEndpoint.publish(context);
         } finally {
             // Restore the thread context classloader
             Thread.currentThread().setContextClassLoader(currentContextClassLoader);
@@ -231,29 +297,90 @@ public class WebServiceReceiver extends SourceConnector {
 
     @Override
     public void onStop() throws ConnectorTaskException {
+        // WR-01 (IRT-2428 follow-up, D-05): each resource is stopped in its own guarded block so a
+        // throw from one never skips the rest. executor.shutdown() in particular must always run,
+        // since 26.15 turned the pool into long-lived non-daemon threads pinned to the connector
+        // classloader; skipping shutdown leaks those threads (and the bound socket) on every
+        // redeploy. The pre-existing single-throw contract is preserved: the FIRST failure is
+        // captured and rethrown, later failures are logged rather than swallowed. Each field is
+        // nulled after its own block so the resource is not retained across redeploy.
+        //
+        // The resources are captured once, up front, and each field is cleared only if it still
+        // holds the instance this call stopped (IRT-2107). A halt can abandon this hook while it is
+        // still running and let the next start proceed without waiting for it, so a late return
+        // here must not null the fresh server, executor and endpoint that start assigned: the
+        // restarted listener would keep its port while the connector lost every reference to it,
+        // so no later stop could release it. The fields are not taken at capture time either,
+        // because a halt landing while this hook is stuck inside endpoint.stop() must still be able
+        // to stop the same server and executor and free the port.
+        logger.debug("stopping Web Service HTTP server");
+
+        Endpoint endpointToStop;
+        HttpServer serverToStop;
+        ExecutorService executorToStop;
+        synchronized (resourceLock) {
+            endpointToStop = webServiceEndpoint;
+            serverToStop = server;
+            executorToStop = executor;
+        }
+
         ConnectorTaskException firstCause = null;
 
-        try {
-            logger.debug("stopping Web Service HTTP server");
-
-            if (webServiceEndpoint != null) {
-                webServiceEndpoint.stop();
+        if (endpointToStop != null) {
+            try {
+                endpointToStop.stop();
+            } catch (Exception e) {
+                firstCause = new ConnectorTaskException("Failed to stop Web Service Listener", e);
+            } finally {
+                synchronized (resourceLock) {
+                    if (webServiceEndpoint == endpointToStop) {
+                        webServiceEndpoint = null;
+                    }
+                }
             }
-
-            if (server != null) {
-                server.stop(1);
-            }
-
-            if (executor != null) {
-                executor.shutdown();
-            }
-        } catch (Exception e) {
-            firstCause = new ConnectorTaskException("Failed to stop Web Service Listener", e);
         }
 
-        if (authenticatorProvider != null) {
-            authenticatorProvider.shutdown();
+        if (serverToStop != null) {
+            try {
+                serverToStop.stop(1);
+            } catch (Exception e) {
+                if (firstCause == null) {
+                    firstCause = new ConnectorTaskException("Failed to stop Web Service Listener", e);
+                } else {
+                    logger.error("Failed to stop Web Service Listener HTTP server", e);
+                }
+            } finally {
+                synchronized (resourceLock) {
+                    if (server == serverToStop) {
+                        server = null;
+                    }
+                }
+            }
         }
+
+        if (executorToStop != null) {
+            try {
+                executorToStop.shutdown();
+            } catch (Exception e) {
+                if (firstCause == null) {
+                    firstCause = new ConnectorTaskException("Failed to stop Web Service Listener", e);
+                } else {
+                    logger.error("Failed to shut down Web Service Listener executor", e);
+                }
+            } finally {
+                synchronized (resourceLock) {
+                    if (executor == executorToStop) {
+                        executor = null;
+                    }
+                }
+            }
+        }
+
+        // authenticatorProvider is intentionally NOT touched here (IRT-2428 review): it is
+        // deploy-scoped and stop/start (and pause/resume) never re-run onDeploy(). Shutting it down
+        // or nulling it in onStop() would leave a subsequent onStart() publishing the endpoint with
+        // no authenticator, silently disabling auth on a bare stop/start without redeploy. See
+        // onUndeploy() for the shutdown, matching D-05's named scope (endpoint/server/executor only).
 
         if (firstCause != null) {
             throw firstCause;
@@ -337,7 +464,9 @@ public class WebServiceReceiver extends SourceConnector {
     }
 
     public void setServer(HttpServer server) {
-        this.server = server;
+        synchronized (resourceLock) {
+            this.server = server;
+        }
     }
 
     private com.sun.net.httpserver.Authenticator createAuthenticator() throws ConnectorTaskException {

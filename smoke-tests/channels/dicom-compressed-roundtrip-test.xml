@@ -1,0 +1,227 @@
+<channel version="26.6.0">
+  <id>00000032-0000-0000-0000-000000000032</id>
+  <nextMetaDataId>2</nextMetaDataId>
+  <name>DICOM Compressed Round-Trip Test Channel</name>
+  <description>Phase 22 / CVE-09 / D-13 hard gate: DICOM Listener source (inbound C-STORE) +
+    DICOM Sender destination (dedicated DcmRcv SCP stub), proving compressed transfer syntaxes
+    (JPEG2000 Lossless Only 1.2.840.10008.1.2.4.90, JPEG Lossless Process 14 SV1
+    1.2.840.10008.1.2.4.70) negotiate and relay end to end through the DIMSE connector after
+    the jai_imageio.jar -> jai-imageio-core/jpeg2000 1.4.0 swap. Unlike dicom-roundtrip-test.xml
+    (nativeData=true, Implicit VR LE only), this Listener leaves defts/nativeData/bigEndian at
+    their all-false default so DICOMReceiver.onStart never calls dcmrcv.setTransferSyntax(...),
+    and the inherited org.dcm4che2.tool.dcmrcv.DcmRcv#NON_RETIRED_LE_TS default (which already
+    includes JPEGLosslessNonHierarchical14 + JPEG2000LosslessOnly, verified directly against
+    DcmRcv.java:139-149/229 this plan) is used for negotiation instead. No PixelData-mutating
+    transform (kept deliberately absent — the acceptance gate is transfer-syntax/SOP-class/tag
+    PRESERVATION, not mutation); DICOMSerializer's toXML/fromXML round-trip on encapsulated
+    pixel data was live-verified byte-identical for both fixtures before this channel was
+    written (22-04-SUMMARY.md D-12 spike). Test-only; never deploy to production.</description>
+  <revision>1</revision>
+  <sourceConnector version="26.6.0">
+    <metaDataId>0</metaDataId>
+    <name>sourceConnector</name>
+    <properties class="com.mirth.connect.connectors.dimse.DICOMReceiverProperties" version="26.6.0">
+      <pluginProperties/>
+      <listenerConnectorProperties version="26.6.0">
+        <host>127.0.0.1</host>
+        <port>${DICOM_COMPRESSED_LISTENER_PORT}</port>
+      </listenerConnectorProperties>
+      <sourceConnectorProperties version="26.6.0">
+        <responseVariable>None</responseVariable>
+        <respondAfterProcessing>true</respondAfterProcessing>
+        <processBatch>false</processBatch>
+        <firstResponse>false</firstResponse>
+        <processingThreads>1</processingThreads>
+        <resourceIds class="linked-hash-map">
+          <entry>
+            <string>Default Resource</string>
+            <string>[Default Resource]</string>
+          </entry>
+        </resourceIds>
+        <queueBufferSize>1000</queueBufferSize>
+      </sourceConnectorProperties>
+      <applicationEntity></applicationEntity>
+      <localHost></localHost>
+      <localPort></localPort>
+      <localApplicationEntity></localApplicationEntity>
+      <soCloseDelay>50</soCloseDelay>
+      <releaseTo>5</releaseTo>
+      <requestTo>5</requestTo>
+      <idleTo>60</idleTo>
+      <reaper>10</reaper>
+      <rspDelay>0</rspDelay>
+      <pdv1>false</pdv1>
+      <sndpdulen>16</sndpdulen>
+      <rcvpdulen>16</rcvpdulen>
+      <async>0</async>
+      <!-- D-13: all three false (the default) is the load-bearing config here ; it is what
+           lets DICOMReceiver.onStart skip dcmrcv.setTransferSyntax(...) entirely, so the
+           Listener negotiates against DcmRcv's own broad default transfer-capability list
+           (includes both compressed transfer syntaxes this gate exercises) rather than being
+           downgraded to Implicit VR LE only (dicom-roundtrip-test.xml's nativeData=true). -->
+      <bigEndian>false</bigEndian>
+      <bufSize>1</bufSize>
+      <defts>false</defts>
+      <!-- Blank: Listener's own Storage-Commitment SCP registration is out of scope ; stgcmt
+           lives entirely on the Sender leg below (mirrors dicom-roundtrip-test.xml). -->
+      <dest></dest>
+      <nativeData>false</nativeData>
+      <sorcvbuf>0</sorcvbuf>
+      <sosndbuf>0</sosndbuf>
+      <tcpDelay>true</tcpDelay>
+      <keyPW></keyPW>
+      <keyStore></keyStore>
+      <keyStorePW></keyStorePW>
+      <noClientAuth>true</noClientAuth>
+      <nossl2>true</nossl2>
+      <tls>notls</tls>
+      <trustStore></trustStore>
+      <trustStorePW></trustStorePW>
+    </properties>
+    <transformer version="26.6.0">
+      <elements/>
+      <inboundDataType>DICOM</inboundDataType>
+      <outboundDataType>DICOM</outboundDataType>
+      <inboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+      <outboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+    </transformer>
+    <filter version="26.6.0">
+      <elements/>
+    </filter>
+    <transportName>DICOM Listener</transportName>
+    <mode>SOURCE</mode>
+    <enabled>true</enabled>
+    <waitForPrevious>true</waitForPrevious>
+  </sourceConnector>
+  <destinationConnectors>
+    <connector version="26.6.0">
+      <metaDataId>1</metaDataId>
+      <name>Destination 1</name>
+      <properties class="com.mirth.connect.connectors.dimse.DICOMDispatcherProperties" version="26.6.0">
+        <pluginProperties/>
+        <destinationConnectorProperties version="26.6.0">
+          <queueEnabled>false</queueEnabled>
+          <sendFirst>false</sendFirst>
+          <retryIntervalMillis>10000</retryIntervalMillis>
+          <regenerateTemplate>false</regenerateTemplate>
+          <retryCount>0</retryCount>
+          <rotate>false</rotate>
+          <includeFilterTransformer>false</includeFilterTransformer>
+          <threadCount>1</threadCount>
+          <threadAssignmentVariable></threadAssignmentVariable>
+          <validateResponse>false</validateResponse>
+          <resourceIds class="linked-hash-map">
+            <entry>
+              <string>Default Resource</string>
+              <string>[Default Resource]</string>
+            </entry>
+          </resourceIds>
+          <queueBufferSize>1000</queueBufferSize>
+          <reattachAttachments>true</reattachAttachments>
+        </destinationConnectorProperties>
+        <host>127.0.0.1</host>
+        <!-- Dedicated stub port (Pitfall 7) ; own port/dir, never shared with
+             dicom-test.xml's or dicom-roundtrip-test.xml's stubs. -->
+        <port>${DICOM_COMPRESSED_SCP_PORT}</port>
+        <applicationEntity>SMOKEHARNESS3</applicationEntity>
+        <localHost></localHost>
+        <localPort></localPort>
+        <localApplicationEntity></localApplicationEntity>
+        <template>${DICOMMESSAGE}</template>
+        <acceptTo>5000</acceptTo>
+        <async>0</async>
+        <bufSize>1</bufSize>
+        <connectTo>0</connectTo>
+        <priority>med</priority>
+        <passcode></passcode>
+        <pdv1>false</pdv1>
+        <rcvpdulen>16</rcvpdulen>
+        <reaper>10</reaper>
+        <releaseTo>5</releaseTo>
+        <rspTo>60</rspTo>
+        <shutdownDelay>1000</shutdownDelay>
+        <sndpdulen>16</sndpdulen>
+        <soCloseDelay>50</soCloseDelay>
+        <sorcvbuf>0</sorcvbuf>
+        <sosndbuf>0</sosndbuf>
+        <!-- stgcmt left at default (false) ; unlike dicom-roundtrip-test.xml, this gate does
+             not need the storage-commitment N-EVENT-REPORT round-trip; the Sender's DcmSnd
+             negotiates + sends synchronously and driveInboundCStore()-style file-count/receipt
+             assertions are sufficient proof of relay (Task 1/Task 2 already established the
+             actual codec-decode question is moot ; see 22-04-SUMMARY.md). -->
+        <stgcmt>false</stgcmt>
+        <tcpDelay>true</tcpDelay>
+        <ts1>false</ts1>
+        <uidnegrsp>false</uidnegrsp>
+        <username></username>
+        <keyPW></keyPW>
+        <keyStore></keyStore>
+        <keyStorePW></keyStorePW>
+        <noClientAuth>true</noClientAuth>
+        <nossl2>true</nossl2>
+        <tls>notls</tls>
+        <trustStore></trustStore>
+        <trustStorePW></trustStorePW>
+      </properties>
+      <transformer version="26.6.0">
+        <elements/>
+        <inboundDataType>DICOM</inboundDataType>
+        <outboundDataType>DICOM</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+      </transformer>
+      <responseTransformer version="26.6.0">
+        <elements/>
+        <inboundDataType>DICOM</inboundDataType>
+        <outboundDataType>DICOM</outboundDataType>
+        <inboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+        <outboundProperties class="com.mirth.connect.plugins.datatypes.dicom.DICOMDataTypeProperties" version="26.6.0"/>
+      </responseTransformer>
+      <filter version="26.6.0">
+        <elements/>
+      </filter>
+      <transportName>DICOM Sender</transportName>
+      <mode>DESTINATION</mode>
+      <enabled>true</enabled>
+      <waitForPrevious>true</waitForPrevious>
+    </connector>
+  </destinationConnectors>
+  <preprocessingScript>return message;</preprocessingScript>
+  <postprocessingScript>return;</postprocessingScript>
+  <deployScript>return;</deployScript>
+  <undeployScript>return;</undeployScript>
+  <properties version="26.6.0">
+    <clearGlobalChannelMap>true</clearGlobalChannelMap>
+    <messageStorageMode>DEVELOPMENT</messageStorageMode>
+    <encryptData>false</encryptData>
+    <encryptAttachments>false</encryptAttachments>
+    <encryptCustomMetaData>false</encryptCustomMetaData>
+    <removeContentOnCompletion>false</removeContentOnCompletion>
+    <removeOnlyFilteredOnCompletion>false</removeOnlyFilteredOnCompletion>
+    <removeAttachmentsOnCompletion>false</removeAttachmentsOnCompletion>
+    <initialState>STARTED</initialState>
+    <storeAttachments>true</storeAttachments>
+    <metaDataColumns>
+      <metaDataColumn>
+        <name>SOURCE</name>
+        <type>STRING</type>
+        <mappingName>message_source</mappingName>
+      </metaDataColumn>
+      <metaDataColumn>
+        <name>TYPE</name>
+        <type>STRING</type>
+        <mappingName>message_type</mappingName>
+      </metaDataColumn>
+    </metaDataColumns>
+    <attachmentProperties version="26.6.0">
+      <type>None</type>
+      <properties/>
+    </attachmentProperties>
+    <resourceIds class="linked-hash-map">
+      <entry>
+        <string>Default Resource</string>
+        <string>[Default Resource]</string>
+      </entry>
+    </resourceIds>
+  </properties>
+</channel>

@@ -15,6 +15,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -28,6 +29,8 @@ import com.mirth.connect.donkey.model.message.Message;
 import com.mirth.connect.donkey.model.message.RawMessage;
 import com.mirth.connect.donkey.model.message.Status;
 import com.mirth.connect.donkey.server.Donkey;
+import com.mirth.connect.donkey.test.util.TestDestinationConnector;
+import com.mirth.connect.donkey.server.channel.AbandonedThreadRegistry;
 import com.mirth.connect.donkey.server.DonkeyConfiguration;
 import com.mirth.connect.donkey.server.DonkeyConnectionPools;
 import com.mirth.connect.donkey.server.StartException;
@@ -661,5 +664,140 @@ public class QueueTests {
         channel.stop();
         channel.undeploy();
         ChannelController.getInstance().removeChannel(channelId);
+    }
+
+    /**
+     * IRT-2107: a destination queue thread parked inside a send that ignores interrupts (the TCP
+     * Sender to a black hole with response timeout 0). Halt joins queue threads only until its
+     * deadline, abandons the survivor, removes it from the connector so the next start does not
+     * inherit it, and reaches STOPPED. The message stays QUEUED in storage.
+     *
+     * <p>
+     * Invariant: not lost (still QUEUED); a duplicate is possible if the orphaned send later succeeds
+     * after the restarted queue resends it, which is the documented halt contract.
+     */
+    @Test(timeout = 60000)
+    public final void testHaltIsBoundedWhenDestinationQueueThreadBlocksInSend() throws Exception {
+        // A source queue thread polls in 1 s slices, so a grace period must comfortably exceed that even for a healthy stop
+        final long grace = 3000;
+        // Source does not wait for destinations, destination queue enabled, so the queue thread does the send
+        TestChannel channel = TestUtils.createDefaultChannel(channelId, serverId, false, 1, 1);
+        channel.setName(channelId);
+        channel.setStopGracePeriodMillis(grace);
+        TestSourceConnector sourceConnector = (TestSourceConnector) channel.getSourceConnector();
+        TestDestinationConnector destinationConnector = (TestDestinationConnector) channel.getDestinationConnector(1);
+        ((com.mirth.connect.donkey.model.channel.DestinationConnectorPropertiesInterface) destinationConnector.getConnectorProperties()).getDestinationConnectorProperties().setQueueEnabled(true);
+        ((com.mirth.connect.donkey.model.channel.DestinationConnectorPropertiesInterface) destinationConnector.getConnectorProperties()).getDestinationConnectorProperties().setSendFirst(false);
+        CountDownLatch gate = new CountDownLatch(1);
+
+        try {
+            channel.deploy();
+            channel.start(null);
+            destinationConnector.blockSend(gate);
+
+            sourceConnector.readTestMessage(testMessage);
+            assertTrue("the destination queue thread never reached send", destinationConnector.getSendEntered().await(30, TimeUnit.SECONDS));
+            long messageId = sourceConnector.getMessageIds().get(0);
+
+            long started = System.currentTimeMillis();
+            channel.halt();
+            long elapsed = System.currentTimeMillis() - started;
+
+            assertTrue("halt took " + elapsed + " ms, which is not bounded", elapsed < 15000);
+            assertEquals(DeployedState.STOPPED, channel.getCurrentState());
+            assertEquals(DeployedState.STOPPED, destinationConnector.getCurrentState());
+            boolean queueThreadAbandoned = false;
+            for (Thread thread : channel.getAbandonedLifecycleThreads()) {
+                queueThreadAbandoned |= thread.getName().startsWith("Destination Queue Thread");
+            }
+            assertTrue("the queue thread the halt gave up on must be reported as abandoned", queueThreadAbandoned);
+            TestUtils.assertConnectorMessageStatusEquals(channelId, messageId, 1, Status.QUEUED);
+
+            /*
+             * Restart with the orphan still wedged, then let it go. It must exit rather than resume as a
+             * second sender next to the restarted queue thread (which would break ordering); the queued
+             * message is resent by the new thread, so the destination may see it twice: the documented
+             * possible duplicate after a halt.
+             */
+            channel.start(null);
+            assertEquals(DeployedState.STARTED, channel.getCurrentState());
+            gate.countDown();
+            for (int i = 0; i < 300 && !channel.getAbandonedLifecycleThreads().isEmpty(); i++) {
+                Thread.sleep(10);
+            }
+            assertTrue("the orphan must finish once released", channel.getAbandonedLifecycleThreads().isEmpty());
+            for (int i = 0; i < 300 && destinationConnector.getMessageIds().isEmpty(); i++) {
+                Thread.sleep(10);
+            }
+            int liveQueueThreads = 0;
+            for (Thread thread : Thread.getAllStackTraces().keySet()) {
+                if (thread.isAlive() && thread.getName().startsWith("Destination Queue Thread") && thread.getName().contains("(" + channelId + ")")) {
+                    liveQueueThreads++;
+                }
+            }
+            assertEquals("exactly one queue thread may be running after the restart", 1, liveQueueThreads);
+            assertTrue("the message must not be lost", destinationConnector.getMessageIds().size() >= 1);
+
+            channel.stop();
+            assertEquals(DeployedState.STOPPED, channel.getCurrentState());
+            channel.undeploy();
+        } finally {
+            gate.countDown();
+            if (channel.getCurrentState() != DeployedState.STOPPED) {
+                channel.halt();
+            }
+            AbandonedThreadRegistry.clear(channelId);
+        }
+    }
+
+    /**
+     * IRT-2107: a source queue thread parked inside process() (a script blocked in a Java call, say).
+     * Halt interrupts the source queue threads and no longer waits for the one that ignores it; the
+     * channel reaches STOPPED and the message stays RECEIVED for the next start to pick up.
+     */
+    @Test(timeout = 60000)
+    public final void testHaltIsBoundedWhenSourceQueueThreadBlocksInProcess() throws Exception {
+        final long grace = 3000;
+        TestChannel channel = TestUtils.createDefaultChannel(channelId, serverId, false, 1, 1);
+        channel.setName(channelId);
+        channel.setStopGracePeriodMillis(grace);
+        TestSourceConnector sourceConnector = (TestSourceConnector) channel.getSourceConnector();
+        TestDestinationConnector destinationConnector = (TestDestinationConnector) channel.getDestinationConnector(1);
+        CountDownLatch gate = new CountDownLatch(1);
+
+        try {
+            channel.deploy();
+            channel.start(null);
+            // The source queue thread runs the destination send inline; block it there, ignoring interrupts
+            destinationConnector.blockSend(gate);
+
+            sourceConnector.readTestMessage(testMessage);
+            assertTrue("the source queue thread never reached send", destinationConnector.getSendEntered().await(30, TimeUnit.SECONDS));
+
+            long started = System.currentTimeMillis();
+            channel.halt();
+            long elapsed = System.currentTimeMillis() - started;
+
+            assertTrue("halt took " + elapsed + " ms, which is not bounded", elapsed < 15000);
+            assertEquals(DeployedState.STOPPED, channel.getCurrentState());
+            boolean sourceQueueThreadAbandoned = false;
+            for (Thread thread : channel.getAbandonedLifecycleThreads()) {
+                sourceQueueThreadAbandoned |= thread.getName().contains("(" + channelId + ")");
+            }
+            assertTrue("the source queue thread must be reported as abandoned", sourceQueueThreadAbandoned);
+
+            gate.countDown();
+            for (int i = 0; i < 300 && !channel.getAbandonedLifecycleThreads().isEmpty(); i++) {
+                Thread.sleep(10);
+            }
+            assertTrue(channel.getAbandonedLifecycleThreads().isEmpty());
+            channel.undeploy();
+        } finally {
+            gate.countDown();
+            if (channel.getCurrentState() != DeployedState.STOPPED) {
+                channel.halt();
+            }
+            AbandonedThreadRegistry.clear(channelId);
+        }
     }
 }

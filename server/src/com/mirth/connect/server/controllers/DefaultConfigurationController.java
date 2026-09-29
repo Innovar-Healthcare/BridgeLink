@@ -29,6 +29,7 @@ import java.io.Reader;
 import java.math.BigInteger;
 import java.net.URI;
 import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
@@ -188,6 +189,7 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
     private static Digester digester = null;
 
     private static final String CHARSET = "ca.uhn.hl7v2.llp.charset";
+    private static final String DEFAULT_ENCODING_PROPERTY = "server.defaultencoding";
     private static final String PROPERTY_TEMP_DIR = "dir.tempdata";
     private static final String PROPERTY_APP_DATA_DIR = "dir.appdata";
     public static final String CONFIGURATION_MAP_PATH = "configurationmap.path";
@@ -296,8 +298,9 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             baseDir = new File(ClassPathResource.getResourceURI("mirth.properties")).getParentFile().getParent();
             logger.debug("set base dir: " + baseDir);
 
-            if (mirthConfig.getString(CHARSET) != null) {
-                System.setProperty(CHARSET, mirthConfig.getString(CHARSET));
+            String defaultEncoding = resolveDefaultEncoding(mirthConfig.getString(DEFAULT_ENCODING_PROPERTY), mirthConfig.getString(CHARSET), logger);
+            if (defaultEncoding != null) {
+                System.setProperty(CHARSET, defaultEncoding);
             }
 
             // Default value is 72 hours (3 days), minimum is 1 minute
@@ -1739,6 +1742,8 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
         String username = properties.getProperty("username");
         String password = properties.getProperty("password");
         String to = properties.getProperty("toAddress");
+        String cc = properties.getProperty("ccAddress");
+        String bcc = properties.getProperty("bccAddress");
         String from = properties.getProperty("fromAddress");
 
         int port = -1;
@@ -1810,6 +1815,16 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
             for (String toAddress : StringUtils.split(to, ",")) {
                 email.addTo(toAddress);
             }
+            if (StringUtils.isNotBlank(cc)) {
+                for (String ccAddress : StringUtils.split(cc, ",")) {
+                    email.addCc(ccAddress);
+                }
+            }
+            if (StringUtils.isNotBlank(bcc)) {
+                for (String bccAddress : StringUtils.split(bcc, ",")) {
+                    email.addBcc(bccAddress);
+                }
+            }
 
             email.setFrom(from);
             email.setMsg("Receipt of this email confirms that mail originating from this BridgeLink Server is capable of reaching its intended destination.\n\nSMTP Configuration:\n- Host: " + host + "\n- Port: " + port);
@@ -1839,6 +1854,57 @@ public class DefaultConfigurationController extends com.mirth.connect.server.con
                 cause = cause.getCause();
             }
             return new ConnectionTestResponse(ConnectionTestResponse.Type.FAILURE, message.toString());
+        }
+    }
+
+    /**
+     * Resolves the server-wide default connector encoding for connectors set to DEFAULT_ENCODING.
+     * The public {@link #DEFAULT_ENCODING_PROPERTY} alias takes precedence over the legacy
+     * {@link #CHARSET} name. The chosen value is validated against the JVM's supported charsets; an
+     * unsupported or malformed value is logged at ERROR and rejected (returns null) rather than
+     * promoted, so a typo cannot make every DEFAULT_ENCODING connector fail per message. Returns null
+     * when nothing valid is configured, in which case DEFAULT_ENCODING keeps following the JVM
+     * platform default.
+     */
+    static String resolveDefaultEncoding(String aliasValue, String legacyValue, Logger logger) {
+        String alias = StringUtils.trimToNull(aliasValue);
+        String legacy = StringUtils.trimToNull(legacyValue);
+        String configured = alias != null ? alias : legacy;
+
+        if (configured == null) {
+            return null;
+        }
+
+        if (!isSupportedCharset(configured)) {
+            logger.error("Configured default connector encoding '" + configured + "' (" + DEFAULT_ENCODING_PROPERTY + " / " + CHARSET + ") is not a charset supported by this JVM; ignoring it. Connectors set to DEFAULT_ENCODING will use the JVM platform default (" + Charset.defaultCharset().name() + ").");
+            return null;
+        }
+
+        if (alias != null && legacy != null && !sameCharset(alias, legacy)) {
+            // ERROR, not WARN: the root logger ships at ERROR and this class has no explicit binding,
+            // so only ERROR reaches an operator — and a silent charset divergence between the two
+            // properties is exactly the misconfiguration worth surfacing.
+            logger.error("Both " + DEFAULT_ENCODING_PROPERTY + " and " + CHARSET + " are set to different charsets; using " + DEFAULT_ENCODING_PROPERTY + " ('" + alias + "') and ignoring " + CHARSET + " ('" + legacy + "').");
+        }
+
+        return configured;
+    }
+
+    private static boolean isSupportedCharset(String name) {
+        try {
+            return Charset.isSupported(name);
+        } catch (IllegalCharsetNameException e) {
+            // Illegal name (e.g. contains reserved characters) — treated as unsupported.
+            return false;
+        }
+    }
+
+    private static boolean sameCharset(String a, String b) {
+        try {
+            return Charset.forName(a).equals(Charset.forName(b));
+        } catch (IllegalArgumentException e) {
+            // Unresolvable name(s) (illegal or unsupported) — treat as different so it is surfaced.
+            return false;
         }
     }
 }

@@ -10,7 +10,10 @@
 package com.mirth.connect.donkey.test.util;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.mirth.connect.donkey.model.message.ConnectorMessage;
 import com.mirth.connect.donkey.model.message.Message;
@@ -24,10 +27,15 @@ import com.mirth.connect.donkey.util.SerializerProvider;
 import com.mirth.connect.donkey.util.xstream.XStreamSerializer;
 
 public class TestChannel extends Channel {
-    private List<Long> messageIds = new ArrayList<Long>();
+    private List<Long> messageIds = Collections.synchronizedList(new ArrayList<Long>());
     private boolean isDeployed = false;
     private volatile boolean queueThreadRunning = false;
     private List<Message> unfinishedMessages = null;
+
+    private volatile Long blockedMessageId;
+    private volatile CountDownLatch processEntered;
+    private volatile CountDownLatch processRelease;
+    private final AtomicBoolean blockConsumed = new AtomicBoolean();
 
     public TestChannel() {
         super();
@@ -83,17 +91,65 @@ public class TestChannel extends Channel {
         super.queue(sourceMessage);
     }
 
+    /**
+     * Parks the next {@link #process(ConnectorMessage, boolean)} call for the given message id until
+     * {@code release} is counted down, so a test can hold a source queue thread in flight on a
+     * specific message. One-shot: later attempts on the same message id are not blocked.
+     *
+     * @param entered
+     *            counted down once the queue thread is inside process (and therefore checked out of
+     *            the source queue)
+     * @param release
+     *            awaited before the message is actually processed
+     */
+    public void blockProcessing(Long messageId, CountDownLatch entered, CountDownLatch release) {
+        blockConsumed.set(false);
+        this.processEntered = entered;
+        this.processRelease = release;
+        // Published last: process() reads the latches only after matching this, so they are never null
+        this.blockedMessageId = messageId;
+    }
+
     @Override
     public Message process(ConnectorMessage sourceMessage, boolean markAsProcessed) throws InterruptedException {
+        Long blocked = blockedMessageId;
+
+        if (blocked != null && blocked.equals(sourceMessage.getMessageId()) && blockConsumed.compareAndSet(false, true)) {
+            processEntered.countDown();
+            processRelease.await();
+        }
+
         Message message = super.process(sourceMessage, markAsProcessed);
         messageIds.add(message.getMessageId());
         return message;
+    }
+
+    /*
+     * IRT-2107: a recovery that never returns. start() runs recovery while holding the lifecycle lock,
+     * so this is how a test parks a channel in STARTING with the lock held, the way a recovery blocked
+     * in a JDBC call does. The block ignores interrupts; the test releases the gate in a finally.
+     */
+    private volatile CountDownLatch recoveryGate;
+    private final CountDownLatch recoveryEntered = new CountDownLatch(1);
+
+    public void blockRecovery(CountDownLatch gate) {
+        this.recoveryGate = gate;
+    }
+
+    public CountDownLatch getRecoveryEntered() {
+        return recoveryEntered;
     }
 
     @Override
     public void processUnfinishedMessages() throws Exception {
         // We only run it once and store it because the tests usually call channel.start() before calling this method directly. 
         // Channel.start() also calls this method so there is nothing left to process by the time we actual want the return value.
+
+        CountDownLatch gate = recoveryGate;
+        if (gate != null) {
+            recoveryEntered.countDown();
+            TestSourceConnector.awaitUninterruptibly(gate);
+        }
 
         super.processUnfinishedMessages();
     }

@@ -7,7 +7,18 @@ custom-extensions/*/testlib/
 .idea
 **/*.iml
 .vscode/
-.claude/
+
+# Claude Code: shared config IS committed (skills, agents, hooks, settings.json) so every
+# contributor gets the same setup; everything else under .claude/ is personal or generated.
+# Note the pattern must be `.claude/*`, not `.claude/` — git does not descend into an
+# excluded directory, so a trailing-slash exclusion cannot be negated and the negations
+# below would silently do nothing. Adding a new SHARED dir (commands/, rules/)? Add a
+# negation here, or it never shows up in git status.
+.claude/*
+!.claude/skills/
+!.claude/agents/
+!.claude/settings.json
+
 donkey/donkey-src
 donkey/donkey-test
 .sonar
@@ -28,10 +39,6 @@ donkey/donkey-test
 **/junit[0-9]*.properties
 **/junitvmwatcher*.properties
 .DS_Store
-
-# smoke-tests/run-smoke-test.sh scratch output (IRT-2270) - runtime state, not a tracked
-# artifact.
-smoke-tests/out/
 
 # /client/
 /client/logs
@@ -202,18 +209,14 @@ smoke-tests/out/
 /donkey/build
 /donkey/dist
 /donkey/donkeydb
-/donkey/donkeytest
-/donkey/derby.log
-
-# Derby test DB / log when ant is invoked from the repo root
-/donkeytest
-/derby.log
 /donkey/nb-build.xml
 /donkey/nbproject
 /donkey/nbbuild
 /donkey/nbdist
 /donkey/test_classes
 /donkey/junit-reports
+/donkey/derby.log
+/donkey/${dir.base}/
 
 # /donkey/conf/
 
@@ -370,7 +373,6 @@ smoke-tests/out/
 /server/setup
 /server/bin
 /server/derby.log
-/server/donkeytest
 /server/dist
 /server/.settings
 /server/build
@@ -666,7 +668,42 @@ smoke-tests/out/
 
 # /webadmin/src/com/mirth/connect/webadmin/utils/
 
+# smoke-tests harness run artifacts (mirth.log copies, per-run scratch) — Phase 18
+/smoke-tests/out/
+# smoke-tests driver build output — Phase 18 plan 06 (smoke-tests/build.xml compile/test-run)
+/smoke-tests/build/
+/smoke-tests/junit-reports/
+# regression-scripts/test-irt1541-jsch-sftp-upgrade.sh per-run evidence log — 25.1-03 (SC-3)
+/regression-scripts/irt1541-evidence.log
+# regression-scripts/test-docwriter-upgrade-migration.sh — 22.5-01 (CVE-07/IRT-1491):
+# cached S3 release tarball (~300MB) + per-run evidence dir/log (rtf-diff-surviving.txt in
+# the evidence dir feeds plan 22.5-02's empirical allowlist derivation, so it is NOT
+# wiped between runs by the script itself — but it is build/run output, never committed)
+/regression-scripts/.dist-cache/
+/regression-scripts/docwriter-migration-evidence/
+/regression-scripts/docwriter-migration-evidence.log
+# offline dependency-check-offline target output (Phase 23, D-19) — build output, not evidence
+/dependency-check-out/
 
+
+# CVE scan outputs (regenerated every run by scripts/scan-local.sh and CI; REPORT.md is tracked)
+/report.html
+/summary.md
+/trivy.json
+/dependency-check-report.*
+
+# Residual docker-test/derby-log ignores from public PR #189 (IRT-1539) not already covered above
+# (/donkey/derby.log and /server/derby.log are pre-existing; these four are the missing subset)
+/donkey/donkeytest
+/donkeytest
+/derby.log
+/server/donkeytest
+
+# Unexpanded ${dir.base} property leaked at the repo root by a build target (Phase 26.3 WR-01);
+# /donkey/${dir.base}/ above only anchors the donkey/ subdirectory, not this root-level case.
+/${dir.base}/
+# compiled output of the manual (non-CI) checks
+client/manual-checks/**/out/
 
 # GSD local planning state (local-only, never committed on this branch)
 .planning/

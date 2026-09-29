@@ -1,13 +1,12 @@
 # This workflow will build a Java project with Ant
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-ant
-#
-# The default `build` target runs the unit tests (server/mirth-build.xml calls
-# test-run), and as of IRT-1539 a failing test fails the build. This workflow is
-# therefore the enforcement point: a red test suite is a red pull request.
-#
-# Pass -Dskip.tests=true to build a distribution without running the tests.
 
 name: Build bridgelink
+
+# Cancel superseded runs on the same ref (PR #190 / IRT-1539 hardening item 1).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 on:
   push:
@@ -17,22 +16,16 @@ on:
     branches:
       - bridgelink_development
 
-# A full build plus the ~2,200 unit tests takes roughly half an hour, so cancel
-# superseded runs rather than queueing them behind each other.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    # The build itself is ~5 minutes and the test suite ~30. The ceiling is here to
-    # kill a hung run: without it the job inherits GitHub's 360-minute default, and
-    # this workflow has previously had a run hang rather than fail.
-    timeout-minutes: 90
-
+    # Bound total runtime (PR #190 / IRT-1539 hardening item 2). Value is a RESEARCH [ASSUMED]
+    # default (A2) pending reconciliation against the public #190 diff.
+    timeout-minutes: 60
     env:
-      ANT_OPTS: -Xmx512m
+      # Heap parity with the ant junit -Xmx2048m forks (PR #190 / IRT-1539 hardening item 3).
+      # Value is a RESEARCH [ASSUMED] default (A2).
+      ANT_OPTS: -Xmx2048m
 
     steps:
       - uses: actions/checkout@v4
@@ -44,13 +37,17 @@ jobs:
           java-package: 'jdk+fx'
           distribution: 'zulu'
 
-      # Ant is currently present on the ubuntu-latest image, but nothing pins it
-      # there. Installing it explicitly keeps an image refresh from breaking the
-      # build for reasons that have nothing to do with this repository.
+      # Explicit Ant install — do not rely on the runner's preinstalled ant (PR #190 / IRT-1539
+      # hardening item 4). Hard-bounded with `timeout` so the step can never hang on an apt lock
+      # OR a mirror/network stall (IRT-1539: the unbounded form stalled the whole run to its
+      # 60-min timeout). Falls back to the runner's preinstalled ant if apt is unavailable, then
+      # asserts ant is on PATH so a genuine absence still fails the step.
       - name: Install Ant
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ant
+          timeout 180 sudo apt-get -o DPkg::Lock::Timeout=60 update || echo "apt-get update skipped (timeout/lock/mirror)"
+          timeout 180 sudo apt-get -o DPkg::Lock::Timeout=60 install -y ant || echo "apt-get install ant skipped (timeout/lock); using preinstalled ant"
           ant -version
 
       - name: Build Bridgelink - signed
@@ -63,25 +60,6 @@ jobs:
         working-directory: server
         run: ant -f mirth-build.xml -DdisableSigning=true
 
-      # if: always() so the reports survive a failing build - that is the run where
-      # they matter. Each module writes its own junit-reports/ directory; they are
-      # collected here rather than from aggregate-reports/ because the aggregation
-      # target runs after all modules and so is skipped when the gate fires.
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: junit-test-results
-          if-no-files-found: warn
-          retention-days: 14
-          path: |
-            donkey/junit-reports/TEST-*.xml
-            server/junit-reports/TEST-*.xml
-            client/junit-reports/TEST-*.xml
-            command/junit-reports/TEST-*.xml
-            custom-extensions/dynamic-lookup-gateway/junit-reports/TEST-*.xml
-            custom-extensions/message-trends/junit-reports/TEST-*.xml
-
       - name: Package distribution
         run: tar czf bridgelink.tar.gz -C server/ setup --transform 's|^setup|bridgelink/|'
 
@@ -90,3 +68,17 @@ jobs:
         with:
           name: bridgelink-build
           path: bridgelink.tar.gz
+
+      # Upload junit reports even on a RED build (PR #190 / IRT-1539 hardening item 5). Path glob
+      # verified against build-aggregate-reports.xml and donkey/build.xml (Phase 26.3 WR-02): the
+      # DB-gated targets write junit-reports-<db> (derby/postgres/mysql/sqlserver/oracle), which
+      # the single **/junit-reports/** glob does not match, so the second glob covers those.
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-reports
+          path: |
+            **/junit-reports/**
+            **/junit-reports-*/**
+          if-no-files-found: warn

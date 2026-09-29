@@ -1,0 +1,394 @@
+<?xml version="1.0"?>
+<!--
+    smoke-tests/build.xml — JUnit assertion driver build (Phase 18, plan 18-06).
+
+    Compiles the smoke-test driver (RestClient, Hl7Messages, D-07 endpoint stubs) and
+    runs its JUnit tests with honest-red exit propagation, following the donkey/build.xml
+    test-run pattern (junit failureproperty + <fail if=...>, donkey/build.xml:108-165,236).
+
+    The driver's classpath BORROWS jars already vendored in the assembled distribution
+    (server/setup/server-lib + server/setup/extensions) rather than duplicating them —
+    the harness must exercise the exact jars BridgeLink ships, and this keeps
+    smoke-tests/ free of new binary dependencies beyond the GreenMail pair committed
+    in 18-01.
+
+    Prerequisite: the distribution must be built first (`ant -f server/mirth-build.xml`)
+    so server/setup/server-lib and server/setup/extensions exist. This target set does
+    NOT build the distribution itself — see smoke.setup.dir below.
+-->
+<project name="smoke-tests" basedir="." default="test-run">
+
+    <!-- Overridable: point at a different assembled distribution's setup/ dir.
+         Default assumes the standard repo layout: smoke-tests/ and server/ are siblings. -->
+    <property name="smoke.setup.dir" value="../server/setup" />
+    <!-- server/testlib (junit + hamcrest) lives beside server/setup, not under it. -->
+    <property name="server.testlib.dir" value="${smoke.setup.dir}/../testlib" />
+
+    <property name="src" value="src" />
+    <property name="build.classes" value="build/classes" />
+    <property name="junit.reports" value="junit-reports" />
+    <!-- Overridable: -Dsmoke.soap.fallback=true forces SoapStub's A2 HttpServer fallback path -->
+    <property name="smoke.soap.fallback" value="false" />
+
+    <target name="check-setup-dir">
+        <available file="${smoke.setup.dir}/server-lib" type="dir" property="setup.dir.present" />
+        <fail unless="setup.dir.present">
+smoke-tests/build.xml: ${smoke.setup.dir}/server-lib not found.
+
+The smoke-test driver borrows jars from the ASSEMBLED distribution (server/setup/).
+Build it first, e.g.:
+    ant -f server/mirth-build.xml -DdisableSigning=true -Dskip.build.tests=true
+
+Then re-run this build, or pass -Dsmoke.setup.dir=/path/to/setup to point at an
+already-built distribution elsewhere.
+        </fail>
+    </target>
+
+    <path id="borrowed.classpath">
+        <!-- javax.mail (SMTP stub — NEVER jakarta.mail, Pitfall 5), javax.json (RestClient's
+             statuses/statistics response parsing), activation, annotation-api, etc. -->
+        <fileset dir="${smoke.setup.dir}/server-lib/javax" includes="*.jar" />
+
+        <!-- SOAP stub: JAX-WS RI + JAXB runtime (Endpoint.publish is not in JDK 11+ core) -->
+        <fileset dir="${smoke.setup.dir}/server-lib/javax/jaxws" includes="*.jar" />
+        <fileset dir="${smoke.setup.dir}/server-lib/javax/jaxws/ext" includes="*.jar" />
+        <fileset dir="${smoke.setup.dir}/server-lib/javax/jaxb" includes="*.jar" />
+        <fileset dir="${smoke.setup.dir}/server-lib/javax/jaxb/ext" includes="*.jar" />
+
+        <!-- JDBC sink: sqlite-jdbc ships server-side (database/). CVE-04 (phase
+             25-cve-mssql-jdbc-upgrade, plan 25-01) adds mssql-jdbc-*.jre11.jar: the driver
+             JVM opens its OWN JDBC connection directly (not through a deployed channel) to
+             poll dest_records for the encrypted round-trip's L2 artifact check, mirroring
+             22-05's WebDavConnection-in-driver-JVM convention above. -->
+        <fileset dir="${smoke.setup.dir}/server-lib/database" includes="sqlite-jdbc-*.jar,mssql-jdbc-*.jre11.jar" />
+
+        <!-- DICOM SCP stub: dcm4che tool jars ship in the dicom connector extension.
+             NOTE: 18-RESEARCH.md Pattern 4 names this dir "extensions/dimse/" — the
+             assembled distribution actually names it "extensions/dicom/lib/"
+             (verified against the built server/setup tree). Corrected here (Rule 1). -->
+        <fileset dir="${smoke.setup.dir}/extensions/dicom/lib" includes="*.jar" />
+        <!-- DcmRcv's CLI arg-parsing method references commons-cli in its constant pool. -->
+        <fileset file="${smoke.setup.dir}/server-lib/commons/commons-cli-1.2.jar" />
+
+        <!-- Document Writer fidelity assertions (18-07): PDFBox ships in extensions/doc/lib.
+             PDDocument's static initializer references org.apache.commons.logging.LogFactory
+             (Rule 1 fix — discovered via live NoClassDefFoundError: pdfbox-2.0.36 depends on
+             commons-logging but 18-RESEARCH.md Pattern 5 didn't call out this transitive jar). -->
+        <fileset dir="${smoke.setup.dir}/extensions/doc/lib" includes="pdfbox-*.jar,fontbox-*.jar" />
+        <fileset file="${smoke.setup.dir}/server-lib/commons/commons-logging-1.3.3.jar" />
+
+        <!-- DcmRcv logging (slf4j-api + log4j2 slf4j bridge + log4j2 core/api) -->
+        <fileset dir="${smoke.setup.dir}/server-lib/donkey" includes="slf4j-api-*.jar,log4j-slf4j2-impl-*.jar,log4j-api-*.jar,log4j-core-*.jar,log4j-1.2-api-*.jar" />
+
+        <!-- Digest-auth client for http-listener-auth-digest-test (18.1-03): java.net.http
+             has no Digest support, so the driver borrows the same Apache HttpClient 4.5.13
+             stack the dispatcher itself uses client-side for Digest handshakes.
+             commons-logging-1.3.3.jar is already on the path above (PDFBox). -->
+        <fileset dir="${smoke.setup.dir}/server-lib/commons" includes="httpclient-4.5.13.jar,httpcore-4.4.13.jar,commons-codec-*.jar" />
+
+        <!-- 22-05 (CVE-06/D-07): WebDavRoundTripTest's webdavsSecureSchemeMapping() directly
+             instantiates the production WebDavConnection (not through a deployed channel) to
+             exercise the webdavs:// (TLS) path against WebDavServerStub's HTTPS listener,
+             scoped to this forked driver JVM only (see run-smoke-test.sh's WEBDAV_TLS_KEYSTORE
+             wiring). file-server.jar carries WebDavConnection + FileSystemConnectionOptions;
+             sardine-5.9.jar is its only new transitive (reuses the already-borrowed
+             httpclient-4.5.13.jar above plus the shipped javax jaxb-runtime/commons-codec). -->
+        <fileset file="${smoke.setup.dir}/extensions/file/file-server.jar" />
+        <!-- SchemeProperties (the FileSystemConnectionOptions constructor param type) lives
+             in file-shared.jar, not file-server.jar. -->
+        <fileset file="${smoke.setup.dir}/extensions/file/file-shared.jar" />
+        <fileset file="${smoke.setup.dir}/extensions/file/lib/sardine-5.9.jar" />
+        <!-- jaxb-runtime/jaxb-api already borrowed above (SOAP stub's server-lib/javax/jaxb
+             fileset) — Sardine reuses that same shipped javax JAXB runtime (D-14). -->
+    </path>
+
+    <path id="test.classpath">
+        <path refid="borrowed.classpath" />
+        <fileset dir="testlib" includes="*.jar" />
+        <fileset dir="${server.testlib.dir}" includes="junit-4.13.1.jar,hamcrest-2.2.jar" />
+    </path>
+
+    <target name="clean">
+        <delete dir="build" />
+        <delete dir="${junit.reports}" />
+    </target>
+
+    <target name="compile" depends="check-setup-dir">
+        <mkdir dir="${build.classes}" />
+        <javac srcdir="${src}" destdir="${build.classes}" debug="on" includeAntRuntime="false" release="17">
+            <classpath refid="test.classpath" />
+        </javac>
+    </target>
+
+    <!-- Harness ports/paths (plan 18-07 Task 3): run-smoke-test.sh passes these as -D
+         properties so NativePumpChannelsTest/StubChannelsTest can reach the live server's
+         allocated ports and per-run work directories. Empty-string defaults mean a bare
+         `ant test-run` (no harness running, e.g. StubSelfTest-only local iteration) simply
+         leaves these unset — SmokeTestBase.requireProperty() then fails loudly with a clear
+         "run via run-smoke-test.sh" message rather than silently misbehaving. Ant property
+         semantics: first-set-wins, so a `-D` value supplied on the command line overrides
+         these defaults; they never overwrite a caller-supplied value. -->
+    <property name="HTTPS_PORT" value="" />
+    <property name="HTTP_LISTENER_PORT" value="" />
+    <property name="MLLP_PORT" value="" />
+    <property name="SMTP_PORT" value="" />
+    <property name="SOAP_URL" value="" />
+    <property name="SCP_PORT" value="" />
+    <property name="SQLITE_PATH" value="" />
+    <property name="IN_DIR" value="" />
+    <property name="OUT_DIR" value="" />
+    <!-- 18.1-02: HTTP connector parameter-coverage fixture ports (NET-06). -->
+    <property name="HTTP_RESPONSE_PORT" value="" />
+    <property name="HTTP_XMLBODY_PORT" value="" />
+    <property name="HTTP_BINARY_PORT" value="" />
+    <!-- 18.1-03: HTTP source-auth (Basic/Digest) fixture ports (D-07/NET-06). -->
+    <property name="HTTP_AUTH_BASIC_PORT" value="" />
+    <property name="HTTP_AUTH_DIGEST_PORT" value="" />
+    <!-- 18.1-04: recording HTTP stub target port for sender-params/sender-timeout
+         fixtures (D-02/D-06/D-09/NET-06). -->
+    <property name="HTTP_STUB_PORT" value="" />
+    <!-- 18.2: Jetty regression fixture ports (NET-07). -->
+    <property name="HTTP_CTXPATH_PORT" value="" />
+    <property name="HTTP_LARGE_PORT" value="" />
+    <property name="HTTP_ERROR500_PORT" value="" />
+    <!-- 18.3-01: DICOM round-trip channel ports (NET-08). -->
+    <property name="DICOM_LISTENER_PORT" value="" />
+    <property name="DICOM_ROUNDTRIP_SCP_PORT" value="" />
+    <!-- 22-04 (CVE-09/D-13): compressed-DICOM round-trip channel ports. Own Listener/SCP
+         pair (Pitfall 7); dicom-compressed-roundtrip-test.xml's Listener leaves
+         defts/nativeData/bigEndian all false so both JPEG2000 and JPEG-lossless transfer
+         syntaxes negotiate against DcmRcv's default TransferCapability list, unlike
+         dicom-roundtrip-test.xml's nativeData=true (Implicit VR LE only). -->
+    <property name="DICOM_COMPRESSED_LISTENER_PORT" value="" />
+    <property name="DICOM_COMPRESSED_SCP_PORT" value="" />
+    <!-- 18.4-03: DICOM TLS round-trip channel keystore/ports (NET-09). -->
+    <property name="DICOM_TLS_KEYSTORE" value="" />
+    <property name="DICOM_TLS_KEYSTORE_PW" value="" />
+    <property name="DICOM_TLS_AES_LISTENER_PORT" value="" />
+    <property name="DICOM_TLS_AES_SCP_PORT" value="" />
+    <property name="DICOM_TLS_3DES_LISTENER_PORT" value="" />
+    <property name="DICOM_TLS_3DES_SCP_PORT" value="" />
+    <!-- 25.1-02 (SC-2, IRT-1541): modern SFTP fixture port/paths from
+         generate_sftp_fixtures() — pinned atmoz/sftp container port, throwaway client
+         key path, runtime-captured known_hosts path, host-side upload dir. -->
+    <property name="SFTP_MODERN_PORT" value="" />
+    <property name="SFTP_KEY_PATH" value="" />
+    <property name="SFTP_KNOWN_HOSTS_PATH" value="" />
+    <property name="SFTP_UPLOAD_DIR" value="" />
+    <!-- 25.1-03 (SC-3, IRT-1541): legacy-algorithm break-then-fix leg. SFTP_LEGACY_PORT is
+         only ever non-empty when run-smoke-test.sh is invoked by the external driver
+         (regression-scripts/test-irt1541-jsch-sftp-upgrade.sh) with the legacy atmoz/sftp
+         port pre-exported; SftpParamsTest's two legacy @Test methods self-skip via
+         Assume.assumeTrue when it is empty. MIRTH_LOG_PATH is always forwarded (not
+         conditional) — the legacy-negative leg needs to read the live mirth.log directly,
+         since a poll-level connection failure never creates a per-message ERROR-status
+         statistics entry (see run-smoke-test.sh's MIRTH_LOG_PATH comment). -->
+    <property name="SFTP_LEGACY_PORT" value="" />
+    <property name="SFTP_LEGACY_UPLOAD_DIR" value="" />
+    <property name="MIRTH_LOG_PATH" value="" />
+    <!-- CVE-04 (SC-3, phase 25-cve-mssql-jdbc-upgrade, plan 25-01): encrypted mssql-jdbc
+         break-then-fix leg. MSSQL_PORT is only ever non-empty when run-smoke-test.sh is
+         invoked by the external driver (regression-scripts/test-cve04-mssql-jdbc-upgrade.sh)
+         with the live SQL Server container's port pre-exported; MssqlJdbcParamsTest's
+         encryptedReadWrite @Test self-skips via Assume.assumeTrue when it is empty, mirroring
+         the SFTP_LEGACY_PORT convention above. -->
+    <property name="MSSQL_HOST" value="" />
+    <property name="MSSQL_PORT" value="" />
+    <property name="MSSQL_DB" value="" />
+    <property name="MSSQL_USER" value="" />
+    <property name="MSSQL_PASSWORD" value="" />
+    <!-- 25-04 (D-09, SC-3): forwarded to MssqlJdbcParamsTest#selfSignedDefaultFailsCertValidation
+         so it can seed the fault-injection hole fixture's own table when
+         test-cve04-mssql-jdbc-upgrade.sh's simulate regression mode swaps in
+         jdbc-mssql-selfsigned-negative-hole-test.xml for channel 00000035. Empty in every
+         normal run. -->
+    <property name="MSSQL_SIMULATE_HOLE" value="" />
+    <!-- 22-05 (CVE-06/D-07): embedded WebDavServerStub ports/keystore — plaintext
+         (webdav://) and TLS (webdavs://) listeners started by WebDavRoundTripTest's own
+         @BeforeClass, mirroring the DICOM round-trip stub's -D wiring. -->
+    <property name="WEBDAV_PORT" value="" />
+    <property name="WEBDAV_TLS_PORT" value="" />
+    <property name="WEBDAV_TLS_KEYSTORE" value="" />
+    <property name="WEBDAV_TLS_KEYSTORE_PW" value="" />
+    <property name="WEBDAV_ROOT_DIR" value="" />
+    <!-- WR-01 fix (18.5-REVIEW.md): empty-string defaults for the three new SMTP CC/BCC
+         -D names, matching the convention above. Without these, a bare `ant test-run`
+         (no -D from run-smoke-test.sh) leaves ${PR177_PRESENT}/${SMTP_CCBCC_PORT}/
+         ${SMTP_JS_PORT} as literal unresolved strings, so requireSmtpProperty()'s
+         null/empty check never fires and Integer.parseInt(...) throws a confusing
+         NumberFormatException instead of the intended clean skip message. -->
+    <property name="PR177_PRESENT" value="" />
+    <property name="SMTP_CCBCC_PORT" value="" />
+    <property name="SMTP_JS_PORT" value="" />
+    <!-- IRT-2217 (Phase 26.12 plan 04, criterion 4): run-smoke-test.sh's default-encoding
+         knob forwards the charset here. Empty-string default means a bare `ant test-run`
+         (no harness running) leaves it unset; the leg treats that as the UTF-8-default
+         branch, matching the empty-string idiom already used above. -->
+    <property name="SERVER_DEFAULT_ENCODING" value="" />
+
+    <target name="test-run" depends="compile" description="Run the smoke-test driver's JUnit tests (stub self-tests etc.) with honest-red exit propagation">
+        <mkdir dir="${junit.reports}" />
+        <!-- WR-03 fix: only emit the javax.net.ssl.trustStore* overrides below when
+             WEBDAV_TLS_KEYSTORE was actually supplied (run-smoke-test.sh's WebDAV TLS leg).
+             Previously these sysproperties were unconditional: on a bare `ant test-run`
+             (WEBDAV_TLS_KEYSTORE unset/empty), javax.net.ssl.trustStore was set to the empty
+             string, which JSSE treats as "no truststore file" (an EMPTY trust set) rather
+             than "fall back to the JDK default cacerts" — silently breaking TLS handshakes
+             for any OTHER suite in this forkmode="once" fork that relies on the default trust
+             store. Gating on this condition means the property is left unset in that case,
+             preserving the JDK default.
+             CVE-04 (plan 25-01) Rule 3 fix: the local Ant install this session's live
+             verification ran against (Homebrew ant 1.10.17) rejects `if="..."` on
+             sysproperty ("sysproperty doesn't support the "if" attribute"); Environment.
+             Variable-typed nested elements are not part of Ant's generic if/unless dispatch,
+             unlike top-level tasks. This blocked the JUnit driver stage entirely (every suite,
+             not just mssql), so it is fixed here rather than deferred. Replaced with the
+             condition-property-value then syspropertyset/propertyref/mapper idiom below: a
+             condition task with a value attribute sets the target property ONLY when the
+             nested test is true, leaving it genuinely UNSET (not merely empty) when false;
+             IntrospectionHelper accepts that even where a bare if= attribute is rejected, and
+             a plain propertyref for an unset property is a documented no-op omission, never
+             an error. Net runtime behavior for both the true and false branches is unchanged
+             from the previous (uncompilable) if= intent. -->
+        <condition property="webdav.tls.keystore.set">
+            <not>
+                <equals arg1="${WEBDAV_TLS_KEYSTORE}" arg2="" />
+            </not>
+        </condition>
+        <condition property="webdav.tls.truststore.actual" value="${WEBDAV_TLS_KEYSTORE}">
+            <not>
+                <equals arg1="${WEBDAV_TLS_KEYSTORE}" arg2="" />
+            </not>
+        </condition>
+        <condition property="webdav.tls.truststore.pw.actual" value="${WEBDAV_TLS_KEYSTORE_PW}">
+            <not>
+                <equals arg1="${WEBDAV_TLS_KEYSTORE}" arg2="" />
+            </not>
+        </condition>
+        <condition property="webdav.tls.truststore.type.actual" value="PKCS12">
+            <not>
+                <equals arg1="${WEBDAV_TLS_KEYSTORE}" arg2="" />
+            </not>
+        </condition>
+        <junit haltonfailure="false" failureproperty="test.failed" errorproperty="test.failed" fork="true" forkmode="once" dir="${basedir}">
+            <jvmarg value="--add-opens=java.base/java.util=ALL-UNNAMED" />
+            <jvmarg value="--add-opens=java.base/java.lang=ALL-UNNAMED" />
+            <!-- 18.4-03 (D-04): re-enable 3DES_EDE_CBC for the driver JVM's own DICOM TLS
+                 SCU calls, mirroring the identical overlay applied to the server JVM in
+                 launch_server(). Single '=' (additive override), never '==' (whole-file
+                 replace). -->
+            <jvmarg value="-Djava.security.properties=${basedir}/fixtures/dicom-tls-3des.security" />
+            <sysproperty key="smoke.soap.fallback" value="${smoke.soap.fallback}" />
+            <sysproperty key="HTTPS_PORT" value="${HTTPS_PORT}" />
+            <sysproperty key="HTTP_LISTENER_PORT" value="${HTTP_LISTENER_PORT}" />
+            <sysproperty key="MLLP_PORT" value="${MLLP_PORT}" />
+            <sysproperty key="SMTP_PORT" value="${SMTP_PORT}" />
+            <sysproperty key="SOAP_URL" value="${SOAP_URL}" />
+            <sysproperty key="SCP_PORT" value="${SCP_PORT}" />
+            <sysproperty key="SQLITE_PATH" value="${SQLITE_PATH}" />
+            <sysproperty key="IN_DIR" value="${IN_DIR}" />
+            <sysproperty key="OUT_DIR" value="${OUT_DIR}" />
+            <sysproperty key="HTTP_RESPONSE_PORT" value="${HTTP_RESPONSE_PORT}" />
+            <sysproperty key="HTTP_XMLBODY_PORT" value="${HTTP_XMLBODY_PORT}" />
+            <sysproperty key="HTTP_BINARY_PORT" value="${HTTP_BINARY_PORT}" />
+            <sysproperty key="HTTP_AUTH_BASIC_PORT" value="${HTTP_AUTH_BASIC_PORT}" />
+            <sysproperty key="HTTP_AUTH_DIGEST_PORT" value="${HTTP_AUTH_DIGEST_PORT}" />
+            <sysproperty key="HTTP_STUB_PORT" value="${HTTP_STUB_PORT}" />
+            <sysproperty key="HTTP_CTXPATH_PORT" value="${HTTP_CTXPATH_PORT}" />
+            <sysproperty key="HTTP_LARGE_PORT" value="${HTTP_LARGE_PORT}" />
+            <sysproperty key="HTTP_ERROR500_PORT" value="${HTTP_ERROR500_PORT}" />
+            <sysproperty key="DICOM_LISTENER_PORT" value="${DICOM_LISTENER_PORT}" />
+            <sysproperty key="DICOM_ROUNDTRIP_SCP_PORT" value="${DICOM_ROUNDTRIP_SCP_PORT}" />
+            <sysproperty key="DICOM_COMPRESSED_LISTENER_PORT" value="${DICOM_COMPRESSED_LISTENER_PORT}" />
+            <sysproperty key="DICOM_COMPRESSED_SCP_PORT" value="${DICOM_COMPRESSED_SCP_PORT}" />
+            <sysproperty key="DICOM_TLS_KEYSTORE" value="${DICOM_TLS_KEYSTORE}" />
+            <sysproperty key="DICOM_TLS_KEYSTORE_PW" value="${DICOM_TLS_KEYSTORE_PW}" />
+            <sysproperty key="DICOM_TLS_AES_LISTENER_PORT" value="${DICOM_TLS_AES_LISTENER_PORT}" />
+            <sysproperty key="DICOM_TLS_AES_SCP_PORT" value="${DICOM_TLS_AES_SCP_PORT}" />
+            <sysproperty key="DICOM_TLS_3DES_LISTENER_PORT" value="${DICOM_TLS_3DES_LISTENER_PORT}" />
+            <sysproperty key="DICOM_TLS_3DES_SCP_PORT" value="${DICOM_TLS_3DES_SCP_PORT}" />
+            <sysproperty key="SFTP_MODERN_PORT" value="${SFTP_MODERN_PORT}" />
+            <sysproperty key="SFTP_KEY_PATH" value="${SFTP_KEY_PATH}" />
+            <sysproperty key="SFTP_KNOWN_HOSTS_PATH" value="${SFTP_KNOWN_HOSTS_PATH}" />
+            <sysproperty key="SFTP_UPLOAD_DIR" value="${SFTP_UPLOAD_DIR}" />
+            <sysproperty key="SFTP_LEGACY_PORT" value="${SFTP_LEGACY_PORT}" />
+            <sysproperty key="SFTP_LEGACY_UPLOAD_DIR" value="${SFTP_LEGACY_UPLOAD_DIR}" />
+            <sysproperty key="MIRTH_LOG_PATH" value="${MIRTH_LOG_PATH}" />
+            <sysproperty key="MSSQL_HOST" value="${MSSQL_HOST}" />
+            <sysproperty key="MSSQL_PORT" value="${MSSQL_PORT}" />
+            <sysproperty key="MSSQL_DB" value="${MSSQL_DB}" />
+            <sysproperty key="MSSQL_USER" value="${MSSQL_USER}" />
+            <sysproperty key="MSSQL_PASSWORD" value="${MSSQL_PASSWORD}" />
+            <sysproperty key="MSSQL_SIMULATE_HOLE" value="${MSSQL_SIMULATE_HOLE}" />
+            <sysproperty key="WEBDAV_PORT" value="${WEBDAV_PORT}" />
+            <sysproperty key="WEBDAV_TLS_PORT" value="${WEBDAV_TLS_PORT}" />
+            <sysproperty key="WEBDAV_TLS_KEYSTORE" value="${WEBDAV_TLS_KEYSTORE}" />
+            <sysproperty key="WEBDAV_TLS_KEYSTORE_PW" value="${WEBDAV_TLS_KEYSTORE_PW}" />
+            <sysproperty key="WEBDAV_ROOT_DIR" value="${WEBDAV_ROOT_DIR}" />
+            <!-- 18.5-01/18.5-02 (NET-10): PR177_PRESENT (the run-smoke-test.sh-computed PR
+                 #177 presence verdict, gates plan 18.5-03+'s JS-API tests) and
+                 SMTP_CCBCC_PORT/SMTP_JS_PORT (dedicated SMTP CC/BCC coverage ports —
+                 SmtpCcBccRoundTripTest's own requireSmtpProperty convention, mirroring
+                 DicomTlsRoundTripTest). run-smoke-test.sh's run_driver() already forwards
+                 these three as -D ant properties (Plan 01), but the forked JUnit JVM
+                 (forkmode="once") only sees a system property when an explicit
+                 <sysproperty> entry names it here — an ant -D on the command line does NOT
+                 automatically propagate into a fork. Rule 3 fix (18.5-02): these three
+                 entries were missing, which made SmtpCcBccRoundTripTest's @BeforeClass fail
+                 fast with "Required system property 'SMTP_CCBCC_PORT' not set" even though
+                 the port was correctly allocated/exported/forwarded one layer up. -->
+            <sysproperty key="PR177_PRESENT" value="${PR177_PRESENT}" />
+            <sysproperty key="SMTP_CCBCC_PORT" value="${SMTP_CCBCC_PORT}" />
+            <sysproperty key="SMTP_JS_PORT" value="${SMTP_JS_PORT}" />
+            <!-- Same Rule 3 fork-propagation trap as the three entries above (IRT-2428,
+                 Phase 26.15 plan 02): WsListenerChannelsTest's @BeforeClass calls
+                 requireProperty("WS_LISTENER_PORT"). run_driver forwards -DWS_LISTENER_PORT
+                 one layer up, but a -D does not propagate into the fork, so without this
+                 explicit sysproperty the driver errors on every run even though the port
+                 was allocated/exported/forwarded correctly. -->
+            <sysproperty key="WS_LISTENER_PORT" value="${WS_LISTENER_PORT}" />
+            <!-- IRT-2217 (Phase 26.12 plan 04, criterion 4): non-ASCII MLLP smoke leg reads
+                 this to pick the windows-1252-vs-UTF-8-default assertion branch. -->
+            <sysproperty key="SERVER_DEFAULT_ENCODING" value="${SERVER_DEFAULT_ENCODING}" />
+            <!-- 22-05 (CVE-06/D-07): webdavsSecureSchemeMapping() directly instantiates
+                 WebDavConnection against WebDavServerStub's self-signed HTTPS listener, in
+                 THIS forked driver JVM only (forkmode="once" — never the deployed Mirth
+                 server, which is a separate process launched by run-smoke-test.sh). The same
+                 PKCS12 keystore doubles as its own truststore (single self-signed keypair,
+                 same convention as generate_dicom_tls_keystore's keyStore/trustStore reuse).
+                 WR-03: emitted only when WEBDAV_TLS_KEYSTORE is non-empty (the
+                 webdav.tls.truststore*.actual properties above are left genuinely UNSET
+                 otherwise) — when unset (bare `ant test-run` local iteration), each
+                 syspropertyset below has nothing to reference and omits its entry entirely
+                 rather than forcing the empty string, so the fork keeps the JDK default
+                 cacerts trust store for every other suite. Ant's <propertyset> type allows
+                 at most one nested <mapper>, hence three separate syspropertysets rather
+                 than one combined block. -->
+            <syspropertyset>
+                <propertyref name="webdav.tls.truststore.actual" />
+                <mapper type="regexp" from="^webdav\.tls\.truststore\.actual$" to="javax.net.ssl.trustStore" />
+            </syspropertyset>
+            <syspropertyset>
+                <propertyref name="webdav.tls.truststore.pw.actual" />
+                <mapper type="regexp" from="^webdav\.tls\.truststore\.pw\.actual$" to="javax.net.ssl.trustStorePassword" />
+            </syspropertyset>
+            <syspropertyset>
+                <propertyref name="webdav.tls.truststore.type.actual" />
+                <mapper type="regexp" from="^webdav\.tls\.truststore\.type\.actual$" to="javax.net.ssl.trustStoreType" />
+            </syspropertyset>
+            <classpath>
+                <path refid="test.classpath" />
+                <pathelement location="${build.classes}" />
+            </classpath>
+            <formatter type="xml" />
+            <batchtest todir="${junit.reports}">
+                <fileset dir="${build.classes}">
+                    <include name="**/*Test.class" />
+                    <exclude name="**/*$*.class" />
+                </fileset>
+            </batchtest>
+        </junit>
+        <fail if="test.failed" message="smoke-tests driver JUnit tests failed - see junit-reports/" />
+    </target>
+
+</project>

@@ -28,8 +28,12 @@ public abstract class JavaScriptTask<T> implements Callable<T> {
     private Logger logger = LogManager.getLogger(JavaScriptTask.class);
     private MirthContextFactory contextFactory;
     private String threadName;
+    private String channelId;
     private Context context;
     private boolean contextCreated = false;
+    // IRT-2107: which thread is running this task, for the diagnostics endpoint; null when not running
+    private volatile Thread executingThread;
+    private volatile boolean running;
 
     public JavaScriptTask(MirthContextFactory contextFactory, String name) {
         this(contextFactory, name, null, null);
@@ -74,6 +78,7 @@ public abstract class JavaScriptTask<T> implements Callable<T> {
     }
 
     private void init(String name, String channelId, String channelName, Integer metaDataId, String destinationName) {
+        this.channelId = channelId;
         StringBuilder builder = new StringBuilder(name).append(" JavaScript Task");
         if (StringUtils.isNotEmpty(channelName)) {
             builder.append(" on ").append(channelName);
@@ -104,15 +109,34 @@ public abstract class JavaScriptTask<T> implements Callable<T> {
         return context;
     }
 
+    /** The channel this script runs for, or null for a global script. */
+    public String getChannelId() {
+        return channelId;
+    }
+
+    /** The thread currently executing this task, or null when it is not running. */
+    public Thread getExecutingThread() {
+        return executingThread;
+    }
+
+    /** True from the start of {@link #call()} until it returns or throws. */
+    public boolean isRunning() {
+        return running;
+    }
+
     public abstract T doCall() throws Exception;
 
     @Override
     public final T call() throws Exception {
         String originalThreadName = Thread.currentThread().getName();
+        executingThread = Thread.currentThread();
+        running = true;
         try {
             Thread.currentThread().setName(threadName + " < " + originalThreadName);
             return doCall();
         } finally {
+            running = false;
+            executingThread = null;
             Thread.currentThread().setName(originalThreadName);
         }
     }

@@ -40,6 +40,9 @@ import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.BatchGetValues
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.ImportLookupGroupRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.ImportValuesRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupGroupRequest;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupKeyRequest;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupKeyValueRequest;
+import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupNameRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.request.LookupValueRequest;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.BatchGetValuesResponse;
 import com.mirth.connect.plugins.dynamiclookup.shared.dto.response.CacheStatistics;
@@ -127,6 +130,33 @@ public class LookupTableServlet extends MirthServlet implements LookupTableServl
         } catch (Exception e) {
             throw new ClientException("Failed to process getGroupByName request. Error: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
         }
+    }
+
+    /**
+     * Body-based counterpart of {@link #getGroupByName(String)} (IRT-1997). Parses the group name
+     * from the JSON body and delegates to the path-based method so audit, caching and error mapping
+     * stay identical.
+     */
+    @Override
+    public String getGroupByNameBody(String requestBody) throws ClientException {
+        LookupNameRequest request;
+        try {
+            request = JsonUtils.fromJson(requestBody, LookupNameRequest.class);
+        } catch (Exception e) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Invalid JSON format for group name request: " + e.getMessage());
+        }
+
+        if (request == null) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Request body must not be null.");
+        }
+
+        try {
+            request.validate();
+        } catch (IllegalArgumentException e) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Validation failed: " + e.getMessage());
+        }
+
+        return getGroupByName(request.getName());
     }
 
     @Override
@@ -353,28 +383,43 @@ public class LookupTableServlet extends MirthServlet implements LookupTableServl
 
     @Override
     public String setValue(Integer groupId, String key, String requestBody) {
+        // Step 1: Parse incoming JSON string into a request DTO
+        LookupValueRequest request;
         try {
-            // Step 1: Parse incoming JSON string into a request DTO
-            LookupValueRequest request;
-            try {
-                request = JsonUtils.fromJson(requestBody, LookupValueRequest.class);
-            } catch (Exception e) {
-                throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Invalid JSON format for value request: " + e.getMessage());
-            }
+            request = JsonUtils.fromJson(requestBody, LookupValueRequest.class);
+        } catch (Exception e) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Invalid JSON format for value request: " + e.getMessage());
+        }
 
-            // Step 2: Validate required fields in the input
-            try {
-                request.validate();
-            } catch (IllegalArgumentException e) {
-                throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Validation failed: " + e.getMessage());
-            }
+        if (request == null) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Request body must not be null.");
+        }
 
+        // Step 2: Validate required fields in the input
+        try {
+            request.validate();
+        } catch (IllegalArgumentException e) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Validation failed: " + e.getMessage());
+        }
+
+        // Steps 3-6: persist and build the response
+        return applySetValue(groupId, key, request.getValue());
+    }
+
+    /**
+     * Persists a value for a key and returns the response JSON. Shared by the path-based
+     * {@link #setValue(Integer, String, String)} and the body-based
+     * {@link #setValueBody(Integer, String)} so audit, error mapping and the response body stay
+     * identical (IRT-1997).
+     */
+    private String applySetValue(Integer groupId, String key, String value) {
+        try {
             // Step 3: get current user id
             String userId = String.valueOf(getCurrentUserId());
 
             // Step 4: Try to set value
             try {
-                LookupService.getInstance().setValue(groupId, key, request.getValue(), userId);
+                LookupService.getInstance().setValue(groupId, key, value, userId);
             } catch (GroupNotFoundException e) {
                 throw new LookupApiException(Response.Status.NOT_FOUND, LookupErrorCode.GROUP_NOT_FOUND, "Lookup group not found with ID: " + groupId);
             } catch (Exception e) {
@@ -406,6 +451,78 @@ public class LookupTableServlet extends MirthServlet implements LookupTableServl
         } catch (GroupNotFoundException e) {
             throw new LookupApiException(Response.Status.NOT_FOUND, LookupErrorCode.GROUP_NOT_FOUND, "Lookup group not found with ID: " + groupId);
         }
+    }
+
+    /**
+     * Body-based counterpart of {@link #getValue(Integer, String)} (IRT-1997). Parses the key from
+     * the JSON body and delegates to the path-based method so the response, caching and error
+     * mapping stay identical.
+     */
+    @Override
+    public String getValueBody(Integer groupId, String requestBody) throws ClientException {
+        return getValue(groupId, parseKey(requestBody));
+    }
+
+    /**
+     * Body-based counterpart of {@link #setValue(Integer, String, String)} (IRT-1997). Parses the
+     * key and value from the JSON body and delegates to the path-based method, rebuilding the
+     * value-only body it expects, so validation, audit and the response stay identical.
+     */
+    @Override
+    public String setValueBody(Integer groupId, String requestBody) throws ClientException {
+        LookupKeyValueRequest request;
+        try {
+            request = JsonUtils.fromJson(requestBody, LookupKeyValueRequest.class);
+        } catch (Exception e) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Invalid JSON format for value request: " + e.getMessage());
+        }
+
+        if (request == null) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Request body must not be null.");
+        }
+
+        try {
+            request.validate();
+        } catch (IllegalArgumentException e) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Validation failed: " + e.getMessage());
+        }
+
+        return applySetValue(groupId, request.getKey(), request.getValue());
+    }
+
+    /**
+     * Body-based counterpart of {@link #deleteValue(Integer, String)} (IRT-1997). Parses the key
+     * from the JSON body and delegates to the path-based method so audit and error mapping stay
+     * identical.
+     */
+    @Override
+    public void deleteValueBody(Integer groupId, String requestBody) throws ClientException {
+        deleteValue(groupId, parseKey(requestBody));
+    }
+
+    /**
+     * Parses a {@link LookupKeyRequest} from the JSON body and returns its validated key, mapping
+     * malformed JSON and a missing key to a 400 the same way the other body endpoints do.
+     */
+    private String parseKey(String requestBody) throws ClientException {
+        LookupKeyRequest request;
+        try {
+            request = JsonUtils.fromJson(requestBody, LookupKeyRequest.class);
+        } catch (Exception e) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Invalid JSON format for key request: " + e.getMessage());
+        }
+
+        if (request == null) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Request body must not be null.");
+        }
+
+        try {
+            request.validate();
+        } catch (IllegalArgumentException e) {
+            throw new LookupApiException(Response.Status.BAD_REQUEST, LookupErrorCode.INVALID_REQUEST, "Validation failed: " + e.getMessage());
+        }
+
+        return request.getKey();
     }
 
     @Override

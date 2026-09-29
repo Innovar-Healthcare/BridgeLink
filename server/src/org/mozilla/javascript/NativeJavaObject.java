@@ -27,12 +27,118 @@ import java.util.Map;
  * @see NativeJavaClass
  */
 
+/*
+ * ============================================================================================
+ * VENDORED RHINO SOURCE -- KNOWN DIVERGENCE FROM THE SHIPPED JAR (Phase 23 code review, WR-01)
+ * ============================================================================================
+ * This file is a BridgeLink-vendored copy of Rhino's own NativeJavaObject source. Because it
+ * lives in server/src under the org.mozilla.javascript package, the class compiled from it
+ * SHADOWS org.mozilla.javascript.NativeJavaObject from server/lib/rhino-1.7.15.1.jar at runtime.
+ * The vendored body is PRE-1.7.15 (it was last re-based for the 1.7.12 -> 1.7.13 bump, commit
+ * 4d8b3a18a) and has NOT been re-based onto 1.7.15.1. Comparing this source against `javap` of
+ * the shipped jar, three upstream members are missing here. None of them produces a
+ * NoSuchMethodError (they are private, or inherited from Object), so every one of them fails
+ * SILENTLY:
+ *
+ *   1. JSTYPE_BIGINT. The 1.7.15.1 getJSTypeCode() tests java.math.BigInteger BEFORE Number and
+ *      returns a dedicated JSTYPE_BIGINT code, with matching cases in getConversionWeight() and
+ *      coerceTypeImpl(). This file has no such code at all, so a JS BigInt (a BigInteger) falls
+ *      through `value instanceof Number` into coerceToNumber()/toDouble() -- SILENT PRECISION
+ *      LOSS on BigInt -> Java, plus wrong overload-resolution weights.
+ *   2. SymbolKey.ITERATOR. 1.7.15.1's get(Symbol, Scriptable)/has(Symbol, Scriptable) return the
+ *      ES6 iterator member when the wrapped javaObject is an Iterable. This file returns
+ *      NOT_FOUND / false unconditionally, so JS `for...of` and spread over a Java Iterable do not
+ *      work here -- see RhinoSeamTest, which asserts exactly that, and note that this is what
+ *      makes init()'s JavaIterableIterator registration below unreachable in practice.
+ *   3. equals(Object) / hashCode(). Present in 1.7.15.1, absent here, so wrapper equality falls
+ *      back to Object identity.
+ *
+ * These deltas were RECORDED, NOT ENDORSED during the Phase 23 review. They are now RATIFIED for
+ * 26.9 (decision 2026-07-31, Zi-Min Weng): the divergence predates Phase 23 -- these gaps shipped
+ * through 26.x already -- and re-basing from the shipped bytecode alone would put guessed
+ * numeric-coercion logic on a clinical-data script path, precisely the silent-defect class this
+ * phase exists to close. Re-basing is therefore deferred, not abandoned, and is tracked as its own
+ * hardening task: IRT-1629 (obtain the real upstream 1.7.15.1 source, re-apply only the BridgeLink
+ * delta, add BigInt + for...of-over-Iterable regression coverage through a real MirthContextFactory).
+ *
+ * WHEN THE NEXT RHINO BUMP LANDS (or when IRT-1629 is picked up): re-base this file against the new
+ * upstream source, re-apply the BridgeLink delta, and update this block. Do not widen the divergence
+ * silently.
+ * ============================================================================================
+ */
 public class NativeJavaObject
     implements Scriptable, SymbolScriptable, Wrapper, Serializable
 {
     private static final long serialVersionUID = -6948590651130498591L;
 
     public NativeJavaObject() { }
+
+    // Both constants are package-private (not private) so a test can assert the exact verbatim
+    // text (CVE-13, D-10), mirroring Mirth.DERBY_JAVA_ERROR_MSG's precedent. Each names only what
+    // is actually true of its own failure mode: JavaIterableIterator registers an ES6 iterator
+    // prototype and has NO relationship to importPackage or scope construction (those are
+    // ImporterTopLevel and JavaScriptScopeUtil.getScope()), so neither message claims otherwise.
+
+    /** The class or its init method is not present/accessible: this is not the expected Rhino build. */
+    static final String JAVA_ITERABLE_ITERATOR_UNREACHABLE_MSG =
+        "NativeJavaObject.init shim could not reach "
+        + "org.mozilla.javascript.NativeJavaObject$JavaIterableIterator.init via reflection -- this "
+        + "Rhino build does not expose that class, so it is not the adapted Rhino build BridgeLink "
+        + "was built against";
+
+    /** The class WAS reached, but its own init threw: a real execution failure, not a lookup failure. */
+    static final String JAVA_ITERABLE_ITERATOR_INIT_FAILED_MSG =
+        "org.mozilla.javascript.NativeJavaObject$JavaIterableIterator.init was reached but threw -- "
+        + "the ES6 Java-Iterable iterator prototype was not registered on this scope";
+
+    /**
+     * Compatibility shim: Rhino 1.7.15+ requires NativeJavaObject.init to be called during
+     * Context.initStandardObjects(). This method delegates to JavaIterableIterator.init
+     * via reflection so the vendored source remains compatible without importing the inner class.
+     *
+     * D-10: the original recovered shim silently swallowed the reflection failure with a
+     * comment dismissing it as harmless, which let initStandardObjects() succeed while
+     * JavaIterableIterator was never registered -- a textbook silent-pass channel on a
+     * clinical-data transform path. It now throws instead, chaining the caught cause so the
+     * reflection failure is not lost, refusing to let an unadapted Rhino proceed. This throw is
+     * raised from the shim itself (not surfaced through a preflight-style check, per
+     * 23-CONTEXT.md Claude's Discretion) because init() runs on every Context.initStandardObjects()
+     * call -- including inside RhinoSeamTest.@BeforeClass -- so an abrupt JVM-halting exit (the
+     * Derby preflight's mechanism, which runs once before the shutdown hook is registered) would
+     * kill the JUnit fork; a plain thrown exception propagates correctly in both the runtime and
+     * test paths.
+     *
+     * WR-02: the two failure modes are kept separate. A single catch(Exception) around the whole
+     * body also catches the InvocationTargetException wrapping anything thrown INSIDE
+     * JavaIterableIterator.init, and would then misreport an execution failure as
+     * "could not reach ... via reflection" -- sending the next debugger after a classloading
+     * problem that does not exist. The lookup phase and the invoke phase therefore have their own
+     * handlers and their own messages, and the invoke phase unwraps getCause() so the real
+     * stack trace survives.
+     */
+    static void init(ScriptableObject scope, boolean sealed) {
+        Method initMethod;
+        try {
+            Class<?> iterClass = Class.forName(
+                "org.mozilla.javascript.NativeJavaObject$JavaIterableIterator");
+            initMethod = iterClass.getDeclaredMethod(
+                "init", ScriptableObject.class, boolean.class);
+            initMethod.setAccessible(true);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            // ClassNotFoundException / NoSuchMethodException, or setAccessible being refused
+            // (InaccessibleObjectException / SecurityException) -- genuinely "cannot reach it".
+            throw new IllegalStateException(JAVA_ITERABLE_ITERATOR_UNREACHABLE_MSG, e);
+        }
+
+        try {
+            initMethod.invoke(null, scope, sealed);
+        } catch (InvocationTargetException e) {
+            // Reached and invoked, but it threw: report THAT, and keep the original cause.
+            throw new IllegalStateException(JAVA_ITERABLE_ITERATOR_INIT_FAILED_MSG, e.getCause());
+        } catch (IllegalAccessException | RuntimeException e) {
+            throw new IllegalStateException(JAVA_ITERABLE_ITERATOR_UNREACHABLE_MSG, e);
+        }
+    }
 
     public NativeJavaObject(Scriptable scope, Object javaObject,
                             Class<?> staticType)

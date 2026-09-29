@@ -249,7 +249,8 @@ public class ServerMigrator extends com.mirth.connect.server.migration.Migrator 
             case v26_3_0: return new com.mirth.connect.server.migration.Migrate26_3_0();
             case v26_3_1: return null;
             case v26_6_0: return new com.mirth.connect.server.migration.Migrate26_6_0();
-            case v26_6_1: return new com.mirth.connect.server.migration.Migrate26_6_1();
+            case v26_6_1: return null;
+            case v26_9_0: return new com.mirth.connect.server.migration.Migrate26_9_0();
         } // @formatter:on
 
         return null;
@@ -351,7 +352,18 @@ public class ServerMigrator extends com.mirth.connect.server.migration.Migrator 
             resultSet = statement.executeQuery("SELECT VERSION FROM SCHEMA_INFO");
 
             if (resultSet.next()) {
-                return Version.fromString(resultSet.getString(1));
+                String raw = resultSet.getString(1);
+                Version version = Version.fromString(raw);
+
+                if (version != null) {
+                    return version;
+                }
+
+                if (StringUtils.isNotBlank(raw)) {
+                    throw new MigrationException("Unrecognized or unsupported schema version \"" + raw + "\" in SCHEMA_INFO; refusing to replay the migration ladder from the beginning.");
+                }
+
+                return null;
             }
 
             return null;

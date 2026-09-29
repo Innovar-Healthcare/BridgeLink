@@ -1,10 +1,14 @@
 /*
  * Copyright (c) Mirth Corporation. All rights reserved.
- * 
+ *
  * http://www.mirthcorp.com
- * 
+ *
  * The software in this package is published under the terms of the MPL license a copy of which has
  * been included with this distribution in the LICENSE.txt file.
+ *
+ * Copyright (c) 2026 Innovar Healthcare. All rights reserved
+ * This project is a fork of Mirth Connect by Nextgen Healthcare.
+ * It has been modified and maintained independently by Innovar Healthcare.
  */
 
 package com.mirth.connect.util;
@@ -125,8 +129,29 @@ public class MirthXmlUtil {
                 start++;
                 radix = 16;
             }
-            Character c = new Character((char) Integer.parseInt(entity.substring(start), radix));
-            return c.toString();
+
+            /*
+             * Parse the full code point rather than narrowing to a char. A cast to char here
+             * silently truncates any reference above U+FFFF (e.g. &#128269; -> U+F50D), which
+             * corrupts supplementary characters with no error. Reject references that cannot be
+             * a valid XML 1.0 character (surrogate range, above U+10FFFF, or unparseable/overflow)
+             * rather than passing them through.
+             */
+            int codePoint;
+            try {
+                codePoint = Integer.parseInt(entity.substring(start), radix);
+            } catch (NumberFormatException e) {
+                /*
+                 * Deliberately do not chain the NumberFormatException: its message is
+                 * "For input string: \"<token>\"", which would carry the raw (possibly PHI)
+                 * reference content into logs and stored message errors.
+                 */
+                throw new IllegalArgumentException("Invalid numeric character reference: not a parseable code point");
+            }
+            if (codePoint < 0 || codePoint > Character.MAX_CODE_POINT || (codePoint >= 0xD800 && codePoint <= 0xDFFF)) {
+                throw new IllegalArgumentException("Numeric character reference U+" + Integer.toHexString(codePoint) + " is not a valid XML 1.0 character");
+            }
+            return new String(Character.toChars(codePoint));
         } else {
             String s = decoder.get(entity);
 
@@ -138,51 +163,70 @@ public class MirthXmlUtil {
     }
 
     public static String encode(char s) {
-        StringBuffer buffer = new StringBuffer(4);
-        char c = s;
-        int j = c;
-        if (j < 0x100 && encoderXml[j] != null) {
-            buffer.append(encoderXml[j]); // have a named encoding
-            buffer.append(';');
-        } else if (j < 0x80) {
-            buffer.append(c); // use ASCII value
-        } else {
-            buffer.append("&#"); // use numeric encoding
-            buffer.append((int) c);
-            buffer.append(';');
-        }
+        StringBuilder buffer = new StringBuilder(8);
+        appendEncoded(buffer, s);
         return buffer.toString();
     }
 
     public static String encode(String s) {
         int length = s.length();
-        StringBuffer buffer = new StringBuffer(length * 2);
-        for (int i = 0; i < length; i++) {
-            char c = s.charAt(i);
-            buffer.append(encode(c));
+        StringBuilder buffer = new StringBuilder(length * 2);
+        int i = 0;
+        while (i < length) {
+            int codePoint = s.codePointAt(i);
+            appendEncoded(buffer, codePoint);
+            i += Character.charCount(codePoint);
         }
-
         return buffer.toString();
     }
 
     public static String encode(char[] text, int start, int length) {
-        StringBuffer buffer = new StringBuffer(length * 2);
-        for (int i = start; i < length + start; i++) {
-            char c = text[i];
-
-            int j = c;
-            if (j < 0x100 && encoderXml[j] != null) {
-                buffer.append(encoderXml[j]); // have a named encoding
-                buffer.append(';');
-            } else if (j < 0x80) {
-                buffer.append(c); // use ASCII value
-            } else {
-                buffer.append("&#"); // use numeric encoding
-                buffer.append((int) c);
-                buffer.append(';');
-            }
+        StringBuilder buffer = new StringBuilder(length * 2);
+        int end = start + length;
+        int i = start;
+        while (i < end) {
+            int codePoint = Character.codePointAt(text, i, end);
+            appendEncoded(buffer, codePoint);
+            i += Character.charCount(codePoint);
         }
         return buffer.toString();
+    }
+
+    /**
+     * Appends the XML encoding of a single Unicode code point to the given buffer.
+     * <p>
+     * Encoding is done per code point, not per UTF-16 code unit, so a supplementary character is
+     * emitted as one numeric character reference (e.g. &amp;#128269;) rather than a pair of
+     * surrogate references (&amp;#55357;&amp;#56589;), which is not well-formed XML 1.0.
+     * <p>
+     * Code points that cannot legally appear in XML 1.0 at all (C0 controls other than tab, LF and
+     * CR; unpaired surrogates; U+FFFE, U+FFFF; anything above U+10FFFF) are rejected with an
+     * {@link IllegalArgumentException} rather than passed through as silently malformed output.
+     */
+    private static void appendEncoded(StringBuilder buffer, int codePoint) {
+        if (codePoint < 0x100 && encoderXml[codePoint] != null) {
+            buffer.append(encoderXml[codePoint]); // have a named encoding (includes &#10; and &#13;)
+            buffer.append(';');
+        } else if (!isValidXmlChar(codePoint)) {
+            throw new IllegalArgumentException("Character U+" + Integer.toHexString(codePoint) + " cannot be represented in XML 1.0");
+        } else if (codePoint < 0x80) {
+            buffer.append((char) codePoint); // use ASCII value
+        } else {
+            buffer.append("&#"); // use numeric encoding
+            buffer.append(codePoint);
+            buffer.append(';');
+        }
+    }
+
+    /**
+     * Returns whether the given code point matches the XML 1.0 {@code Char} production:
+     * {@code #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]}.
+     */
+    private static boolean isValidXmlChar(int codePoint) {
+        return codePoint == 0x9 || codePoint == 0xA || codePoint == 0xD
+                || (codePoint >= 0x20 && codePoint <= 0xD7FF)
+                || (codePoint >= 0xE000 && codePoint <= 0xFFFD)
+                || (codePoint >= 0x10000 && codePoint <= 0x10FFFF);
     }
 
     private static void addEntity(String entity, int value) {
