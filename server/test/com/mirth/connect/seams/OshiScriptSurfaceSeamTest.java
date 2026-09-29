@@ -12,6 +12,7 @@ package com.mirth.connect.seams;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -815,9 +816,12 @@ public class OshiScriptSurfaceSeamTest {
 
     // ========== CR-02 closure: execute the migration note's own committed sampling-floor recipe ==========
     //
-    // The recipe below is never hand-copied into this suite: it is extracted verbatim from
-    // docs/irt-1801-oshi-6x-enlighten-migration.md between two HTML-comment markers and driven
-    // through a simulated per-message invocation sequence. A frozen copy of the defective
+    // The recipe is committed once, as oshi-sampling-floor-recipe.js beside this class, and driven
+    // through a simulated per-message invocation sequence. The migration note
+    // (docs/irt-1801-oshi-6x-enlighten-migration.md) carries the same text between two
+    // HTML-comment markers, and samplingFloorRecipeFileMatchesTheMigrationNote fails if the two
+    // differ. The note is internal-only and stripped from the public export, so the recipe the
+    // other tests execute cannot live only in the note. A frozen copy of the defective
     // unconditional-store form 26.9-VERIFICATION.md gap 1 found is driven through the identical
     // sequence as the negative control -- this is what proves the recipe test can fail.
 
@@ -942,7 +946,7 @@ public class OshiScriptSurfaceSeamTest {
      * correct, but no staleness check), taken verbatim from
      * {@code git show HEAD~1:docs/irt-1801-oshi-6x-enlighten-migration.md} with only its single
      * live clock read substituted for {@code harnessClockMs}, exactly as
-     * {@link #samplingFloorRecipeFromDoc()} substitutes it for the real doc snippet. This is a
+     * {@link #samplingFloorRecipe()} substitutes it for the committed recipe. This is a
      * frozen regression fixture and must never be updated to track the note -- doing so would
      * defeat its purpose as the negative control proving the staleness assertion in
      * {@link #samplingFloorRecipeHoldsTheSentinelOnAStalePostFloorRead()} can fail: without a
@@ -978,43 +982,44 @@ public class OshiScriptSurfaceSeamTest {
                     + "// else: a too-soon invocation. The cache is left alone and load stays at the not-sampled\n"
                     + "// sentinel.\n";
 
-    /**
-     * Resolves the migration note, extracts the exact text between {@link
-     * #SAMPLING_FLOOR_MARKER_BEGIN} and {@link #SAMPLING_FLOOR_MARKER_END}, and substitutes its
-     * one live clock read for the {@code harnessClockMs} variable {@link
-     * #samplingFloorDriverScript(String, String)} binds per invocation. Fails loudly (never skips)
-     * when the note cannot be resolved or the marker/fence shape does not match: this test exists
-     * to execute the note's own committed text, not a hand-copied approximation of it. Tried in
-     * order because the ant server target runs with the module directory as the working
-     * directory, but a direct IDE run may not.
-     */
-    private static String samplingFloorRecipeFromDoc() {
-        String[] candidatePaths = {
-                "../docs/irt-1801-oshi-6x-enlighten-migration.md",
-                "docs/irt-1801-oshi-6x-enlighten-migration.md"
-        };
-        File docFile = null;
+    /** Where the executed recipe is committed, relative to the server module and the repo root. */
+    private static final String[] SAMPLING_FLOOR_RECIPE_PATHS = {
+            "test/com/mirth/connect/seams/oshi-sampling-floor-recipe.js",
+            "server/test/com/mirth/connect/seams/oshi-sampling-floor-recipe.js"
+    };
+
+    /** Where the migration note lives when present; it is stripped from the public export. */
+    private static final String[] MIGRATION_NOTE_PATHS = {
+            "../docs/irt-1801-oshi-6x-enlighten-migration.md",
+            "docs/irt-1801-oshi-6x-enlighten-migration.md"
+    };
+
+    private static File firstExisting(String[] candidatePaths) {
         for (String candidate : candidatePaths) {
             File f = new File(candidate);
             if (f.isFile()) {
-                docFile = f;
-                break;
+                return f;
             }
         }
-        if (docFile == null) {
-            fail("Could not resolve the migration note at either " + candidatePaths[0] + " or "
-                    + candidatePaths[1] + " -- check the working directory this test ran from.");
-            return null; // unreachable: fail() always throws
-        }
+        return null;
+    }
 
-        String docText;
+    private static String readUtf8(File file) {
         try {
-            docText = new String(Files.readAllBytes(docFile.toPath()), StandardCharsets.UTF_8);
+            return new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            fail("Could not read the migration note at " + docFile + ": " + e);
+            fail("Could not read " + file + ": " + e);
             return null; // unreachable: fail() always throws
         }
+    }
 
+    /**
+     * Returns the text of the single fenced code block between {@link
+     * #SAMPLING_FLOOR_MARKER_BEGIN} and {@link #SAMPLING_FLOOR_MARKER_END} in the migration note.
+     * Fails when the marker/fence shape does not match.
+     */
+    private static String recipeBlockFromNote(File docFile) {
+        String docText = readUtf8(docFile);
         int beginIdx = docText.indexOf(SAMPLING_FLOOR_MARKER_BEGIN);
         int endIdx = docText.indexOf(SAMPLING_FLOOR_MARKER_END);
         if (beginIdx < 0 || endIdx < 0 || endIdx <= beginIdx) {
@@ -1030,7 +1035,25 @@ public class OshiScriptSurfaceSeamTest {
                     + "markers in " + docFile + ", found none.");
         }
         int bodyStart = between.indexOf('\n', fenceOpen) + 1;
-        String body = between.substring(bodyStart, fenceClose);
+        return between.substring(bodyStart, fenceClose);
+    }
+
+    /**
+     * Reads the committed sampling-floor recipe and substitutes its one live clock read for the
+     * {@code harnessClockMs} variable {@link #samplingFloorDriverScript(String, String)} binds per
+     * invocation. Fails loudly (never skips) when the recipe cannot be resolved: a wrong working
+     * directory must not read as a pass. Tried in order because the ant server target runs with
+     * the module directory as the working directory, but a direct IDE run may not.
+     */
+    private static String samplingFloorRecipe() {
+        File recipeFile = firstExisting(SAMPLING_FLOOR_RECIPE_PATHS);
+        if (recipeFile == null) {
+            fail("Could not resolve the sampling-floor recipe at either " + SAMPLING_FLOOR_RECIPE_PATHS[0]
+                    + " or " + SAMPLING_FLOOR_RECIPE_PATHS[1]
+                    + " -- check the working directory this test ran from.");
+            return null; // unreachable: fail() always throws
+        }
+        String body = readUtf8(recipeFile);
 
         String clockCall = "java.lang.System.currentTimeMillis()";
         int clockOccurrences = 0;
@@ -1041,7 +1064,7 @@ public class OshiScriptSurfaceSeamTest {
         }
         if (clockOccurrences != 1) {
             fail("Expected the sampling-floor recipe to read the clock exactly once, found "
-                    + clockOccurrences + " in " + docFile);
+                    + clockOccurrences + " in " + recipeFile);
         }
 
         String substituted = body.replace(clockCall, "harnessClockMs");
@@ -1100,6 +1123,31 @@ public class OshiScriptSurfaceSeamTest {
     }
 
     /**
+     * The migration note carries the same recipe these tests execute, for readers of the note, so
+     * the two must not drift. The note is internal-only and stripped from the public export (see
+     * the strip list in .planning/CLEAN-BRANCH-HOW-TO.md), while the recipe file ships. The test
+     * therefore skips only when the note AND .planning/ are both absent, which is a public
+     * checkout; in the internal repo a missing note fails. A wrong working directory is still
+     * caught, because {@link #samplingFloorRecipe()} fails loudly when the recipe cannot be found.
+     */
+    @Test
+    public void samplingFloorRecipeFileMatchesTheMigrationNote() {
+        File docFile = firstExisting(MIGRATION_NOTE_PATHS);
+        if (docFile == null) {
+            boolean internalCheckout = new File("../.planning").isDirectory() || new File(".planning").isDirectory();
+            if (internalCheckout) {
+                fail("The migration note is missing at " + MIGRATION_NOTE_PATHS[0] + " / " + MIGRATION_NOTE_PATHS[1]
+                        + " in an internal checkout -- it was moved or deleted, so nothing guards it against drift.");
+            }
+            assumeTrue("Migration note and .planning/ both absent: public export, where the note is stripped", false);
+        }
+        File recipeFile = firstExisting(SAMPLING_FLOOR_RECIPE_PATHS);
+        assertTrue("Could not resolve the sampling-floor recipe beside this class", recipeFile != null);
+        assertEquals("The fenced recipe in " + docFile + " must match " + recipeFile + " exactly",
+                readUtf8(recipeFile), recipeBlockFromNote(docFile));
+    }
+
+    /**
      * CR-02's recipe-verification half (26.9-VERIFICATION.md gap 1): the migration note's
      * sampling-floor snippet is extracted VERBATIM from the doc and driven through {@link
      * #RECIPE_SIM_INVOCATIONS} simulated per-message invocations at {@link #RECIPE_SIM_STEP_MS}ms
@@ -1120,7 +1168,7 @@ public class OshiScriptSurfaceSeamTest {
      */
     @Test
     public void samplingFloorRecipeGuardFiresOnceTheFloorElapses() {
-        String recipeBody = samplingFloorRecipeFromDoc();
+        String recipeBody = samplingFloorRecipe();
         String advancingStub = simulatedTickProcessorStub(ADVANCING_TICK_STEP_PER_READ);
 
         long expectedMeasurementCount = ((long) (RECIPE_SIM_INVOCATIONS - 1) * RECIPE_SIM_STEP_MS)
@@ -1187,7 +1235,7 @@ public class OshiScriptSurfaceSeamTest {
      */
     @Test
     public void samplingFloorRecipeHoldsTheSentinelOnAStalePostFloorRead() {
-        String recipeBody = samplingFloorRecipeFromDoc();
+        String recipeBody = samplingFloorRecipe();
         String staleStub = simulatedTickProcessorStub(STALE_TICK_STEP_PER_READ);
 
         // (1) The doc snippet's staleness check must hold the sentinel over a stale stub source.
