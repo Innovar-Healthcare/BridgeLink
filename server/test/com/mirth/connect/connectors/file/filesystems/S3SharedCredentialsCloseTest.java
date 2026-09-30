@@ -44,8 +44,10 @@ import com.sun.net.httpserver.HttpServer;
  * {@code destroy()} (every Test Read, undeploy and redeploy) therefore shut the STS client that a
  * role-assuming profile or EKS web identity uses, and every later default-chain connection failed
  * with "Connection pool shut down" once its cached credentials expired, until restart. SDK 2.15.28
- * did not do this. The EC2 instance-profile path is not affected: it reads the metadata service
- * without a pooled client.</li>
+ * closes the singleton on client close too, but there the close stops at
+ * {@code software.amazon.awssdk.utils.Lazy}, which only became closeable in a later release; on
+ * 2.55.8 {@code Lazy.close()} forwards to the held chain and reaches the STS client. The EC2
+ * instance-profile path is not affected: it reads the metadata service without a pooled client.</li>
  * <li>{@code S3Connection.createCredentialsProvider} hands out a view of the singleton that cannot be
  * closed. This test drives the role-assuming profile path against a local mock STS.</li>
  * <li>It needs a JVM in which the default chain has not been resolved yet, because the chain reads
