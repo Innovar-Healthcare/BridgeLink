@@ -49,7 +49,6 @@ import com.mirth.connect.userutil.MessageHeaders;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
@@ -107,15 +106,19 @@ public class S3ConnectionTest {
         assertEquals(AnonymousCredentialsProvider.class, provider.getClass());
         assertEquals(AwsBasicCredentials.class, provider.resolveCredentials().getClass());
 
-        // Null credentials with DCPC
+        // Null credentials with DCPC: the shared default chain, behind a view an S3Client cannot close
         fileSystemOptions = getOptions(false, null, null, true, true);
         provider = s3Conn.createCredentialsProvider(fileSystemOptions);
-        assertEquals(DefaultCredentialsProvider.class, provider.getClass());
+        assertFalse(provider instanceof AutoCloseable);
+        assertFalse(provider instanceof StaticCredentialsProvider);
+        assertFalse(provider instanceof AnonymousCredentialsProvider);
 
         // Blank credentials with DCPC
         fileSystemOptions = getOptions(false, " ", " ", true, true);
         provider = s3Conn.createCredentialsProvider(fileSystemOptions);
-        assertEquals(DefaultCredentialsProvider.class, provider.getClass());
+        assertFalse(provider instanceof AutoCloseable);
+        assertFalse(provider instanceof StaticCredentialsProvider);
+        assertFalse(provider instanceof AnonymousCredentialsProvider);
 
         // Null credentials without DCPC
         String accessKeyId = null;
