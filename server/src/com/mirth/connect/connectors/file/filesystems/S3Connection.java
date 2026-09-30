@@ -201,7 +201,11 @@ public class S3Connection implements FileSystemConnection {
         if (fileSystemOptions.isAnonymous()) {
             return AnonymousCredentialsProvider.create();
         } else if (schemeProps.isUseDefaultCredentialProviderChain() && StringUtils.isBlank(fileSystemOptions.getUsername()) && StringUtils.isBlank(fileSystemOptions.getPassword())) {
-            return DefaultCredentialsProvider.create();
+            // create() returns a JVM-wide singleton, and closing an S3Client closes its credentials
+            // provider. Hand out a view that cannot be closed, so one connection's destroy() does not
+            // shut the STS clients the shared chain uses for every other connection (IRT-2573).
+            DefaultCredentialsProvider shared = DefaultCredentialsProvider.create();
+            return () -> shared.resolveCredentials();
         } else {
             return StaticCredentialsProvider.create(AwsBasicCredentials.create(fileSystemOptions.getUsername(), fileSystemOptions.getPassword()));
         }
