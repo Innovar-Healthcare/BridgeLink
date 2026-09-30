@@ -451,6 +451,28 @@ client and CLI libraries.
 
 ---
 
+## S3 File Connector - Default Credential Chain Fixed (IRT-2573)
+
+On 26.9.0 builds before this fix, an S3-mode File Reader or File Writer set to use the
+default credential provider chain (for example an EC2 instance role) failed: Test Read
+returned an error and deployed channels failed at runtime. The AWS SDK for Java v2 shipped
+with BridgeLink is upgraded to fix this.
+
+| Library | Before | After |
+|---------|--------|-------|
+| AWS SDK for Java v2 | 2.15.28 | 2.55.8 |
+
+- **Advanced S3 Settings region list.** The Administrator's region dropdown now lists the
+  newer AWS regions (53, up from 31).
+- **Static access keys and temporary credentials** work as before.
+
+**Upgrade impact:** if you added AWS SDK v2 service jars of your own (for example SQS, SNS or
+Secrets Manager clients) to `custom-lib` or to a plugin, replace them with version 2.55.8.
+Service jars built for 2.15.28 fail against the upgraded SDK. When upgrading by hand rather
+than with the installer, replace the whole `server-lib` directory so no 2.15.28 jars remain.
+
+---
+
 ## Database - 26.6.1 Migration Rung and Fail-Loud Unknown-Version Startup (IRT-2329)
 
 A database created or last upgraded by `release/26.6.1` (`SCHEMA_INFO.VERSION =
