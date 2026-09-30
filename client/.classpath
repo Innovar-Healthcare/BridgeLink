@@ -190,8 +190,8 @@
 	<classpathentry kind="lib" path="lib/swagger-annotations-2.2.28.jar"/>
 	<classpathentry kind="lib" path="lib/jcifs-ng-2.1.10.jar"/>
 	<classpathentry kind="lib" path="lib/commons-text-1.12.0.jar"/>
-	<classpathentry kind="lib" path="lib/regions-2.15.28.jar"/>
-	<classpathentry kind="lib" path="lib/utils-2.15.28.jar"/>
+	<classpathentry kind="lib" path="lib/regions-2.55.8.jar"/>
+	<classpathentry kind="lib" path="lib/utils-2.55.8.jar"/>
 	<classpathentry kind="lib" path="lib/jackson-annotations-2.18.10.jar"/>
 	<classpathentry kind="lib" path="lib/jackson-core-2.18.10.jar"/>
 	<classpathentry kind="lib" path="lib/jackson-databind-2.18.10.jar"/>
