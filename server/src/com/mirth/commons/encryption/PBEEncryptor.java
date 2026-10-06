@@ -80,7 +80,7 @@ public class PBEEncryptor extends Encryptor {
                 PBEKeySpec pbeKeySpec = new PBEKeySpec(password.toCharArray());
                 SecretKeyFactory factory = SecretKeyFactory.getInstance(getAlgorithm(), getProvider());
                 key = factory.generateSecret(pbeKeySpec);
-                saltGenerator = SecureRandom.getInstance("SHA1PRNG");
+                saltGenerator = new SecureRandom();
             } catch (Exception e) {
                 throw new EncryptionException(e);
             }
